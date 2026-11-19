@@ -65,7 +65,10 @@ export function ChatView({ id, meId, canMonitor }: { id: string; meId: string; c
   });
 
   if (detail.isLoading) return <div className="p-6 text-sm text-muted-foreground">Loading chat…</div>;
-  if (detail.isError || !detail.data) return <div className="p-6 text-sm text-muted-foreground">This chat is not available to you.</div>;
+  // A failed background refetch keeps the chat on screen; a chat that never loaded, or that the
+  // member may no longer see (404, e.g. another agent took it), is unavailable.
+  const lostAccess = detail.error instanceof ApiError && detail.error.status === 404;
+  if (!detail.data || lostAccess) return <div className="p-6 text-sm text-muted-foreground">This chat is not available to you.</div>;
   const chat = detail.data;
   const mine = chat.state === 'INTERVENED' && chat.intervenedBy?.id === meId;
   const canClose = chat.state === 'INTERVENED' && (mine || canMonitor);

@@ -92,4 +92,25 @@ describe('Live chat API contract', () => {
     await check('post', '/inbox/conversations/{id}/template', await send({ 'BODY.1': 'Sara' }), 202);
     await check('post', '/inbox/conversations/{id}/template', await send({}), 422);
   });
+
+  it('US3: settings, agent rules and transfer', async () => {
+    const settings = await admin.agent.get('/api/live-chat/settings');
+    await check('get', '/live-chat/settings', settings, 200);
+    const put = (path: string, body: unknown) => admin.agent.put(path).set('X-CSRF-Token', admin.csrf).send(body as object);
+    await check('put', '/live-chat/settings', await put('/api/live-chat/settings', { ...settings.body, humanKeywords: ['agent'], autoResolve: false }), 200);
+    await check('put', '/live-chat/settings', await put('/api/live-chat/settings', { ...settings.body, humanKeywords: ['a', 'b', 'c', 'd', 'e', 'f'] }), 422);
+
+    const tag = await ctx.prisma.tag.create({ data: { name: `contract-${randomUUID().slice(0, 6)}` } });
+    await check('put', '/users/{id}/agent-rules', await put(`/api/users/${agentB.userId}/agent-rules`, [{ kind: 'TAG', tagId: tag.id }]), 200);
+    await check('get', '/users/{id}/agent-rules', await admin.agent.get(`/api/users/${agentB.userId}/agent-rules`), 200);
+    await check('put', '/users/{id}/agent-rules', await put(`/api/users/${admin.userId}/agent-rules`, []), 422);
+    await check('put', '/users/{id}/agent-rules', await put(`/api/users/${agentB.userId}/agent-rules`, []), 200);
+
+    const id = await newChat();
+    await agentA.agent.post(`/api/inbox/conversations/${id}/intervene`).set('X-CSRF-Token', agentA.csrf);
+    const transfer = (who: SignedInAgent, userId: string) =>
+      who.agent.post(`/api/inbox/conversations/${id}/transfer`).set('X-CSRF-Token', who.csrf).send({ userId });
+    await check('post', '/inbox/conversations/{id}/transfer', await transfer(agentA, agentB.userId), 200);
+    await check('post', '/inbox/conversations/{id}/transfer', await transfer(agentA, agentA.userId), 404);
+  });
 });
