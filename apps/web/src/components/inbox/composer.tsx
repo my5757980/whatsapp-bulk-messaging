@@ -7,6 +7,8 @@ import { toast } from '@/components/ui/toaster';
 import { api, ApiError } from '@/lib/api-client';
 import type { ChatItem, ConversationDetail } from '@/lib/inbox-types';
 import { queryKeys } from '@/lib/query';
+import { MediaPicker } from './media-picker';
+import { SavedReplyPicker } from './saved-reply-picker';
 import { TemplateSender } from './template-sender';
 
 export const MAX_REPLY_LENGTH = 4096;
@@ -27,8 +29,9 @@ function useTimeLeft(windowEndsAt: string | null): string | null {
 }
 
 /**
- * Reply box (T036): text up to 4096 characters (emoji from the system picker). The queued
- * message shows at once; ticks follow from live events. A failed send keeps the draft.
+ * Reply box (T036, T066): text up to 4096 characters (emoji from the system picker), saved
+ * replies by typing "/", and files from the computer or the media library. The queued message
+ * shows at once; ticks follow from live events. A failed send keeps the draft.
  */
 export function Composer({
   chat,
@@ -44,10 +47,10 @@ export function Composer({
   const timeLeft = useTimeLeft(chat.windowEndsAt);
 
   const send = useMutation({
-    mutationFn: (text: string) =>
+    mutationFn: (body: Record<string, unknown>) =>
       api<ChatItem>(`/inbox/conversations/${chat.id}/messages`, {
         method: 'POST',
-        json: { type: 'text', text },
+        json: body,
       }),
     onSuccess: (item) => {
       setDraft('');
@@ -63,10 +66,12 @@ export function Composer({
     },
   });
 
+  // "/" at the start of the box opens the saved replies instead of sending text.
+  const picking = draft.startsWith('/');
   const submit = () => {
     const text = draft.trim();
-    if (!text || send.isPending) return;
-    send.mutate(text);
+    if (!text || picking || send.isPending) return;
+    send.mutate({ type: 'text', text });
   };
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -109,10 +114,17 @@ export function Composer({
         submit();
       }}
     >
+      {picking && (
+        <SavedReplyPicker
+          query={draft.slice(1)}
+          onSend={(reply, params) => send.mutate({ type: 'canned', cannedMessageId: reply.id, params })}
+          onClose={() => setDraft('')}
+        />
+      )}
       <textarea
         aria-label="Reply"
         className="min-h-[72px] w-full resize-y rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-        placeholder="Type a reply… (Enter to send, Shift+Enter for a new line)"
+        placeholder='Type a reply… ("/" for saved replies, Enter to send, Shift+Enter for a new line)'
         maxLength={MAX_REPLY_LENGTH}
         value={draft}
         onChange={(event) => setDraft(event.target.value)}
@@ -124,8 +136,9 @@ export function Composer({
           <span>
             {draft.length}/{MAX_REPLY_LENGTH}
           </span>
+          <MediaPicker disabled={send.isPending} onSend={(item, caption) => send.mutate({ type: 'media', mediaAssetId: item.id, ...(caption.trim() ? { text: caption.trim() } : {}) })} />
           <TemplateSender chat={chat} variant="outline" />
-          <Button type="submit" size="sm" disabled={!draft.trim() || send.isPending}>
+          <Button type="submit" size="sm" disabled={!draft.trim() || picking || send.isPending}>
             {send.isPending ? 'Sending…' : 'Send'}
           </Button>
         </span>

@@ -114,4 +114,36 @@ describe('Live chat API contract', () => {
     await check('post', '/inbox/conversations/{id}/transfer', await transfer(agentA, agentB.userId), 200);
     await check('post', '/inbox/conversations/{id}/transfer', await transfer(agentA, agentA.userId), 404);
   });
+
+  it('US4: saved replies, media library and sending them', async () => {
+    const name = `Contract reply ${randomUUID().slice(0, 6)}`;
+    const create = (body: Record<string, unknown>) => admin.agent.post('/api/canned-messages').set('X-CSRF-Token', admin.csrf).send(body);
+    const created = await create({ name, type: 'TEXT', text: 'Hi {first_name}, order {{1}}', variableFallbacks: { first_name: 'there' } });
+    await check('post', '/canned-messages', created, 201);
+    await check('post', '/canned-messages', await create({ name, type: 'TEXT', text: 'again' }), 409);
+    await check('get', '/canned-messages', await agentA.agent.get('/api/canned-messages'), 200);
+    await check(
+      'patch',
+      '/canned-messages/{id}',
+      await admin.agent.patch(`/api/canned-messages/${created.body.id}`).set('X-CSRF-Token', admin.csrf).send({ name, type: 'TEXT', text: 'Hi {first_name}, order {{1}} ready' }),
+      200,
+    );
+    await check('put', '/canned-messages/{id}/favorite', await agentA.agent.put(`/api/canned-messages/${created.body.id}/favorite`).set('X-CSRF-Token', agentA.csrf), 204);
+    await check('delete', '/canned-messages/{id}/favorite', await agentA.agent.delete(`/api/canned-messages/${created.body.id}/favorite`).set('X-CSRF-Token', agentA.csrf), 204);
+
+    const uploaded = await agentA.agent.post('/api/media-library').set('X-CSRF-Token', agentA.csrf).attach('file', Buffer.from('%PDF-1.4'), { filename: 'menu.pdf', contentType: 'application/pdf' });
+    await check('post', '/media-library', uploaded, 201);
+    await check('post', '/media-library', await agentA.agent.post('/api/media-library').set('X-CSRF-Token', agentA.csrf).attach('file', Buffer.from('GIF89a'), { filename: 'a.gif', contentType: 'image/gif' }), 422);
+    await check('get', '/media-library', await agentA.agent.get('/api/media-library').query({ kind: 'document' }), 200);
+
+    const id = await newChat();
+    const send = (body: Record<string, unknown>) => agentA.agent.post(`/api/inbox/conversations/${id}/messages`).set('X-CSRF-Token', agentA.csrf).send(body);
+    await check('post', '/inbox/conversations/{id}/messages', await send({ type: 'media', mediaAssetId: uploaded.body.id, text: 'Menu' }), 202);
+    await check('post', '/inbox/conversations/{id}/messages', await send({ type: 'canned', cannedMessageId: created.body.id, params: { '1': '#7' } }), 202);
+    await check('post', '/inbox/conversations/{id}/messages', await send({ type: 'canned', cannedMessageId: created.body.id }), 422);
+
+    await check('delete', '/media-library/{id}', await admin.agent.delete(`/api/media-library/${uploaded.body.id}`).set('X-CSRF-Token', admin.csrf), 204);
+    await check('delete', '/canned-messages/{id}', await admin.agent.delete(`/api/canned-messages/${created.body.id}`).set('X-CSRF-Token', admin.csrf), 204);
+    await check('delete', '/canned-messages/{id}', await admin.agent.delete(`/api/canned-messages/${created.body.id}`).set('X-CSRF-Token', admin.csrf), 404);
+  });
 });
