@@ -31,6 +31,13 @@ export class InboxPublisher {
     await this.events.publish({ type: 'conversation.upserted', ...facts(row), ...(prev ? { prev } : {}), data: { ...summary } });
   }
 
+  /** conversation.window_closed: the chat moves from the live tabs to Past chats (SC-005). */
+  async windowClosed(conversationId: string): Promise<void> {
+    const row = await this.prisma.conversation.findUnique({ where: { id: conversationId }, include: SUMMARY_INCLUDE });
+    if (!row) return;
+    await this.events.publish({ type: 'conversation.window_closed', ...facts(row), data: { conversationId: row.id } });
+  }
+
   /** message.created (or note.created) with the full timeline item. */
   async itemCreated(itemId: string, mentions?: string[]): Promise<void> {
     const found = await this.prisma.chatMessage.findUnique({ where: { id: itemId }, include: { ...ITEM_INCLUDE, conversation: { include: SUMMARY_INCLUDE } } });

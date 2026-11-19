@@ -9,7 +9,8 @@ import { QueueRegistry } from '../../common/queue/queue.module.js';
 import type { MessageEventType, MessageStatus, Prisma, WhatsAppNumber } from '../../generated/prisma/client.js';
 import { sendJobId } from '../sending/dispatch-planner.js';
 import { MAX_SEND_ATTEMPTS } from '../sending/send-outcome.js';
-import { HEADER_MEDIA_URL_PARAM, headerMediaType } from '../sending/template-payload.builder.js';
+import { HEADER_MEDIA_URL_PARAM } from '../sending/template-payload.builder.js';
+import { assertConsent, assertTemplateApproved, assertTemplateParams, refuse } from '../sending/template-send-rules.js';
 import { SettingsService } from '../settings/settings.service.js';
 import type { ApiKeyContext } from './api-key.guard.js';
 import { IdempotencyService, requestHash } from './idempotency.service.js';
@@ -32,7 +33,6 @@ export const SendRequestSchema = z
   .strict();
 export type SendRequest = z.infer<typeof SendRequestSchema>;
 
-const refuse = (code: string, message: string, details?: ErrorDetail[]) => new AppError(HttpStatus.UNPROCESSABLE_ENTITY, code, message, details);
 const notFound = (code: string, message: string) => new AppError(HttpStatus.NOT_FOUND, code, message);
 
 const PUBLIC_STATUS: Record<MessageStatus, string> = {
@@ -100,29 +100,21 @@ export class PublicApiService {
       where: { wabaId_name_language: { wabaId: number.wabaId, name: input.template.name, language: input.template.language } },
     });
     if (!template || template.status === 'DELETED') throw notFound('TEMPLATE_NOT_FOUND', 'No template with this name and language for the number');
-    if (template.status !== 'APPROVED') throw refuse('TEMPLATE_NOT_APPROVED', `The template is ${template.status.toLowerCase()}, not approved`);
+    assertTemplateApproved(template);
 
     const { defaultCountryCode } = await this.settings.get();
     const phone = normalizePhone(input.to, defaultCountryCode);
     if (!phone) throw refuse('INVALID_NUMBER', 'The phone number is not valid');
 
     const params = input.params ?? {};
-    const keys = ((Array.isArray(template.variables) ? template.variables : []) as Array<{ key: string }>).map((v) => v.key);
-    const details: ErrorDetail[] = [
-      ...keys.filter((k) => !params[k]?.trim()).map((k) => ({ field: `params.${k}`, issue: 'is required' })),
-      ...Object.keys(params).filter((k) => !keys.includes(k)).map((k) => ({ field: `params.${k}`, issue: 'is not a variable of this template' })),
-    ];
-    const mediaType = headerMediaType(template.components as unknown as MetaTemplateComponent[]);
-    if (mediaType && !input.headerMediaUrl) details.push({ field: 'headerMediaUrl', issue: `is required for a ${mediaType} header` });
-    if (details.length) throw refuse('PARAMS_MISMATCH', 'The parameters do not match the template', details);
+    assertTemplateParams(template, params, Boolean(input.headerMediaUrl));
 
     const wantsOptIn = input.contact?.optIn === true;
     const note = input.contact?.optInSourceNote; // required with optIn (schema)
     const existing = await this.prisma.contact.findUnique({ where: { phoneE164: phone.e164 } });
     // An opt-out is only undone by the contact (keyword) or an admin, never by an API call.
     if (existing?.consentStatus === 'OPTED_OUT') throw refuse('CONTACT_OPTED_OUT', 'The contact has opted out');
-    const consent = wantsOptIn ? 'OPTED_IN' : (existing?.consentStatus ?? 'UNKNOWN');
-    if (template.category === 'MARKETING' && consent !== 'OPTED_IN') throw refuse('NO_OPT_IN', 'Marketing templates need the contact to have opted in');
+    assertConsent(wantsOptIn ? 'OPTED_IN' : (existing?.consentStatus ?? 'UNKNOWN'), template.category);
 
     let message: { id: string; createdAt: Date };
     try {

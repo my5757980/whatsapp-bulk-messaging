@@ -14,6 +14,7 @@ import { NumbersService } from '../numbers/numbers.service.js';
 import { StatusHandler } from '../webhooks/handlers/status.handler.js';
 import { decideSendFailure, preSendCheck } from './send-outcome.js';
 import { HEADER_MEDIA_URL_PARAM, buildTemplatePayload, headerMediaType } from './template-payload.builder.js';
+import { HEADER_MEDIA_ASSET_PARAM } from './template-send-rules.js';
 
 /** Blocking codes caused by the number's credentials or account (research R9). */
 export const NUMBER_BLOCKING = new Set([190, 10, 368, 133010]);
@@ -121,9 +122,11 @@ export class SendProcessor {
       const headerMedia =
         mediaType && m.campaign?.headerMediaAssetId
           ? { type: mediaType, id: await this.media.ensureMetaMediaId(m.campaign.headerMediaAssetId, m.number) }
-          : mediaType && params[HEADER_MEDIA_URL_PARAM]
-            ? { type: mediaType, link: params[HEADER_MEDIA_URL_PARAM] }
-            : undefined;
+          : mediaType && params[HEADER_MEDIA_ASSET_PARAM]
+            ? { type: mediaType, id: await this.media.ensureMetaMediaId(params[HEADER_MEDIA_ASSET_PARAM], m.number) }
+            : mediaType && params[HEADER_MEDIA_URL_PARAM]
+              ? { type: mediaType, link: params[HEADER_MEDIA_URL_PARAM] }
+              : undefined;
       const payload = buildTemplatePayload({
         to: m.phoneE164,
         template: { name: m.template.name, language: m.template.language, parameterFormat: m.template.parameterFormat, components },
