@@ -6,6 +6,7 @@ import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import { SettingsService } from '../../settings/settings.service.js';
 import { normalizeKeyword } from '../../webhooks/handlers/inbound.handler.js';
 import { WebhookRouter, type WebhookChange, type WebhookChangeHandler } from '../../webhooks/webhook-router.js';
+import { AutoRepliesService } from '../automation/auto-replies.service.js';
 import { onCustomerMessage } from '../conversations/conversation-state.js';
 import { isLive, startsOpening } from '../conversations/window.js';
 import type { ConversationState } from '../inbox-common.js';
@@ -46,6 +47,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly queues: QueueRegistry,
     private readonly liveChat: LiveChatSettingsService,
     private readonly routing: ChatRoutingService,
+    private readonly autoReplies: AutoRepliesService,
   ) {}
 
   onModuleInit(): void {
@@ -62,7 +64,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
       this.logger.warn({ phoneNumberId }, 'Customer message for an unknown number; not added to live chat');
       return;
     }
-    const { defaultCountryCode } = await this.settings.get();
+    const { defaultCountryCode, optOutKeywords, optInKeywords } = await this.settings.get();
     // Read fresh for every webhook (one row): a cache in the worker would miss changes made in the app.
     const { humanKeywords } = await this.liveChat.get();
     for (const raw of messages) {
@@ -72,12 +74,15 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
         continue;
       }
       // Text, button and list replies can carry a "talk to a person" keyword (research R13).
-      const humanKeyword = parsed.text !== null && humanKeywords.includes(normalizeKeyword(parsed.text));
-      await this.store(number.id, parsed, defaultCountryCode, humanKeyword);
+      const normalized = parsed.text !== null ? normalizeKeyword(parsed.text) : null;
+      const humanKeyword = normalized !== null && humanKeywords.includes(normalized);
+      // Opt-out and opt-in keywords never get an automatic reply either (FR-036).
+      const consentKeyword = normalized !== null && (optOutKeywords.includes(normalized) || optInKeywords.includes(normalized));
+      await this.store(number.id, parsed, defaultCountryCode, humanKeyword, consentKeyword);
     }
   }
 
-  private async store(numberId: string, msg: ParsedInbound, defaultCountry: string, humanKeyword: boolean): Promise<void> {
+  private async store(numberId: string, msg: ParsedInbound, defaultCountry: string, humanKeyword: boolean, consentKeyword: boolean): Promise<void> {
     const phone = normalizePhone(waIdToE164(msg.waId), defaultCountry);
     if (!phone) {
       this.logger.warn({ numberId }, 'Customer message from a number that cannot be normalised; not added to live chat');
@@ -139,11 +144,10 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
                unresolved_requests = unresolved_requests + ${countRequest ? 1 : 0},
                updated_at = now()
          WHERE id = ${chat.id}::uuid`;
-      if (startsOpening(chat.last_customer_message_at, msg.occurredAt)) {
-        await tx.conversationOpening.create({ data: { conversationId: chat.id, openedAt: msg.occurredAt } });
-      }
+      const newOpening = startsOpening(chat.last_customer_message_at, msg.occurredAt);
+      if (newOpening) await tx.conversationOpening.create({ data: { conversationId: chat.id, openedAt: msg.occurredAt } });
       if (created) await this.timeline.backfill(tx, chat.id, contact.id, numberId);
-      return { conversationId: chat.id, created, previous, becameRequesting };
+      return { conversationId: chat.id, created, previous, becameRequesting, newOpening };
     });
     if (!outcome) return;
 
@@ -153,6 +157,12 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     await this.publisher.itemCreated(itemId);
     await this.publisher.conversation(outcome.conversationId, outcome.created ? undefined : outcome.previous);
     if (outcome.becameRequesting) await this.routing.alertRequesting(outcome.conversationId);
+    await this.autoReplies.handle({
+      conversationId: outcome.conversationId,
+      contactId: contact.id,
+      newOpening: outcome.newOpening,
+      keyword: humanKeyword || consentKeyword,
+    });
   }
 
   private async queueMediaDownload(chatMessageId: string, metaMediaId: string): Promise<void> {

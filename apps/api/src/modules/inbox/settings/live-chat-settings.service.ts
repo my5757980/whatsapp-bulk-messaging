@@ -1,7 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import { chatMediaKind } from '@wbm/shared';
 import { z } from 'zod';
+import { AppError, type ErrorDetail } from '../../../common/errors/app-error.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
+import { unmappedVariables, VariableMappingSchema } from '../../campaigns/variable-resolver.js';
 import { normalizeKeyword } from '../../webhooks/handlers/inbound.handler.js';
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -98,6 +101,11 @@ export class LiveChatSettingsService {
 
   async update(input: LiveChatSettingsInput, actorId: string): Promise<LiveChatSettingsDto> {
     await this.get();
+    const details = [
+      ...(input.welcomeEnabled && input.welcomeContent ? await this.contentProblems('welcomeContent', input.welcomeContent) : []),
+      ...(input.offHoursEnabled && input.offHoursContent ? await this.contentProblems('offHoursContent', input.offHoursContent) : []),
+    ];
+    if (details.length) throw AppError.validation('The automatic messages need attention', details);
     const row = await this.prisma.liveChatSettings.update({
       where: { id: 1 },
       data: {
@@ -113,6 +121,28 @@ export class LiveChatSettingsService {
       },
     });
     return toDto(row);
+  }
+
+  /**
+   * Checks welcome / off-hours content (T081): an approved template with every variable mapped,
+   * or text, or an image / file from the media library.
+   */
+  private async contentProblems(field: string, content: NonNullable<AutoContent>): Promise<ErrorDetail[]> {
+    if (content.kind === 'TEXT') return [];
+    if (content.kind === 'TEMPLATE') {
+      const template = await this.prisma.template.findUnique({ where: { id: content.templateId }, select: { status: true, variables: true } });
+      if (!template) return [{ field: `${field}.templateId`, issue: 'is not a template' }];
+      if (template.status !== 'APPROVED') return [{ field: `${field}.templateId`, issue: `is ${template.status.toLowerCase()}, not approved` }];
+      const mapping = VariableMappingSchema.safeParse(content.variables ?? {});
+      if (!mapping.success) return [{ field: `${field}.variables`, issue: 'are not a valid variable mapping' }];
+      const variables = (Array.isArray(template.variables) ? template.variables : []) as Array<{ key: string }>;
+      return unmappedVariables(variables, mapping.data).map((key) => ({ field: `${field}.variables.${key}`, issue: 'needs a value or a fallback' }));
+    }
+    const asset = await this.prisma.mediaAsset.findUnique({ where: { id: content.mediaAssetId }, select: { purpose: true, removedAt: true, mimeType: true } });
+    if (!asset || asset.purpose !== 'LIBRARY' || asset.removedAt) return [{ field: `${field}.mediaAssetId`, issue: 'is not a media library file' }];
+    const kind = chatMediaKind(asset.mimeType);
+    if (content.kind === 'IMAGE' && kind !== 'image') return [{ field: `${field}.mediaAssetId`, issue: 'is not an image' }];
+    return [];
   }
 }
 

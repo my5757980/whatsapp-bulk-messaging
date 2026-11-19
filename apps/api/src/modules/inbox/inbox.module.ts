@@ -6,6 +6,7 @@ import { ChatItemsService } from './messages/chat-items.service.js';
 import { ChatMediaController } from './messages/chat-media.controller.js';
 import { ChatTimelineService } from './messages/chat-timeline.service.js';
 import { JourneyService } from './journey/journey.service.js';
+import { AutoRepliesService } from './automation/auto-replies.service.js';
 import { ChatContactController, ChatContactService } from './conversations/chat-contact.service.js';
 import { SessionSendService } from './messages/session-send.service.js';
 import { TemplateSendService } from './messages/template-send.service.js';
@@ -27,8 +28,8 @@ import { DEFAULT_INBOX_STREAM_OPTIONS, INBOX_STREAM_OPTIONS, StreamFanoutService
 /** Live chat services shared by the HTTP app and the worker. */
 @Global()
 @Module({
-  providers: [InboxEventsService, AgentRulesLoader, InboxPublisher, ChatTimelineService, LiveChatSettingsService, ChatRoutingService, JourneyService],
-  exports: [InboxEventsService, AgentRulesLoader, InboxPublisher, ChatTimelineService, LiveChatSettingsService, ChatRoutingService, JourneyService],
+  providers: [InboxEventsService, AgentRulesLoader, InboxPublisher, ChatTimelineService, LiveChatSettingsService, ChatRoutingService, JourneyService, AutoRepliesService],
+  exports: [InboxEventsService, AgentRulesLoader, InboxPublisher, ChatTimelineService, LiveChatSettingsService, ChatRoutingService, JourneyService, AutoRepliesService],
 })
 export class InboxDomainModule {}
 
