@@ -23,6 +23,9 @@ interface SentMessage {
 
 const templates = new Map<string, MockTemplate[]>(); // wabaId -> templates
 const sent: SentMessage[] = [];
+
+/** Category of a template by name (Meta's pricing category follows the template category). */
+const templateCategory = (name: string): string | undefined => [...templates.values()].flat().find((t) => t.name === name)?.category;
 let counter = 0;
 const nextId = (prefix: string) => `${prefix}${Date.now()}${(counter++).toString().padStart(4, '0')}`;
 
@@ -128,9 +131,10 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
         postSigned(statusPayload({ wabaId, phoneNumberId: id, wamid, recipient: body.to!, status: 'failed', error: { code: 131026, title: 'Message undeliverable', message: 'Message undeliverable' } })),
       );
     } else {
-      later(400, () => postSigned(statusPayload({ wabaId, phoneNumberId: id, wamid, recipient: body.to!, status: 'sent' })));
-      later(900, () => postSigned(statusPayload({ wabaId, phoneNumberId: id, wamid, recipient: body.to!, status: 'delivered' })));
-      later(1600, () => postSigned(statusPayload({ wabaId, phoneNumberId: id, wamid, recipient: body.to!, status: 'read' })));
+      const category = templateCategory(body.template.name);
+      later(400, () => postSigned(statusPayload({ wabaId, phoneNumberId: id, wamid, recipient: body.to!, status: 'sent', category })));
+      later(900, () => postSigned(statusPayload({ wabaId, phoneNumberId: id, wamid, recipient: body.to!, status: 'delivered', category })));
+      later(1600, () => postSigned(statusPayload({ wabaId, phoneNumberId: id, wamid, recipient: body.to!, status: 'read', category })));
     }
     return send(res, 200, { messaging_product: 'whatsapp', contacts: [{ input: body.to, wa_id: body.to }], messages: [{ id: wamid }] });
   }

@@ -79,6 +79,9 @@ function Wizard() {
           campaign={campaign.data}
           onBack={() => go(campaign.data.id, 3)}
           onLaunched={(c) => {
+            // The cached copy is still the draft; without this the detail page shows "still a draft"
+            // (no refetch for 10 s and no polling for drafts) instead of the running or scheduled campaign.
+            queryClient.removeQueries({ queryKey: queryKeys.campaign(c.id), exact: true });
             void queryClient.invalidateQueries({ queryKey: ['campaigns'] });
             router.push(`/campaigns/${c.id}`);
           }}

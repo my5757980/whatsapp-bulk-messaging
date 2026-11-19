@@ -24,7 +24,9 @@ has, so run them in CI.
 | `npm audit` | ✅ PASS | 0 vulnerabilities (CI gate: `--audit-level=high`) |
 | `promtool check rules ops/alerts.yml` | ✅ PASS | 6 rules (prom/prometheus v3.5.0) |
 | gitleaks v8.30.1 | ✅ PASS | No leaks in the files to be committed. Two test-only passwords are tagged `gitleaks:allow`. |
-| `docker build --check` (api, web) | ✅ PASS | No warnings. Full image builds run in the CI `docker-images` job. |
+| Docker images (api, web) | ✅ PASS | `docker build --check` has no warnings. Both images build in GitHub Actions (`docker-images` job, PR #1). |
+| GitHub Actions `build-test` | ✅ PASS | npm audit, lint, contracts lint, promtool, typecheck, unit, integration and contract tests on ubuntu-latest (PR #1) |
+| GitHub Actions `secret-scan` | ✅ PASS | gitleaks over the whole git history |
 | Playwright e2e (US1–US7) | ⏳ NOT RUN | 7 specs are written. They need the chromium build Playwright 1.65 expects, plus about 2 GB of free RAM for web + api + worker + mock-meta. |
 | Performance SC-007 (50k import) | ✅ PASS | 50,000 new contacts in 1m 13s, upload included (limit 5 min) |
 | Performance SC-002 (10k campaign) | ✅ PASS | Re-run after fix 7 at a configured 25 msg/s: 10,000 sent in 10m 59s (limit 20 min), 10,000 unique sends, no duplicates. All ~30,000 status webhooks were stored and queued, and none were lost. Final statuses: 9,999 Read and 1 Failed (the deliberate `0000` number). |
@@ -68,6 +70,14 @@ has, so run them in CI.
    stuck at Delivered in the new test. Webhooks now run 10 in parallel, each status update locks
    its message row (`FOR NO KEY UPDATE`), and the database pool is configurable
    (`DATABASE_POOL_MAX`, default 20). Covered by `status-concurrency.int-spec.ts`.
+
+8. **CI had no storage bucket:** CI starts an empty MinIO, and only the API's boot created the
+   bucket, so upload, import, media and retention tests failed. The integration global setup now
+   creates the bucket. This was proven with a brand-new bucket name.
+9. **Stale rate card in the worker:** the first CI e2e run showed a $0.00 report cost. The API and
+   the worker each cached the rate card for 30 s, and a change cleared only the API's copy, so
+   deliveries were priced with the old (empty) card. The cache is now versioned through Redis.
+   Covered by `rate-card-cache.int-spec.ts`.
 
 After fixes 5–7, the affected suites were re-run and pass:
 - worker-boot, users
