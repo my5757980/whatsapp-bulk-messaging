@@ -1,8 +1,23 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { WebhooksProcessor } from '../../src/modules/webhooks/webhooks.processor.js';
-import { restoreNetwork, seedContact, seedNumber, seedTemplate, setDefaultCountry, uaePhone, useNockLocalOnly } from '../support/fixtures.js';
-import { createTestContext, postSignedWebhook, signIn, webhook, type SignedInAgent, type TestContext } from '../support/test-context.js';
+import {
+  restoreNetwork,
+  seedContact,
+  seedNumber,
+  seedTemplate,
+  setDefaultCountry,
+  uaePhone,
+  useNockLocalOnly,
+} from '../support/fixtures.js';
+import {
+  createTestContext,
+  postSignedWebhook,
+  signIn,
+  webhook,
+  type SignedInAgent,
+  type TestContext,
+} from '../support/test-context.js';
 import { expectMatchesContract } from './openapi-validator.js';
 
 // T025 (and later stories): live chat responses match specs/002-team-inbox/contracts/inbox-api.openapi.yaml.
@@ -13,7 +28,12 @@ describe('Live chat API contract', () => {
   let agentB: SignedInAgent;
   let number: { id: string; phoneNumberId: string; wabaId: string };
 
-  const check = async (method: string, route: string, res: { status: number; body: unknown }, expected: number) => {
+  const check = async (
+    method: string,
+    route: string,
+    res: { status: number; body: unknown },
+    expected: number,
+  ) => {
     expect(res.status, JSON.stringify(res.body)).toBe(expected);
     await expectMatchesContract('inbox-api.openapi.yaml', method, route, res.status, res.body);
   };
@@ -21,9 +41,15 @@ describe('Live chat API contract', () => {
   /** A chat opened by a customer message; returns its ID. */
   const newChat = async (): Promise<string> => {
     const phone = uaePhone();
-    const payload = webhook.inbound(number.phoneNumberId, phone.slice(1), `Hello ${randomUUID().slice(0, 4)}`);
+    const payload = webhook.inbound(
+      number.phoneNumberId,
+      phone.slice(1),
+      `Hello ${randomUUID().slice(0, 4)}`,
+    );
     await ctx.app.get(WebhooksProcessor).process(await postSignedWebhook(ctx, payload));
-    return (await ctx.prisma.conversation.findFirstOrThrow({ where: { contact: { phoneE164: phone } } })).id;
+    return (
+      await ctx.prisma.conversation.findFirstOrThrow({ where: { contact: { phoneE164: phone } } })
+    ).id;
   };
 
   beforeAll(async () => {
@@ -44,106 +70,391 @@ describe('Live chat API contract', () => {
   it('US1: lists, opens, takes, answers, reads and closes a chat', async () => {
     const id = await newChat();
 
-    await check('get', '/inbox/conversations', await admin.agent.get('/api/inbox/conversations'), 200);
-    await check('get', '/inbox/conversations', await agentA.agent.get('/api/inbox/conversations').query({ view: 'live', state: 'ACTIVE', mine: 'false' }), 200);
-    await check('get', '/inbox/conversations', await admin.agent.get('/api/inbox/conversations').query({ view: 'live', state: 'BOGUS' }), 422);
-    await check('get', '/inbox/conversations/{id}', await agentA.agent.get(`/api/inbox/conversations/${id}`), 200);
-    await check('get', '/inbox/conversations/{id}', await agentA.agent.get(`/api/inbox/conversations/${randomUUID()}`), 404);
-    await check('get', '/inbox/conversations/{id}/items', await agentA.agent.get(`/api/inbox/conversations/${id}/items`).query({ limit: 10 }), 200);
+    await check(
+      'get',
+      '/inbox/conversations',
+      await admin.agent.get('/api/inbox/conversations'),
+      200,
+    );
+    await check(
+      'get',
+      '/inbox/conversations',
+      await agentA.agent
+        .get('/api/inbox/conversations')
+        .query({ view: 'live', state: 'ACTIVE', mine: 'false' }),
+      200,
+    );
+    await check(
+      'get',
+      '/inbox/conversations',
+      await admin.agent.get('/api/inbox/conversations').query({ view: 'live', state: 'BOGUS' }),
+      422,
+    );
+    await check(
+      'get',
+      '/inbox/conversations/{id}',
+      await agentA.agent.get(`/api/inbox/conversations/${id}`),
+      200,
+    );
+    await check(
+      'get',
+      '/inbox/conversations/{id}',
+      await agentA.agent.get(`/api/inbox/conversations/${randomUUID()}`),
+      404,
+    );
+    await check(
+      'get',
+      '/inbox/conversations/{id}/items',
+      await agentA.agent.get(`/api/inbox/conversations/${id}/items`).query({ limit: 10 }),
+      200,
+    );
     await check('get', '/inbox/unread', await agentA.agent.get('/api/inbox/unread'), 200);
 
-    await check('post', '/inbox/conversations/{id}/intervene', await agentA.agent.post(`/api/inbox/conversations/${id}/intervene`).set('X-CSRF-Token', agentA.csrf), 200);
-    await check('post', '/inbox/conversations/{id}/intervene', await admin.agent.post(`/api/inbox/conversations/${id}/intervene`).set('X-CSRF-Token', admin.csrf), 409);
-    await check('post', '/inbox/conversations/{id}/resolve', await agentB.agent.post(`/api/inbox/conversations/${id}/resolve`).set('X-CSRF-Token', agentB.csrf), 404);
+    await check(
+      'post',
+      '/inbox/conversations/{id}/intervene',
+      await agentA.agent
+        .post(`/api/inbox/conversations/${id}/intervene`)
+        .set('X-CSRF-Token', agentA.csrf),
+      200,
+    );
+    await check(
+      'post',
+      '/inbox/conversations/{id}/intervene',
+      await admin.agent
+        .post(`/api/inbox/conversations/${id}/intervene`)
+        .set('X-CSRF-Token', admin.csrf),
+      409,
+    );
+    await check(
+      'post',
+      '/inbox/conversations/{id}/resolve',
+      await agentB.agent
+        .post(`/api/inbox/conversations/${id}/resolve`)
+        .set('X-CSRF-Token', agentB.csrf),
+      404,
+    );
 
     // Replies are only queued here; no send worker runs in contract tests.
-    const reply = await agentA.agent.post(`/api/inbox/conversations/${id}/messages`).set('X-CSRF-Token', agentA.csrf).send({ type: 'text', text: 'Hi! How can we help?' });
+    const reply = await agentA.agent
+      .post(`/api/inbox/conversations/${id}/messages`)
+      .set('X-CSRF-Token', agentA.csrf)
+      .send({ type: 'text', text: 'Hi! How can we help?' });
     await check('post', '/inbox/conversations/{id}/messages', reply, 202);
     await check(
       'post',
       '/inbox/conversations/{id}/messages',
-      await agentA.agent.post(`/api/inbox/conversations/${id}/messages`).set('X-CSRF-Token', agentA.csrf).send({ type: 'text', text: '' }),
+      await agentA.agent
+        .post(`/api/inbox/conversations/${id}/messages`)
+        .set('X-CSRF-Token', agentA.csrf)
+        .send({ type: 'text', text: '' }),
       422,
     );
 
-    const read = await agentA.agent.post(`/api/inbox/conversations/${id}/read`).set('X-CSRF-Token', agentA.csrf);
+    const read = await agentA.agent
+      .post(`/api/inbox/conversations/${id}/read`)
+      .set('X-CSRF-Token', agentA.csrf);
     expect(read.status).toBe(204);
     await check('post', '/inbox/conversations/{id}/read', read, 204);
 
-    await check('post', '/inbox/conversations/{id}/resolve', await agentA.agent.post(`/api/inbox/conversations/${id}/resolve`).set('X-CSRF-Token', agentA.csrf), 200);
-    await check('post', '/inbox/conversations/{id}/resolve', await agentA.agent.post(`/api/inbox/conversations/${id}/resolve`).set('X-CSRF-Token', agentA.csrf), 409);
+    await check(
+      'post',
+      '/inbox/conversations/{id}/resolve',
+      await agentA.agent
+        .post(`/api/inbox/conversations/${id}/resolve`)
+        .set('X-CSRF-Token', agentA.csrf),
+      200,
+    );
+    await check(
+      'post',
+      '/inbox/conversations/{id}/resolve',
+      await agentA.agent
+        .post(`/api/inbox/conversations/${id}/resolve`)
+        .set('X-CSRF-Token', agentA.csrf),
+      409,
+    );
   });
 
   it('US2: Past chats, starting a chat and sending a template', async () => {
-    await check('get', '/inbox/conversations', await admin.agent.get('/api/inbox/conversations').query({ view: 'history' }), 200);
+    await check(
+      'get',
+      '/inbox/conversations',
+      await admin.agent.get('/api/inbox/conversations').query({ view: 'history' }),
+      200,
+    );
     await check('get', '/inbox/numbers', await agentA.agent.get('/api/inbox/numbers'), 200);
     await check('get', '/inbox/members', await agentA.agent.get('/api/inbox/members'), 200);
 
     const phone = uaePhone();
     const contact = await seedContact(ctx, phone);
-    const open = (body: Record<string, string>) => admin.agent.post('/api/inbox/conversations').set('X-CSRF-Token', admin.csrf).send(body);
+    const open = (body: Record<string, string>) =>
+      admin.agent.post('/api/inbox/conversations').set('X-CSRF-Token', admin.csrf).send(body);
     const created = await open({ contactId: contact.id, numberId: number.id });
     await check('post', '/inbox/conversations', created, 201);
-    await check('post', '/inbox/conversations', await open({ contactId: contact.id, numberId: number.id }), 200);
-    await check('post', '/inbox/conversations', await open({ contactId: randomUUID(), numberId: number.id }), 404);
+    await check(
+      'post',
+      '/inbox/conversations',
+      await open({ contactId: contact.id, numberId: number.id }),
+      200,
+    );
+    await check(
+      'post',
+      '/inbox/conversations',
+      await open({ contactId: randomUUID(), numberId: number.id }),
+      404,
+    );
 
     const template = await seedTemplate(ctx, number.wabaId);
     const send = (params: Record<string, string>) =>
-      admin.agent.post(`/api/inbox/conversations/${created.body.id}/template`).set('X-CSRF-Token', admin.csrf).send({ templateId: template.id, params });
-    await check('post', '/inbox/conversations/{id}/template', await send({ 'BODY.1': 'Sara' }), 202);
+      admin.agent
+        .post(`/api/inbox/conversations/${created.body.id}/template`)
+        .set('X-CSRF-Token', admin.csrf)
+        .send({ templateId: template.id, params });
+    await check(
+      'post',
+      '/inbox/conversations/{id}/template',
+      await send({ 'BODY.1': 'Sara' }),
+      202,
+    );
     await check('post', '/inbox/conversations/{id}/template', await send({}), 422);
   });
 
   it('US3: settings, agent rules and transfer', async () => {
     const settings = await admin.agent.get('/api/live-chat/settings');
     await check('get', '/live-chat/settings', settings, 200);
-    const put = (path: string, body: unknown) => admin.agent.put(path).set('X-CSRF-Token', admin.csrf).send(body as object);
-    await check('put', '/live-chat/settings', await put('/api/live-chat/settings', { ...settings.body, humanKeywords: ['agent'], autoResolve: false }), 200);
-    await check('put', '/live-chat/settings', await put('/api/live-chat/settings', { ...settings.body, humanKeywords: ['a', 'b', 'c', 'd', 'e', 'f'] }), 422);
+    const put = (path: string, body: unknown) =>
+      admin.agent
+        .put(path)
+        .set('X-CSRF-Token', admin.csrf)
+        .send(body as object);
+    await check(
+      'put',
+      '/live-chat/settings',
+      await put('/api/live-chat/settings', {
+        ...settings.body,
+        humanKeywords: ['agent'],
+        autoResolve: false,
+      }),
+      200,
+    );
+    await check(
+      'put',
+      '/live-chat/settings',
+      await put('/api/live-chat/settings', {
+        ...settings.body,
+        humanKeywords: ['a', 'b', 'c', 'd', 'e', 'f'],
+      }),
+      422,
+    );
 
-    const tag = await ctx.prisma.tag.create({ data: { name: `contract-${randomUUID().slice(0, 6)}` } });
-    await check('put', '/users/{id}/agent-rules', await put(`/api/users/${agentB.userId}/agent-rules`, [{ kind: 'TAG', tagId: tag.id }]), 200);
-    await check('get', '/users/{id}/agent-rules', await admin.agent.get(`/api/users/${agentB.userId}/agent-rules`), 200);
-    await check('put', '/users/{id}/agent-rules', await put(`/api/users/${admin.userId}/agent-rules`, []), 422);
-    await check('put', '/users/{id}/agent-rules', await put(`/api/users/${agentB.userId}/agent-rules`, []), 200);
+    const tag = await ctx.prisma.tag.create({
+      data: { name: `contract-${randomUUID().slice(0, 6)}` },
+    });
+    await check(
+      'put',
+      '/users/{id}/agent-rules',
+      await put(`/api/users/${agentB.userId}/agent-rules`, [{ kind: 'TAG', tagId: tag.id }]),
+      200,
+    );
+    await check(
+      'get',
+      '/users/{id}/agent-rules',
+      await admin.agent.get(`/api/users/${agentB.userId}/agent-rules`),
+      200,
+    );
+    await check(
+      'put',
+      '/users/{id}/agent-rules',
+      await put(`/api/users/${admin.userId}/agent-rules`, []),
+      422,
+    );
+    await check(
+      'put',
+      '/users/{id}/agent-rules',
+      await put(`/api/users/${agentB.userId}/agent-rules`, []),
+      200,
+    );
 
     const id = await newChat();
-    await agentA.agent.post(`/api/inbox/conversations/${id}/intervene`).set('X-CSRF-Token', agentA.csrf);
+    await agentA.agent
+      .post(`/api/inbox/conversations/${id}/intervene`)
+      .set('X-CSRF-Token', agentA.csrf);
     const transfer = (who: SignedInAgent, userId: string) =>
-      who.agent.post(`/api/inbox/conversations/${id}/transfer`).set('X-CSRF-Token', who.csrf).send({ userId });
-    await check('post', '/inbox/conversations/{id}/transfer', await transfer(agentA, agentB.userId), 200);
-    await check('post', '/inbox/conversations/{id}/transfer', await transfer(agentA, agentA.userId), 404);
+      who.agent
+        .post(`/api/inbox/conversations/${id}/transfer`)
+        .set('X-CSRF-Token', who.csrf)
+        .send({ userId });
+    await check(
+      'post',
+      '/inbox/conversations/{id}/transfer',
+      await transfer(agentA, agentB.userId),
+      200,
+    );
+    await check(
+      'post',
+      '/inbox/conversations/{id}/transfer',
+      await transfer(agentA, agentA.userId),
+      404,
+    );
   });
 
   it('US4: saved replies, media library and sending them', async () => {
     const name = `Contract reply ${randomUUID().slice(0, 6)}`;
-    const create = (body: Record<string, unknown>) => admin.agent.post('/api/canned-messages').set('X-CSRF-Token', admin.csrf).send(body);
-    const created = await create({ name, type: 'TEXT', text: 'Hi {first_name}, order {{1}}', variableFallbacks: { first_name: 'there' } });
+    const create = (body: Record<string, unknown>) =>
+      admin.agent.post('/api/canned-messages').set('X-CSRF-Token', admin.csrf).send(body);
+    const created = await create({
+      name,
+      type: 'TEXT',
+      text: 'Hi {first_name}, order {{1}}',
+      variableFallbacks: { first_name: 'there' },
+    });
     await check('post', '/canned-messages', created, 201);
-    await check('post', '/canned-messages', await create({ name, type: 'TEXT', text: 'again' }), 409);
+    await check(
+      'post',
+      '/canned-messages',
+      await create({ name, type: 'TEXT', text: 'again' }),
+      409,
+    );
     await check('get', '/canned-messages', await agentA.agent.get('/api/canned-messages'), 200);
     await check(
       'patch',
       '/canned-messages/{id}',
-      await admin.agent.patch(`/api/canned-messages/${created.body.id}`).set('X-CSRF-Token', admin.csrf).send({ name, type: 'TEXT', text: 'Hi {first_name}, order {{1}} ready' }),
+      await admin.agent
+        .patch(`/api/canned-messages/${created.body.id}`)
+        .set('X-CSRF-Token', admin.csrf)
+        .send({ name, type: 'TEXT', text: 'Hi {first_name}, order {{1}} ready' }),
       200,
     );
-    await check('put', '/canned-messages/{id}/favorite', await agentA.agent.put(`/api/canned-messages/${created.body.id}/favorite`).set('X-CSRF-Token', agentA.csrf), 204);
-    await check('delete', '/canned-messages/{id}/favorite', await agentA.agent.delete(`/api/canned-messages/${created.body.id}/favorite`).set('X-CSRF-Token', agentA.csrf), 204);
+    await check(
+      'put',
+      '/canned-messages/{id}/favorite',
+      await agentA.agent
+        .put(`/api/canned-messages/${created.body.id}/favorite`)
+        .set('X-CSRF-Token', agentA.csrf),
+      204,
+    );
+    await check(
+      'delete',
+      '/canned-messages/{id}/favorite',
+      await agentA.agent
+        .delete(`/api/canned-messages/${created.body.id}/favorite`)
+        .set('X-CSRF-Token', agentA.csrf),
+      204,
+    );
 
-    const uploaded = await agentA.agent.post('/api/media-library').set('X-CSRF-Token', agentA.csrf).attach('file', Buffer.from('%PDF-1.4'), { filename: 'menu.pdf', contentType: 'application/pdf' });
+    const uploaded = await agentA.agent
+      .post('/api/media-library')
+      .set('X-CSRF-Token', agentA.csrf)
+      .attach('file', Buffer.from('%PDF-1.4'), {
+        filename: 'menu.pdf',
+        contentType: 'application/pdf',
+      });
     await check('post', '/media-library', uploaded, 201);
-    await check('post', '/media-library', await agentA.agent.post('/api/media-library').set('X-CSRF-Token', agentA.csrf).attach('file', Buffer.from('GIF89a'), { filename: 'a.gif', contentType: 'image/gif' }), 422);
-    await check('get', '/media-library', await agentA.agent.get('/api/media-library').query({ kind: 'document' }), 200);
+    await check(
+      'post',
+      '/media-library',
+      await agentA.agent
+        .post('/api/media-library')
+        .set('X-CSRF-Token', agentA.csrf)
+        .attach('file', Buffer.from('GIF89a'), { filename: 'a.gif', contentType: 'image/gif' }),
+      422,
+    );
+    await check(
+      'get',
+      '/media-library',
+      await agentA.agent.get('/api/media-library').query({ kind: 'document' }),
+      200,
+    );
 
     const id = await newChat();
-    const send = (body: Record<string, unknown>) => agentA.agent.post(`/api/inbox/conversations/${id}/messages`).set('X-CSRF-Token', agentA.csrf).send(body);
-    await check('post', '/inbox/conversations/{id}/messages', await send({ type: 'media', mediaAssetId: uploaded.body.id, text: 'Menu' }), 202);
-    await check('post', '/inbox/conversations/{id}/messages', await send({ type: 'canned', cannedMessageId: created.body.id, params: { '1': '#7' } }), 202);
-    await check('post', '/inbox/conversations/{id}/messages', await send({ type: 'canned', cannedMessageId: created.body.id }), 422);
+    const send = (body: Record<string, unknown>) =>
+      agentA.agent
+        .post(`/api/inbox/conversations/${id}/messages`)
+        .set('X-CSRF-Token', agentA.csrf)
+        .send(body);
+    await check(
+      'post',
+      '/inbox/conversations/{id}/messages',
+      await send({ type: 'media', mediaAssetId: uploaded.body.id, text: 'Menu' }),
+      202,
+    );
+    await check(
+      'post',
+      '/inbox/conversations/{id}/messages',
+      await send({ type: 'canned', cannedMessageId: created.body.id, params: { '1': '#7' } }),
+      202,
+    );
+    await check(
+      'post',
+      '/inbox/conversations/{id}/messages',
+      await send({ type: 'canned', cannedMessageId: created.body.id }),
+      422,
+    );
 
-    await check('delete', '/media-library/{id}', await admin.agent.delete(`/api/media-library/${uploaded.body.id}`).set('X-CSRF-Token', admin.csrf), 204);
-    await check('delete', '/canned-messages/{id}', await admin.agent.delete(`/api/canned-messages/${created.body.id}`).set('X-CSRF-Token', admin.csrf), 204);
-    await check('delete', '/canned-messages/{id}', await admin.agent.delete(`/api/canned-messages/${created.body.id}`).set('X-CSRF-Token', admin.csrf), 404);
+    await check(
+      'delete',
+      '/media-library/{id}',
+      await admin.agent
+        .delete(`/api/media-library/${uploaded.body.id}`)
+        .set('X-CSRF-Token', admin.csrf),
+      204,
+    );
+    await check(
+      'delete',
+      '/canned-messages/{id}',
+      await admin.agent
+        .delete(`/api/canned-messages/${created.body.id}`)
+        .set('X-CSRF-Token', admin.csrf),
+      204,
+    );
+    await check(
+      'delete',
+      '/canned-messages/{id}',
+      await admin.agent
+        .delete(`/api/canned-messages/${created.body.id}`)
+        .set('X-CSRF-Token', admin.csrf),
+      404,
+    );
+  });
+  it('US5: journey, contact edits and blocking', async () => {
+    const id = await newChat();
+    const chat = await ctx.prisma.conversation.findUniqueOrThrow({ where: { id } });
+    await check(
+      'get',
+      '/inbox/conversations/{id}/journey',
+      await agentA.agent.get(`/api/inbox/conversations/${id}/journey`),
+      200,
+    );
+    const tag = await ctx.prisma.tag.create({
+      data: { name: `profile-${randomUUID().slice(0, 6)}` },
+    });
+    const patch = (body: Record<string, unknown>) =>
+      admin.agent
+        .patch(`/api/inbox/conversations/${id}/contact`)
+        .set('X-CSRF-Token', admin.csrf)
+        .send(body);
+    await check(
+      'patch',
+      '/inbox/conversations/{id}/contact',
+      await patch({ name: 'Contract Name', addTagIds: [tag.id], firstMessageTagId: tag.id }),
+      200,
+    );
+    await check(
+      'patch',
+      '/inbox/conversations/{id}/contact',
+      await patch({ addTagIds: [randomUUID()] }),
+      422,
+    );
+    await check(
+      'get',
+      '/inbox/conversations/{id}/journey',
+      await admin.agent.get(`/api/inbox/conversations/${id}/journey`),
+      200,
+    );
+    const block = (method: 'post' | 'delete', contactId: string) =>
+      agentA.agent[method](`/api/contacts/${contactId}/block`).set('X-CSRF-Token', agentA.csrf);
+    await check('post', '/contacts/{id}/block', await block('post', chat.contactId!), 204);
+    await check('delete', '/contacts/{id}/block', await block('delete', chat.contactId!), 204);
+    await check('post', '/contacts/{id}/block', await block('post', randomUUID()), 404);
   });
 });

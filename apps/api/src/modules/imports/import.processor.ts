@@ -169,10 +169,10 @@ export class ImportProcessor implements OnModuleInit {
         const values = rows.map((r) => {
           const optIn = r.optInNote !== null;
           return Prisma.sql`(${uuidv7()}::uuid, ${r.phoneE164}, ${r.countryCode}, ${r.name}, ${JSON.stringify(r.attributes)}::jsonb,
-            ${optIn ? 'OPTED_IN' : 'UNKNOWN'}::"ConsentStatus", ${optIn ? 'IMPORT' : null}::"ConsentSource", ${r.optInNote}, ${optIn ? now : null}::timestamptz, ${now}, ${now})`;
+            ${optIn ? 'OPTED_IN' : 'UNKNOWN'}::"ConsentStatus", ${optIn ? 'IMPORT' : null}::"ConsentSource", ${r.optInNote}, ${optIn ? now : null}::timestamptz, 'Import', ${now}, ${now})`;
         });
         const upserted = await tx.$queryRaw<Array<{ id: string; phone_e164: string; inserted: boolean }>>`
-          INSERT INTO contacts (id, phone_e164, country_code, name, attributes, consent_status, consent_source, consent_source_note, consent_at, created_at, updated_at)
+          INSERT INTO contacts (id, phone_e164, country_code, name, attributes, consent_status, consent_source, consent_source_note, consent_at, lead_source, created_at, updated_at)
           VALUES ${Prisma.join(values)}
           ON CONFLICT (phone_e164) DO UPDATE
              SET name = COALESCE(EXCLUDED.name, contacts.name),

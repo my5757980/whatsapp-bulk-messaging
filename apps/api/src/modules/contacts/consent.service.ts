@@ -112,6 +112,7 @@ export class ConsentService {
                 consentSource: 'UPLOAD_CONFIRMATION' as const,
                 consentSourceNote: note,
                 consentAt: now,
+                leadSource: 'Campaign upload',
               })),
               skipDuplicates: true,
               select: { id: true },

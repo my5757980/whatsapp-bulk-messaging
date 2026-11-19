@@ -121,7 +121,7 @@ export class PublicApiService {
         const now = new Date();
         const contact = await tx.contact.upsert({
           where: { phoneE164: phone.e164 },
-          create: { phoneE164: phone.e164, countryCode: phone.country, name: input.contact?.name || null },
+          create: { phoneE164: phone.e164, countryCode: phone.country, name: input.contact?.name || null, leadSource: 'API' },
           update: {},
         });
         if (input.contact?.name && !contact.name) await tx.contact.update({ where: { id: contact.id }, data: { name: input.contact.name } });

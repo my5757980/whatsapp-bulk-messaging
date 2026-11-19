@@ -38,6 +38,22 @@ export class InboxPublisher {
     await this.events.publish({ type: 'conversation.window_closed', ...facts(row), data: { conversationId: row.id } });
   }
 
+  /** contact.updated: tags, attributes, name, first-message tag, consent or blocking changed. */
+  async contactUpdated(contactId: string): Promise<void> {
+    const chats = await this.prisma.conversation.findMany({ where: { contactId }, select: { id: true } });
+    const contact = await this.prisma.contact.findUnique({ where: { id: contactId }, select: { blockedAt: true } });
+    await this.events.publish({
+      type: 'contact.updated',
+      conversationId: null,
+      numberId: null,
+      contactId,
+      state: null,
+      intervenedById: null,
+      blocked: contact?.blockedAt != null,
+      data: { contactId, conversationIds: chats.map((c) => c.id) },
+    });
+  }
+
   /** message.created (or note.created) with the full timeline item. */
   async itemCreated(itemId: string, mentions?: string[]): Promise<void> {
     const found = await this.prisma.chatMessage.findUnique({ where: { id: itemId }, include: { ...ITEM_INCLUDE, conversation: { include: SUMMARY_INCLUDE } } });
