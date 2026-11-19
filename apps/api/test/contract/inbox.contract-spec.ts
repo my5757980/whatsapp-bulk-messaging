@@ -76,6 +76,7 @@ describe('Live chat API contract', () => {
 
   it('US2: Past chats, starting a chat and sending a template', async () => {
     await check('get', '/inbox/conversations', await admin.agent.get('/api/inbox/conversations').query({ view: 'history' }), 200);
+    await check('get', '/inbox/numbers', await agentA.agent.get('/api/inbox/numbers'), 200);
 
     const phone = uaePhone();
     const contact = await seedContact(ctx, phone);

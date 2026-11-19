@@ -185,6 +185,15 @@ export class ConversationsService {
     };
   }
 
+  /** Numbers a member can start a chat from (agents cannot list numbers in settings). */
+  async numbers() {
+    return this.prisma.whatsAppNumber.findMany({
+      where: { connectionStatus: { not: 'DISCONNECTED' } },
+      select: { id: true, label: true, displayPhoneNumber: true },
+      orderBy: { label: 'asc' },
+    });
+  }
+
   /** Loads a chat the viewer may see, or answers 404 (contract header). */
   async loadVisible(viewer: Viewer, id: string): Promise<ConversationRow> {
     const row = await this.prisma.conversation.findUnique({ where: { id }, include: SUMMARY_INCLUDE });

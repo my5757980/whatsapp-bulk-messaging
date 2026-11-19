@@ -39,6 +39,8 @@ export function mapTemplateCategory(category: string): Category {
 export const TemplateListQuerySchema = z.object({
   status: z.enum(['DRAFT', 'PENDING', 'APPROVED', 'REJECTED', 'PAUSED', 'DISABLED', 'DELETED']).optional(),
   wabaId: z.string().trim().min(1).optional(),
+  /** Templates usable from this number (its WABA); for live chat, where agents cannot list numbers. */
+  numberId: z.uuid().optional(),
 });
 export type TemplateListQuery = z.infer<typeof TemplateListQuerySchema>;
 
@@ -86,8 +88,14 @@ export class TemplatesSyncService {
   ) {}
 
   async list(query: TemplateListQuery) {
+    let wabaId = query.wabaId;
+    if (query.numberId) {
+      const number = await this.prisma.whatsAppNumber.findUnique({ where: { id: query.numberId }, select: { wabaId: true } });
+      if (!number || (wabaId && wabaId !== number.wabaId)) return [];
+      wabaId = number.wabaId;
+    }
     const rows = await this.prisma.template.findMany({
-      where: { ...(query.status ? { status: query.status } : {}), ...(query.wabaId ? { wabaId: query.wabaId } : {}) },
+      where: { ...(query.status ? { status: query.status } : {}), ...(wabaId ? { wabaId } : {}) },
       orderBy: [{ name: 'asc' }, { language: 'asc' }],
     });
     return rows.map(toTemplateDto);

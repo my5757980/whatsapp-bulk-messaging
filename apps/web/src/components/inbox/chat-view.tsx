@@ -112,7 +112,7 @@ export function ChatView({ id, meId, canMonitor }: { id: string; meId: string; c
         <div ref={bottom} />
       </div>
 
-      <Composer chat={chat} />
+      <Composer chat={chat} meId={meId} />
     </section>
   );
 }

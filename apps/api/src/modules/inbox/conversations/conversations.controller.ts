@@ -96,6 +96,12 @@ export class ConversationsController {
     await this.conversations.markRead(viewer(user), id);
   }
 
+  @Get('numbers')
+  @Require('inbox.reply')
+  numbers() {
+    return this.conversations.numbers();
+  }
+
   @Get('unread')
   @Require('inbox.view')
   unread(@CurrentUser() user: RequestUser) {

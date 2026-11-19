@@ -611,6 +611,7 @@ paths:
       parameters:
         - { name: status, in: query, schema: { $ref: '#/components/schemas/TemplateStatus' } }
         - { name: wabaId, in: query, schema: { type: string } }
+        - { name: numberId, in: query, description: 'templates usable from this number (its WABA); added by feature 002', schema: { type: string, format: uuid } }
       responses:
         '200':
           description: Templates

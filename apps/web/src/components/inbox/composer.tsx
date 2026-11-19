@@ -7,6 +7,7 @@ import { toast } from '@/components/ui/toaster';
 import { api, ApiError } from '@/lib/api-client';
 import type { ChatItem, ConversationDetail } from '@/lib/inbox-types';
 import { queryKeys } from '@/lib/query';
+import { TemplateSender } from './template-sender';
 
 export const MAX_REPLY_LENGTH = 4096;
 
@@ -29,13 +30,25 @@ function useTimeLeft(windowEndsAt: string | null): string | null {
  * Reply box (T036): text up to 4096 characters (emoji from the system picker). The queued
  * message shows at once; ticks follow from live events. A failed send keeps the draft.
  */
-export function Composer({ chat, onSent }: { chat: ConversationDetail; onSent?: (item: ChatItem) => void }) {
+export function Composer({
+  chat,
+  meId,
+  onSent,
+}: {
+  chat: ConversationDetail;
+  meId: string;
+  onSent?: (item: ChatItem) => void;
+}) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState('');
   const timeLeft = useTimeLeft(chat.windowEndsAt);
 
   const send = useMutation({
-    mutationFn: (text: string) => api<ChatItem>(`/inbox/conversations/${chat.id}/messages`, { method: 'POST', json: { type: 'text', text } }),
+    mutationFn: (text: string) =>
+      api<ChatItem>(`/inbox/conversations/${chat.id}/messages`, {
+        method: 'POST',
+        json: { type: 'text', text },
+      }),
     onSuccess: (item) => {
       setDraft('');
       onSent?.(item);
@@ -45,7 +58,8 @@ export function Composer({ chat, onSent }: { chat: ConversationDetail; onSent?: 
     },
     onError: (error) => {
       toast.error(error instanceof ApiError ? error.message : 'The reply could not be sent');
-      if (error instanceof ApiError && error.code === 'WINDOW_CLOSED') void queryClient.invalidateQueries({ queryKey: queryKeys.inboxConversation(chat.id) });
+      if (error instanceof ApiError && error.code === 'WINDOW_CLOSED')
+        void queryClient.invalidateQueries({ queryKey: queryKeys.inboxConversation(chat.id) });
     },
   });
 
@@ -61,18 +75,28 @@ export function Composer({ chat, onSent }: { chat: ConversationDetail; onSent?: 
     }
   };
 
+  // Templates work in Past chats too; a chat another member took stays theirs.
+  const mayAct = chat.state !== 'INTERVENED' || chat.intervenedBy?.id === meId;
   if (chat.inHistory) {
     return (
-      <div className="border-t bg-muted/40 p-4 text-sm text-muted-foreground" data-testid="window-closed">
-        🔒 The 24-hour reply window has closed. Free replies are locked until the customer writes again; a template can restart
-        the conversation.
+      <div
+        className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/40 p-4 text-sm text-muted-foreground"
+        data-testid="window-closed"
+      >
+        <span>
+          🔒 The 24-hour reply window has closed. Free replies are locked until the customer writes
+          again; a template can restart the conversation.
+        </span>
+        {mayAct && <TemplateSender chat={chat} />}
       </div>
     );
   }
   if (!chat.canReply) {
     return (
       <div className="border-t bg-muted/40 p-4 text-sm text-muted-foreground">
-        {chat.state === 'INTERVENED' && chat.intervenedBy ? `${chat.intervenedBy.name} has taken this chat.` : 'You cannot reply in this chat right now.'}
+        {chat.state === 'INTERVENED' && chat.intervenedBy
+          ? `${chat.intervenedBy.name} has taken this chat.`
+          : 'You cannot reply in this chat right now.'}
       </div>
     );
   }
@@ -100,6 +124,7 @@ export function Composer({ chat, onSent }: { chat: ConversationDetail; onSent?: 
           <span>
             {draft.length}/{MAX_REPLY_LENGTH}
           </span>
+          <TemplateSender chat={chat} variant="outline" />
           <Button type="submit" size="sm" disabled={!draft.trim() || send.isPending}>
             {send.isPending ? 'Sending…' : 'Send'}
           </Button>
