@@ -1,6 +1,26 @@
 import { execSync } from 'node:child_process';
+import { CreateBucketCommand, HeadBucketCommand, S3Client } from '@aws-sdk/client-s3';
 import { Redis } from 'ioredis';
 import '../../src/common/config/load-env.js';
+
+/** Creates the object-storage bucket when missing (CI starts an empty MinIO; the API does this at boot). */
+async function ensureBucket(): Promise<void> {
+  const bucket = process.env.S3_BUCKET ?? 'wbm';
+  const s3 = new S3Client({
+    region: process.env.S3_REGION ?? 'us-east-1',
+    ...(process.env.S3_ENDPOINT ? { endpoint: process.env.S3_ENDPOINT, forcePathStyle: true } : {}),
+    ...(process.env.S3_ACCESS_KEY && process.env.S3_SECRET_KEY
+      ? { credentials: { accessKeyId: process.env.S3_ACCESS_KEY, secretAccessKey: process.env.S3_SECRET_KEY } }
+      : {}),
+  });
+  try {
+    await s3.send(new HeadBucketCommand({ Bucket: bucket }));
+  } catch {
+    await s3.send(new CreateBucketCommand({ Bucket: bucket }));
+  } finally {
+    s3.destroy();
+  }
+}
 
 /**
  * Runs once before the integration/contract projects:
@@ -27,4 +47,6 @@ export default async function globalSetup(): Promise<void> {
   } finally {
     await redis.quit();
   }
+
+  await ensureBucket();
 }
