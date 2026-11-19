@@ -26,7 +26,7 @@ test('US7: public API send, idempotency, status and opt-out refusal', async ({ p
   await page.getByRole('button', { name: 'Create API key' }).click();
   await page.getByLabel('Name').fill(`E2E ${suffix}`);
   await page.getByRole('button', { name: 'Create key' }).click();
-  const secret = await page.getByLabel('API key').inputValue();
+  const secret = await page.getByRole('textbox', { name: 'API key', exact: true }).inputValue();
   expect(secret).toMatch(/^wbk_[A-Za-z0-9]{32}$/);
   await page.getByRole('button', { name: 'I have stored it' }).click();
 

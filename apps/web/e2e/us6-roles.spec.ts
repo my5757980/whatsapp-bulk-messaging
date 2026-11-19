@@ -19,7 +19,7 @@ async function inviteAndAccept(admin: Page, browser: Browser, role: 'MANAGER' | 
   await admin.goto('/settings/team');
   await admin.getByRole('button', { name: 'Invite member' }).click();
   await admin.getByLabel('E-mail').fill(email);
-  await admin.getByLabel('Role').selectOption(role);
+  await admin.getByLabel('Role', { exact: true }).selectOption(role);
   await admin.getByRole('button', { name: 'Create invitation' }).click();
   const link = await admin.getByLabel('Invitation link').inputValue();
   await admin.keyboard.press('Escape');

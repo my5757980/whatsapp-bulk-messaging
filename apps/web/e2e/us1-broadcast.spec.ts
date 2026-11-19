@@ -25,7 +25,7 @@ test('US1: connect, sync, upload, map, send and see 9 delivered/read + 1 failed'
   await page.getByLabel('Phone number ID').fill(`10${suffix}`);
   await page.getByLabel('Access token').fill('mock-token');
   await page.getByRole('button', { name: 'Connect', exact: true }).click();
-  await expect(page.getByRole('cell', { name: new RegExp(label) })).toBeVisible();
+  await expect(page.getByRole('cell', { name: new RegExp(`^${label}`) })).toBeVisible();
 
   // Sync templates from mock-meta.
   await page.goto('/templates');

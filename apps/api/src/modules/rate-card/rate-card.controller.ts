@@ -1,9 +1,11 @@
-import { Body, Controller, Get, Injectable, Put, Req } from '@nestjs/common';
+import { Body, Controller, Get, Inject, Injectable, Put, Req } from '@nestjs/common';
+import type { Redis } from 'ioredis';
 import { z } from 'zod';
 import { Require } from '../../common/auth/permissions.guard.js';
 import { CurrentUser, clientIp, type AuthedRequest, type RequestUser } from '../../common/auth/request-user.js';
 import { AppError, type ErrorDetail } from '../../common/errors/app-error.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
+import { REDIS_CLIENT } from '../../common/queue/queue.module.js';
 import { ZodValidationPipe } from '../../common/validation/zod.pipe.js';
 import type { RateCardEntry } from '../../generated/prisma/client.js';
 import { AuditService, type AuditActor } from '../audit/audit.service.js';
@@ -35,14 +37,17 @@ const toDto = (e: RateCardEntry) => ({
 });
 
 const CACHE_MS = 30_000;
+/** Bumped on every change, so the api's and the worker's caches drop stale rates at once. */
+const VERSION_KEY = 'wbm:rate-card:version';
 
 @Injectable()
 export class RateCardService {
-  private cache: { table: RateTable; at: number } | null = null;
+  private cache: { table: RateTable; at: number; version: string } | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
   async list() {
@@ -52,10 +57,12 @@ export class RateCardService {
 
   /** Rate lookup table, cached briefly because status webhooks use it for every delivery. */
   async table(): Promise<RateTable> {
-    if (this.cache && Date.now() - this.cache.at < CACHE_MS) return this.cache.table;
+    // A Redis hiccup keeps the current cache rather than failing the status update.
+    const version = (await this.redis.get(VERSION_KEY).catch(() => this.cache?.version)) ?? '0';
+    if (this.cache && this.cache.version === version && Date.now() - this.cache.at < CACHE_MS) return this.cache.table;
     const rows = await this.prisma.rateCardEntry.findMany();
     const table = new RateTable(rows);
-    this.cache = { table, at: Date.now() };
+    this.cache = { table, at: Date.now(), version };
     return table;
   }
 
@@ -77,6 +84,7 @@ export class RateCardService {
       }),
     ]);
     this.cache = null;
+    await this.redis.incr(VERSION_KEY);
     await this.audit.record(actor, 'rate_card.updated', { type: 'rate_card' }, { entries: entries.length });
     return this.list();
   }

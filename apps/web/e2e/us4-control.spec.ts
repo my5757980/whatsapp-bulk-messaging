@@ -69,7 +69,8 @@ test('US4: a scheduled 1,000-recipient campaign starts on time and never double-
   await page.getByRole('button', { name: 'Schedule' }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Schedule' }).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${campaign.id}$`));
-  await expect(page.getByTestId('scheduled-banner')).toBeVisible();
+  // The dev server compiles the campaign page on its first visit, which can take a while in CI.
+  await expect(page.getByTestId('scheduled-banner')).toBeVisible({ timeout: 30_000 });
 
   // Starts on time (within a minute of the scheduled minute).
   await expect(async () => {
