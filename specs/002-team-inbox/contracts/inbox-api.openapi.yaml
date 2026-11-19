@@ -328,6 +328,26 @@ paths:
           description: Count
           content: { application/json: { schema: { type: object, required: [total], properties: { total: { type: integer } } } } }
 
+  /inbox/members:
+    get:
+      tags: [conversations]
+      summary: Active members a chat can be transferred to
+      x-permission: inbox.reply
+      responses:
+        '200':
+          description: Members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, name, role]
+                  properties:
+                    id: { type: string, format: uuid }
+                    name: { type: string }
+                    role: { type: string, enum: [ADMIN, MANAGER, AGENT] }
+
   /inbox/numbers:
     get:
       tags: [conversations]

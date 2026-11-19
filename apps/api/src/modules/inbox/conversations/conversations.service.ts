@@ -226,6 +226,12 @@ export class ConversationsService {
     };
   }
 
+  /** Active members a chat can be transferred to (agents cannot list the team in settings). */
+  async members() {
+    const users = await this.prisma.user.findMany({ where: { status: 'ACTIVE' }, select: { id: true, name: true, role: true }, orderBy: { name: 'asc' } });
+    return users.filter((u) => can(u.role, 'inbox.reply'));
+  }
+
   /** Numbers a member can start a chat from (agents cannot list numbers in settings). */
   async numbers() {
     return this.prisma.whatsAppNumber.findMany({

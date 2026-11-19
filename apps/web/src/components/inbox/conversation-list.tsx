@@ -1,10 +1,11 @@
 'use client';
 
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { NativeSelect } from '@/components/ui/native-select';
 import { api } from '@/lib/api-client';
 import type { ConversationList, ConversationState } from '@/lib/inbox-types';
 import { queryKeys } from '@/lib/query';
@@ -30,17 +31,27 @@ export function ConversationList({ selectedId, onSelect }: { selectedId: string 
   const [tab, setTab] = useState<Tab>('ACTIVE');
   const [search, setSearch] = useState('');
   const [q, setQ] = useState('');
+  const [numberId, setNumberId] = useState('');
+  const [tagId, setTagId] = useState('');
+  const [mine, setMine] = useState(false);
+  const numbers = useQuery({ queryKey: ['inbox', 'numbers'], queryFn: () => api<Array<{ id: string; label: string }>>('/inbox/numbers') });
+  const tags = useQuery({ queryKey: ['tags'], queryFn: () => api<Array<{ id: string; name: string }>>('/tags') });
   useEffect(() => {
     const timer = window.setTimeout(() => setQ(search.trim()), 300);
     return () => window.clearTimeout(timer);
   }, [search]);
 
-  const filters: Record<string, string> = tab === 'HISTORY' ? { view: 'history', q } : { view: 'live', state: tab, q };
+  const filters: Record<string, string> = {
+    ...(tab === 'HISTORY' ? { view: 'history' } : { view: 'live', state: tab }),
+    ...(q ? { q } : {}),
+    ...(numberId ? { numberId } : {}),
+    ...(tagId ? { tagId } : {}),
+    ...(mine ? { mine: 'true' } : {}),
+  };
   const list = useInfiniteQuery({
     queryKey: queryKeys.inboxConversations(filters),
     queryFn: ({ pageParam }) => {
       const params = new URLSearchParams({ ...filters, limit: '30' });
-      if (!q) params.delete('q');
       if (pageParam) params.set('cursor', pageParam);
       return api<ConversationList>(`/inbox/conversations?${params.toString()}`);
     },
@@ -68,6 +79,30 @@ export function ConversationList({ selectedId, onSelect }: { selectedId: string 
           ))}
         </div>
         <Input placeholder="Search name or number" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Search chats" />
+        <div className="grid grid-cols-2 gap-2">
+          {(numbers.data?.length ?? 0) > 1 && (
+            <NativeSelect aria-label="Filter by number" value={numberId} onChange={(e) => setNumberId(e.target.value)}>
+              <option value="">All numbers</option>
+              {numbers.data?.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.label}
+                </option>
+              ))}
+            </NativeSelect>
+          )}
+          <NativeSelect aria-label="Filter by tag" value={tagId} onChange={(e) => setTagId(e.target.value)}>
+            <option value="">All tags</option>
+            {tags.data?.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </NativeSelect>
+          <label className="flex items-center gap-2 text-xs">
+            <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} />
+            Only my chats
+          </label>
+        </div>
       </div>
       <ul className="min-h-0 flex-1 overflow-y-auto" data-testid="conversation-list">
         {list.isLoading && <li className="p-4 text-sm text-muted-foreground">Loading…</li>}

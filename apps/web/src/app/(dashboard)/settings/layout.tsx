@@ -13,6 +13,7 @@ const TABS: Array<{ href: string; label: string; permission: Permission }> = [
   { href: '/settings/keywords', label: 'Consent keywords', permission: 'settings.view' },
   { href: '/settings/rate-card', label: 'Rate card', permission: 'campaigns.view' },
   { href: '/settings/team', label: 'Team', permission: 'users.manage' },
+  { href: '/settings/live-chat', label: 'Live chat', permission: 'livechat.settings' },
   { href: '/settings/api-keys', label: 'API keys', permission: 'apikeys.manage' },
   { href: '/settings/audit', label: 'Audit log', permission: 'audit.view' },
 ];

@@ -10,6 +10,7 @@ import { STATE_LABEL, type ChatItemPage, type ConversationDetail, type Conversat
 import { queryKeys } from '@/lib/query';
 import { ChatItemView } from './chat-item-view';
 import { Composer } from './composer';
+import { TransferDialog } from './transfer-dialog';
 
 /** Marks the chat read at most every 3 s while it is open and the tab is visible (R8). */
 function useMarkRead(id: string, newestItemId: string | undefined) {
@@ -93,6 +94,7 @@ export function ChatView({ id, meId, canMonitor }: { id: string; meId: string; c
               Take chat
             </Button>
           )}
+          {canClose && <TransferDialog chatId={chat.id} ownerId={chat.intervenedBy?.id ?? null} />}
           {canClose && (
             <Button size="sm" variant="outline" onClick={() => act.mutate('resolve')} disabled={act.isPending}>
               Close chat
