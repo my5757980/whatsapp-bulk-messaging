@@ -299,7 +299,7 @@
 
 ### Tests for User Story 3 (REQUIRED - Constitution Principle V) ⚠️
 
-- [ ] T045 [P] [US3] Integration test in apps/api/test/integration/inbox-routing.int-spec.ts:
+- [X] T045 [P] [US3] Integration test in apps/api/test/integration/inbox-routing.int-spec.ts:
   - **Keywords:**
     - a configured "talk to a person" keyword → REQUESTING, unresolved_requests +1, INBOX_REQUESTING notifications to members who can see the chat
     - a keyword while INTERVENED changes nothing except the counter
@@ -308,32 +308,32 @@
   - **Agent rules:** with mixed tags and attributes on 100 chats, the agent sees exactly the matching ones (SC-008)
   - **Filters:** tagId, attribute and campaignId filters combine
   - **Deactivation:** deactivating a member resolves their chats to ACTIVE
-- [ ] T046 [P] [US3] Add contract tests for transfer, `GET`/`PUT /users/{id}/agent-rules` and `GET`/`PUT /live-chat/settings` (keywords and auto-resolve fields) to apps/api/test/contract/inbox.contract-spec.ts
+- [X] T046 [P] [US3] Add contract tests for transfer, `GET`/`PUT /users/{id}/agent-rules` and `GET`/`PUT /live-chat/settings` (keywords and auto-resolve fields) to apps/api/test/contract/inbox.contract-spec.ts
 - [ ] T047 [P] [US3] Playwright e2e for the quickstart US3 row in apps/web/e2e/inbox-us3-routing.spec.ts
 
 ### Implementation for User Story 3
 
-- [ ] T048 [US3] Implement the live chat settings core in apps/api/src/modules/inbox/settings/live-chat-settings.service.ts and live-chat-settings.controller.ts:
+- [X] T048 [US3] Implement the live chat settings core in apps/api/src/modules/inbox/settings/live-chat-settings.service.ts and live-chat-settings.controller.ts:
   - get and put the singleton
   - validate `humanKeywords` (at most 5, normalised, unique) and `autoResolve`
   - working hours and automatic content are accepted and validated here but used in US6
   - audit the changes
-- [ ] T049 [US3] Add "talk to a person" handling to apps/api/src/modules/inbox/inbound/inbound-chat.handler.ts (research R13):
+- [X] T049 [US3] Add "talk to a person" handling to apps/api/src/modules/inbox/inbound/inbound-chat.handler.ts (research R13):
   - order: consent (001) → human keywords → rest
   - REQUESTING transition and counter, journey REQUESTED
   - in-app notifications through the 001 NotificationsService (types INBOX_REQUESTING)
   - publish
-- [ ] T050 [US3] Implement transfer in apps/api/src/modules/inbox/conversations/conversations.service.ts and the controller:
+- [X] T050 [US3] Implement transfer in apps/api/src/modules/inbox/conversations/conversations.service.ts and the controller:
   - guards: owner, or inbox.monitor; target active and can see the chat
   - journey TRANSFERRED, INBOX_TRANSFERRED notification, audit
-- [ ] T051 [P] [US3] Implement auto-resolve in apps/api/src/modules/inbox/routing/auto-resolve.processor.ts: a maintenance scheduler every 5 min; when the setting is on, resolve INTERVENED chats with last_activity_at older than 24 h, close the opening and publish
-- [ ] T052 [P] [US3] Implement agent rules in apps/api/src/modules/inbox/routing/agent-rules.service.ts and agent-rules.controller.ts:
+- [X] T051 [P] [US3] Implement auto-resolve in apps/api/src/modules/inbox/routing/auto-resolve.processor.ts: a maintenance scheduler every 5 min; when the setting is on, resolve INTERVENED chats with last_activity_at older than 24 h, close the opening and publish
+- [X] T052 [P] [US3] Implement agent rules in apps/api/src/modules/inbox/routing/agent-rules.service.ts and agent-rules.controller.ts:
   - replace-all PUT, validated: the user must be an AGENT, the tag exists, the attribute key is defined
   - invalidate the visibility cache, audit
-- [ ] T053 [US3] Implement list filters and the deactivation hook in apps/api/src/modules/inbox/conversations/conversations.service.ts and apps/api/src/modules/users/users.controller.ts:
+- [X] T053 [US3] Implement list filters and the deactivation hook in apps/api/src/modules/inbox/conversations/conversations.service.ts and apps/api/src/modules/users/users.controller.ts:
   - tagId, attribute (`key:value` → `attributes @>`) and campaignId (recipient of the campaign) filters in conversations.service.ts
   - in apps/api/src/modules/users/users.controller.ts (UsersService.update), deactivation resolves the member's INTERVENED chats
-- [ ] T054 [P] [US3] Add the dev helper apps/api/scripts/inbox-age.ts with a root script `inbox:age` that shifts a chat's timestamps back by N hours (quickstart US3); it refuses to run when NODE_ENV=production
+- [X] T054 [P] [US3] Add the dev helper apps/api/scripts/inbox-age.ts with a root script `inbox:age` that shifts a chat's timestamps back by N hours (quickstart US3); it refuses to run when NODE_ENV=production
 - [ ] T055 [US3] Build the routing UI in apps/web/src/components/inbox/chat-view.tsx and apps/web/src/app/(dashboard)/settings/live-chat/page.tsx:
   - a transfer menu in the chat header (apps/web/src/components/inbox/chat-view.tsx)
   - filter controls in conversation-list.tsx

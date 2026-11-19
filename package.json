@@ -25,6 +25,7 @@
     "db:migrate": "npm run db:migrate -w @wbm/api",
     "db:seed": "npm run db:seed -w @wbm/api --",
     "mock:inbound": "npm run inbound -w @wbm/mock-meta --",
+    "inbox:age": "npm run inbox:age -w @wbm/api --",
     "perf:campaign": "tsx tools/perf/campaign-10k.ts",
     "perf:import": "tsx tools/perf/import-50k.ts"
   },
