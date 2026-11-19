@@ -244,7 +244,7 @@
 
 ### Tests for User Story 2 (REQUIRED - Constitution Principle V) ⚠️
 
-- [ ] T037 [P] [US2] Integration test in apps/api/test/integration/inbox-window-history.int-spec.ts:
+- [X] T037 [P] [US2] Integration test in apps/api/test/integration/inbox-window-history.int-spec.ts:
   - `windowEndsAt` is shown
   - `view=history` lists only chats past 24 h
   - free-form text after 24 h gets 422 WINDOW_CLOSED at the request
@@ -254,24 +254,24 @@
   - a customer reply returns the chat to live as ACTIVE
   - the window-close job publishes `conversation.window_closed` within 60 s
   - `POST /inbox/conversations` opens or creates a chat for a contact
-- [ ] T038 [P] [US2] Add contract tests for POST /inbox/conversations, POST /inbox/conversations/{id}/template and `view=history` to apps/api/test/contract/inbox.contract-spec.ts
+- [X] T038 [P] [US2] Add contract tests for POST /inbox/conversations, POST /inbox/conversations/{id}/template and `view=history` to apps/api/test/contract/inbox.contract-spec.ts
 - [ ] T039 [P] [US2] Playwright e2e for the quickstart US2 row in apps/web/e2e/inbox-us2-window-history.spec.ts
 
 ### Implementation for User Story 2
 
-- [ ] T040 [US2] Move the template consent and validation checks into apps/api/src/modules/sending/template-send-rules.ts:
+- [X] T040 [US2] Move the template consent and validation checks into apps/api/src/modules/sending/template-send-rules.ts:
   - extract them from apps/api/src/modules/public-api/public-api.service.ts into `assertTemplateSendable(contact, template, params, headerMedia)` in apps/api/src/modules/sending/template-send-rules.ts
   - reuse it from the public API (no behaviour change; the 001 public-api tests stay green)
-- [ ] T041 [US2] Implement template sends from a chat in apps/api/src/modules/inbox/messages/template-send.service.ts:
+- [X] T041 [US2] Implement template sends from a chat in apps/api/src/modules/inbox/messages/template-send.service.ts:
   - create a `messages` row (origin INBOX, sent_by_user_id), resolved params and header media through the 001 builders
   - enqueue the inbox `send` job at priority 1
   - add a MESSAGE_REF row and publish
-- [ ] T042 [US2] Implement History and starting chats in apps/api/src/modules/inbox/conversations/conversations.service.ts and conversations.controller.ts:
+- [X] T042 [US2] Implement History and starting chats in apps/api/src/modules/inbox/conversations/conversations.service.ts and conversations.controller.ts:
   - `view=history` in `list`
   - `POST /inbox/conversations` (open or create with back-fill)
   - `POST /inbox/conversations/{id}/template`
   - `canReply` and `windowEndsAt` in the DTOs
-- [ ] T043 [P] [US2] Implement the window-close notifier in apps/api/src/modules/inbox/routing/window-close.processor.ts: a maintenance scheduler every 60 s that publishes `conversation.window_closed` for chats whose 24-hour mark fell in the last minute
+- [X] T043 [P] [US2] Implement the window-close notifier in apps/api/src/modules/inbox/routing/window-close.processor.ts: a maintenance scheduler every 60 s that publishes `conversation.window_closed` for chats whose 24-hour mark fell in the last minute
 - [ ] T044 [US2] Build the History and template UI in apps/web/src/components/inbox/template-sender.tsx, conversation-list.tsx and composer.tsx:
   - a Past chats tab
   - a window countdown in the reply box; a lock with the explanation and "Send template" when closed

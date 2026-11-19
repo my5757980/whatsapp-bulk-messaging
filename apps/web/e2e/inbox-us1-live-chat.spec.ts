@@ -54,9 +54,13 @@ test('US1: receive a customer message live, take the chat, reply with ticks and 
   await expect(page.getByText('Taken · you')).toBeVisible();
 
   await page.getByLabel('Reply').fill('Yes, it is in stock!');
-  await page.getByLabel('Reply').press('Enter');
+  const [response] = await Promise.all([
+    page.waitForResponse((r) => r.request().method() === 'POST' && r.url().includes('/api/inbox/conversations/') && r.url().endsWith('/messages')),
+    page.getByLabel('Reply').press('Enter'),
+  ]);
+  expect(response.status(), await response.text()).toBe(202);
   const reply = timeline.getByTestId('chat-item').filter({ hasText: 'Yes, it is in stock!' });
-  await expect(reply).toBeVisible();
+  await expect(reply).toBeVisible({ timeout: 15_000 });
   await expect(page.getByLabel('Reply')).toHaveValue('');
   // mock-meta reports sent, delivered and read within about two seconds of the send.
   await expect(reply.getByLabel('Read')).toBeVisible({ timeout: 45_000 });

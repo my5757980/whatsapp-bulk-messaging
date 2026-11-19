@@ -58,7 +58,7 @@ export function TemplateSender({ chat, variant = 'default' }: { chat: Conversati
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant={variant}>
+        <Button type="button" size="sm" variant={variant}>
           Send template
         </Button>
       </DialogTrigger>
