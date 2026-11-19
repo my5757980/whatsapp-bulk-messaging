@@ -49,7 +49,10 @@ export function ChatView({ id, meId, canMonitor }: { id: string; meId: string; c
   const items = useMemo(() => (timeline.data?.pages.flatMap((p) => p.items) ?? []).slice().reverse(), [timeline.data]);
   const newestId = items.at(-1)?.id;
   useMarkRead(id, newestId);
-  useEffect(() => bottom.current?.scrollIntoView({ block: 'end' }), [newestId]);
+  // A block body: scrollIntoView() returns a Promise in recent browsers, and an effect may only return a cleanup function.
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ block: 'end' });
+  }, [newestId]);
 
   const refresh = (summary?: ConversationSummary) => {
     void queryClient.invalidateQueries({ queryKey: queryKeys.inboxConversation(id) });
