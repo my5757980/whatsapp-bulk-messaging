@@ -119,13 +119,15 @@ describe('Live chat: saved replies and media (US4)', () => {
     const metaId = `media-${randomUUID()}`;
     const uploads = nock(META_BASE).post(`/${META_VERSION}/${number.phoneNumberId}/media`).once().reply(200, { id: metaId });
     const bodies: Array<Record<string, unknown>> = [];
-    nock(META_BASE)
-      .post(`/${META_VERSION}/${number.phoneNumberId}/messages`, (body: Record<string, unknown>) => {
-        bodies.push(body);
-        return true;
-      })
-      .times(2)
-      .reply(200, { messages: [{ id: `wamid.${randomUUID()}` }] });
+    // One interceptor per send: Meta returns a different wamid for every message.
+    for (let i = 0; i < 2; i++) {
+      nock(META_BASE)
+        .post(`/${META_VERSION}/${number.phoneNumberId}/messages`, (body: Record<string, unknown>) => {
+          bodies.push(body);
+          return true;
+        })
+        .reply(200, { messages: [{ id: `wamid.${randomUUID()}` }] });
+    }
 
     for (const caption of ['Our menu', 'Again']) {
       const sent = await post(agent, `/api/inbox/conversations/${chat.id}/messages`).send({ type: 'media', mediaAssetId: file.body.id, text: caption, fileName: 'menu.pdf' });
