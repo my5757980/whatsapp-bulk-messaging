@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
+import { collectDiagnostics } from './diagnostics';
 
 // T026: quickstart US1 row - a customer's message appears in Open within seconds; a member takes
 // the chat, replies, sees the ticks and closes it (specs/002-team-inbox/quickstart.md).
@@ -20,6 +21,7 @@ test('US1: receive a customer message live, take the chat, reply with ticks and 
   // Avoid mock-meta's failure endings (0000 and 0047).
   const customer = `+97150${suffix.slice(-6)}1`;
   const name = `Sara ${suffix.slice(-4)}`;
+  const diag = collectDiagnostics(page);
 
   await page.goto('/login');
   await page.getByLabel('Email').fill(ADMIN_EMAIL);
@@ -60,10 +62,10 @@ test('US1: receive a customer message live, take the chat, reply with ticks and 
   ]);
   expect(response.status(), await response.text()).toBe(202);
   const reply = timeline.getByTestId('chat-item').filter({ hasText: 'Yes, it is in stock!' });
-  await expect(reply).toBeVisible({ timeout: 15_000 });
+  await diag.check(() => expect(reply).toBeVisible({ timeout: 15_000 }));
   await expect(page.getByLabel('Reply')).toHaveValue('');
   // mock-meta reports sent, delivered and read within about two seconds of the send.
-  await expect(reply.getByLabel('Read')).toBeVisible({ timeout: 45_000 });
+  await diag.check(() => expect(reply.getByLabel('Read')).toBeVisible({ timeout: 45_000 }));
 
   const sent = (await (await page.request.get(`${MOCK_META}/mock/sent`)).json()) as { messages: Array<{ phoneNumberId: string; type: string; text?: string }> };
   expect(sent.messages.some((m) => m.phoneNumberId === phoneNumberId && m.type === 'text' && m.text === 'Yes, it is in stock!')).toBe(true);

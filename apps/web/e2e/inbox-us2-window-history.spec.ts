@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
+import { collectDiagnostics } from './diagnostics';
 
 // T039: quickstart US2 row - a chat older than 24 hours is under Past chats with free replies
 // locked; a template restarts it and is delivered; the customer's answer makes it live again.
@@ -20,6 +21,7 @@ test('US2: a past chat is locked, a template restarts it, and the reply makes it
   const phoneNumberId = `81${suffix}`;
   const customer = `+97155${suffix.slice(-6)}2`;
   const name = `Omar ${suffix.slice(-4)}`;
+  const diag = collectDiagnostics(page);
 
   await page.goto('/login');
   await page.getByLabel('Email').fill(ADMIN_EMAIL);
@@ -61,6 +63,6 @@ test('US2: a past chat is locked, a template restarts it, and the reply makes it
 
   // The customer answers: the window opens again and the reply box returns.
   inbound(`--from ${customer} --name "${name}" --text "Great, thanks!" --phone-number-id ${phoneNumberId}`);
-  await expect(page.getByTestId('timeline')).toContainText('Great, thanks!', { timeout: 15_000 });
-  await expect(page.getByLabel('Reply')).toBeVisible({ timeout: 15_000 });
+  await diag.check(() => expect(page.getByTestId('timeline')).toContainText('Great, thanks!', { timeout: 15_000 }));
+  await diag.check(() => expect(page.getByLabel('Reply')).toBeVisible({ timeout: 15_000 }));
 });
