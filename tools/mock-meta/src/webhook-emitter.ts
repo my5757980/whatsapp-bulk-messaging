@@ -55,12 +55,31 @@ export function statusPayload(e: StatusEvent) {
   });
 }
 
-export function inboundPayload(args: { wabaId: string; phoneNumberId: string; from: string; text: string }) {
+/** One entry of `value.messages[]` (specs/002-team-inbox/contracts/meta-graph-inbox.md §1). */
+export interface InboundMessage {
+  from: string;
+  id: string;
+  timestamp: string;
+  type: string;
+  [field: string]: unknown;
+}
+
+/** A customer message of any type, with the sender's profile name. */
+export function inboundMessagePayload(args: { wabaId: string; phoneNumberId: string; name: string; message: InboundMessage }) {
   return envelope(args.wabaId, 'messages', {
     messaging_product: 'whatsapp',
     metadata: { display_phone_number: '15550100', phone_number_id: args.phoneNumberId },
-    contacts: [{ profile: { name: 'Mock Customer' }, wa_id: args.from }],
-    messages: [{ from: args.from, id: `wamid.in.${Date.now()}`, timestamp: unix(), type: 'text', text: { body: args.text } }],
+    contacts: [{ profile: { name: args.name }, wa_id: args.message.from }],
+    messages: [args.message],
+  });
+}
+
+export function inboundPayload(args: { wabaId: string; phoneNumberId: string; from: string; text: string }) {
+  return inboundMessagePayload({
+    wabaId: args.wabaId,
+    phoneNumberId: args.phoneNumberId,
+    name: 'Mock Customer',
+    message: { from: args.from, id: `wamid.in.${Date.now()}`, timestamp: unix(), type: 'text', text: { body: args.text } },
   });
 }
 

@@ -22,6 +22,14 @@ export const ALL_PERMISSIONS = [
   'apikeys.manage',
   'ratecard.manage',
   'audit.view',
+  // Feature 002 live chat (spec FR-041, contracts/inbox-api.openapi.yaml header)
+  'inbox.view',
+  'inbox.reply',
+  'inbox.monitor',
+  'canned.manage',
+  'media.manage',
+  'livechat.settings',
+  'inbox.metrics',
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];
@@ -39,9 +47,15 @@ const MANAGER_PERMISSIONS: readonly Permission[] = [
   'campaigns.launch',
   'data.export',
   'phones.full',
+  'inbox.view',
+  'inbox.reply',
+  'inbox.monitor',
+  'canned.manage',
+  'media.manage',
+  'inbox.metrics',
 ];
 
-const AGENT_PERMISSIONS: readonly Permission[] = ['contacts.view', 'templates.view', 'campaigns.view'];
+const AGENT_PERMISSIONS: readonly Permission[] = ['contacts.view', 'templates.view', 'campaigns.view', 'inbox.view', 'inbox.reply'];
 
 const MATRIX: Readonly<Record<Role, ReadonlySet<Permission>>> = {
   [Role.ADMIN]: new Set<Permission>(ALL_PERMISSIONS),

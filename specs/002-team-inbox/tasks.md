@@ -37,23 +37,23 @@
 
 **Purpose**: dependencies, configuration, permissions and simulator support used by every story.
 
-- [ ] T001 Add the `web-push` dependency to apps/api/package.json and update package-lock.json:
-  - pin the newest release at least 2 weeks old, plus its types if separate
+- [X] T001 Add the `web-push` dependency to apps/api/package.json and update package-lock.json:
+  - pin the newest release at least 2 weeks old, plus its types if separate (done: web-push ^3.6.7, since 4.0.0 is only 13 days old; @types/web-push ^3.6.4)
   - add optional `WEB_PUSH_PUBLIC_KEY`, `WEB_PUSH_PRIVATE_KEY` and `WEB_PUSH_SUBJECT` to apps/api/src/common/config/config.ts (all three or none, otherwise a ConfigError)
   - document all three in .env.example
-- [ ] T002 [P] Write failing unit tests for the new permissions in packages/shared/src/permissions.test.ts:
+- [X] T002 [P] Write failing unit tests for the new permissions in packages/shared/src/permissions.test.ts:
   - inbox.view, inbox.reply, inbox.monitor, canned.manage, media.manage, livechat.settings and inbox.metrics
   - role matrix per spec FR-041 and the header of contracts/inbox-api.openapi.yaml
   - then add the permissions to packages/shared/src/permissions.ts and rebuild `@wbm/shared`
-- [ ] T003 [P] Extend tools/mock-meta/src/server.ts (contracts/meta-graph-inbox.md §2–§4, §6):
+- [X] T003 [P] Extend tools/mock-meta/src/server.ts (contracts/meta-graph-inbox.md §2–§4, §6):
   - accept free-form text/image/video/audio/document sends and emit sent/delivered/read webhooks like templates (numbers ending in 0000 fail with 131026)
   - answer `{status:"read"}` calls with `{success:true}`
   - serve `GET /{media-id}` (url, mime_type, file_size) and the download URL for test files
-- [ ] T004 [P] Extend the inbound CLI in tools/mock-meta/src/inbound-cli.ts:
+- [X] T004 [P] Extend the inbound CLI in tools/mock-meta/src/inbound-cli.ts:
   - flags `--name`, `--text`, `--image`, `--video`, `--audio --voice`, `--document`, `--sticker`, `--location lat,lng --label`, `--contact-card`, `--button-reply`, `--list-reply`, `--reaction --to-wamid`, `--unsupported`, `--at <offset>`
   - signed payloads per meta-graph-inbox.md §1
   - add sample media under samples/media/ (small jpg, pdf, ogg)
-- [ ] T005 [P] Add specs/002-team-inbox/contracts/inbox-api.openapi.yaml to the root `lint:contracts` script in package.json, and confirm `npm run lint:contracts` passes
+- [X] T005 [P] Add specs/002-team-inbox/contracts/inbox-api.openapi.yaml to the root `lint:contracts` script in package.json, and confirm `npm run lint:contracts` passes
 
 ---
 
