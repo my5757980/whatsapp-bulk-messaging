@@ -259,8 +259,8 @@ Each can be an approved template, or a regular text, image or file message.
 2. **Given** the welcome message is on and it is within working hours, **When** a customer starts a
    new conversation (first message, or first after 24 hours of silence), **Then** the welcome
    message is sent once for that conversation.
-3. **Given** a customer sends an opt-out, opt-in or "talk to a person" keyword, **When** it is
-   processed, **Then** no welcome or off-hours message is sent in reply.
+3. **Given** a customer sends an opt-out, opt-in or "talk to a person" keyword, or the contact has
+   opted out, **When** the message is processed, **Then** no welcome or off-hours message is sent.
 4. **Given** automatic messages, **When** the chat is shown, **Then** they are labelled automatic and do
    not count as a team member's response.
 5. **Given** a template is chosen as the welcome or off-hours message, **When** it is sent, **Then** its
@@ -499,7 +499,8 @@ documents, but do not change its flow.
 
   Each can be an approved template, or a regular text, image or file message.
 - **FR-036**: Automatic messages:
-  - MUST NOT be sent in reply to opt-out, opt-in or "talk to a person" keywords, or to blocked contacts
+  - MUST NOT be sent in reply to opt-out, opt-in or "talk to a person" keywords, to blocked contacts,
+    or to opted-out contacts (constitution Principle I: opt-out holds on every automated send path)
   - MUST be labelled automatic in the chat
   - MUST NOT count as a member's response
 
