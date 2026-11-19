@@ -425,7 +425,7 @@
   - a campaign still reaches a blocked (non-opted-out) contact
   - unblock restores live behaviour; blocking and unblocking are audited
 - [X] T068 [P] [US5] Add contract tests for GET journey, PATCH contact and POST/DELETE /contacts/{id}/block to apps/api/test/contract/inbox.contract-spec.ts
-- [ ] T069 [P] [US5] Playwright e2e for the quickstart US5 row in apps/web/e2e/inbox-us5-profile.spec.ts
+- [X] T069 [P] [US5] Playwright e2e for the quickstart US5 row in apps/web/e2e/inbox-us5-profile.spec.ts
 
 ### Implementation for User Story 5
 
@@ -446,7 +446,7 @@
   - endpoints in apps/api/src/modules/inbox/conversations/block.controller.ts: `POST`/`DELETE /contacts/{id}/block`, audited, journey events
   - in inbound-chat.handler.ts, a blocked contact stops after storing (no event, push or automatic reply)
   - blocked chats are excluded from live lists through the T016 predicate
-- [ ] T074 [US5] Build the profile and journey UI in apps/web/src/components/inbox/profile-panel.tsx and apps/web/src/components/inbox/journey-list.tsx:
+- [X] T074 [US5] Build the profile and journey UI in apps/web/src/components/inbox/profile-panel.tsx and apps/web/src/components/inbox/journey-list.tsx:
   - counters, source, first-message tag selector
   - campaigns with read ticks
   - attribute editing and tag add/create (permission-gated)
@@ -466,36 +466,36 @@
 
 ### Tests for User Story 6 (REQUIRED - Constitution Principle V) ⚠️
 
-- [ ] T075 [P] [US6] Unit tests for working hours in apps/api/test/unit/inbox/working-hours.spec.ts:
+- [X] T075 [P] [US6] Unit tests for working hours in apps/api/test/unit/inbox/working-hours.spec.ts:
   - IANA time zones including DST zones
   - several ranges per day, closed days, range boundaries
   - validation rejects overlaps and start ≥ end
-- [ ] T076 [P] [US6] Unit tests for the automatic-reply decision table (FR-035, FR-036) in apps/api/test/unit/inbox/auto-replies.spec.ts:
+- [X] T076 [P] [US6] Unit tests for the automatic-reply decision table (FR-035, FR-036) in apps/api/test/unit/inbox/auto-replies.spec.ts:
   - welcome only within hours on a new opening, once
   - off-hours outside hours, once per contact per 12 h
   - none for keywords, blocked or opted-out contacts
   - both off → nothing
-- [ ] T077 [P] [US6] Integration test in apps/api/test/integration/inbox-auto-replies.int-spec.ts:
+- [X] T077 [P] [US6] Integration test in apps/api/test/integration/inbox-auto-replies.int-spec.ts:
   - text/image/file content goes through the session path, and template content through the template path with variable fallbacks
   - each is sent exactly once under repeated inbound webhooks
   - items are labelled AUTOMATIC
   - `first_human_reply_at` is untouched
   - settings validation rejects an unapproved template
-- [ ] T078 [P] [US6] Playwright e2e for the quickstart US6 row in apps/web/e2e/inbox-us6-auto-replies.spec.ts
+- [X] T078 [P] [US6] Playwright e2e for the quickstart US6 row in apps/web/e2e/inbox-us6-auto-replies.spec.ts
 
 ### Implementation for User Story 6
 
-- [ ] T079 [P] [US6] Implement working hours in apps/api/src/modules/inbox/automation/working-hours.ts (makes T075 pass)
-- [ ] T080 [US6] Implement automatic replies in apps/api/src/modules/inbox/automation/auto-replies.service.ts (makes T076 pass, research R10):
+- [X] T079 [P] [US6] Implement working hours in apps/api/src/modules/inbox/automation/working-hours.ts (makes T075 pass)
+- [X] T080 [US6] Implement automatic replies in apps/api/src/modules/inbox/automation/auto-replies.service.ts (makes T076 pass, research R10):
   - called from inbound-chat.handler.ts after keywords
   - welcome guard: conditional update of `conversation_openings.welcome_sent_at`
   - off-hours guard: `SET NX EX 43200`
   - sends through session-send or template-send with `automatic: true`
-- [ ] T081 [US6] Complete settings validation in apps/api/src/modules/inbox/settings/live-chat-settings.service.ts:
+- [X] T081 [US6] Complete settings validation in apps/api/src/modules/inbox/settings/live-chat-settings.service.ts:
   - working hours shape and time zone
   - welcome/off-hours content: an approved template with variable mapping, or text, or a library image/file
   - "required when enabled"
-- [ ] T082 [US6] Build the working hours and automatic message sections of apps/web/src/app/(dashboard)/settings/live-chat/page.tsx:
+- [X] T082 [US6] Build the working hours and automatic message sections of apps/web/src/app/(dashboard)/settings/live-chat/page.tsx:
   - a weekday hours editor with time-zone select
   - welcome and off-hours editors: a template picker with variable mapping, or text, image or file from the library, with a preview
   - on/off switches

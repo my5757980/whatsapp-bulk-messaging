@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
 import { NotificationsBell } from '@/components/layout/notifications-bell';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api-client';
-import { useInboxEvents } from '@/lib/inbox-events';
+import { useInboxEvents, useNewMessageSound } from '@/lib/inbox-events';
 import { queryKeys } from '@/lib/query';
 import { useMe } from '@/lib/session';
 import { cn } from '@/lib/utils';
@@ -31,6 +31,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const canChat = me.data?.permissions.includes('inbox.view') ?? false;
   // One live event stream per tab, on every dashboard page (badges and sound work everywhere).
   useInboxEvents(canChat);
+  useNewMessageSound(canChat);
   const unread = useQuery({
     queryKey: queryKeys.inboxUnread,
     queryFn: () => api<{ total: number }>('/inbox/unread'),
@@ -82,6 +83,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-end gap-3 border-b px-6 py-3 text-sm">
+          {canChat && (
+            <Link href="/account/notifications" className="text-muted-foreground hover:text-foreground">
+              Alerts
+            </Link>
+          )}
           <NotificationsBell />
           <span className="text-muted-foreground">
             {me.data.name} · {me.data.role.toLowerCase()}

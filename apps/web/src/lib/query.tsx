@@ -26,6 +26,8 @@ export const queryKeys = {
   inboxConversation: (id: string) => ['inbox', 'conversation', id] as const,
   inboxItems: (id: string) => ['inbox', 'items', id] as const,
   inboxUnread: ['inbox', 'unread'] as const,
+  notificationPrefs: ['notification-preferences'] as const,
+  pushDevices: ['push-devices'] as const,
 };
 
 export function QueryProvider({ children }: { children: ReactNode }) {

@@ -1,7 +1,9 @@
 'use client';
 
-import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
+import { api } from './api-client';
+import { playChime } from './chime';
 import { queryKeys } from './query';
 
 // Live chat events in the browser (specs/002-team-inbox/contracts/realtime-events.md, T023): one
@@ -84,6 +86,26 @@ export function useInboxEvents(enabled: boolean): void {
       source?.close();
     };
   }, [enabled, queryClient]);
+}
+
+/** Plays the chime for new customer messages while the member's sound is on (T088, FR-037). */
+export function useNewMessageSound(enabled: boolean): void {
+  const prefs = useQuery({
+    queryKey: queryKeys.notificationPrefs,
+    queryFn: () => api<{ soundEnabled: boolean }>('/me/notification-preferences'),
+    enabled,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const soundOn = enabled && prefs.data?.soundEnabled === true;
+  useEffect(() => {
+    if (!soundOn) return;
+    // The stream only carries chats this member may see.
+    return subscribeInboxEvents((event) => {
+      const item = event.data.item as { origin?: string } | undefined;
+      if (event.type === 'message.created' && item?.origin === 'CUSTOMER') playChime();
+    });
+  }, [soundOn]);
 }
 
 function handle(queryClient: QueryClient, type: InboxEventType, message: MessageEvent<string>): void {

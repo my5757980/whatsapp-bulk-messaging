@@ -29,6 +29,8 @@ WORKDIR /app
 # outputFileTracingRoot is the repo root, so the server lives at apps/web/server.js.
 COPY --from=build --chown=node:node /app/apps/web/.next/standalone ./
 COPY --from=build --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
+# public/ holds the push alert service worker (sw.js, feature 002).
+COPY --from=build --chown=node:node /app/apps/web/public ./apps/web/public
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
