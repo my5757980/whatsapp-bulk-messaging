@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-worker/
+build/
+.next/
+out/
+*.tsbuildinfo
+apps/api/src/generated/
+
+# Environment & secrets (constitution Principle III)
+.env
+.env.*
+!.env.example
+
+# Tests & reports
+coverage/
+playwright-report/
+test-results/
+blob-report/
+
+# Logs & temp
+*.log
+npm-debug.log*
+*.tmp
+*.swp
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -208,3 +208,10 @@ Wait for consent; never auto-create ADRs. Group related decisions (stacks, authe
 
 ## Code Standards
 See `.specify/memory/constitution.md` for code quality, testing, performance, security, and architecture principles.
+
+## Active Technologies
+- TypeScript 6.0 on Node.js 26 LTS + Next.js 16.4 + React 19.3 + TanStack Query 5 + Tailwind CSS 4 (web); NestJS 12.5 + Prisma 7.10 + BullMQ 6.7 + ioredis 6 + nestjs-pino 5 + zod 4 + argon2 + csv-parse 7 + libphonenumber-js + AWS SDK S3 v3 + prom-client 15 (api/worker) (001-whatsapp-bulk-messaging)
+- PostgreSQL 16+ (Neon in production, Docker locally) via Prisma migrations; Redis 7+ (noeviction, AOF) for queues and rate limits; S3-compatible object storage (MinIO locally) for uploads and media (001-whatsapp-bulk-messaging)
+
+## Recent Changes
+- 001-whatsapp-bulk-messaging: Added TypeScript 6.0 on Node.js 26 LTS + Next.js 16.4, NestJS 12.5, Prisma 7.10, BullMQ 6.7 (see specs/001-whatsapp-bulk-messaging/plan.md)

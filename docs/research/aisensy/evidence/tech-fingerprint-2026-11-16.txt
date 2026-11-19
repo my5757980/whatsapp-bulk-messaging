@@ -1,0 +1,46 @@
+AiSensy public tech fingerprint — retrieved 2026-11-16 (passive: public pages, response headers, DNS)
+(Tracking IDs and verification tokens intentionally omitted.)
+
+== https://aisensy.com/ (marketing site) ==
+Status 200, ~244 KB HTML, server-rendered
+Response headers: X-Umso-Render: 2 | Strict-Transport-Security: max-age=15552000 | X-Frame-Options: sameorigin | Referrer-Policy: no-referrer-when-downgrade | Cache-Control: public, must-revalidate, max-age=0
+Asset/embed hosts (count): umsousercontent.com 138 | d3jt6ku4g6z5l8.cloudfront.net 55 | app.aisensy.com 6 | create.aisensy.com 4 | faq.aisensy.com 4 | m.aisensy.com 3 | aisensy.stoplight.io 2 | trust.aisensy.com 2 | wiki.aisensy.com 1 | careers.aisensy.com 1 | calendly.com 1 | youtube.com
+Third-party scripts: Google Tag Manager / gtag (2 GA4 properties), Meta Pixel, Microsoft Clarity, Plausible, Ahrefs Analytics, Tapfiliate, d3mkw6s8thqya7.cloudfront.net/integration-plugin.js, ai-sensy-contextual-popup-builder.replit.app/v1.js
+robots.txt: "User-agent: * / Allow: /"
+sitemap.xml: 735 URLs (see sitemap-urls-2026-11-16.txt)
+
+== https://app.aisensy.com/ -> https://www.app.aisensy.com/ (web app) ==
+Server: AmazonS3 | Via: CloudFront | X-Amz-Cf-Pop: DXB52
+HTML shell: <div id="root">, /static/js/main.<hash>.js  => React, Create React App build
+Scripts in shell: googletagmanager gtag, fast.wistia.com (video), js.chargebee.com/v2/chargebee.js (billing), sdk.arengu.com/forms.js (forms/signup flows)
+Login: https://app.aisensy.com/login | Signup: https://app.aisensy.com/signup
+
+== https://create.aisensy.com/ (free WhatsApp link & widget tool) ==
+Title: "AiSensy - Create WhatsApp Link & Widget"
+Server: AmazonS3 | Via: CloudFront | React (CRA chunks /static/js/2.<hash>.chunk.js, main.<hash>.chunk.js)
+
+== https://m.aisensy.com/ ==
+Redirects to https://aisensy.com/
+
+== https://wiki.aisensy.com/ and https://faq.aisensy.com/ (help center) ==
+Both -> https://wiki.aisensy.com/en/ ; Server: cloudflare ; assets static.intercomassets.com/_next/... => Intercom Articles (Next.js)
+help.aisensy.com article links also referenced from docs
+
+== https://trust.aisensy.com/ ==
+TLS handshake failed from this client (not investigated further)
+
+== https://careers.aisensy.com/ ==
+JS-rendered; content via fetch: 150+ team, roles in sales, support, engineering (software, DevOps, QA, PM), finance, HR, marketing; no tech stack named
+
+== Public API (from docs) ==
+POST https://backend.aisensy.com/campaign/t1/api/v2  (apiKey in JSON body)
+Docs: wiki.aisensy.com/en/articles/11501889-api-reference-docs ; Postman public workspace "aisensy" ; Stoplight project-api page linked from homepage returns 404
+
+== DNS: aisensy.com ==
+A      99.83.181.15  (ARIN RDAP: NET-99-83-64-0-1, Amazon.com, Inc.)
+www    99.83.181.15
+NS     dns1/dns2.registrar-servers.com  (Namecheap)
+MX     aspmx.l.google.com + alt1/alt2 + aspmx2/3.googlemail.com  (Google Workspace)
+SPF    include:_spf.google.com include:spf.brevo.com include:amazonses.com include:sendgrid.net ~all
+TXT    proxy-ssl.webflow.com. (legacy Webflow record)
+TXT    facebook-domain-verification, 5x google-site-verification, Microsoft 365 (MS=...), ps-cd-verification

@@ -1,0 +1,182 @@
+openapi: 3.1.0
+info:
+  title: WhatsApp Bulk Messaging - Public API v1
+  version: 1.0.0
+  description: >
+    API for the company's other systems (website, CRM, billing) to send approved WhatsApp
+    template messages (spec User Story 7, FR-032 to FR-037). Authenticate with an API key created
+    by an admin: `Authorization: Bearer wbk_...`. Requests are limited per key (default 60 per
+    minute). Send an `Idempotency-Key` header to make retries safe; a repeated key within 24 hours
+    returns the original message instead of sending again.
+servers:
+  - url: /api/v1
+security:
+  - apiKey: []
+
+paths:
+  /messages:
+    post:
+      summary: Send one approved template message
+      operationId: sendTemplateMessage
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema: { type: string, maxLength: 255 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendTemplateRequest' }
+            examples:
+              orderConfirmation:
+                value:
+                  numberId: 7b0c1f9e-4c1e-4b1a-9a5e-1f2e3d4c5b6a
+                  to: '+971501234567'
+                  template: { name: order_confirmation, language: en_US }
+                  params: { BODY.1: Sara, BODY.2: '#10234' }
+                  contact: { name: Sara, optInSourceNote: checkout form }
+      responses:
+        '202':
+          description: Accepted and queued; poll the status or rely on the message log
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageAccepted' }
+        '200':
+          description: Duplicate Idempotency-Key with identical body; original message returned
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageAccepted' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: Number or template not found
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '409':
+          description: Idempotency-Key reused with a different request body
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '422':
+          description: >
+            Not sendable. code is one of TEMPLATE_NOT_APPROVED, INVALID_NUMBER, CONTACT_OPTED_OUT,
+            NO_OPT_IN (marketing template without opt-in), PARAMS_MISMATCH, NUMBER_UNAVAILABLE
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /messages/{id}:
+    get:
+      summary: Current status and status history of a message
+      operationId: getMessage
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Message status
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageStatusResponse' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: Not found or not created by this key
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /templates:
+    get:
+      summary: List approved templates and their variable keys
+      operationId: listTemplates
+      responses:
+        '200':
+          description: Approved templates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name: { type: string }
+                    language: { type: string }
+                    category: { type: string, enum: [MARKETING, UTILITY, AUTHENTICATION] }
+                    variables: { type: array, items: { type: string }, examples: [[BODY.1, BODY.2]] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+components:
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      description: API key created in Settings > API keys (format wbk_...)
+  responses:
+    BadRequest:
+      description: Malformed request
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Unauthorized:
+      description: Missing, invalid or revoked API key
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    TooManyRequests:
+      description: Per-key request limit exceeded
+      headers:
+        Retry-After: { schema: { type: integer }, description: Seconds until the window resets }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    SendTemplateRequest:
+      type: object
+      required: [to, template]
+      properties:
+        numberId:
+          type: string
+          format: uuid
+          description: Sending number; optional when only one number is connected
+        to:
+          type: string
+          description: Recipient phone; international format preferred, default country code applied otherwise
+        template:
+          type: object
+          required: [name, language]
+          properties:
+            name: { type: string }
+            language: { type: string }
+        params:
+          type: object
+          additionalProperties: { type: string }
+          description: Values keyed by variable key, e.g. BODY.1, HEADER.1, BUTTON.0.1
+        headerMediaUrl:
+          type: string
+          format: uri
+          description: Public HTTPS URL for media headers
+        contact:
+          type: object
+          description: Optional upsert of the contact; recording opt-in requires optInSourceNote
+          properties:
+            name: { type: string }
+            optIn: { type: boolean }
+            optInSourceNote: { type: string }
+    MessageAccepted:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [QUEUED] }
+        createdAt: { type: string, format: date-time }
+    MessageStatusResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [QUEUED, SENDING, SENT, DELIVERED, READ, FAILED, SKIPPED] }
+        failureCode: { type: [integer, 'null'] }
+        failureReason: { type: [string, 'null'] }
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              status: { type: string }
+              at: { type: string, format: date-time }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        requestId: { type: string }

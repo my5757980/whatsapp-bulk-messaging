@@ -1,0 +1,42 @@
+{
+  "name": "whatsapp-bulk-messaging",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=26"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @wbm/shared && npm run build -w @wbm/api && npm run build -w @wbm/web",
+    "dev": "concurrently -k -n shared,api,worker,web,mock -c gray,blue,magenta,green,yellow \"npm run dev -w @wbm/shared\" \"npm run dev -w @wbm/api\" \"npm run dev:worker -w @wbm/api\" \"npm run dev -w @wbm/web\" \"npm run dev -w @wbm/mock-meta\"",
+    "lint": "eslint .",
+    "lint:contracts": "redocly lint specs/001-whatsapp-bulk-messaging/contracts/dashboard-api.openapi.yaml specs/001-whatsapp-bulk-messaging/contracts/public-api.openapi.yaml",
+    "format": "prettier --write .",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p tools/perf/tsconfig.json",
+    "test": "npm run test --workspaces --if-present",
+    "test:integration": "npm run test:integration -w @wbm/api",
+    "test:contract": "npm run test:contract -w @wbm/api",
+    "test:e2e": "npm run test:e2e -w @wbm/web",
+    "db:migrate": "npm run db:migrate -w @wbm/api",
+    "db:seed": "npm run db:seed -w @wbm/api --",
+    "mock:inbound": "npm run inbound -w @wbm/mock-meta --",
+    "perf:campaign": "tsx tools/perf/campaign-10k.ts",
+    "perf:import": "tsx tools/perf/import-50k.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@redocly/cli": "^2.79.0",
+    "@types/node": "^26.6.6",
+    "concurrently": "^10.0.7",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0",
+    "prettier": "^3.10.1",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.73.0"
+  }
+}
