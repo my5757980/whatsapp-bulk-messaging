@@ -559,6 +559,8 @@ model MediaAsset {
   displayName      String?      @map("display_name") @db.VarChar(240)
   uploadedById     String?      @map("uploaded_by_id") @db.Uuid
   uploadedBy       User?        @relation("MediaUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  /// Removed from the media library; kept while sent chat messages still show it (002 FR-032).
+  removedAt        DateTime?    @map("removed_at") @db.Timestamptz
   createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz
 
   templates      Template[]      @relation("TemplateHeaderMedia")

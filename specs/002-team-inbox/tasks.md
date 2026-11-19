@@ -168,7 +168,7 @@
   - POST intervene, resolve and messages (text)
   - POST read, GET /inbox/unread
   - all checked against contracts/inbox-api.openapi.yaml
-- [ ] T026 [P] [US1] Playwright e2e for the quickstart US1 row in apps/web/e2e/inbox-us1-live-chat.spec.ts, using the mock-meta CLI for the inbound message
+- [X] T026 [P] [US1] Playwright e2e for the quickstart US1 row in apps/web/e2e/inbox-us1-live-chat.spec.ts, using the mock-meta CLI for the inbound message
 
 ### Implementation for User Story 1
 
@@ -217,14 +217,14 @@
   - US1 endpoints of inbox-api.openapi.yaml: list, detail, items, intervene, resolve, messages (text), read, unread
   - `GET /inbox/media/{id}` streaming with visibility checks
   - permissions and phone masking (`@PhoneField`)
-- [ ] T035 [US1] Build the Live chat page in apps/web/src/app/(dashboard)/inbox/page.tsx with apps/web/src/components/inbox/conversation-list.tsx and apps/web/src/components/inbox/chat-view.tsx:
+- [X] T035 [US1] Build the Live chat page in apps/web/src/app/(dashboard)/inbox/page.tsx with apps/web/src/components/inbox/conversation-list.tsx and apps/web/src/components/inbox/chat-view.tsx:
   - three panes
   - Open, Waiting for agent and Taken tabs with counts; search; unread badges
   - a timeline renderer for every content type (picture preview, video/audio player, document download, map link, contact card, sticker, reaction on its message, chosen option, unsupported note)
   - campaign messages with names, and ticks
   - Take chat and Close chat
   - live updates from the T023 hook
-- [ ] T036 [US1] Build the reply box in apps/web/src/components/inbox/composer.tsx:
+- [X] T036 [US1] Build the reply box in apps/web/src/components/inbox/composer.tsx:
   - text with native emoji input, up to 4096 characters
   - send shows the queued item at once and updates the ticks from events
   - an error toast with the reason; the draft kept on failure
@@ -255,7 +255,7 @@
   - the window-close job publishes `conversation.window_closed` within 60 s
   - `POST /inbox/conversations` opens or creates a chat for a contact
 - [X] T038 [P] [US2] Add contract tests for POST /inbox/conversations, POST /inbox/conversations/{id}/template and `view=history` to apps/api/test/contract/inbox.contract-spec.ts
-- [ ] T039 [P] [US2] Playwright e2e for the quickstart US2 row in apps/web/e2e/inbox-us2-window-history.spec.ts
+- [X] T039 [P] [US2] Playwright e2e for the quickstart US2 row in apps/web/e2e/inbox-us2-window-history.spec.ts
 
 ### Implementation for User Story 2
 
@@ -272,7 +272,7 @@
   - `POST /inbox/conversations/{id}/template`
   - `canReply` and `windowEndsAt` in the DTOs
 - [X] T043 [P] [US2] Implement the window-close notifier in apps/api/src/modules/inbox/routing/window-close.processor.ts: a maintenance scheduler every 60 s that publishes `conversation.window_closed` for chats whose 24-hour mark fell in the last minute
-- [ ] T044 [US2] Build the History and template UI in apps/web/src/components/inbox/template-sender.tsx, conversation-list.tsx and composer.tsx:
+- [X] T044 [US2] Build the History and template UI in apps/web/src/components/inbox/template-sender.tsx, conversation-list.tsx and composer.tsx:
   - a Past chats tab
   - a window countdown in the reply box; a lock with the explanation and "Send template" when closed
   - a template dialog: approved templates for the chat's number, inputs for variables and header media, preview, send
