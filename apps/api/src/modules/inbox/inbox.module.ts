@@ -7,6 +7,10 @@ import { ChatMediaController } from './messages/chat-media.controller.js';
 import { ChatTimelineService } from './messages/chat-timeline.service.js';
 import { SessionSendService } from './messages/session-send.service.js';
 import { TemplateSendService } from './messages/template-send.service.js';
+import { AgentRulesController, AgentRulesService } from './routing/agent-rules.service.js';
+import { ChatRoutingService } from './routing/chat-routing.service.js';
+import { LiveChatSettingsController } from './settings/live-chat-settings.controller.js';
+import { LiveChatSettingsService } from './settings/live-chat-settings.service.js';
 import { InboxEventsService } from './realtime/inbox-events.service.js';
 import { InboxPublisher } from './realtime/inbox-publisher.js';
 import { InboxStreamController } from './realtime/inbox-stream.controller.js';
@@ -19,8 +23,8 @@ import { DEFAULT_INBOX_STREAM_OPTIONS, INBOX_STREAM_OPTIONS, StreamFanoutService
 /** Live chat services shared by the HTTP app and the worker. */
 @Global()
 @Module({
-  providers: [InboxEventsService, AgentRulesLoader, InboxPublisher, ChatTimelineService],
-  exports: [InboxEventsService, AgentRulesLoader, InboxPublisher, ChatTimelineService],
+  providers: [InboxEventsService, AgentRulesLoader, InboxPublisher, ChatTimelineService, LiveChatSettingsService, ChatRoutingService],
+  exports: [InboxEventsService, AgentRulesLoader, InboxPublisher, ChatTimelineService, LiveChatSettingsService, ChatRoutingService],
 })
 export class InboxDomainModule {}
 
@@ -34,7 +38,8 @@ export class InboxDomainModule {}
     ChatItemsService,
     SessionSendService,
     TemplateSendService,
+    AgentRulesService,
   ],
-  controllers: [InboxStreamController, ConversationsController, ChatMediaController],
+  controllers: [InboxStreamController, ConversationsController, ChatMediaController, LiveChatSettingsController, AgentRulesController],
 })
 export class InboxApiModule {}

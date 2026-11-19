@@ -839,12 +839,15 @@ components:
         attributeKey: { type: string, maxLength: 60 }
         attributeValue: { type: string, maxLength: 200 }
     AgentRule:
-      allOf:
-        - $ref: '#/components/schemas/AgentRuleInput'
-        - type: object
-          properties:
-            id: { type: string, format: uuid }
-            tagName: { type: [string, 'null'] }
+      type: object
+      required: [id, kind]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [TAG, ATTRIBUTE] }
+        tagId: { type: string, format: uuid }
+        tagName: { type: [string, 'null'] }
+        attributeKey: { type: string }
+        attributeValue: { type: string }
     PushDevice:
       type: object
       properties:

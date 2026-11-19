@@ -9,9 +9,10 @@ import { QueueRegistry, REDIS_CLIENT } from '../../../common/queue/queue.module.
 import { Prisma } from '../../../generated/prisma/client.js';
 import { INBOX_QUEUE, readReceiptJob } from '../inbox-queue.js';
 import { ChatTimelineService } from '../messages/chat-timeline.service.js';
+import { ChatRoutingService } from '../routing/chat-routing.service.js';
 import { InboxPublisher, type PreviousFacts } from '../realtime/inbox-publisher.js';
 import { AgentRulesLoader } from './agent-rules.loader.js';
-import { resolve as resolveTransition } from './conversation-state.js';
+import { resolve as resolveTransition, transfer as transferTransition } from './conversation-state.js';
 import {
   decodeCursor,
   encodeCursor,
@@ -49,6 +50,9 @@ export type ConversationListQuery = z.infer<typeof ConversationListQuerySchema>;
 export const OpenConversationSchema = z.strictObject({ contactId: z.uuid(), numberId: z.uuid() });
 export type OpenConversationInput = z.infer<typeof OpenConversationSchema>;
 
+export const TransferSchema = z.strictObject({ userId: z.uuid() });
+export type TransferInput = z.infer<typeof TransferSchema>;
+
 /** Unread totals are cached briefly per user and dropped when that user reads a chat (R8). */
 const UNREAD_CACHE_SECONDS = 10;
 const unreadKey = (userId: string) => `wbm:inbox:unread:${userId}`;
@@ -75,7 +79,44 @@ export class ConversationsService {
     private readonly queues: QueueRegistry,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly timeline: ChatTimelineService,
+    private readonly routing: ChatRoutingService,
   ) {}
+
+  /** Hands a taken chat to another member who may see it (FR-022): the owner, or an admin or manager. */
+  async transfer(viewer: Viewer & { name: string }, id: string, input: TransferInput): Promise<ConversationSummaryDto> {
+    const row = await this.loadVisible(viewer, id);
+    const transition = transferTransition({ state: row.state, intervenedById: row.intervenedById }, { id: viewer.id, canMonitor: seesAll(viewer) }, input.userId);
+    if (!transition.ok) {
+      throw AppError.conflict(
+        transition.error === 'NOT_INTERVENED' ? 'Nobody has taken this chat, so it cannot be transferred' : 'Only the member who took this chat, an admin or a manager can transfer it',
+        transition.error,
+      );
+    }
+    if (!transition.changed) return this.summaryFor(viewer, id);
+    const target = await this.prisma.user.findUnique({ where: { id: input.userId }, select: { id: true, role: true, status: true } });
+    if (!target) throw AppError.notFound('Member not found');
+    // The new owner must be active and allowed to see this contact (agent rules), as if the chat were open.
+    const targetRules = seesAll(target) ? [] : await this.rules.forUser(target.id);
+    if (target.status !== 'ACTIVE' || !can(target.role, 'inbox.reply') || !canAccess(target, targetRules, { ...factsOf(row), state: 'ACTIVE', intervenedById: null })) {
+      throw AppError.conflict('That member cannot see this chat', 'TARGET_CANNOT_SEE');
+    }
+    const now = new Date();
+    const moved = await this.prisma.$transaction(async (tx) => {
+      const updated = await tx.conversation.updateMany({
+        where: { id, state: 'INTERVENED', intervenedById: row.intervenedById },
+        data: { intervenedById: target.id, intervenedAt: now },
+      });
+      if (!updated.count) return false;
+      await tx.conversationEvent.create({
+        data: { conversationId: id, type: 'TRANSFERRED', actorType: 'MEMBER', actorUserId: viewer.id, occurredAt: now, data: { fromUserId: row.intervenedById, toUserId: target.id } },
+      });
+      return true;
+    });
+    if (!moved) throw AppError.conflict('The chat changed meanwhile; refresh and try again', 'CONFLICT');
+    await this.publisher.conversation(id, previous(row));
+    await this.routing.alertTransferred(id, target.id, viewer.name);
+    return this.summaryFor(viewer, id);
+  }
 
   /**
    * Opens the chat with a contact on a number, creating it when needed (US2, "Message on

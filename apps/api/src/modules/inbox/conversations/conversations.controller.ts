@@ -12,8 +12,10 @@ import {
   ConversationListQuerySchema,
   ConversationsService,
   OpenConversationSchema,
+  TransferSchema,
   type ConversationListQuery,
   type OpenConversationInput,
+  type TransferInput,
 } from './conversations.service.js';
 import type { Viewer } from './visibility.js';
 
@@ -73,6 +75,13 @@ export class ConversationsController {
   @Require('inbox.reply')
   resolve(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.conversations.resolve(viewer(user), id);
+  }
+
+  @Post('conversations/:id/transfer')
+  @HttpCode(200)
+  @Require('inbox.reply')
+  transfer(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(TransferSchema)) body: TransferInput) {
+    return this.conversations.transfer({ ...viewer(user), name: user.name }, id, body);
   }
 
   @Post('conversations/:id/messages')

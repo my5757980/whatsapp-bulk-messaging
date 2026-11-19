@@ -25,6 +25,16 @@ export class NotificationsService {
     return count;
   }
 
+  /** One notification per listed member (live chat alerts, feature 002). */
+  async notifyUsers(userIds: string[], input: NotificationInput): Promise<number> {
+    const unique = [...new Set(userIds)];
+    if (!unique.length) return 0;
+    const { count } = await this.prisma.notification.createMany({
+      data: unique.map((userId) => ({ userId, type: input.type, title: input.title, body: input.body, link: input.link ?? null })),
+    });
+    return count;
+  }
+
   async listForUser(userId: string, limit = 50) {
     const rows = await this.prisma.notification.findMany({
       where: { userId },

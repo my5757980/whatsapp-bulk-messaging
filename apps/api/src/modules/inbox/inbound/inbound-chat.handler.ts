@@ -4,6 +4,7 @@ import { normalizePhone, waIdToE164 } from '../../../common/phone/phone.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import { SettingsService } from '../../settings/settings.service.js';
+import { normalizeKeyword } from '../../webhooks/handlers/inbound.handler.js';
 import { WebhookRouter, type WebhookChange, type WebhookChangeHandler } from '../../webhooks/webhook-router.js';
 import { onCustomerMessage } from '../conversations/conversation-state.js';
 import { isLive, startsOpening } from '../conversations/window.js';
@@ -11,6 +12,8 @@ import type { ConversationState } from '../inbox-common.js';
 import { INBOX_QUEUE, inboundMediaJob } from '../inbox-queue.js';
 import { ChatTimelineService } from '../messages/chat-timeline.service.js';
 import { InboxPublisher, type PreviousFacts } from '../realtime/inbox-publisher.js';
+import { ChatRoutingService } from '../routing/chat-routing.service.js';
+import { LiveChatSettingsService } from '../settings/live-chat-settings.service.js';
 import { parseInboundMessage, previewOf, type ParsedInbound } from './message-parser.js';
 
 interface LockedChat {
@@ -41,6 +44,8 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly timeline: ChatTimelineService,
     private readonly publisher: InboxPublisher,
     private readonly queues: QueueRegistry,
+    private readonly liveChat: LiveChatSettingsService,
+    private readonly routing: ChatRoutingService,
   ) {}
 
   onModuleInit(): void {
@@ -58,17 +63,20 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
       return;
     }
     const { defaultCountryCode } = await this.settings.get();
+    const { humanKeywords } = await this.liveChat.current();
     for (const raw of messages) {
       const parsed = parseInboundMessage(raw, change.value.contacts);
       if (!parsed) {
         this.logger.warn({ phoneNumberId }, 'Skipped a malformed customer message');
         continue;
       }
-      await this.store(number.id, parsed, defaultCountryCode);
+      // Text, button and list replies can carry a "talk to a person" keyword (research R13).
+      const humanKeyword = parsed.text !== null && humanKeywords.includes(normalizeKeyword(parsed.text));
+      await this.store(number.id, parsed, defaultCountryCode, humanKeyword);
     }
   }
 
-  private async store(numberId: string, msg: ParsedInbound, defaultCountry: string): Promise<void> {
+  private async store(numberId: string, msg: ParsedInbound, defaultCountry: string, humanKeyword: boolean): Promise<void> {
     const phone = normalizePhone(waIdToE164(msg.waId), defaultCountry);
     if (!phone) {
       this.logger.warn({ numberId }, 'Customer message from a number that cannot be normalised; not added to live chat');
@@ -109,10 +117,13 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
       if (!inserted) return null; // a repeated webhook
 
       const previous: PreviousFacts = { state: chat.state, intervenedById: chat.intervened_by_id, blocked: contact.blockedAt !== null };
-      const { next, countRequest } = onCustomerMessage(created ? null : { state: chat.state, intervenedById: chat.intervened_by_id }, {
-        humanKeyword: false, // "talk to a person" keywords arrive with US3
+      const { next, countRequest, becameRequesting } = onCustomerMessage(created ? null : { state: chat.state, intervenedById: chat.intervened_by_id }, {
+        humanKeyword,
         windowWasOpen: isLive(chat.last_customer_message_at, msg.occurredAt),
       });
+      if (becameRequesting) {
+        await tx.conversationEvent.create({ data: { conversationId: chat.id, type: 'REQUESTED', actorType: 'CUSTOMER', occurredAt: msg.occurredAt } });
+      }
       const preview = previewOf(msg);
       // SET expressions see the old row, so the preview only changes for the newest message.
       await tx.$executeRaw`
@@ -131,7 +142,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
         await tx.conversationOpening.create({ data: { conversationId: chat.id, openedAt: msg.occurredAt } });
       }
       if (created) await this.timeline.backfill(tx, chat.id, contact.id, numberId);
-      return { conversationId: chat.id, created, previous };
+      return { conversationId: chat.id, created, previous, becameRequesting };
     });
     if (!outcome) return;
 
@@ -140,6 +151,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     if (contact.blockedAt) return;
     await this.publisher.itemCreated(itemId);
     await this.publisher.conversation(outcome.conversationId, outcome.created ? undefined : outcome.previous);
+    if (outcome.becameRequesting) await this.routing.alertRequesting(outcome.conversationId);
   }
 
   private async queueMediaDownload(chatMessageId: string, metaMediaId: string): Promise<void> {
