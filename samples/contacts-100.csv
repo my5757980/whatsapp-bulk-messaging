@@ -1,0 +1,104 @@
+name,phone,tags,city,last_order_date
+Omar Khalid,+971500000001,newsletter,Abu Dhabi,2026-08-12
+Lina Haddad,+971500000002,vip;newsletter,Sharjah,2026-03-23
+Yusuf Rahman,+971500000003,wholesale,Ajman,2025-10-06
+Maya Fernandes,+971500000004,,Al Ain,2026-05-17
+Daniel Okafor,+971500000005,newsletter;returning,Fujairah,2026-12-28
+Priya Nair,+971500000006,returning,Ras Al Khaimah,2025-07-11
+Chen Wei,+971500000007,vip,Dubai,2026-02-22
+Fatima Zahra,+971500000008,newsletter,Abu Dhabi,2026-09-05
+Ali Hussain,+971500000009,vip;newsletter,Sharjah,2025-04-16
+Noor Ahmed,+971500000010,wholesale,Ajman,2026-11-27
+Hassan Khalid,+971500000011,,Al Ain,2026-06-10
+Elena Haddad,+971500000012,newsletter;returning,Fujairah,2025-01-21
+Ravi Rahman,+971500000013,returning,Ras Al Khaimah,2026-08-04
+Aisha Fernandes,+971500000014,vip,Dubai,2026-03-15
+Tariq Okafor,+971500000015,newsletter,Abu Dhabi,2025-10-26
+Mei Nair,+971500000016,vip;newsletter,Sharjah,2026-05-09
+Karim Wei,+971500000017,wholesale,Ajman,2026-12-20
+Zara Zahra,+971500000018,,Al Ain,2025-07-03
+Leo Hussain,+971500000019,newsletter;returning,Fujairah,2026-02-14
+Sara Ahmed,+971500000020,returning,Ras Al Khaimah,2026-09-25
+Omar Khalid,+971500000021,vip,Dubai,2025-04-08
+Lina Haddad,+971500000022,newsletter,Abu Dhabi,2026-11-19
+Yusuf Rahman,+971500000023,vip;newsletter,Sharjah,2026-06-02
+Maya Fernandes,+971500000024,wholesale,Ajman,2025-01-13
+Daniel Okafor,+971500000025,,Al Ain,2026-08-24
+Priya Nair,+971500000026,newsletter;returning,Fujairah,2026-03-07
+Chen Wei,+971500000027,returning,Ras Al Khaimah,2025-10-18
+Fatima Zahra,+971500000028,vip,Dubai,2026-05-01
+Ali Hussain,+971500000029,newsletter,Abu Dhabi,2026-12-12
+Noor Ahmed,+971500000030,vip;newsletter,Sharjah,2025-07-23
+Hassan Khalid,+971500000031,wholesale,Ajman,2026-02-06
+Elena Haddad,+971500000032,,Al Ain,2026-09-17
+Ravi Rahman,+971500000033,newsletter;returning,Fujairah,2025-04-28
+Aisha Fernandes,+971500000034,returning,Ras Al Khaimah,2026-11-11
+Tariq Okafor,+971500000035,vip,Dubai,2026-06-22
+Mei Nair,+971500000036,newsletter,Abu Dhabi,2025-01-05
+Karim Wei,+971500000037,vip;newsletter,Sharjah,2026-08-16
+Zara Zahra,+971500000038,wholesale,Ajman,2026-03-27
+Leo Hussain,+971500000039,,Al Ain,2025-10-10
+Sara Ahmed,+971500000040,newsletter;returning,Fujairah,2026-05-21
+Omar Khalid,+971500000041,returning,Ras Al Khaimah,2026-12-04
+Lina Haddad,+971500000042,vip,Dubai,2025-07-15
+Yusuf Rahman,+971500000043,newsletter,Abu Dhabi,2026-02-26
+Maya Fernandes,+971500000044,vip;newsletter,Sharjah,2026-09-09
+Daniel Okafor,+971500000045,wholesale,Ajman,2025-04-20
+Priya Nair,+971500000046,,Al Ain,2026-11-03
+Chen Wei,+971500000047,newsletter;returning,Fujairah,2026-06-14
+Fatima Zahra,+971500000048,returning,Ras Al Khaimah,2025-01-25
+Ali Hussain,+971500000049,vip,Dubai,2026-08-08
+Noor Ahmed,+971500000050,newsletter,Abu Dhabi,2026-03-19
+Hassan Khalid,+971500000051,vip;newsletter,Sharjah,2025-10-02
+Elena Haddad,+971500000052,wholesale,Ajman,2026-05-13
+Ravi Rahman,+971500000053,,Al Ain,2026-12-24
+Aisha Fernandes,+971500000054,newsletter;returning,Fujairah,2025-07-07
+Tariq Okafor,+971500000055,returning,Ras Al Khaimah,2026-02-18
+Mei Nair,+971500000056,vip,Dubai,2026-09-01
+Karim Wei,+971500000057,newsletter,Abu Dhabi,2025-04-12
+Zara Zahra,+971500000058,vip;newsletter,Sharjah,2026-11-23
+Leo Hussain,+971500000059,wholesale,Ajman,2026-06-06
+Sara Ahmed,+971500000060,,Al Ain,2025-01-17
+Omar Khalid,+971500000061,newsletter;returning,Fujairah,2026-08-28
+Lina Haddad,+971500000062,returning,Ras Al Khaimah,2026-03-11
+Yusuf Rahman,+971500000063,vip,Dubai,2025-10-22
+Maya Fernandes,+971500000064,newsletter,Abu Dhabi,2026-05-05
+Daniel Okafor,+971500000065,vip;newsletter,Sharjah,2026-12-16
+Priya Nair,+971500000066,wholesale,Ajman,2025-07-27
+Chen Wei,+971500000067,,Al Ain,2026-02-10
+Fatima Zahra,+971500000068,newsletter;returning,Fujairah,2026-09-21
+Ali Hussain,+971500000069,returning,Ras Al Khaimah,2025-04-04
+Noor Ahmed,+971500000070,vip,Dubai,2026-11-15
+Hassan Khalid,+971500000071,newsletter,Abu Dhabi,2026-06-26
+Elena Haddad,+971500000072,vip;newsletter,Sharjah,2025-01-09
+Ravi Rahman,+971500000073,wholesale,Ajman,2026-08-20
+Aisha Fernandes,+971500000074,,Al Ain,2026-03-03
+Tariq Okafor,+971500000075,newsletter;returning,Fujairah,2025-10-14
+Mei Nair,+971500000076,returning,Ras Al Khaimah,2026-05-25
+Karim Wei,+971500000077,vip,Dubai,2026-12-08
+Zara Zahra,+971500000078,newsletter,Abu Dhabi,2025-07-19
+Leo Hussain,+971500000079,vip;newsletter,Sharjah,2026-02-02
+Sara Ahmed,+971500000080,wholesale,Ajman,2026-09-13
+Omar Khalid,+971500000081,,Al Ain,2025-04-24
+Lina Haddad,+971500000082,newsletter;returning,Fujairah,2026-11-07
+Yusuf Rahman,+971500000083,returning,Ras Al Khaimah,2026-06-18
+Maya Fernandes,+971500000084,vip,Dubai,2025-01-01
+Daniel Okafor,+971500000085,newsletter,Abu Dhabi,2026-08-12
+Priya Nair,+971500000086,vip;newsletter,Sharjah,2026-03-23
+Chen Wei,+971500000087,wholesale,Ajman,2025-10-06
+Fatima Zahra,+971500000088,,Al Ain,2026-05-17
+Ali Hussain,+971500000089,newsletter;returning,Fujairah,2026-12-28
+Noor Ahmed,+971500000090,returning,Ras Al Khaimah,2025-07-11
+Hassan Khalid,+971500000091,vip,Dubai,2026-02-22
+Elena Haddad,+971500000092,newsletter,Abu Dhabi,2026-09-05
+Ravi Rahman,+971500000093,vip;newsletter,Sharjah,2025-04-16
+Aisha Fernandes,+971500000094,wholesale,Ajman,2026-11-27
+Tariq Okafor,+971500000095,,Al Ain,2026-06-10
+Mei Nair,+971500000096,newsletter;returning,Fujairah,2025-01-21
+Karim Wei,+971500000097,returning,Ras Al Khaimah,2026-08-04
+Zara Zahra,+971500000098,vip,Dubai,2026-03-15
+Leo Hussain,+971500000099,newsletter,Abu Dhabi,2025-10-26
+Sara Ahmed,+971500000100,vip;newsletter,Sharjah,2026-05-09
+Invalid Phone,12345,vip,Dubai,2026-01-10
+Missing Phone,,newsletter,Sharjah,2026-02-11
+Bad Date,+971500000200,vip,Dubai,31/12/2025

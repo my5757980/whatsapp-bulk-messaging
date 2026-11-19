@@ -1,0 +1,15 @@
+{
+  "name": "@wbm/mock-meta",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "inbound": "tsx src/inbound-cli.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}

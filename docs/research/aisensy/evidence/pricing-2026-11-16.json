@@ -1,0 +1,63 @@
+{
+  "source": ["https://aisensy.com/pricing", "https://aisensy.com/pricing/usd"],
+  "retrieved": "2026-11-16",
+  "note": "Extracted from public pricing pages. Prices exclude GST. Billing is prepaid; upgrades/downgrades pro-rata.",
+  "billing_cycles": { "quarterly_discount": "5%", "yearly_discount": "10%" },
+  "plans": [
+    {
+      "id": "free", "name": "Free Forever",
+      "price_inr": { "monthly": 0 }, "price_usd": { "monthly": 0 },
+      "broadcasting": false,
+      "limits": { "tags": 10, "attributes": 5 },
+      "includes": ["WhatsApp Business API", "Blue Tick application", "CTWA Ads Manager", "1,000 Meta ad credits", "INR 50 conversation credits", "Templates", "Live chat dashboard", "Unlimited contacts"]
+    },
+    {
+      "id": "basic", "name": "Basic",
+      "price_inr": { "monthly": 1500, "quarterly": 4275, "yearly": 16200 },
+      "price_usd": { "monthly": 45, "quarterly": 128.25, "yearly": 486 },
+      "limits": { "msgs_per_sec": 40, "agents": "1 owner + 5", "tags": 10, "attributes": 5, "segments": 2, "storage_gb": 1 },
+      "includes": ["Broadcasting & retargeting", "Smart campaign manager", "Template message APIs", "Multi-agent live chat", "Agent transfer & monitoring", "Marketplace integrations", "Shopify & WooCommerce"]
+    },
+    {
+      "id": "pro", "name": "Pro", "popular": true,
+      "price_inr": { "monthly": 3200, "quarterly": 9120, "yearly": 34560 },
+      "price_usd": { "monthly": 99, "quarterly": 282.15, "yearly": 1069.20 },
+      "limits": { "msgs_per_sec": 40, "agents": "1 owner + 5", "tags": 100, "attributes": 20, "segments": 10 },
+      "includes": ["Campaign scheduler", "Click tracking", "Campaign budget & analytics", "Project APIs", "Custom agent rules", "Carousel click tracking", "CSV campaign scheduler", "User access control", "Automatic failed message retry", "Chatflow delay & timeout"]
+    },
+    {
+      "id": "premium", "name": "Premium",
+      "price_inr": { "monthly": 9100, "quarterly": 25935, "yearly": 98280 },
+      "price_usd": { "monthly": 299, "quarterly": 852.15, "yearly": 3229.20 },
+      "limits": { "msgs_per_sec": 250, "agents": "1 owner + 9", "tags": 250, "attributes": 50, "segments": 50, "webhooks": 1 },
+      "includes": ["Priority support", "Number masking", "Download reports", "Template TTL", "Turbo onboarding", "Duplicate contacts in CSV", "Multiple Meta-ad chatflow triggers"]
+    },
+    {
+      "id": "unlimited", "name": "Unlimited",
+      "price_inr": { "monthly": 45000, "quarterly": 128250, "yearly": 486000 },
+      "price_usd": { "monthly": 899, "quarterly": 2562.15, "yearly": 9709.20 },
+      "limits": { "msgs_per_sec": 1000, "agents": "up to 200", "tags": 500, "attributes": 100, "segments": 50, "webhooks": 3 },
+      "includes": ["Dedicated account manager"]
+    },
+    {
+      "id": "enterprise", "name": "Enterprise",
+      "price": "custom", "message_rates": "custom",
+      "target": "5 lakh+ messages per month",
+      "includes": ["Dedicated 1:1 onboarding", "Solution architect & success team", "Custom integrations", "SLA-backed support", "SSO & audit logs", "Custom throughput", "Custom contracts & invoicing"]
+    }
+  ],
+  "fair_use_caps": { "agents": 200, "tags": 500, "attributes": 100, "segments": 50 },
+  "extra_agent_seat": { "inr_per_month": 750, "usd_per_month": 20 },
+  "addons_inr": {
+    "chatbot_flow_builder": { "monthly": 2500, "monthly_billed_yearly": 2250, "includes": "5 chatbots, cart & catalog, Shopify bot, 3 AI flow generations" },
+    "ai_agent_builder": { "monthly": 1350, "monthly_billed_yearly": 1215, "includes": "1,000 AI messages/month; 500 free test AI messages" },
+    "indian_virtual_number": { "yearly": 2000, "quarterly": 299, "note": "+ GST; requires GST/MSME KYC" }
+  },
+  "whatsapp_message_rates_india_inr": {
+    "effective": "2026-10-01",
+    "marketing": 1.09, "utility": 0.145, "authentication": 0.145, "service": 0.145,
+    "service_free_per_number_per_month": 1000,
+    "free": ["incoming messages", "replies inside 72-hour CTWA free entry point window"],
+    "wallet": { "name": "WhatsApp Conversation Credits (WCC)", "signup_credit_inr": 50, "min_balance_for_automation": "INR 10 / USD 1" }
+  }
+}

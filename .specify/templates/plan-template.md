@@ -3,7 +3,7 @@
 **Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
 **Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
 
-**Note**: This template is filled in by the `/sp.plan` command. See `.specify/templates/commands/plan.md` for the execution workflow.
+**Note**: This template is filled in by the `/sp.plan` command. See `.claude/commands/sp.plan.md` for the execution workflow.
 
 ## Summary
 
@@ -31,7 +31,22 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Gates from `.specify/memory/constitution.md` (v1.0.0). Mark each one, and justify any
+failure in Complexity Tracking:
+
+- [ ] **I. Official API & Policy**: Meta Cloud API only; templates outside the 24-hour window;
+  opt-in recorded; opt-out enforced on every send path; broadcast kill switch
+- [ ] **II. Original Product**: no competitor UI, text, assets or brand copied
+- [ ] **III. Security & Privacy**: secrets in env vars; tokens encrypted; roles (admin/manager/
+  agent); webhook signature verified; audit log; phone-number masking
+- [ ] **IV. Reliable Bulk Messaging**: queue-only sending; per-number rate limit; retries with
+  backoff; idempotent webhooks; dead-letter queue; pause/resume without duplicates
+- [ ] **V. Test-First**: tests planned before implementation; Meta API mocked; CI gates defined
+- [ ] **VI. Observability**: structured logs with correlation IDs; delivery metrics; alerts
+- [ ] **VII. Simplicity**: simplest viable design; extra complexity justified below
+
+Platform constraints: single tenant; Next.js + NestJS (TypeScript strict); PostgreSQL (Neon)
+with migrations; Redis + BullMQ; Docker; costs in USD.
 
 ## Project Structure
 

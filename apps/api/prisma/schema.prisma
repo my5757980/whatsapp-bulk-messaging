@@ -1,0 +1,630 @@
+// Data model for feature 001-whatsapp-bulk-messaging (specs/.../data-model.md, T025).
+// Conventions: uuid v7 ids, snake_case tables/columns, timestamptz, money as integer USD micros.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- Enums ----------
+
+enum Role {
+  ADMIN
+  MANAGER
+  AGENT
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DEACTIVATED
+}
+
+enum ConnectionStatus {
+  CONNECTED
+  ERROR
+  DISCONNECTED
+}
+
+enum QualityRating {
+  GREEN
+  YELLOW
+  RED
+  UNKNOWN
+}
+
+enum ConsentStatus {
+  OPTED_IN
+  OPTED_OUT
+  UNKNOWN
+}
+
+enum ConsentSource {
+  IMPORT
+  UPLOAD_CONFIRMATION
+  API
+  KEYWORD
+  MANUAL
+}
+
+enum AttributeType {
+  TEXT
+  NUMBER
+  DATE
+  BOOLEAN
+}
+
+enum ImportKind {
+  CONTACTS
+  CAMPAIGN_AUDIENCE
+}
+
+enum ImportStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum TemplateCategory {
+  MARKETING
+  UTILITY
+  AUTHENTICATION
+}
+
+enum ParameterFormat {
+  POSITIONAL
+  NAMED
+}
+
+enum TemplateStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  PAUSED
+  DISABLED
+  DELETED
+}
+
+enum MediaPurpose {
+  TEMPLATE_SAMPLE
+  CAMPAIGN_HEADER
+}
+
+enum CampaignState {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  CANCELLED
+}
+
+enum AudienceType {
+  FILTER
+  ALL_OPTED_IN
+  UPLOAD
+  RETARGET
+}
+
+enum RetargetStatus {
+  FAILED
+  NOT_READ
+  READ
+  DELIVERED
+}
+
+enum MessageOrigin {
+  CAMPAIGN
+  API
+}
+
+enum MessageStatus {
+  PENDING
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SKIPPED
+  CANCELLED
+}
+
+enum SkipReason {
+  OPTED_OUT
+  NO_OPT_IN
+  INVALID_NUMBER
+  DUPLICATE
+  MISSING_VARIABLE
+}
+
+enum MessageEventType {
+  QUEUED
+  SENT_ACCEPTED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  RETRY_SCHEDULED
+  SKIPPED
+  CANCELLED
+  REQUEUED
+}
+
+enum RateCategory {
+  MARKETING
+  UTILITY
+  AUTHENTICATION
+  SERVICE
+}
+
+enum NotificationType {
+  CAMPAIGN_COMPLETED
+  CAMPAIGN_AUTO_PAUSED
+  QUALITY_DROPPED
+  CREDENTIALS_FAILED
+}
+
+// ---------- Access & audit ----------
+
+model User {
+  id           String     @id @default(uuid(7)) @db.Uuid
+  /// Stored lower-cased; uniqueness is therefore case-insensitive.
+  email        String     @unique
+  name         String
+  passwordHash String?    @map("password_hash")
+  role         Role
+  status       UserStatus @default(INVITED)
+  lastLoginAt  DateTime?  @map("last_login_at") @db.Timestamptz
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+
+  sessions        Session[]
+  invitationsSent Invitation[]   @relation("InvitedBy")
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+  campaigns       Campaign[]
+  apiKeys         ApiKey[]
+  importJobs      ImportJob[]
+  templates       Template[]
+  consentEvents   ConsentEvent[]
+
+  @@map("users")
+}
+
+model Invitation {
+  id          String    @id @default(uuid(7)) @db.Uuid
+  email       String
+  role        Role
+  tokenHash   String    @unique @map("token_hash")
+  invitedById String    @map("invited_by_id") @db.Uuid
+  invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id])
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz
+  acceptedAt  DateTime? @map("accepted_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([email])
+  @@map("invitations")
+}
+
+model Session {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique @map("token_hash")
+  expiresAt  DateTime @map("expires_at") @db.Timestamptz
+  lastSeenAt DateTime @default(now()) @map("last_seen_at") @db.Timestamptz
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model AuditLog {
+  id            String   @id @default(uuid(7)) @db.Uuid
+  actorUserId   String?  @map("actor_user_id") @db.Uuid
+  actorUser     User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  actorApiKeyId String?  @map("actor_api_key_id") @db.Uuid
+  actorApiKey   ApiKey?  @relation(fields: [actorApiKeyId], references: [id], onDelete: SetNull)
+  action        String
+  targetType    String   @map("target_type")
+  targetId      String?  @map("target_id")
+  /// Never contains secrets.
+  metadata      Json     @default("{}")
+  ip            String?
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([createdAt])
+  @@index([actorUserId])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+model Settings {
+  id                 Int      @id @default(1)
+  defaultCountryCode String   @default("US") @map("default_country_code") @db.Char(2)
+  defaultTimezone    String   @default("UTC") @map("default_timezone")
+  optOutKeywords     String[] @default(["STOP", "UNSUBSCRIBE"]) @map("opt_out_keywords")
+  optInKeywords      String[] @default(["START"]) @map("opt_in_keywords")
+  updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("settings")
+}
+
+// ---------- WhatsApp numbers ----------
+
+model WhatsAppNumber {
+  id                 String           @id @default(uuid(7)) @db.Uuid
+  label              String
+  wabaId             String           @map("waba_id")
+  phoneNumberId      String           @unique @map("phone_number_id")
+  displayPhoneNumber String           @map("display_phone_number")
+  verifiedName       String           @map("verified_name")
+  connectionStatus   ConnectionStatus @default(CONNECTED) @map("connection_status")
+  qualityRating      QualityRating    @default(UNKNOWN) @map("quality_rating")
+  messagingLimitTier String?          @map("messaging_limit_tier")
+  throughputLevel    String?          @map("throughput_level")
+  sendRatePerSecond  Int              @default(20) @map("send_rate_per_second")
+  /// Kill switch (constitution Principle I): false blocks dispatch and sending.
+  sendingEnabled     Boolean          @default(true) @map("sending_enabled")
+  /// AES-256-GCM "v1:iv:tag:ct"; never returned by the API.
+  accessTokenEnc     String           @map("access_token_enc")
+  lastSyncedAt       DateTime?        @map("last_synced_at") @db.Timestamptz
+  lastError          String?          @map("last_error")
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  campaigns Campaign[]
+  messages  Message[]
+
+  @@map("whatsapp_numbers")
+}
+
+// ---------- Contacts & consent ----------
+
+model Contact {
+  id                String         @id @default(uuid(7)) @db.Uuid
+  phoneE164         String         @unique @map("phone_e164")
+  countryCode       String         @map("country_code") @db.Char(2)
+  name              String?
+  attributes        Json           @default("{}")
+  consentStatus     ConsentStatus  @default(UNKNOWN) @map("consent_status")
+  consentSource     ConsentSource? @map("consent_source")
+  consentSourceNote String?        @map("consent_source_note")
+  consentAt         DateTime?      @map("consent_at") @db.Timestamptz
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  tags          ContactTag[]
+  consentEvents ConsentEvent[]
+  messages      Message[]
+
+  @@index([consentStatus])
+  @@index([attributes], type: Gin)
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "contacts_name_trgm_idx")
+  @@index([phoneE164(ops: raw("gin_trgm_ops"))], type: Gin, map: "contacts_phone_trgm_idx")
+  @@map("contacts")
+}
+
+model Tag {
+  id        String       @id @default(uuid(7)) @db.Uuid
+  /// Stored lower-cased and trimmed; uniqueness is therefore case-insensitive.
+  name      String       @unique
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  contacts  ContactTag[]
+
+  @@map("tags")
+}
+
+model ContactTag {
+  contactId String  @map("contact_id") @db.Uuid
+  tagId     String  @map("tag_id") @db.Uuid
+  contact   Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag       Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+  @@index([tagId])
+  @@map("contact_tags")
+}
+
+model AttributeDefinition {
+  id        String        @id @default(uuid(7)) @db.Uuid
+  key       String        @unique
+  label     String
+  type      AttributeType
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("attribute_definitions")
+}
+
+model ConsentEvent {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  contactId   String        @map("contact_id") @db.Uuid
+  contact     Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  status      ConsentStatus
+  source      ConsentSource
+  note        String?
+  actorUserId String?       @map("actor_user_id") @db.Uuid
+  actorUser   User?         @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([contactId])
+  @@map("consent_events")
+}
+
+model ImportJob {
+  id              String       @id @default(uuid(7)) @db.Uuid
+  kind            ImportKind
+  campaignId      String?      @map("campaign_id") @db.Uuid
+  campaign        Campaign?    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  fileKey         String       @map("file_key")
+  mapping         Json         @default("{}")
+  optInSourceNote String?      @map("opt_in_source_note")
+  status          ImportStatus @default(QUEUED)
+  totalRows       Int          @default(0) @map("total_rows")
+  createdCount    Int          @default(0) @map("created_count")
+  updatedCount    Int          @default(0) @map("updated_count")
+  skippedCount    Int          @default(0) @map("skipped_count")
+  errorCount      Int          @default(0) @map("error_count")
+  columns         String[]     @default([])
+  errorFileKey    String?      @map("error_file_key")
+  error           String?
+  createdById     String       @map("created_by_id") @db.Uuid
+  createdBy       User         @relation(fields: [createdById], references: [id])
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  finishedAt      DateTime?    @map("finished_at") @db.Timestamptz
+
+  @@index([campaignId])
+  @@map("import_jobs")
+}
+
+model CampaignUploadRow {
+  id         String   @id @default(uuid(7)) @db.Uuid
+  campaignId String   @map("campaign_id") @db.Uuid
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  rowNumber  Int      @map("row_number")
+  phoneE164  String   @map("phone_e164")
+  /// Raw CSV columns, used for variable mapping.
+  data       Json     @default("{}")
+
+  @@unique([campaignId, phoneE164])
+  @@map("campaign_upload_rows")
+}
+
+// ---------- Templates & media ----------
+
+model Template {
+  id                 String           @id @default(uuid(7)) @db.Uuid
+  wabaId             String           @map("waba_id")
+  metaTemplateId     String?          @map("meta_template_id")
+  name               String
+  language           String
+  category           TemplateCategory
+  parameterFormat    ParameterFormat  @default(POSITIONAL) @map("parameter_format")
+  components         Json             @default("[]")
+  variables          Json             @default("[]")
+  status             TemplateStatus   @default(DRAFT)
+  rejectionReason    String?          @map("rejection_reason")
+  headerMediaAssetId String?          @map("header_media_asset_id") @db.Uuid
+  headerMediaAsset   MediaAsset?      @relation("TemplateHeaderMedia", fields: [headerMediaAssetId], references: [id], onDelete: SetNull)
+  lastSyncedAt       DateTime?        @map("last_synced_at") @db.Timestamptz
+  createdById        String?          @map("created_by_id") @db.Uuid
+  createdBy          User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  campaigns Campaign[]
+  messages  Message[]
+
+  @@unique([wabaId, name, language])
+  @@index([status])
+  @@map("templates")
+}
+
+model MediaAsset {
+  id               String       @id @default(uuid(7)) @db.Uuid
+  storageKey       String       @map("storage_key")
+  mimeType         String       @map("mime_type")
+  sizeBytes        Int          @map("size_bytes")
+  purpose          MediaPurpose
+  metaHeaderHandle String?      @map("meta_header_handle")
+  /// { "<phoneNumberId>": { "id": "...", "uploadedAt": "..." } }
+  metaMediaIds     Json         @default("{}") @map("meta_media_ids")
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  templates Template[] @relation("TemplateHeaderMedia")
+  campaigns Campaign[] @relation("CampaignHeaderMedia")
+
+  @@map("media_assets")
+}
+
+// ---------- Campaigns & messages ----------
+
+model Campaign {
+  id                     String          @id @default(uuid(7)) @db.Uuid
+  name                   String
+  /// Nullable while a draft is incomplete; launch requires both.
+  numberId               String?         @map("number_id") @db.Uuid
+  number                 WhatsAppNumber? @relation(fields: [numberId], references: [id])
+  templateId             String?         @map("template_id") @db.Uuid
+  template               Template?       @relation(fields: [templateId], references: [id])
+  state                  CampaignState   @default(DRAFT)
+  audienceType           AudienceType    @default(UPLOAD) @map("audience_type")
+  audienceFilter         Json?           @map("audience_filter")
+  variableMapping        Json            @default("{}") @map("variable_mapping")
+  headerMediaAssetId     String?         @map("header_media_asset_id") @db.Uuid
+  headerMediaAsset       MediaAsset?     @relation("CampaignHeaderMedia", fields: [headerMediaAssetId], references: [id], onDelete: SetNull)
+  scheduledAt            DateTime?       @map("scheduled_at") @db.Timestamptz
+  timezone               String          @default("UTC")
+  sourceCampaignId       String?         @map("source_campaign_id") @db.Uuid
+  sourceCampaign         Campaign?       @relation("Retarget", fields: [sourceCampaignId], references: [id], onDelete: SetNull)
+  retargets              Campaign[]      @relation("Retarget")
+  retargetStatus         RetargetStatus? @map("retarget_status")
+  pausedReason           String?         @map("paused_reason")
+  launchedAt             DateTime?       @map("launched_at") @db.Timestamptz
+  completedAt            DateTime?       @map("completed_at") @db.Timestamptz
+  cancelledAt            DateTime?       @map("cancelled_at") @db.Timestamptz
+  totals                 Json            @default("{}")
+  estimatedCostUsdMicros BigInt          @default(0) @map("estimated_cost_usd_micros")
+  createdById            String          @map("created_by_id") @db.Uuid
+  createdBy              User            @relation(fields: [createdById], references: [id])
+  createdAt              DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt              DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  messages   Message[]
+  uploadRows CampaignUploadRow[]
+  importJobs ImportJob[]
+
+  @@index([state])
+  @@map("campaigns")
+}
+
+model Message {
+  id               String          @id @default(uuid(7)) @db.Uuid
+  origin           MessageOrigin
+  campaignId       String?         @map("campaign_id") @db.Uuid
+  campaign         Campaign?       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  apiKeyId         String?         @map("api_key_id") @db.Uuid
+  apiKey           ApiKey?         @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  contactId        String?         @map("contact_id") @db.Uuid
+  contact          Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  /// Null after contact deletion (FR-015).
+  phoneE164        String?         @map("phone_e164")
+  recipientCountry String          @map("recipient_country") @db.Char(2)
+  numberId         String          @map("number_id") @db.Uuid
+  number           WhatsAppNumber  @relation(fields: [numberId], references: [id])
+  templateId       String          @map("template_id") @db.Uuid
+  template         Template        @relation(fields: [templateId], references: [id])
+  resolvedParams   Json            @default("{}") @map("resolved_params")
+  status           MessageStatus   @default(PENDING)
+  skipReason       SkipReason?     @map("skip_reason")
+  failureCode      Int?            @map("failure_code")
+  failureReason    String?         @map("failure_reason")
+  attempts         Int             @default(0)
+  waMessageId      String?         @unique @map("wa_message_id")
+  pricingCategory  String?         @map("pricing_category")
+  billable         Boolean?
+  costUsdMicros    BigInt?         @map("cost_usd_micros")
+  queuedAt         DateTime?       @map("queued_at") @db.Timestamptz
+  sentAt           DateTime?       @map("sent_at") @db.Timestamptz
+  deliveredAt      DateTime?       @map("delivered_at") @db.Timestamptz
+  readAt           DateTime?       @map("read_at") @db.Timestamptz
+  failedAt         DateTime?       @map("failed_at") @db.Timestamptz
+  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  events             MessageEvent[]
+  idempotencyRecords IdempotencyRecord[]
+
+  /// At most one message per recipient per campaign (FR-022). NULLs are distinct in Postgres,
+  /// so API messages (no campaign) and anonymised rows (no contact) never collide.
+  @@unique([campaignId, contactId])
+  @@index([campaignId, status])
+  @@index([apiKeyId, createdAt])
+  @@map("messages")
+}
+
+model MessageEvent {
+  id         String           @id @default(uuid(7)) @db.Uuid
+  messageId  String           @map("message_id") @db.Uuid
+  message    Message          @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  type       MessageEventType
+  occurredAt DateTime         @map("occurred_at") @db.Timestamptz
+  payload    Json             @default("{}")
+  /// e.g. "wamid.X:delivered" or "<messageId>:retry:<n>"; makes event writes idempotent.
+  dedupeKey  String           @unique @map("dedupe_key")
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([messageId])
+  @@map("message_events")
+}
+
+model WebhookEvent {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  receivedAt     DateTime  @default(now()) @map("received_at") @db.Timestamptz
+  signatureValid Boolean   @map("signature_valid")
+  /// Raw body; null when the signature was invalid. Retained 30 days.
+  payload        Json?
+  processedAt    DateTime? @map("processed_at") @db.Timestamptz
+  error          String?
+
+  @@index([receivedAt])
+  @@map("webhook_events")
+}
+
+// ---------- Cost, API & notifications ----------
+
+model RateCardEntry {
+  id             String       @id @default(uuid(7)) @db.Uuid
+  category       RateCategory
+  /// ISO-2 country code, or "*" as the default rate.
+  countryCode    String       @map("country_code") @db.VarChar(2)
+  priceUsdMicros BigInt       @map("price_usd_micros")
+  effectiveFrom  DateTime     @map("effective_from") @db.Date
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([category, countryCode, effectiveFrom])
+  @@map("rate_card_entries")
+}
+
+model ApiKey {
+  id                 String    @id @default(uuid(7)) @db.Uuid
+  name               String
+  prefix             String    @db.Char(8)
+  keyHash            String    @unique @map("key_hash")
+  last4              String    @db.Char(4)
+  rateLimitPerMinute Int       @default(60) @map("rate_limit_per_minute")
+  createdById        String    @map("created_by_id") @db.Uuid
+  createdBy          User      @relation(fields: [createdById], references: [id])
+  lastUsedAt         DateTime? @map("last_used_at") @db.Timestamptz
+  revokedAt          DateTime? @map("revoked_at") @db.Timestamptz
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  messages           Message[]
+  idempotencyRecords IdempotencyRecord[]
+  auditLogs          AuditLog[]
+
+  @@index([prefix])
+  @@map("api_keys")
+}
+
+model IdempotencyRecord {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  apiKeyId    String   @map("api_key_id") @db.Uuid
+  apiKey      ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  key         String   @db.VarChar(255)
+  requestHash String   @map("request_hash")
+  messageId   String   @map("message_id") @db.Uuid
+  message     Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([apiKeyId, key])
+  @@index([expiresAt])
+  @@map("idempotency_records")
+}
+
+/// One row per recipient user (admin notifications are fanned out at creation time).
+model Notification {
+  id        String           @id @default(uuid(7)) @db.Uuid
+  userId    String           @map("user_id") @db.Uuid
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  body      String
+  link      String?
+  readAt    DateTime?        @map("read_at") @db.Timestamptz
+  createdAt DateTime         @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([userId, readAt])
+  @@map("notifications")
+}

@@ -1,0 +1,164 @@
+name: CI
+
+on:
+  # Branch pushes are covered by their pull request; main runs after every merge.
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: wbm
+          POSTGRES_PASSWORD: wbm
+          POSTGRES_DB: wbm
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U wbm"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        # Redis' default maxmemory-policy is noeviction, as BullMQ requires.
+        image: redis:7
+        ports: ['6379:6379']
+    env:
+      DATABASE_URL: postgresql://wbm:wbm@localhost:5432/wbm
+      DATABASE_URL_TEST: postgresql://wbm:wbm@localhost:5432/wbm_test
+      REDIS_URL: redis://localhost:6379
+      META_GRAPH_BASE_URL: http://localhost:4010
+      META_GRAPH_API_VERSION: v27.0
+      APP_URL: http://localhost:3000
+      COOKIE_SECURE: 'false'
+      LOG_LEVEL: warn
+      S3_ENDPOINT: http://localhost:9000
+      S3_BUCKET: wbm
+      S3_ACCESS_KEY: wbm
+      S3_SECRET_KEY: wbm-secret-key
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+          cache: npm
+      - name: Generate throwaway test secrets (never committed)
+        run: |
+          echo "TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+          echo "OPS_TOKEN=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+          echo "META_APP_SECRET=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+          echo "META_WEBHOOK_VERIFY_TOKEN=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+      - name: Create test database
+        run: PGPASSWORD=wbm psql -h localhost -U wbm -d wbm -c 'CREATE DATABASE wbm_test;'
+      - name: Start S3-compatible storage (MinIO via Chainguard image)
+        run: docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=wbm -e MINIO_ROOT_PASSWORD=wbm-secret-key cgr.dev/chainguard/minio:latest server /data
+      - run: npm ci
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+      - run: npm run lint
+      - run: npm run lint:contracts
+      - name: Check alert rules (promtool)
+        run: docker run --rm -v "$PWD/ops:/ops:ro" --entrypoint promtool prom/prometheus:v3.5.0 check rules /ops/alerts.yml
+      - run: npm run build -w @wbm/shared
+      - run: npm run db:generate -w @wbm/api
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run test:integration
+      - run: npm run test:contract
+
+  e2e-smoke:
+    runs-on: ubuntu-latest
+    needs: build-test
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: wbm
+          POSTGRES_PASSWORD: wbm
+          POSTGRES_DB: wbm
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U wbm"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:7
+        ports: ['6379:6379']
+    env:
+      DATABASE_URL: postgresql://wbm:wbm@localhost:5432/wbm
+      REDIS_URL: redis://localhost:6379
+      META_GRAPH_BASE_URL: http://localhost:4010
+      META_GRAPH_API_VERSION: v27.0
+      MOCK_WEBHOOK_TARGET: http://localhost:4000/api/webhooks/meta
+      APP_URL: http://localhost:3000
+      COOKIE_SECURE: 'false'
+      S3_ENDPOINT: http://localhost:9000
+      S3_BUCKET: wbm
+      S3_ACCESS_KEY: wbm
+      S3_SECRET_KEY: wbm-secret-key
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 26
+          cache: npm
+      - name: Generate throwaway test secrets (never committed)
+        run: |
+          echo "TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+          echo "OPS_TOKEN=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+          echo "META_APP_SECRET=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+          echo "META_WEBHOOK_VERIFY_TOKEN=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+      - run: npm ci
+      - run: npm run build -w @wbm/shared
+      - run: npm run db:generate -w @wbm/api
+      - run: npm run db:migrate
+      - name: Seed the admin used by the e2e specs (quickstart §2)
+        run: npm run db:seed -- --admin-email admin@company.test --admin-password "ChangeMe-12345"
+      - name: Start S3-compatible storage (MinIO via Chainguard image)
+        run: docker run -d --name minio -p 9000:9000 -e MINIO_ROOT_USER=wbm -e MINIO_ROOT_PASSWORD=wbm-secret-key cgr.dev/chainguard/minio:latest server /data
+      - run: npx --no-install playwright install --with-deps chromium
+        working-directory: apps/web
+      - run: npm run test:e2e
+      - name: Keep the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report
+          retention-days: 7
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz | tar -xz gitleaks
+      - name: Scan the git history for secrets
+        run: ./gitleaks git --redact --verbose --exit-code 1 .
+
+  docker-images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - name: Build the api/worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: false
+          tags: wbm-api:ci
+      - name: Build the web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: false
+          build-args: API_INTERNAL_URL=http://api:4000
+          tags: wbm-web:ci
