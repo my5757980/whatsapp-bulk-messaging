@@ -7,6 +7,7 @@ import { SettingsService } from '../../settings/settings.service.js';
 import { normalizeKeyword } from '../../webhooks/handlers/inbound.handler.js';
 import { WebhookRouter, type WebhookChange, type WebhookChangeHandler } from '../../webhooks/webhook-router.js';
 import { AutoRepliesService } from '../automation/auto-replies.service.js';
+import { InboxNotifier } from '../notifications/inbox-notifier.js';
 import { onCustomerMessage } from '../conversations/conversation-state.js';
 import { isLive, startsOpening } from '../conversations/window.js';
 import type { ConversationState } from '../inbox-common.js';
@@ -48,6 +49,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly liveChat: LiveChatSettingsService,
     private readonly routing: ChatRoutingService,
     private readonly autoReplies: AutoRepliesService,
+    private readonly notifier: InboxNotifier,
   ) {}
 
   onModuleInit(): void {
@@ -156,7 +158,9 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     if (contact.blockedAt) return;
     await this.publisher.itemCreated(itemId);
     await this.publisher.conversation(outcome.conversationId, outcome.created ? undefined : outcome.previous);
+    // A chat that starts waiting for an agent gets that alert instead of a new-message alert.
     if (outcome.becameRequesting) await this.routing.alertRequesting(outcome.conversationId);
+    else await this.notifier.queue({ kind: 'message', conversationId: outcome.conversationId, itemId });
     await this.autoReplies.handle({
       conversationId: outcome.conversationId,
       contactId: contact.id,

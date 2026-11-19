@@ -457,4 +457,35 @@ describe('Live chat API contract', () => {
     await check('delete', '/contacts/{id}/block', await block('delete', chat.contactId!), 204);
     await check('post', '/contacts/{id}/block', await block('post', randomUUID()), 404);
   });
+
+  it('US7: sound preference, push devices and the VAPID key', async () => {
+    const me = (path: string) => `/api/me/${path}`;
+    await check('get', '/me/notification-preferences', await agentA.agent.get(me('notification-preferences')), 200);
+    await check(
+      'put',
+      '/me/notification-preferences',
+      await agentA.agent.put(me('notification-preferences')).set('X-CSRF-Token', agentA.csrf).send({ soundEnabled: false }),
+      200,
+    );
+    const register = (endpoint: string) =>
+      agentA.agent
+        .post(me('push-devices'))
+        .set('X-CSRF-Token', agentA.csrf)
+        .send({
+          endpoint,
+          keys: { p256dh: 'BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM', auth: 'tBHItJI5svbpez7KI4CCXg' },
+          label: 'Contract browser',
+        });
+    const device = await register(`https://push.example.test/contract/${randomUUID()}`);
+    await check('post', '/me/push-devices', device, 201);
+    await check('post', '/me/push-devices', await register('not a url'), 422);
+    await check('get', '/me/push-devices', await agentA.agent.get(me('push-devices')), 200);
+    const pause = (id: string) => agentA.agent.patch(me(`push-devices/${id}`)).set('X-CSRF-Token', agentA.csrf).send({ paused: true });
+    await check('patch', '/me/push-devices/{id}', await pause(device.body.id), 200);
+    await check('patch', '/me/push-devices/{id}', await pause(randomUUID()), 404);
+    const remove = (id: string) => agentA.agent.delete(me(`push-devices/${id}`)).set('X-CSRF-Token', agentA.csrf);
+    await check('delete', '/me/push-devices/{id}', await remove(device.body.id), 204);
+    await check('delete', '/me/push-devices/{id}', await remove(device.body.id), 404);
+    await check('get', '/push/vapid-public-key', await agentA.agent.get('/api/push/vapid-public-key'), 200);
+  });
 });

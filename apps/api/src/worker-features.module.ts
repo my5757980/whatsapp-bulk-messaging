@@ -8,6 +8,8 @@ import { InboundChatHandler } from './modules/inbox/inbound/inbound-chat.handler
 import { InboundMediaProcessor } from './modules/inbox/inbound/inbound-media.processor.js';
 import { InboxDomainModule } from './modules/inbox/inbox.module.js';
 import { InboxQueueProcessor } from './modules/inbox/inbox-queue.processor.js';
+import { InboxNotifyProcessor } from './modules/inbox/notifications/inbox-notify.processor.js';
+import { PushService } from './modules/inbox/notifications/push.service.js';
 import { ReadReceiptProcessor } from './modules/inbox/messages/read-receipt.processor.js';
 import { SessionSendProcessor } from './modules/inbox/messages/session-send.processor.js';
 import { WindowCloseProcessor } from './modules/inbox/routing/window-close.processor.js';
@@ -51,6 +53,8 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     InboundMediaProcessor,
     ReadReceiptProcessor,
     InboxQueueProcessor,
+    InboxNotifyProcessor,
+    PushService,
     SessionSendProcessor,
     WindowCloseProcessor,
     AutoResolveProcessor,

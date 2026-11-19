@@ -19,6 +19,12 @@ import { LiveChatSettingsService } from './settings/live-chat-settings.service.j
 import { InboxEventsService } from './realtime/inbox-events.service.js';
 import { InboxPublisher } from './realtime/inbox-publisher.js';
 import { InboxStreamController } from './realtime/inbox-stream.controller.js';
+import { InboxNotifier } from './notifications/inbox-notifier.js';
+import { NotificationPrefsController } from './notifications/notification-prefs.controller.js';
+import { PushDevicesController, PushDevicesService, PushKeyController } from './notifications/push-devices.controller.js';
+import { createPushSender, PUSH_SENDER } from './notifications/push-sender.js';
+import { APP_CONFIG } from '../../common/config/config.module.js';
+import type { AppConfig } from '../../common/config/config.js';
 import { DEFAULT_INBOX_STREAM_OPTIONS, INBOX_STREAM_OPTIONS, StreamFanoutService } from './realtime/stream-fanout.service.js';
 
 // Live chat wiring (feature 002, T022), following the 001 split: shared services here, HTTP-only
@@ -28,8 +34,30 @@ import { DEFAULT_INBOX_STREAM_OPTIONS, INBOX_STREAM_OPTIONS, StreamFanoutService
 /** Live chat services shared by the HTTP app and the worker. */
 @Global()
 @Module({
-  providers: [InboxEventsService, AgentRulesLoader, InboxPublisher, ChatTimelineService, LiveChatSettingsService, ChatRoutingService, JourneyService, AutoRepliesService],
-  exports: [InboxEventsService, AgentRulesLoader, InboxPublisher, ChatTimelineService, LiveChatSettingsService, ChatRoutingService, JourneyService, AutoRepliesService],
+  providers: [
+    InboxEventsService,
+    AgentRulesLoader,
+    InboxPublisher,
+    ChatTimelineService,
+    LiveChatSettingsService,
+    ChatRoutingService,
+    JourneyService,
+    AutoRepliesService,
+    InboxNotifier,
+    { provide: PUSH_SENDER, inject: [APP_CONFIG], useFactory: (config: AppConfig) => createPushSender(config) },
+  ],
+  exports: [
+    InboxEventsService,
+    AgentRulesLoader,
+    InboxPublisher,
+    ChatTimelineService,
+    LiveChatSettingsService,
+    ChatRoutingService,
+    JourneyService,
+    AutoRepliesService,
+    InboxNotifier,
+    PUSH_SENDER,
+  ],
 })
 export class InboxDomainModule {}
 
@@ -47,6 +75,7 @@ export class InboxDomainModule {}
     CannedMessagesService,
     MediaLibraryService,
     ChatContactService,
+    PushDevicesService,
   ],
   controllers: [
     InboxStreamController,
@@ -57,6 +86,9 @@ export class InboxDomainModule {}
     CannedMessagesController,
     MediaLibraryController,
     ChatContactController,
+    NotificationPrefsController,
+    PushDevicesController,
+    PushKeyController,
   ],
 })
 export class InboxApiModule {}
