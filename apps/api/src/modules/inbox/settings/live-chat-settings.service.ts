@@ -80,17 +80,12 @@ export interface LiveChatSettingsDto {
   autoResolve: boolean;
 }
 
-/** Workers read the settings often; changes made on another instance apply within this time. */
-const CACHE_MS = 15_000;
-
 /**
  * Live chat settings, one row (T048): "talk to a person" keywords, auto-resolve, and the working
  * hours and automatic messages used by US6. Created on first use from the company time zone.
  */
 @Injectable()
 export class LiveChatSettingsService {
-  private cached: { value: LiveChatSettingsDto; expires: number } | null = null;
-
   constructor(private readonly prisma: PrismaService) {}
 
   async get(): Promise<LiveChatSettingsDto> {
@@ -99,14 +94,6 @@ export class LiveChatSettingsService {
     const company = await this.prisma.settings.findUnique({ where: { id: 1 }, select: { defaultTimezone: true } });
     const created = await this.prisma.liveChatSettings.upsert({ where: { id: 1 }, create: { id: 1, timezone: company?.defaultTimezone ?? 'UTC' }, update: {} });
     return toDto(created);
-  }
-
-  /** Cached copy for message handling and jobs. */
-  async current(): Promise<LiveChatSettingsDto> {
-    if (this.cached && this.cached.expires > Date.now()) return this.cached.value;
-    const value = await this.get();
-    this.cached = { value, expires: Date.now() + CACHE_MS };
-    return value;
   }
 
   async update(input: LiveChatSettingsInput, actorId: string): Promise<LiveChatSettingsDto> {
@@ -125,7 +112,6 @@ export class LiveChatSettingsService {
         updatedById: actorId,
       },
     });
-    this.cached = null;
     return toDto(row);
   }
 }

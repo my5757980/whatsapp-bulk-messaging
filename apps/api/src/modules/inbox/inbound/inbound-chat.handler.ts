@@ -63,7 +63,8 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
       return;
     }
     const { defaultCountryCode } = await this.settings.get();
-    const { humanKeywords } = await this.liveChat.current();
+    // Read fresh for every webhook (one row): a cache in the worker would miss changes made in the app.
+    const { humanKeywords } = await this.liveChat.get();
     for (const raw of messages) {
       const parsed = parseInboundMessage(raw, change.value.contacts);
       if (!parsed) {
