@@ -112,9 +112,15 @@ function applyToCaches(queryClient: QueryClient, event: InboxEvent): void {
       void queryClient.invalidateQueries({ queryKey: queryKeys.inboxLists });
       void queryClient.invalidateQueries({ queryKey: queryKeys.inboxUnread });
       return;
+    case 'contact.updated':
+      for (const id of Array.isArray(event.data.conversationIds) ? (event.data.conversationIds as string[]) : []) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.inboxConversation(id) });
+        void queryClient.invalidateQueries({ queryKey: ['journey', id] });
+      }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.inboxLists });
+      return;
     case 'conversation.upserted':
     case 'conversation.window_closed':
-    case 'contact.updated':
       void queryClient.invalidateQueries({ queryKey: queryKeys.inboxLists });
       void queryClient.invalidateQueries({ queryKey: queryKeys.inboxUnread });
       if (conversationId) void queryClient.invalidateQueries({ queryKey: queryKeys.inboxConversation(conversationId) });
