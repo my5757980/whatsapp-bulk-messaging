@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 // T194: ops/alerts.yml covers the R19 alerts and only uses metrics the code exports.
 // (Rule syntax is checked by `promtool check rules` in CI.)
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ALERTS = readFileSync(path.resolve(HERE, '../../../../ops/alerts.yml'), 'utf8');
+// Windows checkouts may have CRLF line endings; the rules are matched on LF.
+const ALERTS = readFileSync(path.resolve(HERE, '../../../../ops/alerts.yml'), 'utf8').replace(/\r\n/g, '\n');
 const METRICS_SOURCE = readFileSync(path.resolve(HERE, '../../src/common/metrics/metrics.service.ts'), 'utf8');
 
 /** The rule block of one alert: from its `- alert:` line to the next one. */

@@ -1,5 +1,6 @@
 import { Injectable, Logger, type OnApplicationBootstrap, type OnModuleInit } from '@nestjs/common';
 import { UnrecoverableError, type Job } from 'bullmq';
+import type { JobProcessor } from '../../common/queue/processor.registry.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { ProcessorRegistry } from '../../common/queue/processor.registry.js';
 import { QUEUES, sendQueueName } from '../../common/queue/queue.constants.js';
@@ -19,6 +20,8 @@ const SEND_CONCURRENCY = 50;
 export class SendQueueManager implements OnModuleInit, OnApplicationBootstrap {
   private readonly logger = new Logger(SendQueueManager.name);
   private readonly active = new Set<string>();
+  /** Handlers for other job names on the number queues, e.g. live chat replies ("session"). */
+  private readonly jobHandlers = new Map<string, JobProcessor>();
 
   constructor(
     private readonly registry: ProcessorRegistry,
@@ -56,12 +59,21 @@ export class SendQueueManager implements OnModuleInit, OnApplicationBootstrap {
     }
   }
 
+  /**
+   * Lets another feature process its own job name on every number queue, sharing the number's
+   * rate limit and priorities (002 R3). Register before workers start (onModuleInit).
+   */
+  registerJobHandler<T, R>(jobName: string, handler: JobProcessor<T, R>): void {
+    if (jobName === 'send') throw new Error('"send" jobs belong to the campaign send processor');
+    this.jobHandlers.set(jobName, handler as JobProcessor);
+  }
+
   async ensureWorker(numberId: string, ratePerSecond: number): Promise<void> {
     if (this.active.has(numberId)) return;
     this.active.add(numberId);
     try {
       await this.queues.sendQueue(numberId).setGlobalRateLimit(ratePerSecond, 1000);
-      this.registry.register<SendJobData, unknown>(sendQueueName(numberId), (job) => this.run(job), {
+      this.registry.register<SendJobData, unknown>(sendQueueName(numberId), (job) => this.route(job), {
         concurrency: SEND_CONCURRENCY,
         settings: { backoffStrategy: (attemptsMade: number) => backoffDelay(attemptsMade) },
       });
@@ -70,6 +82,15 @@ export class SendQueueManager implements OnModuleInit, OnApplicationBootstrap {
       throw error;
     }
     this.logger.log({ numberId, ratePerSecond }, 'Send worker started');
+  }
+
+  /** "send" jobs go to the campaign send processor; other names to their registered handler. */
+  private async route(job: Job) {
+    if (job.name === 'send') return this.run(job as Job<SendJobData>);
+    const handler = this.jobHandlers.get(job.name);
+    // Retried rather than failed: a worker started before the handler existed may pick it up.
+    if (!handler) throw new Error(`No handler for "${job.name}" jobs on ${job.queueName}`);
+    return handler(job);
   }
 
   /** BullMQ adapter: transient failures throw (retry with backoff), permanent ones are final. */

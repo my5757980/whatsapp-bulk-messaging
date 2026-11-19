@@ -80,7 +80,7 @@
   - agents see ACTIVE/REQUESTING plus their own INTERVENED
   - tag and attribute rules match with OR; no rules = unrestricted
   - blocked contacts hidden from live lists
-  - the in-memory checker used for SSE agrees with the SQL predicate on a table of cases
+  - the in-memory checker used for SSE agrees with the SQL predicate on a table of cases (shared cases in apps/api/test/support/inbox-visibility-cases.ts; the SQL side runs in apps/api/test/integration/inbox-visibility.int-spec.ts)
 - [X] T009 [P] Unit tests for inbound parsing in apps/api/test/unit/inbox/message-parser.spec.ts:
   - every type in meta-graph-inbox.md §1: text, image, video, audio/voice, document, sticker, location, contacts, button, interactive button/list/nfm, reaction, unsupported with `errors[]`, unknown type
   - context.id and contact profile names
@@ -108,31 +108,32 @@
   - run `npm run db:generate -w @wbm/api`
 - [X] T014 [P] Implement the pure transitions in apps/api/src/modules/inbox/conversations/conversation-state.ts (makes T006 pass)
 - [X] T015 [P] Implement the 24-hour helpers in apps/api/src/modules/inbox/conversations/window.ts (makes T007 pass)
-- [ ] T016 [P] Implement the visibility predicate builder in apps/api/src/modules/inbox/conversations/visibility.ts (makes T008 pass):
+- [X] T016 [P] Implement the visibility predicate builder in apps/api/src/modules/inbox/conversations/visibility.ts (makes T008 pass):
   - `whereVisible(user, rules)` returning a Prisma `where` plus a raw SQL fragment
   - `canSee(user, rules, chatFacts)` for single-chat checks and SSE
-  - an agent-rule loader with a 30 s cache
+  - an agent-rule loader with a 30 s cache (apps/api/src/modules/inbox/conversations/agent-rules.loader.ts)
+  - done as a SQL fragment (`visibleSql`) plus the in-memory check; no Prisma `where`, because attribute rules compare text like `->>`, which Prisma JSON filters cannot express
 - [X] T017 [P] Implement the inbound parser in apps/api/src/modules/inbox/inbound/message-parser.ts (makes T009 pass)
-- [ ] T018 Implement the event bus in apps/api/src/modules/inbox/realtime/inbox-events.service.ts:
+- [X] T018 Implement the event bus in apps/api/src/modules/inbox/realtime/inbox-events.service.ts:
   - `publish(envelope)` does XADD to `wbm:inbox:events` with `MAXLEN ~ 20000`
   - envelope types per data-model.md §5
-- [ ] T019 Implement fan-out and filtering in apps/api/src/modules/inbox/realtime/stream-fanout.service.ts and apps/api/src/modules/inbox/realtime/event-filter.ts (makes T010 pass):
+- [X] T019 Implement fan-out and filtering in apps/api/src/modules/inbox/realtime/stream-fanout.service.ts and apps/api/src/modules/inbox/realtime/event-filter.ts (makes T010 pass):
   - one XREAD BLOCK tail per api instance, dispatched to connections
   - a contact facts cache invalidated by `contact.updated`
-- [ ] T020 Implement the SSE endpoint in apps/api/src/modules/inbox/realtime/inbox-stream.controller.ts (makes T011 pass):
+- [X] T020 Implement the SSE endpoint in apps/api/src/modules/inbox/realtime/inbox-stream.controller.ts (makes T011 pass):
   - `GET /inbox/events` with permission inbox.view
   - headers `text/event-stream`, `no-cache, no-transform`, `X-Accel-Buffering: no`, no compression
   - Last-Event-ID replay with XRANGE, `resync` when the ID is trimmed
   - 15 s ping, presence key `wbm:presence:{userId}` with a 45 s TTL
-- [ ] T021 Add job priorities to the send queues in apps/api/src/modules/sending/send-queue.manager.ts (makes T012 pass, research R3):
+- [X] T021 Add job priorities to the send queues in apps/api/src/modules/sending/send-queue.manager.ts (makes T012 pass, research R3):
   - campaign `send` jobs explicitly priority 10 in apps/api/src/modules/sending/dispatcher.processor.ts
   - in apps/api/src/modules/sending/send-queue.manager.ts, route jobs named `session` to the session processor (registered in US1) and inbox `send` jobs (template) at priority 1
-- [ ] T022 Create the inbox module wiring in apps/api/src/modules/inbox/inbox.module.ts:
+- [X] T022 Create the inbox module wiring in apps/api/src/modules/inbox/inbox.module.ts:
   - services into apps/api/src/modules/domain.module.ts (DomainModule)
   - controllers into ApiFeaturesModule
   - processors into apps/api/src/worker-features.module.ts
   - keep apps/api/test/integration/worker-boot.int-spec.ts green
-- [ ] T023 [P] Web realtime and navigation in apps/web/src/lib/inbox-events.ts and apps/web/src/lib/query.tsx:
+- [X] T023 [P] Web realtime and navigation in apps/web/src/lib/inbox-events.ts and apps/web/src/lib/query.tsx:
   - an EventSource hook with reconnect/backoff and `resync`, applying events to TanStack Query caches
   - query keys for inbox lists, chat, items and unread
   - a "Live chat" entry with an unread badge in the dashboard sidebar (apps/web/src/components/layout/)

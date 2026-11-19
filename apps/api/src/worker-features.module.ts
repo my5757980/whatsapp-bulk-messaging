@@ -4,6 +4,7 @@ import { CampaignProgressProcessor } from './modules/campaigns/campaign-progress
 import { ScheduleReconcilerProcessor } from './modules/campaigns/schedule-reconciler.processor.js';
 import { DomainModule } from './modules/domain.module.js';
 import { ImportProcessor } from './modules/imports/import.processor.js';
+import { InboxWorkerModule } from './modules/inbox/inbox.module.js';
 import { RetentionProcessor, RetentionService } from './modules/maintenance/retention.processor.js';
 import { NumberRefreshProcessor } from './modules/numbers/number-refresh.processor.js';
 import { IdempotencyCleanupProcessor } from './modules/public-api/idempotency-cleanup.processor.js';
@@ -21,7 +22,7 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
  * integration tests, which drive the processors directly with a stub ProcessorRegistry.
  */
 @Module({
-  imports: [DomainModule, WebhooksWorkerModule],
+  imports: [DomainModule, WebhooksWorkerModule, InboxWorkerModule],
   providers: [
     StatusHandler,
     InboundHandler,

@@ -251,3 +251,12 @@ fan-out. The SSE event ID is the stream entry ID. See [contracts/realtime-events
   - for the contact's chat messages: `text = NULL`, `payload = '{}'`, media assets deleted
   - `last_message_preview = NULL`, `contact_id = NULL`
   - openings and anonymous counts are kept for metrics
+
+## 7. Implementation notes (T013)
+
+- `conversations (intervened_by_id)` is a plain index; Prisma cannot declare the partial one.
+- `chat_messages.message_id` is **unique**, so one message has at most one reference row and back-fills are idempotent.
+- `agent_rules` has no unique constraint (its NULL columns would make one ineffective); the replace-all PUT removes duplicates.
+- `canned_messages.name` is `citext`, unique ignoring case; length (80) is validated by the API.
+- `live_chat_settings` is created on first use (as 001 does for `settings`); a check constraint keeps `id = 1`.
+- Check constraints in the migration: an `INTERVENED` chat has an owner; `MESSAGE_REF` rows have a `message_id`; notes have origin `MEMBER`.

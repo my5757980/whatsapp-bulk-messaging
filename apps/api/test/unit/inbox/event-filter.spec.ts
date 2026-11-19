@@ -83,7 +83,8 @@ describe('decideDelivery', () => {
     });
     const forAgent = decideDelivery(agentA, [], noFacts, upsert);
     expect(forAgent).toMatchObject({ send: true, data: { contact: { phone: '•••• 1234' } } });
-    expect((forAgent as { data: { lastMessagePreview: string } }).data.lastMessagePreview).toHaveLength(120);
+    if (!forAgent.send) throw new Error('expected the event to be delivered');
+    expect(forAgent.data.lastMessagePreview).toHaveLength(120);
     expect(decideDelivery(manager, [], noFacts, upsert)).toMatchObject({ send: true, data: { contact: { phone: '+971500001234' } } });
   });
 

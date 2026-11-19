@@ -82,5 +82,13 @@ export const NotificationType = {
   CAMPAIGN_AUTO_PAUSED: 'CAMPAIGN_AUTO_PAUSED',
   QUALITY_DROPPED: 'QUALITY_DROPPED',
   CREDENTIALS_FAILED: 'CREDENTIALS_FAILED',
+  // Feature 002 live chat
+  INBOX_REQUESTING: 'INBOX_REQUESTING',
+  INBOX_TRANSFERRED: 'INBOX_TRANSFERRED',
+  INBOX_MENTION: 'INBOX_MENTION',
 } as const;
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
+
+/** Live chat states (feature 002, data-model §4). UI labels: Open, Waiting for agent, Taken. */
+export const ConversationState = { ACTIVE: 'ACTIVE', REQUESTING: 'REQUESTING', INTERVENED: 'INTERVENED' } as const;
+export type ConversationState = (typeof ConversationState)[keyof typeof ConversationState];
