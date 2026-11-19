@@ -286,8 +286,8 @@ match the rows.
   - zero duplicate Meta sends across the run
   - audits recorded
 - [X] T082 [P] [US1] Write failing contract tests in apps/api/test/contract/us1.contract-spec.ts validating US1 responses against dashboard-api.openapi.yaml: /numbers, /templates, /templates/sync, /campaigns, /campaigns/{id}, /audience-upload, /estimate, /launch, /messages, /pause, /resume, /cancel, DELETE /contacts/{id}
-- [ ] T083 [P] [US1] Write a failing Playwright e2e for the quickstart US1 row in apps/web/e2e/us1-broadcast.spec.ts: connect the mock number, sync templates, upload samples/contacts-10.csv, map BODY.1 → name, send, and see 9 delivered/read + 1 failed
-  - _Status:_ spec written (apps/web/e2e/us1-broadcast.spec.ts); not yet executed - needs `npx playwright install chromium` (v1255) and the full local stack. The same flow passed as an HTTP smoke run against the real API, worker and mock-meta.
+- [X] T083 [P] [US1] Write a failing Playwright e2e for the quickstart US1 row in apps/web/e2e/us1-broadcast.spec.ts: connect the mock number, sync templates, upload samples/contacts-10.csv, map BODY.1 → name, send, and see 9 delivered/read + 1 failed
+  - _Verified:_ passes in GitHub Actions (e2e-smoke job, PR #1, 2026-11-19).
 
 ### Implementation for User Story 1
 
@@ -387,8 +387,8 @@ phone. Build an audience filter, and verify that the counts exclude the unsubscr
   - tag rules and attribute operators eq, neq, contains, gt, lt, before, after, is_true, is_false
   - OPTED_OUT is always excluded; non-OPTED_IN contacts are excluded for MARKETING templates
 - [X] T118 [P] [US2] Write failing contract tests for contacts, tags, attributes, imports and audience-preview responses in apps/api/test/contract/us2.contract-spec.ts
-- [ ] T119 [P] [US2] Write a failing Playwright e2e for the quickstart US2 row in apps/web/e2e/us2-contacts.spec.ts: import samples/contacts-100.csv, check the error report, send STOP via mock:inbound, confirm the audience count excludes the contact
-  - _Status:_ spec written (apps/web/e2e/us2-contacts.spec.ts); not yet executed - needs `npx playwright install chromium` (v1255) and the full local stack. The same flow passed as an HTTP smoke run against the real API, worker and mock-meta.
+- [X] T119 [P] [US2] Write a failing Playwright e2e for the quickstart US2 row in apps/web/e2e/us2-contacts.spec.ts: import samples/contacts-100.csv, check the error report, send STOP via mock:inbound, confirm the audience count excludes the contact
+  - _Verified:_ passes in GitHub Actions (e2e-smoke job, PR #1, 2026-11-19).
 
 ### Implementation for User Story 2
 
@@ -438,8 +438,8 @@ submit it. The status appears as pending, then approved or rejected, without a m
   - REJECTED, with the reason stored
   - PAUSED or DISABLED auto-pauses the RUNNING campaigns that use the template and notifies admins
 - [X] T135 [P] [US3] Write failing contract tests for template create, duplicate and delete, and for media responses, in apps/api/test/contract/us3.contract-spec.ts
-- [ ] T136 [P] [US3] Write a failing Playwright e2e for the quickstart US3 row in apps/web/e2e/us3-templates.spec.ts: a marketing template with 1 variable and a URL button goes Pending → Approved without refresh; an invalid name is blocked
-  - _Status:_ spec written (apps/web/e2e/us3-templates.spec.ts); not yet executed - needs `npx playwright install chromium` (v1255) and the full local stack.
+- [X] T136 [P] [US3] Write a failing Playwright e2e for the quickstart US3 row in apps/web/e2e/us3-templates.spec.ts: a marketing template with 1 variable and a URL button goes Pending → Approved without refresh; an invalid name is blocked
+  - _Verified:_ passes in GitHub Actions (e2e-smoke job, PR #1, 2026-11-19).
 
 ### Implementation for User Story 3
 
@@ -483,8 +483,8 @@ must be retried.
   - token expired (190) mid-campaign and number disconnected both auto-pause the campaign with a reason
   - resume is rejected while the blocking condition persists
   - a `phone_number_quality_update` downgrade creates a QUALITY_DROPPED notification
-- [ ] T146 [P] [US4] Write a failing Playwright e2e for the quickstart US4 row in apps/web/e2e/us4-control.spec.ts: schedule 1,000 recipients 2 min ahead, pause at ~30%, resume, and assert 1,000 unique sends recorded by mock-meta
-  - _Status:_ spec written (apps/web/e2e/us4-control.spec.ts); not yet executed - needs `npx playwright install chromium` (v1255) and the full local stack. A live HTTP smoke (real worker + mock-meta) scheduled 109 recipients 70 s ahead: started 0.2 s after the scheduled time, 109 unique sends.
+- [X] T146 [P] [US4] Write a failing Playwright e2e for the quickstart US4 row in apps/web/e2e/us4-control.spec.ts: schedule 1,000 recipients 2 min ahead, pause at ~30%, resume, and assert 1,000 unique sends recorded by mock-meta
+  - _Verified:_ passes in GitHub Actions (e2e-smoke job, PR #1, 2026-11-19).
 
 ### Implementation for User Story 4
 
@@ -522,8 +522,8 @@ matches the rate card, and "Retarget → Not read" creates a correct draft.
   - POST /campaigns/{id}/retarget for FAILED, NOT_READ, READ and DELIVERED; opted-out contacts excluded; the new DRAFT has `source_campaign_id`
   - PUT /rate-card validation
 - [X] T156 [P] [US5] Write failing contract tests for report, rate-card and retarget responses in apps/api/test/contract/us5.contract-spec.ts
-- [ ] T157 [P] [US5] Write a failing Playwright e2e for the quickstart US5 row (report, export, retarget) in apps/web/e2e/us5-reports.spec.ts
-  - _Status:_ spec written (apps/web/e2e/us5-reports.spec.ts); not yet executed - needs `npx playwright install chromium` (v1255) and the full local stack.
+- [X] T157 [P] [US5] Write a failing Playwright e2e for the quickstart US5 row (report, export, retarget) in apps/web/e2e/us5-reports.spec.ts
+  - _Verified:_ passes in GitHub Actions (e2e-smoke job, PR #1, 2026-11-19).
 
 ### Implementation for User Story 5
 
@@ -559,8 +559,8 @@ account, and confirm the audit log shows the actions.
   - _Implemented:_ the test reads every operation with `x-permission` from dashboard-api.openapi.yaml and checks all three roles against the shared role table (the US7 key endpoints are covered since US7).
 - [X] T168 [P] [US6] Write failing integration tests for AGENT phone masking on contacts, campaign messages, API messages and estimate previews in apps/api/test/integration/masking.int-spec.ts
 - [X] T169 [P] [US6] Write failing integration tests in apps/api/test/integration/audit.int-spec.ts: each audited action in data-model.md §1 writes an entry; GET /audit-logs is admin-only and supports filters
-- [ ] T170 [P] [US6] Write a failing Playwright e2e for the quickstart US6 row (manager and agent permissions, masked phones, audit entries) in apps/web/e2e/us6-roles.spec.ts
-  - _Status:_ spec written (apps/web/e2e/us6-roles.spec.ts); not yet executed - needs `npx playwright install chromium` (v1255) and the full local stack.
+- [X] T170 [P] [US6] Write a failing Playwright e2e for the quickstart US6 row (manager and agent permissions, masked phones, audit entries) in apps/web/e2e/us6-roles.spec.ts
+  - _Verified:_ passes in GitHub Actions (e2e-smoke job, PR #1, 2026-11-19).
 
 ### Implementation for User Story 6
 
@@ -610,8 +610,8 @@ its status. Repeat with the same idempotency key, and send to an opted-out numbe
 
   Also cover GET /api/v1/messages/{id} history and GET /api/v1/templates.
 - [X] T183 [P] [US7] Write failing contract tests against public-api.openapi.yaml in apps/api/test/contract/public-api.contract-spec.ts
-- [ ] T184 [P] [US7] Write a failing Playwright e2e for the quickstart US7 row, using Playwright's request API for the two idempotent calls, in apps/web/e2e/us7-api.spec.ts
-  - _Status:_ spec written (apps/web/e2e/us7-api.spec.ts); not yet executed - needs `npx playwright install chromium` (v1255) and the full local stack.
+- [X] T184 [P] [US7] Write a failing Playwright e2e for the quickstart US7 row, using Playwright's request API for the two idempotent calls, in apps/web/e2e/us7-api.spec.ts
+  - _Verified:_ passes in GitHub Actions (e2e-smoke job, PR #1, 2026-11-19).
 
 ### Implementation for User Story 7
 
@@ -655,7 +655,7 @@ its status. Repeat with the same idempotency key, and send to an opted-out numbe
 - [X] T196 [P] Create performance scripts in tools/perf/campaign-10k.ts and tools/perf/import-50k.ts:
   - a 10k-recipient campaign against mock-meta finishes within 20 min at the configured rate (SC-002)
   - a 50k-row import finishes within 5 min (SC-007)
-  - _Implemented:_ the scripts call the API directly (`npm run perf:campaign`, `npm run perf:import`) and print PASS/FAIL. They have not been run yet (see T200).
+  - _Implemented:_ the scripts call the API directly (`npm run perf:campaign`, `npm run perf:import`) and print PASS/FAIL. Both pass: SC-007 in 1m 13s and SC-002 in 10m 59s (see T200).
 - [X] T197 [P] Add multi-stage Dockerfiles in apps/api/Dockerfile and apps/web/Dockerfile: the api image runs `node dist/main.js` or `node dist/worker.js`; the web image uses Next.js standalone output; the api HEALTHCHECK calls /api/health with the `X-Ops-Token` header
   - _Implemented:_ the api image has a `migrate` target. `healthcheck.mjs` checks /api/health or the worker's /health, depending on PID 1's command. The web build takes `API_INTERNAL_URL` as a build argument (standalone output, tracing root = repo root). `docker build --check` passes; full builds run in the CI `docker-images` job.
 - [X] T198 Security hardening in apps/api/src/main.ts, apps/web/next.config.ts, .github/workflows/ci.yml:
@@ -665,8 +665,8 @@ its status. Repeat with the same idempotency key, and send to an opted-out numbe
   - a gitleaks secret-scan step in CI
   - _Implemented:_ helmet sends `default-src 'none'` on API responses. Production refuses `COOKIE_SECURE=false` or a non-https `APP_URL`. Web CSP and security headers are in next.config.ts (tests/security-headers.test.ts). `npm audit` is clean and gated in CI, and a gitleaks job was added. The API also trusts X-Forwarded-For from private peers, so the login throttle sees real client IPs.
 - [X] T199 [P] Write the root README (overview, architecture summary, links to the spec, plan, quickstart and ADRs) in README.md
-- [ ] T200 Run every quickstart.md validation row end to end, fix any gaps, and record the results in specs/001-whatsapp-bulk-messaging/checklists/release.md
-  - _Status:_ the automated gates pass and four gaps were fixed (see checklists/release.md). The full integration project passes (29 files, 127 tests, 2026-11-19), and SC-007 passes (50k import in 1m 13s). The live runs found three more bugs, all fixed with tests: the worker could not boot, imports failed on a 2-second connection wait, and delivery statuses were lost under load. SC-002 also passes: 10k sent in 10m 59s, no duplicates, all statuses final (9,999 read, 1 failed). Still to run: the Playwright specs and the Docker builds, which need more RAM than this machine has (CI).
+- [X] T200 Run every quickstart.md validation row end to end, fix any gaps, and record the results in specs/001-whatsapp-bulk-messaging/checklists/release.md
+  - _Done:_ every quickstart row is verified end to end. All 7 Playwright specs pass in GitHub Actions (e2e-smoke, PR #1), and so do build-test (lint, audit, promtool, typecheck, unit, integration, contract), secret-scan and docker-images. SC-007 (50k import in 1m 13s) and SC-002 (10k campaign in 10m 59s, no duplicates) pass. Eleven gaps were found and fixed; see checklists/release.md.
 - [X] T201 Check that ADR-0001 to ADR-0005 still match the implementation, then mark them Accepted or propose amendments, in history/adr/
   - _Implemented:_ all five ADRs are marked Accepted, with implementation notes: queue and job ID naming, daily retention, API sends skipping the dispatcher, hash lookup for API keys, and the proxy-aware client IP.
 

@@ -6,10 +6,10 @@
 - Node 26, Docker 29.1.3
 - Postgres 16, Redis 7 and MinIO via `docker compose`
 
-**Status**: Not ready to sign off. Every automated test suite passes, and both performance
-targets are met: the 50k import in 1m 13s and the 10k campaign in 10m 59s. Still outstanding: the
-Playwright e2e suite and the Docker image builds. They need more RAM than this 3.9 GB machine
-has, so run them in CI.
+**Status**: Ready for sign-off. Every automated gate passes locally and in GitHub Actions
+(PR #1, run 44483317755): build, lint, audit, unit, integration, contract, all 7 Playwright e2e
+specs, the secret scan and both Docker images. Both performance targets are met. What remains is
+production setup (section 4) and the product owner's sign-off.
 
 ## 1. Automated gates (quickstart §4 + CI)
 
@@ -27,7 +27,7 @@ has, so run them in CI.
 | Docker images (api, web) | ✅ PASS | `docker build --check` has no warnings. Both images build in GitHub Actions (`docker-images` job, PR #1). |
 | GitHub Actions `build-test` | ✅ PASS | npm audit, lint, contracts lint, promtool, typecheck, unit, integration and contract tests on ubuntu-latest (PR #1) |
 | GitHub Actions `secret-scan` | ✅ PASS | gitleaks over the whole git history |
-| Playwright e2e (US1–US7) | ⏳ NOT RUN | 7 specs are written. They need the chromium build Playwright 1.65 expects, plus about 2 GB of free RAM for web + api + worker + mock-meta. |
+| Playwright e2e (US1–US7) | ✅ PASS | 7/7 in GitHub Actions (`e2e-smoke`, run 44483317755, 3.2 min). The first CI runs found gaps 9–11; locally the suite needs more than this machine’s RAM. |
 | Performance SC-007 (50k import) | ✅ PASS | 50,000 new contacts in 1m 13s, upload included (limit 5 min) |
 | Performance SC-002 (10k campaign) | ✅ PASS | Re-run after fix 7 at a configured 25 msg/s: 10,000 sent in 10m 59s (limit 20 min), 10,000 unique sends, no duplicates. All ~30,000 status webhooks were stored and queued, and none were lost. Final statuses: 9,999 Read and 1 Failed (the deliberate `0000` number). |
 | Status lag at volume (SC-005) | 🟡 HARDWARE-BOUND | On this machine the worker applies about 23 webhooks/s on its own, or about 13/s while sending. mock-meta produces about 45/s at 15 msg/s, so the statuses finished about 20 min after the sends. Re-measure on staging hardware; production Postgres should be an order of magnitude faster per query. |
@@ -36,13 +36,13 @@ has, so run them in CI.
 
 | Story | Status | How it was validated | Still to do |
 |---|---|---|---|
-| US1 Broadcast | ✅ | Live smoke against mock-meta (2026-11-17); campaign-upload and campaign-send integration tests; US1 contract test | e2e `us1-broadcast` |
-| US2 Contacts & consent | ✅ | Live smoke: import of `samples/contacts-100.csv` and STOP keyword (2026-11-17); contacts, imports and consent-keywords integration tests; US2 contract test | e2e `us2-contacts` |
-| US3 Templates | 🟡 | templates-create and template-status integration tests; US3 contract test | Live check of approval within 15 s; e2e `us3-templates` |
-| US4 Control | ✅ | Live smoke: scheduled campaign with pause and resume, no duplicates (2026-11-17); campaign-control, campaign-schedule and campaign-autopause integration tests | e2e `us4-control` |
-| US5 Reports | 🟡 | reports and retarget-ratecard integration tests; US5 contract test | e2e `us5-reports` |
-| US6 Roles | 🟡 | users, rbac, masking and audit integration tests | e2e `us6-roles` |
-| US7 API | 🟡 | api-keys and public-api integration tests; public-api contract test. Covered: idempotent repeat returns 200 with the same id, and the status history. | Run the quickstart `curl` against a live stack; e2e `us7-api` |
+| US1 Broadcast | ✅ | Live smoke against mock-meta (2026-11-17); campaign-upload and campaign-send integration tests; US1 contract test | e2e `us1-broadcast` passes in CI |
+| US2 Contacts & consent | ✅ | Live smoke: import of `samples/contacts-100.csv` and STOP keyword (2026-11-17); contacts, imports and consent-keywords integration tests; US2 contract test | e2e `us2-contacts` passes in CI |
+| US3 Templates | ✅ | templates-create and template-status integration tests; US3 contract test | e2e `us3-templates` passes in CI (approval within 15 s) |
+| US4 Control | ✅ | Live smoke: scheduled campaign with pause and resume, no duplicates (2026-11-17); campaign-control, campaign-schedule and campaign-autopause integration tests | e2e `us4-control` passes in CI |
+| US5 Reports | ✅ | reports and retarget-ratecard integration tests; US5 contract test | e2e `us5-reports` passes in CI |
+| US6 Roles | ✅ | users, rbac, masking and audit integration tests | e2e `us6-roles` passes in CI |
+| US7 API | ✅ | api-keys and public-api integration tests; public-api contract test. Covered: idempotent repeat returns 200 with the same id, and the status history. | e2e `us7-api` passes in CI (same flow as the quickstart `curl`) |
 
 ## 3. Gaps found and fixed during validation
 
@@ -78,6 +78,12 @@ has, so run them in CI.
    the worker each cached the rate card for 30 s, and a change cleared only the API's copy, so
    deliveries were priced with the old (empty) card. The cache is now versioned through Redis.
    Covered by `rate-card-cache.int-spec.ts`.
+10. **"Still a draft" after launching:** the wizard sent users to the campaign page with the cached
+    draft. The cache is fresh for 10 s and drafts are never polled, so the page said the campaign
+    was a draft and never showed it running or scheduled. The wizard now drops the cached copy
+    on launch. Found by the US1 and US4 e2e runs.
+11. **mock-meta pricing category:** status webhooks always said `marketing`, so utility rates never
+    applied in e2e runs. mock-meta now sends the template's real category, as Meta does.
 
 After fixes 5–7, the affected suites were re-run and pass:
 - worker-boot, users
@@ -100,9 +106,8 @@ After fixes 5–7, the affected suites were re-run and pass:
 
 - [x] Run the full integration project (29 files, 127 tests, 2026-11-19).
 - [x] Run both performance scripts (SC-007 and SC-002 pass, 2026-11-19).
-- [ ] Run the seven Playwright specs, in CI or locally with enough free RAM, and record the results
-  here.
-- [ ] Make the first git commit and confirm the CI jobs pass: build-test, e2e-smoke, secret-scan and docker-images.
+- [x] Run the seven Playwright specs (7/7 pass in GitHub Actions, 2026-11-19).
+- [x] Publish the repo and confirm the CI jobs pass: build-test, e2e-smoke, secret-scan and docker-images (PR #1).
 - [ ] Production config:
   - `NODE_ENV=production`, `COOKIE_SECURE=true`, https `APP_URL`
   - long random `OPS_TOKEN` and `TOKEN_ENCRYPTION_KEY`
