@@ -4,8 +4,9 @@ import { TokenCipher } from '../../../common/crypto/token-cipher.js';
 import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { e164ToWaRecipient } from '../../../common/phone/phone.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
-import type { MessageStatus } from '../../../generated/prisma/client.js';
-import { MetaGraphClient } from '../../meta/meta-graph.client.js';
+import type { MessageStatus, WhatsAppNumber } from '../../../generated/prisma/client.js';
+import { MediaService } from '../../media/media.service.js';
+import { MetaGraphClient, type SessionMessagePayload } from '../../meta/meta-graph.client.js';
 import { NumbersService } from '../../numbers/numbers.service.js';
 import type { SessionJobData } from '../../sending/send-jobs.js';
 import { decideSendFailure } from '../../sending/send-outcome.js';
@@ -41,6 +42,7 @@ export class SessionSendProcessor implements OnModuleInit {
     private readonly publisher: InboxPublisher,
     private readonly sendQueues: SendQueueManager,
     private readonly metrics: MetricsService,
+    private readonly media: MediaService,
   ) {}
 
   onModuleInit(): void {
@@ -74,11 +76,7 @@ export class SessionSendProcessor implements OnModuleInit {
 
     let waMessageId: string;
     try {
-      ({ waMessageId } = await this.meta.sendSessionMessage(this.cipher.decrypt(number.accessTokenEnc), number.phoneNumberId, {
-        to: e164ToWaRecipient(phone),
-        type: 'text',
-        text: { body: item.text ?? '', preview_url: true },
-      }));
+      ({ waMessageId } = await this.meta.sendSessionMessage(this.cipher.decrypt(number.accessTokenEnc), number.phoneNumberId, await this.payload(item, number, e164ToWaRecipient(phone))));
     } catch (error) {
       const decision = decideSendFailure(error, attempt);
       this.metrics.sendErrorsTotal.inc({ code: String(decision.code ?? 'network') });
@@ -98,6 +96,25 @@ export class SessionSendProcessor implements OnModuleInit {
     await this.statuses.applyBuffered(waMessageId);
     await this.publisher.itemStatus(item.id);
     return { result: 'sent', waMessageId };
+  }
+
+  /** Graph payload for the reply (contracts/meta-graph-inbox.md §2): library files are uploaded once per number. */
+  private async payload(
+    item: { contentType: string; text: string | null; mediaAssetId: string | null; payload: unknown },
+    number: WhatsAppNumber,
+    to: string,
+  ): Promise<SessionMessagePayload> {
+    if (item.contentType === 'TEXT') return { to, type: 'text', text: { body: item.text ?? '', preview_url: true } };
+    const data = (item.payload ?? {}) as { link?: string; fileName?: string };
+    const source = item.mediaAssetId ? { id: await this.media.ensureMetaMediaId(item.mediaAssetId, number) } : { link: data.link };
+    switch (item.contentType) {
+      case 'AUDIO':
+        return { to, type: 'audio', media: source };
+      case 'DOCUMENT':
+        return { to, type: 'document', media: { ...source, ...(item.text ? { caption: item.text } : {}), ...(data.fileName ? { filename: data.fileName } : {}) } };
+      default:
+        return { to, type: item.contentType === 'VIDEO' ? 'video' : 'image', media: { ...source, ...(item.text ? { caption: item.text } : {}) } };
+    }
   }
 
   private async fail(id: string, from: MessageStatus, code: number | null, reason: string): Promise<SessionOutcome> {

@@ -791,15 +791,21 @@ components:
         mediaUrl: { type: string, format: uri, pattern: '^https://' }
         fileName: { type: string, maxLength: 240 }
     CannedMessage:
-      allOf:
-        - $ref: '#/components/schemas/CannedMessageInput'
-        - type: object
-          properties:
-            id: { type: string, format: uuid }
-            favorite: { type: boolean }
-            parameterCount: { type: integer }
-            createdBy: { $ref: '#/components/schemas/MemberRef' }
-            updatedAt: { type: string, format: date-time }
+      type: object
+      required: [id, name, type, favorite, parameterCount]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        type: { type: string, enum: [TEXT, MEDIA] }
+        text: { type: string }
+        variableFallbacks: { type: object, additionalProperties: { type: string } }
+        mediaAssetId: { type: string, format: uuid }
+        mediaUrl: { type: string }
+        fileName: { type: string }
+        favorite: { type: boolean }
+        parameterCount: { type: integer }
+        createdBy: { $ref: '#/components/schemas/MemberRef' }
+        updatedAt: { type: string, format: date-time }
     MediaItem:
       type: object
       properties:

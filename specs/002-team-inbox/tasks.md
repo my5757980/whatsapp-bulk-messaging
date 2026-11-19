@@ -309,7 +309,7 @@
   - **Filters:** tagId, attribute and campaignId filters combine
   - **Deactivation:** deactivating a member resolves their chats to ACTIVE
 - [X] T046 [P] [US3] Add contract tests for transfer, `GET`/`PUT /users/{id}/agent-rules` and `GET`/`PUT /live-chat/settings` (keywords and auto-resolve fields) to apps/api/test/contract/inbox.contract-spec.ts
-- [ ] T047 [P] [US3] Playwright e2e for the quickstart US3 row in apps/web/e2e/inbox-us3-routing.spec.ts
+- [X] T047 [P] [US3] Playwright e2e for the quickstart US3 row in apps/web/e2e/inbox-us3-routing.spec.ts
 
 ### Implementation for User Story 3
 
@@ -334,7 +334,7 @@
   - tagId, attribute (`key:value` → `attributes @>`) and campaignId (recipient of the campaign) filters in conversations.service.ts
   - in apps/api/src/modules/users/users.controller.ts (UsersService.update), deactivation resolves the member's INTERVENED chats
 - [X] T054 [P] [US3] Add the dev helper apps/api/scripts/inbox-age.ts with a root script `inbox:age` that shifts a chat's timestamps back by N hours (quickstart US3); it refuses to run when NODE_ENV=production
-- [ ] T055 [US3] Build the routing UI in apps/web/src/components/inbox/chat-view.tsx and apps/web/src/app/(dashboard)/settings/live-chat/page.tsx:
+- [X] T055 [US3] Build the routing UI in apps/web/src/components/inbox/chat-view.tsx and apps/web/src/app/(dashboard)/settings/live-chat/page.tsx:
   - a transfer menu in the chat header (apps/web/src/components/inbox/chat-view.tsx)
   - filter controls in conversation-list.tsx
   - keywords and auto-close settings in apps/web/src/app/(dashboard)/settings/live-chat/page.tsx (first section)
@@ -357,12 +357,12 @@
 
 ### Tests for User Story 4 (REQUIRED - Constitution Principle V) ⚠️
 
-- [ ] T056 [P] [US4] Unit tests for saved-reply rendering in apps/api/test/unit/inbox/canned-render.spec.ts:
+- [X] T056 [P] [US4] Unit tests for saved-reply rendering in apps/api/test/unit/inbox/canned-render.spec.ts:
   - `{first_name}`, `{name}`, `{last_name}`, `{phone}` and `{attr:key}` with fallbacks, or blank when there is none
   - `{{n}}` parameters required, and counted
   - WhatsApp formatting characters kept as is
   - unknown placeholders left untouched
-- [ ] T057 [P] [US4] Unit tests for chat media limits (FR-015 table) in packages/shared/src/chat-media-limits.test.ts:
+- [X] T057 [P] [US4] Unit tests for chat media limits (FR-015 table) in packages/shared/src/chat-media-limits.test.ts:
   - formats and sizes per type
   - error messages naming the type and the limit
 - [ ] T058 [P] [US4] Integration test in apps/api/test/integration/inbox-canned-media.int-spec.ts:
@@ -378,8 +378,8 @@
 
 ### Implementation for User Story 4
 
-- [ ] T061 [P] [US4] Implement saved-reply rendering in apps/api/src/modules/inbox/canned/canned-render.ts (makes T056 pass)
-- [ ] T062 [P] [US4] Implement the chat media limits in packages/shared/src/chat-media-limits.ts, exported from packages/shared/src/index.ts (makes T057 pass)
+- [X] T061 [P] [US4] Implement saved-reply rendering in apps/api/src/modules/inbox/canned/canned-render.ts (makes T056 pass)
+- [X] T062 [P] [US4] Implement the chat media limits in packages/shared/src/chat-media-limits.ts, exported from packages/shared/src/index.ts (makes T057 pass)
 - [ ] T063 [US4] Implement saved replies in apps/api/src/modules/inbox/canned/canned-messages.service.ts and canned-messages.controller.ts:
   - CRUD with the 200 limit (advisory-lock transaction) and unique names
   - favourites

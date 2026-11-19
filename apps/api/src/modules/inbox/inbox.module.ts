@@ -7,6 +7,8 @@ import { ChatMediaController } from './messages/chat-media.controller.js';
 import { ChatTimelineService } from './messages/chat-timeline.service.js';
 import { SessionSendService } from './messages/session-send.service.js';
 import { TemplateSendService } from './messages/template-send.service.js';
+import { CannedMessagesController, CannedMessagesService } from './canned/canned-messages.service.js';
+import { MediaLibraryController, MediaLibraryService } from './media-library/media-library.service.js';
 import { AgentRulesController, AgentRulesService } from './routing/agent-rules.service.js';
 import { ChatRoutingService } from './routing/chat-routing.service.js';
 import { LiveChatSettingsController } from './settings/live-chat-settings.controller.js';
@@ -39,7 +41,17 @@ export class InboxDomainModule {}
     SessionSendService,
     TemplateSendService,
     AgentRulesService,
+    CannedMessagesService,
+    MediaLibraryService,
   ],
-  controllers: [InboxStreamController, ConversationsController, ChatMediaController, LiveChatSettingsController, AgentRulesController],
+  controllers: [
+    InboxStreamController,
+    ConversationsController,
+    ChatMediaController,
+    LiveChatSettingsController,
+    AgentRulesController,
+    CannedMessagesController,
+    MediaLibraryController,
+  ],
 })
 export class InboxApiModule {}
