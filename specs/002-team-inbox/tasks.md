@@ -65,14 +65,14 @@
 
 ### Tests for the foundation (write first, must fail) ⚠️
 
-- [ ] T006 [P] Unit tests for state transitions (data-model.md §4) in apps/api/test/unit/inbox/conversation-state.spec.ts:
+- [X] T006 [P] Unit tests for state transitions (data-model.md §4) in apps/api/test/unit/inbox/conversation-state.spec.ts:
   - first inbound → ACTIVE
   - keyword → REQUESTING (not from INTERVENED)
   - intervene from ACTIVE/REQUESTING only
   - transfer keeps INTERVENED with the new owner
   - resolve/auto-resolve → ACTIVE
   - a message arriving while in History keeps an INTERVENED owner, otherwise ACTIVE
-- [ ] T007 [P] Unit tests for the 24-hour helpers in apps/api/test/unit/inbox/window.spec.ts:
+- [X] T007 [P] Unit tests for the 24-hour helpers in apps/api/test/unit/inbox/window.spec.ts:
   - `windowEndsAt`, `isLive`, `inHistory`, `startsOpening` (null or >24 h → new opening)
   - boundaries exactly at 24 h, and time-zone independence
 - [ ] T008 [P] Unit tests for the visibility predicate (FR-026–FR-028, research R7) in apps/api/test/unit/inbox/visibility.spec.ts:
@@ -81,10 +81,10 @@
   - tag and attribute rules match with OR; no rules = unrestricted
   - blocked contacts hidden from live lists
   - the in-memory checker used for SSE agrees with the SQL predicate on a table of cases
-- [ ] T009 [P] Unit tests for inbound parsing in apps/api/test/unit/inbox/message-parser.spec.ts:
+- [X] T009 [P] Unit tests for inbound parsing in apps/api/test/unit/inbox/message-parser.spec.ts:
   - every type in meta-graph-inbox.md §1: text, image, video, audio/voice, document, sticker, location, contacts, button, interactive button/list/nfm, reaction, unsupported with `errors[]`, unknown type
   - context.id and contact profile names
-- [ ] T010 [P] Unit tests for SSE filtering and masking (realtime-events.md rules 1–2) in apps/api/test/unit/inbox/event-filter.spec.ts:
+- [X] T010 [P] Unit tests for SSE filtering and masking (realtime-events.md rules 1–2) in apps/api/test/unit/inbox/event-filter.spec.ts:
   - agents never get other agents' intervened chats or full phones
   - a `visible:false` upsert is sent when a chat leaves a user's view
 - [ ] T011 [P] Integration test for the realtime stream in apps/api/test/integration/inbox-realtime.int-spec.ts:
@@ -97,7 +97,7 @@
 
 ### Implementation for the foundation
 
-- [ ] T013 Create the Prisma schema changes and migration (data-model.md §1–§2) in apps/api/prisma/schema.prisma and apps/api/prisma/migrations/20261120000000_live_chat/migration.sql:
+- [X] T013 Create the Prisma schema changes and migration (data-model.md §1–§2) in apps/api/prisma/schema.prisma and apps/api/prisma/migrations/20261120000000_live_chat/migration.sql:
   - new tables: conversations, chat_messages, conversation_openings, conversation_events, chat_read_markers, live_chat_settings (seed row id=1), agent_rules, canned_messages, canned_message_favorites, notification_preferences, push_devices
   - altered tables:
     - contacts: blocked_at, blocked_by_id, lead_source (back-filled), first_message_tag_id
@@ -106,13 +106,13 @@
     - notification types: INBOX_REQUESTING, INBOX_TRANSFERRED, INBOX_MENTION
   - indexes and check constraints as listed
   - run `npm run db:generate -w @wbm/api`
-- [ ] T014 [P] Implement the pure transitions in apps/api/src/modules/inbox/conversations/conversation-state.ts (makes T006 pass)
-- [ ] T015 [P] Implement the 24-hour helpers in apps/api/src/modules/inbox/conversations/window.ts (makes T007 pass)
+- [X] T014 [P] Implement the pure transitions in apps/api/src/modules/inbox/conversations/conversation-state.ts (makes T006 pass)
+- [X] T015 [P] Implement the 24-hour helpers in apps/api/src/modules/inbox/conversations/window.ts (makes T007 pass)
 - [ ] T016 [P] Implement the visibility predicate builder in apps/api/src/modules/inbox/conversations/visibility.ts (makes T008 pass):
   - `whereVisible(user, rules)` returning a Prisma `where` plus a raw SQL fragment
   - `canSee(user, rules, chatFacts)` for single-chat checks and SSE
   - an agent-rule loader with a 30 s cache
-- [ ] T017 [P] Implement the inbound parser in apps/api/src/modules/inbox/inbound/message-parser.ts (makes T009 pass)
+- [X] T017 [P] Implement the inbound parser in apps/api/src/modules/inbox/inbound/message-parser.ts (makes T009 pass)
 - [ ] T018 Implement the event bus in apps/api/src/modules/inbox/realtime/inbox-events.service.ts:
   - `publish(envelope)` does XADD to `wbm:inbox:events` with `MAXLEN ~ 20000`
   - envelope types per data-model.md §5
