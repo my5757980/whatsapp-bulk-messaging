@@ -1,0 +1,150 @@
+'use client';
+
+import type { ChatItem, ChatItemStatus } from '@/lib/inbox-types';
+import { cn } from '@/lib/utils';
+
+const mediaUrl = (id: string) => `/api/inbox/media/${id}`;
+const str = (value: unknown): string | null => (typeof value === 'string' && value ? value : null);
+
+function time(value: string): string {
+  return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
+}
+
+/** Ticks for messages we sent: clock while queued, one tick sent, two delivered, two blue read. */
+export function Ticks({ status }: { status: ChatItemStatus | null }) {
+  if (!status) return null;
+  const label: Record<ChatItemStatus, string> = {
+    QUEUED: 'Queued',
+    SENDING: 'Sending',
+    SENT: 'Sent',
+    DELIVERED: 'Delivered',
+    READ: 'Read',
+    FAILED: 'Failed',
+  };
+  const symbol = status === 'QUEUED' || status === 'SENDING' ? '🕓' : status === 'SENT' ? '✓' : status === 'FAILED' ? '⚠' : '✓✓';
+  return (
+    <span title={label[status]} aria-label={label[status]} className={cn('ml-1 text-xs', status === 'READ' && 'text-sky-600', status === 'FAILED' && 'text-destructive')}>
+      {symbol}
+    </span>
+  );
+}
+
+function MediaBody({ item }: { item: ChatItem }) {
+  const media = item.media;
+  if (!media) return null;
+  if (media.state === 'PENDING') return <p className="text-xs italic text-muted-foreground">Downloading…</p>;
+  if (media.state === 'FAILED' || !media.id) return <p className="text-xs italic text-muted-foreground">Media unavailable</p>;
+  const src = mediaUrl(media.id);
+  switch (item.contentType) {
+    case 'IMAGE':
+    case 'STICKER':
+      return (
+        <a href={src} target="_blank" rel="noreferrer">
+          {/* A plain img: the file comes from the authenticated API, not a static asset. */}
+          <img src={src} alt={item.contentType === 'STICKER' ? 'Sticker' : (item.text ?? 'Picture')} className={cn('rounded-md', item.contentType === 'STICKER' ? 'h-28 w-28 object-contain' : 'max-h-72 max-w-full')} />
+        </a>
+      );
+    case 'VIDEO':
+      return <video src={src} controls preload="metadata" className="max-h-72 max-w-full rounded-md" />;
+    case 'AUDIO':
+      return <audio src={src} controls preload="metadata" className="w-60" />;
+    default:
+      return (
+        <a href={src} className="text-sm underline" download={media.fileName ?? undefined}>
+          📄 {media.fileName ?? 'Download file'}
+        </a>
+      );
+  }
+}
+
+function Body({ item }: { item: ChatItem }) {
+  const p = item.payload;
+  switch (item.contentType) {
+    case 'TEXT':
+      return <p className="whitespace-pre-wrap break-words text-sm">{item.text}</p>;
+    case 'IMAGE':
+    case 'VIDEO':
+    case 'AUDIO':
+    case 'DOCUMENT':
+    case 'STICKER':
+      return (
+        <div className="grid gap-1">
+          <MediaBody item={item} />
+          {item.contentType === 'AUDIO' && p.voice === true && <span className="text-xs text-muted-foreground">Voice message</span>}
+          {item.text && <p className="whitespace-pre-wrap break-words text-sm">{item.text}</p>}
+        </div>
+      );
+    case 'LOCATION': {
+      const lat = Number(p.latitude);
+      const lng = Number(p.longitude);
+      return (
+        <a className="text-sm underline" href={`https://www.google.com/maps?q=${lat},${lng}`} target="_blank" rel="noreferrer">
+          📍 {str(p.name) ?? 'Shared location'}
+          {str(p.address) ? ` — ${str(p.address)}` : ''}
+        </a>
+      );
+    }
+    case 'CONTACTS': {
+      const cards = Array.isArray(p.contacts) ? (p.contacts as Array<{ name?: string; phones?: string[] }>) : [];
+      return (
+        <div className="grid gap-1 text-sm">
+          {cards.map((card, i) => (
+            <div key={i}>
+              👤 {card.name ?? 'Contact'} {card.phones?.length ? <span className="text-muted-foreground">({card.phones.join(', ')})</span> : null}
+            </div>
+          ))}
+        </div>
+      );
+    }
+    case 'BUTTON_REPLY':
+    case 'LIST_REPLY':
+      return (
+        <p className="text-sm">
+          <span className="text-muted-foreground">Chose: </span>
+          {str(p.title) ?? item.text}
+          {str(p.description) ? <span className="text-muted-foreground"> — {str(p.description)}</span> : null}
+        </p>
+      );
+    case 'FORM_REPLY':
+      return <pre className="max-w-full overflow-x-auto whitespace-pre-wrap text-xs">{JSON.stringify(p.response ?? {}, null, 2)}</pre>;
+    case 'REACTION':
+      return <p className="text-sm">{str(p.emoji) ? `Reacted ${String(p.emoji)} to a message` : 'Removed a reaction'}</p>;
+    case 'TEMPLATE':
+      return (
+        <div className="grid gap-1 text-sm">
+          <p className="whitespace-pre-wrap break-words">{item.template?.renderedText}</p>
+          <span className="text-xs text-muted-foreground">
+            Template {item.template?.name}
+            {item.campaign ? ` · Campaign "${item.campaign.name}"` : item.origin === 'API' ? ' · API' : ''}
+          </span>
+        </div>
+      );
+    default:
+      return <p className="text-sm italic text-muted-foreground">This message type is not supported on the web; open it on the phone.</p>;
+  }
+}
+
+/** One timeline entry; customer messages on the left, ours on the right. */
+export function ChatItemView({ item }: { item: ChatItem }) {
+  const ours = item.kind !== 'INBOUND';
+  return (
+    <div className={cn('flex', ours ? 'justify-end' : 'justify-start')} data-testid="chat-item" data-kind={item.kind}>
+      <div
+        className={cn(
+          'max-w-[78%] rounded-lg px-3 py-2 shadow-sm',
+          ours ? 'bg-emerald-50 dark:bg-emerald-950' : 'bg-card border',
+          item.kind === 'NOTE' && 'border-dashed border-amber-400 bg-amber-50 dark:bg-amber-950',
+        )}
+      >
+        <Body item={item} />
+        <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
+          {item.sentBy && <span>{item.sentBy.name} ·</span>}
+          {item.origin === 'AUTOMATIC' && <span>Automatic ·</span>}
+          <span>{time(item.occurredAt)}</span>
+          {ours && <Ticks status={item.status} />}
+        </div>
+        {item.status === 'FAILED' && item.failureReason && <p className="mt-1 text-xs text-destructive">Not sent: {item.failureReason}</p>}
+      </div>
+    </div>
+  );
+}

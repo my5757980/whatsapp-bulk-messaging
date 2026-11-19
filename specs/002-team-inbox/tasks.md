@@ -75,7 +75,7 @@
 - [X] T007 [P] Unit tests for the 24-hour helpers in apps/api/test/unit/inbox/window.spec.ts:
   - `windowEndsAt`, `isLive`, `inHistory`, `startsOpening` (null or >24 h → new opening)
   - boundaries exactly at 24 h, and time-zone independence
-- [ ] T008 [P] Unit tests for the visibility predicate (FR-026–FR-028, research R7) in apps/api/test/unit/inbox/visibility.spec.ts:
+- [X] T008 [P] Unit tests for the visibility predicate (FR-026–FR-028, research R7) in apps/api/test/unit/inbox/visibility.spec.ts:
   - admins and managers see all
   - agents see ACTIVE/REQUESTING plus their own INTERVENED
   - tag and attribute rules match with OR; no rules = unrestricted
@@ -87,13 +87,13 @@
 - [X] T010 [P] Unit tests for SSE filtering and masking (realtime-events.md rules 1–2) in apps/api/test/unit/inbox/event-filter.spec.ts:
   - agents never get other agents' intervened chats or full phones
   - a `visible:false` upsert is sent when a chat leaves a user's view
-- [ ] T011 [P] Integration test for the realtime stream in apps/api/test/integration/inbox-realtime.int-spec.ts:
+- [X] T011 [P] Integration test for the realtime stream in apps/api/test/integration/inbox-realtime.int-spec.ts:
   - `GET /api/inbox/events` streams published events in order
   - a `: ping` arrives within 15 s
   - `Last-Event-ID` replays missed events and an expired ID gets `resync`
   - an agent receives only visible events
   - the presence key is set while connected and expires after disconnect
-- [ ] T012 [P] Integration test for send priority in apps/api/test/integration/inbox-send-priority.int-spec.ts: with 200 campaign send jobs queued on a number, a priority-1 session job is processed before the remaining campaign jobs and the rate limit still holds
+- [X] T012 [P] Integration test for send priority in apps/api/test/integration/inbox-send-priority.int-spec.ts: with 200 campaign send jobs queued on a number, a priority-1 session job is processed before the remaining campaign jobs and the rate limit still holds
 
 ### Implementation for the foundation
 
@@ -153,7 +153,7 @@
 
 ### Tests for User Story 1 (REQUIRED - Constitution Principle V) ⚠️
 
-- [ ] T024 [P] [US1] Integration test for the main journey in apps/api/test/integration/inbox-receive-reply.int-spec.ts:
+- [X] T024 [P] [US1] Integration test for the main journey in apps/api/test/integration/inbox-receive-reply.int-spec.ts:
   - inbound text creates the contact (source Organic) and an ACTIVE conversation, and back-fills earlier campaign/API messages as MESSAGE_REF
   - a repeated webhook adds nothing
   - an image enqueues the download, which ends READY (nock for Graph media)
@@ -163,7 +163,7 @@
   - a failed send shows its reason
   - a second agent cannot open the intervened chat (404)
   - `POST /read` clears unread and enqueues the read receipt
-- [ ] T025 [P] [US1] Contract tests in apps/api/test/contract/inbox.contract-spec.ts for:
+- [X] T025 [P] [US1] Contract tests in apps/api/test/contract/inbox.contract-spec.ts for:
   - GET /inbox/conversations, GET /inbox/conversations/{id}, GET /inbox/conversations/{id}/items
   - POST intervene, resolve and messages (text)
   - POST read, GET /inbox/unread
@@ -172,27 +172,27 @@
 
 ### Implementation for User Story 1
 
-- [ ] T027 [US1] Implement the inbound chat pipeline in apps/api/src/modules/inbox/inbound/inbound-chat.handler.ts, registered on the 001 WebhookRouter after the consent handler:
+- [X] T027 [US1] Implement the inbound chat pipeline in apps/api/src/modules/inbox/inbound/inbound-chat.handler.ts, registered on the 001 WebhookRouter after the consent handler:
   - upsert the contact (name from the profile, lead_source Organic)
   - create or update the conversation (state per T014, last_customer_message_at, last_inbound_at, preview)
   - start an opening when T015 says so
   - insert chat_messages with `ON CONFLICT (wa_message_id) DO NOTHING`
   - publish `message.created` and `conversation.upserted`
-- [ ] T028 [P] [US1] Implement the inbound media download in apps/api/src/modules/inbox/inbound/inbound-media.processor.ts (research R4):
+- [X] T028 [P] [US1] Implement the inbound media download in apps/api/src/modules/inbox/inbound/inbound-media.processor.ts (research R4):
   - add MetaGraphClient methods `getMedia(token, mediaId)` and `downloadMedia(token, url)` in apps/api/src/modules/meta/meta-graph.client.ts
   - stream the file to S3 `media/inbound/{uuid}` and create a media_assets row (INBOUND)
   - 3 attempts, then media_state FAILED
   - publish `message.status`
-- [ ] T029 [US1] Implement the timeline in apps/api/src/modules/inbox/messages/chat-items.service.ts:
+- [X] T029 [US1] Implement the timeline in apps/api/src/modules/inbox/messages/chat-items.service.ts:
   - keyset paging `(occurred_at, id)`, newest first
   - MESSAGE_REF back-fill on conversation creation
   - DTO mapping per the ChatItem schema: campaign and template info joined from messages; media DTO
-  - hook apps/api/src/modules/sending/send.processor.ts so successful campaign/API/inbox template sends append a MESSAGE_REF row when a conversation exists, and publish `message.created`
-- [ ] T030 [US1] Implement the live list and detail in apps/api/src/modules/inbox/conversations/conversations.service.ts:
+  - hook apps/api/src/modules/sending/send.processor.ts so successful campaign/API/inbox template sends append a MESSAGE_REF row when a conversation exists, and publish `message.created` (done in apps/api/src/modules/inbox/messages/chat-timeline.service.ts; only chat templates move a chat up the list)
+- [X] T030 [US1] Implement the live list and detail in apps/api/src/modules/inbox/conversations/conversations.service.ts:
   - `list(view=live, state, mine, numberId, q, cursor)` with counts per tab
   - `getDetail` with basic fields, unread from chat_read_markers
   - `intervene` and `resolve` as atomic conditional updates (research R6), writing conversation_events and publishing `conversation.upserted`
-- [ ] T031 [US1] Implement free-form text sending in apps/api/src/modules/inbox/messages/session-send.service.ts and session-send.processor.ts (research R3):
+- [X] T031 [US1] Implement free-form text sending in apps/api/src/modules/inbox/messages/session-send.service.ts and session-send.processor.ts (research R3):
   - in apps/api/src/modules/inbox/messages/session-send.service.ts:
     - validate the request
     - auto-intervene (FR-020)
@@ -205,15 +205,15 @@
     - add `sendSessionMessage` to MetaGraphClient
     - classify errors with the 001 classifier
     - store the wamid and publish `message.status`
-- [ ] T032 [US1] Route status webhooks for free-form messages in apps/api/src/modules/webhooks/handlers/status.handler.ts (research R11):
+- [X] T032 [US1] Route status webhooks for free-form messages in apps/api/src/modules/webhooks/handlers/status.handler.ts (research R11):
   - look up `messages.wa_message_id` first, then `chat_messages.wa_message_id`
   - shared precedence rules and timestamps
   - publish `message.status`
-- [ ] T033 [P] [US1] Implement read markers and receipts in apps/api/src/modules/inbox/messages/read-receipt.processor.ts and conversations.service.ts:
+- [X] T033 [P] [US1] Implement read markers and receipts in apps/api/src/modules/inbox/messages/read-receipt.processor.ts and conversations.service.ts:
   - `POST /inbox/conversations/{id}/read` upserts the marker
   - enqueue `mark-read` at most once per chat per 10 s; it calls Graph `{status:"read"}`
   - `GET /inbox/unread` with a 10 s per-user cache
-- [ ] T034 [US1] Implement the controllers in apps/api/src/modules/inbox/conversations/conversations.controller.ts and apps/api/src/modules/inbox/messages/chat-media.controller.ts:
+- [X] T034 [US1] Implement the controllers in apps/api/src/modules/inbox/conversations/conversations.controller.ts and apps/api/src/modules/inbox/messages/chat-media.controller.ts:
   - US1 endpoints of inbox-api.openapi.yaml: list, detail, items, intervene, resolve, messages (text), read, unread
   - `GET /inbox/media/{id}` streaming with visibility checks
   - permissions and phone masking (`@PhoneField`)

@@ -26,6 +26,11 @@ data: {"conversationId":"…","at":"2026-11-19T10:00:00.000Z","data":{…}}
    (same `id`) and apply status changes by precedence (QUEUED < SENDING < SENT < DELIVERED < READ;
    FAILED only below DELIVERED).
 6. **Writes stay REST:** the stream is read-only.
+7. **Volume (implementation note, T032):** `message.status` is published for live chat replies and
+   for templates sent from a chat. Ticks of campaign and API references are not streamed; they show
+   when a chat is opened, so a large broadcast does not flood the stream.
+8. **No phone numbers in events:** `conversation.upserted` omits `phone` (and the per-user
+   `unread`); clients refetch over REST, where masking applies.
 
 ## Event types
 
