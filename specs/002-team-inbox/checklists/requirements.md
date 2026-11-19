@@ -31,6 +31,15 @@
 
 ## Notes
 
+- **Revision 2 (2026-11-19):** the spec was realigned to AiSensy's documented live-chat flow:
+  - Active, Requesting and Intervened states, and History
+  - Intervene and Resolve, auto-resolve and agent rules
+  - canned messages with media, favourites and a limit of 200, plus the media library
+  - welcome and off-hours messages, blocking, notification sound and push
+  - chat-profile counters and the customer journey
+
+  It was re-validated and all items pass: 42 functional requirements and 9 success criteria, no
+  clarification markers.
 - Validation passed on the first iteration (2026-11-19).
 - No clarification markers were needed: the description was detailed. Reasonable defaults are
   recorded under Assumptions:
