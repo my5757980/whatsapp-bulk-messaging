@@ -10,6 +10,7 @@ import { InboxDomainModule } from './modules/inbox/inbox.module.js';
 import { InboxQueueProcessor } from './modules/inbox/inbox-queue.processor.js';
 import { ReadReceiptProcessor } from './modules/inbox/messages/read-receipt.processor.js';
 import { SessionSendProcessor } from './modules/inbox/messages/session-send.processor.js';
+import { WindowCloseProcessor } from './modules/inbox/routing/window-close.processor.js';
 import { RetentionProcessor, RetentionService } from './modules/maintenance/retention.processor.js';
 import { NumberRefreshProcessor } from './modules/numbers/number-refresh.processor.js';
 import { IdempotencyCleanupProcessor } from './modules/public-api/idempotency-cleanup.processor.js';
@@ -50,6 +51,7 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     ReadReceiptProcessor,
     InboxQueueProcessor,
     SessionSendProcessor,
+    WindowCloseProcessor,
   ],
 })
 export class WorkerFeaturesModule {}

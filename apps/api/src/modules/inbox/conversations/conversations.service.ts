@@ -1,12 +1,14 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { can } from '@wbm/shared';
 import type { Redis } from 'ioredis';
+import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 import { AppError } from '../../../common/errors/app-error.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QueueRegistry, REDIS_CLIENT } from '../../../common/queue/queue.module.js';
 import { Prisma } from '../../../generated/prisma/client.js';
 import { INBOX_QUEUE, readReceiptJob } from '../inbox-queue.js';
+import { ChatTimelineService } from '../messages/chat-timeline.service.js';
 import { InboxPublisher, type PreviousFacts } from '../realtime/inbox-publisher.js';
 import { AgentRulesLoader } from './agent-rules.loader.js';
 import { resolve as resolveTransition } from './conversation-state.js';
@@ -43,6 +45,10 @@ export const ConversationListQuerySchema = z.object({
 });
 export type ConversationListQuery = z.infer<typeof ConversationListQuerySchema>;
 
+/** POST /inbox/conversations: open (or create) the chat with a contact on a number. */
+export const OpenConversationSchema = z.strictObject({ contactId: z.uuid(), numberId: z.uuid() });
+export type OpenConversationInput = z.infer<typeof OpenConversationSchema>;
+
 /** Unread totals are cached briefly per user and dropped when that user reads a chat (R8). */
 const UNREAD_CACHE_SECONDS = 10;
 const unreadKey = (userId: string) => `wbm:inbox:unread:${userId}`;
@@ -68,7 +74,50 @@ export class ConversationsService {
     private readonly publisher: InboxPublisher,
     private readonly queues: QueueRegistry,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly timeline: ChatTimelineService,
   ) {}
+
+  /**
+   * Opens the chat with a contact on a number, creating it when needed (US2, "Message on
+   * WhatsApp"): a new chat starts Active, in Past chats until the customer writes, with the
+   * templates already sent to the contact on that number in its timeline.
+   */
+  async openOrCreate(viewer: Viewer, input: OpenConversationInput): Promise<{ created: boolean; summary: ConversationSummaryDto }> {
+    const [contact, number] = await Promise.all([
+      this.prisma.contact.findUnique({ where: { id: input.contactId }, select: { id: true, attributes: true, blockedAt: true, tags: { select: { tagId: true } } } }),
+      this.prisma.whatsAppNumber.findUnique({ where: { id: input.numberId }, select: { id: true } }),
+    ]);
+    if (!contact || !number) throw AppError.notFound('Contact or number not found');
+    const key = { contactId_numberId: { contactId: contact.id, numberId: number.id } };
+    const existing = await this.prisma.conversation.findUnique({ where: key, select: { id: true } });
+    if (existing) {
+      await this.loadVisible(viewer, existing.id);
+      return { created: false, summary: await this.summaryFor(viewer, existing.id) };
+    }
+    // Agents may only start chats their rules let them see.
+    const rules = seesAll(viewer) ? [] : await this.rules.forUser(viewer.id);
+    const facts = {
+      state: 'ACTIVE' as const,
+      intervenedById: null,
+      blocked: contact.blockedAt !== null,
+      contactTagIds: contact.tags.map((t) => t.tagId),
+      contactAttributes: (contact.attributes ?? {}) as Record<string, unknown>,
+    };
+    if (!canAccess(viewer, rules, facts)) throw AppError.notFound('Contact or number not found');
+
+    const id = uuidv7();
+    const created = await this.prisma.$transaction(async (tx) => {
+      const inserted = await tx.$executeRaw`
+        INSERT INTO conversations (id, contact_id, number_id, state, last_activity_at, unresolved_requests, created_at, updated_at)
+        VALUES (${id}::uuid, ${contact.id}::uuid, ${number.id}::uuid, 'ACTIVE', now(), 0, now(), now())
+        ON CONFLICT (contact_id, number_id) DO NOTHING`;
+      if (inserted) await this.timeline.backfill(tx, id, contact.id, number.id);
+      return inserted > 0;
+    });
+    const chatId = created ? id : (await this.prisma.conversation.findUniqueOrThrow({ where: key, select: { id: true } })).id;
+    if (created) await this.publisher.conversation(chatId);
+    return { created, summary: await this.summaryFor(viewer, chatId) };
+  }
 
   async list(viewer: Viewer, query: ConversationListQuery) {
     const rules = seesAll(viewer) ? [] : await this.rules.forUser(viewer.id);

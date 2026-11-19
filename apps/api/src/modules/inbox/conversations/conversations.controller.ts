@@ -1,10 +1,20 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Res } from '@nestjs/common';
+import { can } from '@wbm/shared';
+import type { Response } from 'express';
 import { Require } from '../../../common/auth/permissions.guard.js';
 import { CurrentUser, type RequestUser } from '../../../common/auth/request-user.js';
+import { DEFAULT_PHONE_FIELDS, maskPhoneFields } from '../../../common/interceptors/phone-mask.interceptor.js';
 import { ZodValidationPipe } from '../../../common/validation/zod.pipe.js';
 import { ChatItemsService, ItemsQuerySchema, type ItemsQuery } from '../messages/chat-items.service.js';
 import { SendMessageSchema, SessionSendService, type SendMessageInput } from '../messages/session-send.service.js';
-import { ConversationListQuerySchema, ConversationsService, type ConversationListQuery } from './conversations.service.js';
+import { SendTemplateSchema, TemplateSendService, type SendTemplateInput } from '../messages/template-send.service.js';
+import {
+  ConversationListQuerySchema,
+  ConversationsService,
+  OpenConversationSchema,
+  type ConversationListQuery,
+  type OpenConversationInput,
+} from './conversations.service.js';
 import type { Viewer } from './visibility.js';
 
 const viewer = (user: RequestUser): Viewer => ({ id: user.id, role: user.role });
@@ -16,7 +26,22 @@ export class ConversationsController {
     private readonly conversations: ConversationsService,
     private readonly items: ChatItemsService,
     private readonly sender: SessionSendService,
+    private readonly templates: TemplateSendService,
   ) {}
+
+  /** 200 with the existing chat, 201 when it was created. */
+  @Post('conversations')
+  @Require('inbox.reply')
+  async open(
+    @CurrentUser() user: RequestUser,
+    @Body(new ZodValidationPipe(OpenConversationSchema)) body: OpenConversationInput,
+    @Res() res: Response,
+  ): Promise<void> {
+    const { created, summary } = await this.conversations.openOrCreate(viewer(user), body);
+    // @Res() bypasses the global phone-mask interceptor, so agents are masked here (FR-029).
+    const out = can(user.role, 'phones.full') ? summary : maskPhoneFields(summary, new Set(DEFAULT_PHONE_FIELDS));
+    res.status(created ? 201 : 200).json(out);
+  }
 
   @Get('conversations')
   @Require('inbox.view')
@@ -55,6 +80,13 @@ export class ConversationsController {
   @Require('inbox.reply')
   send(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(SendMessageSchema)) body: SendMessageInput) {
     return this.sender.send(viewer(user), id, body);
+  }
+
+  @Post('conversations/:id/template')
+  @HttpCode(202)
+  @Require('inbox.reply')
+  template(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(SendTemplateSchema)) body: SendTemplateInput) {
+    return this.templates.send(viewer(user), id, body);
   }
 
   @Post('conversations/:id/read')

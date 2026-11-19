@@ -1,7 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import type { MetaTemplateComponent } from '@wbm/shared';
 import { z } from 'zod';
-import { AppError, type ErrorDetail } from '../../common/errors/app-error.js';
+import { AppError } from '../../common/errors/app-error.js';
 import { normalizePhone } from '../../common/phone/phone.js';
 import { isUniqueViolation } from '../../common/prisma/prisma-errors.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { WebhooksProcessor } from '../../src/modules/webhooks/webhooks.processor.js';
-import { restoreNetwork, seedNumber, setDefaultCountry, uaePhone, useNockLocalOnly } from '../support/fixtures.js';
+import { restoreNetwork, seedContact, seedNumber, seedTemplate, setDefaultCountry, uaePhone, useNockLocalOnly } from '../support/fixtures.js';
 import { createTestContext, postSignedWebhook, signIn, webhook, type SignedInAgent, type TestContext } from '../support/test-context.js';
 import { expectMatchesContract } from './openapi-validator.js';
 
@@ -11,7 +11,7 @@ describe('Live chat API contract', () => {
   let admin: SignedInAgent;
   let agentA: SignedInAgent;
   let agentB: SignedInAgent;
-  let number: { id: string; phoneNumberId: string };
+  let number: { id: string; phoneNumberId: string; wabaId: string };
 
   const check = async (method: string, route: string, res: { status: number; body: unknown }, expected: number) => {
     expect(res.status, JSON.stringify(res.body)).toBe(expected);
@@ -72,5 +72,23 @@ describe('Live chat API contract', () => {
 
     await check('post', '/inbox/conversations/{id}/resolve', await agentA.agent.post(`/api/inbox/conversations/${id}/resolve`).set('X-CSRF-Token', agentA.csrf), 200);
     await check('post', '/inbox/conversations/{id}/resolve', await agentA.agent.post(`/api/inbox/conversations/${id}/resolve`).set('X-CSRF-Token', agentA.csrf), 409);
+  });
+
+  it('US2: Past chats, starting a chat and sending a template', async () => {
+    await check('get', '/inbox/conversations', await admin.agent.get('/api/inbox/conversations').query({ view: 'history' }), 200);
+
+    const phone = uaePhone();
+    const contact = await seedContact(ctx, phone);
+    const open = (body: Record<string, string>) => admin.agent.post('/api/inbox/conversations').set('X-CSRF-Token', admin.csrf).send(body);
+    const created = await open({ contactId: contact.id, numberId: number.id });
+    await check('post', '/inbox/conversations', created, 201);
+    await check('post', '/inbox/conversations', await open({ contactId: contact.id, numberId: number.id }), 200);
+    await check('post', '/inbox/conversations', await open({ contactId: randomUUID(), numberId: number.id }), 404);
+
+    const template = await seedTemplate(ctx, number.wabaId);
+    const send = (params: Record<string, string>) =>
+      admin.agent.post(`/api/inbox/conversations/${created.body.id}/template`).set('X-CSRF-Token', admin.csrf).send({ templateId: template.id, params });
+    await check('post', '/inbox/conversations/{id}/template', await send({ 'BODY.1': 'Sara' }), 202);
+    await check('post', '/inbox/conversations/{id}/template', await send({}), 422);
   });
 });

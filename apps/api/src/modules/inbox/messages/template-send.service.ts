@@ -5,7 +5,7 @@ import { AppError } from '../../../common/errors/app-error.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
-import { chatTemplateSendJob } from '../../sending/send-jobs.js';
+import { chatTemplateSendJob, requestSendWorkerSync } from '../../sending/send-jobs.js';
 import { assertConsent, assertTemplateApproved, assertTemplateParams, HEADER_MEDIA_ASSET_PARAM, refuse } from '../../sending/template-send-rules.js';
 import { ConversationsService } from '../conversations/conversations.service.js';
 import { ITEM_INCLUDE, toItemDto, type ChatItemDto } from '../conversations/conversation-views.js';
@@ -102,6 +102,7 @@ export class TemplateSendService {
     try {
       const job = chatTemplateSendJob(message.id);
       await this.queues.sendQueue(chat.numberId).add(job.name, job.data, job.opts);
+      await requestSendWorkerSync(this.queues);
     } catch (error) {
       await this.prisma.message.update({ where: { id: message.id }, data: { status: 'FAILED', failureReason: 'queue_unavailable', failedAt: new Date() } });
       await this.publisher.itemCreated(itemId);

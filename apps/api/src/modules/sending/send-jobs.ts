@@ -1,4 +1,6 @@
 import type { JobsOptions } from 'bullmq';
+import { QUEUES } from '../../common/queue/queue.constants.js';
+import type { QueueRegistry } from '../../common/queue/queue.module.js';
 import { sendJobId } from './dispatch-planner.js';
 import { MAX_SEND_ATTEMPTS } from './send-outcome.js';
 
@@ -48,6 +50,17 @@ export function campaignSendJob(messageId: string): QueuedJob<SendJobData> {
 /** A template sent from a chat (`messages` origin INBOX), processed by the 001 send processor. */
 export function chatTemplateSendJob(messageId: string): QueuedJob<SendJobData> {
   return { name: 'send', data: { messageId }, opts: retrying(sendJobId(messageId), SEND_PRIORITY.CHAT) };
+}
+
+/**
+ * Asks the worker to start send workers now rather than at its next 30 s sync, e.g. right after a
+ * number is connected, so the first message does not wait. Best effort; repeats collapse.
+ */
+export async function requestSendWorkerSync(queues: QueueRegistry): Promise<void> {
+  await queues
+    .get(QUEUES.MAINTENANCE)
+    .add('send-workers', {}, { jobId: 'send-workers-now', removeOnComplete: true, removeOnFail: true })
+    .catch(() => undefined);
 }
 
 /** A free-form live chat reply (`chat_messages` SESSION_OUT), processed by the session processor. */

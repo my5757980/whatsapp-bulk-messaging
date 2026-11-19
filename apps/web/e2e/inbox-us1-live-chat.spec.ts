@@ -58,8 +58,8 @@ test('US1: receive a customer message live, take the chat, reply with ticks and 
   const reply = timeline.getByTestId('chat-item').filter({ hasText: 'Yes, it is in stock!' });
   await expect(reply).toBeVisible();
   await expect(page.getByLabel('Reply')).toHaveValue('');
-  // mock-meta reports sent, delivered and read within about two seconds.
-  await expect(reply.getByLabel('Read')).toBeVisible({ timeout: 20_000 });
+  // mock-meta reports sent, delivered and read within about two seconds of the send.
+  await expect(reply.getByLabel('Read')).toBeVisible({ timeout: 45_000 });
 
   const sent = (await (await page.request.get(`${MOCK_META}/mock/sent`)).json()) as { messages: Array<{ phoneNumberId: string; type: string; text?: string }> };
   expect(sent.messages.some((m) => m.phoneNumberId === phoneNumberId && m.type === 'text' && m.text === 'Yes, it is in stock!')).toBe(true);

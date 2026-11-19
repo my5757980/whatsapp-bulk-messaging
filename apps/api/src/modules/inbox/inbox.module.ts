@@ -6,6 +6,7 @@ import { ChatItemsService } from './messages/chat-items.service.js';
 import { ChatMediaController } from './messages/chat-media.controller.js';
 import { ChatTimelineService } from './messages/chat-timeline.service.js';
 import { SessionSendService } from './messages/session-send.service.js';
+import { TemplateSendService } from './messages/template-send.service.js';
 import { InboxEventsService } from './realtime/inbox-events.service.js';
 import { InboxPublisher } from './realtime/inbox-publisher.js';
 import { InboxStreamController } from './realtime/inbox-stream.controller.js';
@@ -32,6 +33,7 @@ export class InboxDomainModule {}
     ConversationsService,
     ChatItemsService,
     SessionSendService,
+    TemplateSendService,
   ],
   controllers: [InboxStreamController, ConversationsController, ChatMediaController],
 })

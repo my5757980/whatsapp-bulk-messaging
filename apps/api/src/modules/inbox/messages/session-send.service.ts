@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { AppError } from '../../../common/errors/app-error.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
-import { sessionSendJob } from '../../sending/send-jobs.js';
+import { requestSendWorkerSync, sessionSendJob } from '../../sending/send-jobs.js';
 import { ConversationsService } from '../conversations/conversations.service.js';
 import { ITEM_INCLUDE, toItemDto, type ChatItemDto } from '../conversations/conversation-views.js';
 import type { Viewer } from '../conversations/visibility.js';
@@ -83,6 +83,7 @@ export class SessionSendService {
     try {
       const job = sessionSendJob(id);
       await this.queues.sendQueue(chat.numberId).add(job.name, job.data, job.opts);
+      await requestSendWorkerSync(this.queues);
     } catch (error) {
       await this.prisma.chatMessage.update({
         where: { id },
