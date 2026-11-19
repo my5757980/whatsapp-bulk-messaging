@@ -365,7 +365,7 @@
 - [X] T057 [P] [US4] Unit tests for chat media limits (FR-015 table) in packages/shared/src/chat-media-limits.test.ts:
   - formats and sizes per type
   - error messages naming the type and the limit
-- [ ] T058 [P] [US4] Integration test in apps/api/test/integration/inbox-canned-media.int-spec.ts:
+- [X] T058 [P] [US4] Integration test in apps/api/test/integration/inbox-canned-media.int-spec.ts:
   - CRUD; the 201st saved reply → 422 LIMIT_REACHED
   - favourites are per user and listed first
   - an agent gets 403 on create/update/delete
@@ -373,27 +373,27 @@
   - media library upload accepts and refuses per the limits
   - sending library media uploads to Meta once per number, then reuses the media ID (nock), with a session media payload carrying caption and filename
   - removing a library item keeps already-sent messages intact
-- [ ] T059 [P] [US4] Add contract tests for /canned-messages (CRUD and favourite), /media-library (list, upload, delete) and messages of type media and canned to apps/api/test/contract/inbox.contract-spec.ts
-- [ ] T060 [P] [US4] Playwright e2e for the quickstart US4 row in apps/web/e2e/inbox-us4-saved-replies.spec.ts
+- [X] T059 [P] [US4] Add contract tests for /canned-messages (CRUD and favourite), /media-library (list, upload, delete) and messages of type media and canned to apps/api/test/contract/inbox.contract-spec.ts
+- [X] T060 [P] [US4] Playwright e2e for the quickstart US4 row in apps/web/e2e/inbox-us4-saved-replies.spec.ts
 
 ### Implementation for User Story 4
 
 - [X] T061 [P] [US4] Implement saved-reply rendering in apps/api/src/modules/inbox/canned/canned-render.ts (makes T056 pass)
 - [X] T062 [P] [US4] Implement the chat media limits in packages/shared/src/chat-media-limits.ts, exported from packages/shared/src/index.ts (makes T057 pass)
-- [ ] T063 [US4] Implement saved replies in apps/api/src/modules/inbox/canned/canned-messages.service.ts and canned-messages.controller.ts:
+- [X] T063 [US4] Implement saved replies in apps/api/src/modules/inbox/canned/canned-messages.service.ts and canned-messages.controller.ts:
   - CRUD with the 200 limit (advisory-lock transaction) and unique names
   - favourites
   - list with favourites first and `parameterCount`
   - audit changes
-- [ ] T064 [US4] Implement the media library in apps/api/src/modules/inbox/media-library/media-library.controller.ts:
+- [X] T064 [US4] Implement the media library in apps/api/src/modules/inbox/media-library/media-library.controller.ts:
   - upload (multipart, chat limits, media_assets LIBRARY with display_name and uploaded_by_id)
   - paged list by kind
   - delete (media.manage, audited)
-- [ ] T065 [US4] Extend free-form sending for media and saved replies in apps/api/src/modules/inbox/messages/session-send.service.ts and session-send.processor.ts:
+- [X] T065 [US4] Extend free-form sending for media and saved replies in apps/api/src/modules/inbox/messages/session-send.service.ts and session-send.processor.ts:
   - `type: media` (library asset → `ensureMetaMediaId` per number; or an https link) with caption and filename
   - `type: canned` renders with T061 and sends text or media
   - audio is sent without a caption
-- [ ] T066 [US4] Build the saved replies and media UI in apps/web/src/app/(dashboard)/settings/saved-replies/page.tsx and apps/web/src/components/inbox/composer.tsx:
+- [X] T066 [US4] Build the saved replies and media UI in apps/web/src/app/(dashboard)/settings/saved-replies/page.tsx and apps/web/src/components/inbox/composer.tsx:
   - apps/web/src/app/(dashboard)/settings/saved-replies/page.tsx (list, create/edit with preview, delete)
   - apps/web/src/app/(dashboard)/settings/media-library/page.tsx
   - in the reply box (composer.tsx): a "/" picker (apps/web/src/components/inbox/saved-reply-picker.tsx) with favourites and parameter inputs
@@ -417,32 +417,32 @@
 
 ### Tests for User Story 5 (REQUIRED - Constitution Principle V) ⚠️
 
-- [ ] T067 [P] [US5] Integration test in apps/api/test/integration/inbox-profile-block.int-spec.ts:
+- [X] T067 [P] [US5] Integration test in apps/api/test/integration/inbox-profile-block.int-spec.ts:
   - detail returns template/session counts, unresolved_requests, lead source, first-message tag, and at most 10 recent campaigns with status; phone masked for agents
   - PATCH from the chat (name, attributes, tags, first-message tag) needs contacts.manage, updates the contact and writes journey events
   - the journey merges events and campaign references, newest first, with actor types
   - block: a new inbound message is stored, with no SSE event, push or automatic reply, and the chat is hidden from live lists
   - a campaign still reaches a blocked (non-opted-out) contact
   - unblock restores live behaviour; blocking and unblocking are audited
-- [ ] T068 [P] [US5] Add contract tests for GET journey, PATCH contact and POST/DELETE /contacts/{id}/block to apps/api/test/contract/inbox.contract-spec.ts
+- [X] T068 [P] [US5] Add contract tests for GET journey, PATCH contact and POST/DELETE /contacts/{id}/block to apps/api/test/contract/inbox.contract-spec.ts
 - [ ] T069 [P] [US5] Playwright e2e for the quickstart US5 row in apps/web/e2e/inbox-us5-profile.spec.ts
 
 ### Implementation for User Story 5
 
-- [ ] T070 [US5] Implement the journey in apps/api/src/modules/inbox/journey/journey.service.ts:
+- [X] T070 [US5] Implement the journey in apps/api/src/modules/inbox/journey/journey.service.ts:
   - merge conversation_events with CAMPAIGN/API reference rows
   - write CONSENT_CHANGED events when the 001 keyword handler changes consent (hook in apps/api/src/modules/webhooks/handlers/inbound.handler.ts)
   - `GET /inbox/conversations/{id}/journey`
-- [ ] T071 [US5] Complete the profile data in apps/api/src/modules/inbox/conversations/conversations.service.ts `getDetail`:
+- [X] T071 [US5] Complete the profile data in apps/api/src/modules/inbox/conversations/conversations.service.ts `getDetail`:
   - template and session message counts
   - lead source, first-message tag, consent fields
   - up to 10 recent campaigns
   - set lead_source on 001 contact-creation paths: public API → API, upload → "Campaign upload", import → "Import" (apps/api/src/modules/public-api/public-api.service.ts, apps/api/src/modules/contacts/consent.service.ts, apps/api/src/modules/imports/import.processor.ts)
-- [ ] T072 [US5] Implement contact edits from a chat in apps/api/src/modules/inbox/conversations/conversations.controller.ts:
+- [X] T072 [US5] Implement contact edits from a chat in apps/api/src/modules/inbox/conversations/conversations.controller.ts:
   - `PATCH /inbox/conversations/{id}/contact`, reusing the 001 ContactsService and tag services
   - journey TAG_ADDED, TAG_REMOVED, ATTRIBUTE_CHANGED and FIRST_MESSAGE_TAG_CHANGED
   - publish `contact.updated`
-- [ ] T073 [US5] Implement blocking in apps/api/src/modules/inbox/conversations/block.controller.ts and inbound-chat.handler.ts:
+- [X] T073 [US5] Implement blocking in apps/api/src/modules/inbox/conversations/block.controller.ts and inbound-chat.handler.ts:
   - endpoints in apps/api/src/modules/inbox/conversations/block.controller.ts: `POST`/`DELETE /contacts/{id}/block`, audited, journey events
   - in inbound-chat.handler.ts, a blocked contact stops after storing (no event, push or automatic reply)
   - blocked chats are excluded from live lists through the T016 predicate
