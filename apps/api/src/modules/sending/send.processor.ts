@@ -7,6 +7,7 @@ import { isUniqueViolation } from '../../common/prisma/prisma-errors.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import type { MessageEventType, MessageStatus, Prisma } from '../../generated/prisma/client.js';
 import { CampaignsService } from '../campaigns/campaigns.service.js';
+import { ChatTimelineService } from '../inbox/messages/chat-timeline.service.js';
 import { MediaService } from '../media/media.service.js';
 import { MetaGraphClient } from '../meta/meta-graph.client.js';
 import { NumbersService } from '../numbers/numbers.service.js';
@@ -15,7 +16,7 @@ import { decideSendFailure, preSendCheck } from './send-outcome.js';
 import { HEADER_MEDIA_URL_PARAM, buildTemplatePayload, headerMediaType } from './template-payload.builder.js';
 
 /** Blocking codes caused by the number's credentials or account (research R9). */
-const NUMBER_BLOCKING = new Set([190, 10, 368, 133010]);
+export const NUMBER_BLOCKING = new Set([190, 10, 368, 133010]);
 /** Blocking codes that tell us the template's new state. */
 const TEMPLATE_STATE: Readonly<Record<number, 'PAUSED' | 'DISABLED'>> = { 132015: 'PAUSED', 132016: 'DISABLED' };
 
@@ -51,6 +52,7 @@ export class SendProcessor {
     private readonly statuses: StatusHandler,
     private readonly metrics: MetricsService,
     private readonly numbers: NumbersService,
+    private readonly timeline: ChatTimelineService,
   ) {}
 
   /** @param attempt 1-based attempt number of this job */
@@ -138,6 +140,10 @@ export class SendProcessor {
     await this.event(m.id, 'SENT_ACCEPTED', `${m.id}:accepted`, { waMessageId }, now);
     this.metrics.messagesTotal.inc({ status: 'SENT', number: m.number.phoneNumberId });
     await this.statuses.applyBuffered(waMessageId);
+    // Show the template in the contact's live chat on this number (002 R2); never fails the send.
+    await this.timeline.appendRef(m.id).catch((error: unknown) =>
+      this.logger.warn({ messageId: m.id, err: (error as Error).message }, 'Could not add the message to live chat'),
+    );
     return { result: 'sent', waMessageId };
   }
 

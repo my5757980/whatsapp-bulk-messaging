@@ -14,6 +14,8 @@ export interface WebhookContext {
 
 export interface WebhookChangeHandler {
   readonly field: string;
+  /** Handlers of one field run in ascending order (default 0); live chat runs after consent. */
+  readonly order?: number;
   handle(change: WebhookChange, context: WebhookContext): Promise<void>;
 }
 
@@ -26,6 +28,8 @@ export class WebhookRouter {
   register(handler: WebhookChangeHandler): void {
     const list = this.handlers.get(handler.field) ?? [];
     list.push(handler);
+    // Stable sort: equal orders keep their registration order.
+    list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     this.handlers.set(handler.field, list);
   }
 

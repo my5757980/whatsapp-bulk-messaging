@@ -4,7 +4,12 @@ import { CampaignProgressProcessor } from './modules/campaigns/campaign-progress
 import { ScheduleReconcilerProcessor } from './modules/campaigns/schedule-reconciler.processor.js';
 import { DomainModule } from './modules/domain.module.js';
 import { ImportProcessor } from './modules/imports/import.processor.js';
-import { InboxWorkerModule } from './modules/inbox/inbox.module.js';
+import { InboundChatHandler } from './modules/inbox/inbound/inbound-chat.handler.js';
+import { InboundMediaProcessor } from './modules/inbox/inbound/inbound-media.processor.js';
+import { InboxDomainModule } from './modules/inbox/inbox.module.js';
+import { InboxQueueProcessor } from './modules/inbox/inbox-queue.processor.js';
+import { ReadReceiptProcessor } from './modules/inbox/messages/read-receipt.processor.js';
+import { SessionSendProcessor } from './modules/inbox/messages/session-send.processor.js';
 import { RetentionProcessor, RetentionService } from './modules/maintenance/retention.processor.js';
 import { NumberRefreshProcessor } from './modules/numbers/number-refresh.processor.js';
 import { IdempotencyCleanupProcessor } from './modules/public-api/idempotency-cleanup.processor.js';
@@ -22,7 +27,7 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
  * integration tests, which drive the processors directly with a stub ProcessorRegistry.
  */
 @Module({
-  imports: [DomainModule, WebhooksWorkerModule, InboxWorkerModule],
+  imports: [DomainModule, WebhooksWorkerModule, InboxDomainModule],
   providers: [
     StatusHandler,
     InboundHandler,
@@ -39,6 +44,12 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     IdempotencyCleanupProcessor,
     RetentionService,
     RetentionProcessor,
+    // Live chat (feature 002)
+    InboundChatHandler,
+    InboundMediaProcessor,
+    ReadReceiptProcessor,
+    InboxQueueProcessor,
+    SessionSendProcessor,
   ],
 })
 export class WorkerFeaturesModule {}

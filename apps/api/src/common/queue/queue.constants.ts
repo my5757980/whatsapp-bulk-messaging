@@ -5,6 +5,8 @@ export const QUEUES = {
   WEBHOOKS: 'webhooks',
   IMPORTS: 'imports',
   MAINTENANCE: 'maintenance',
+  /** Live chat background work: inbound media downloads and read receipts (feature 002). */
+  INBOX: 'inbox',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];

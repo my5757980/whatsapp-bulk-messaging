@@ -87,7 +87,8 @@ export class InboundHandler implements WebhookChangeHandler, OnModuleInit {
           : null;
       const contact = await this.prisma.contact.upsert({
         where: { phoneE164: phone.e164 },
-        create: { phoneE164: phone.e164, countryCode: phone.country, name: profiles.get(from)?.slice(0, 120) ?? null },
+        // A contact first seen through their own message came organically (002 FR-033).
+        create: { phoneE164: phone.e164, countryCode: phone.country, name: profiles.get(from)?.slice(0, 120) ?? null, leadSource: 'Organic' },
         update: {},
         select: { id: true },
       });
