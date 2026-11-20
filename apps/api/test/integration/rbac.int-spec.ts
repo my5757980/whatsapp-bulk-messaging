@@ -6,8 +6,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { restoreNetwork, useNockLocalOnly } from '../support/fixtures.js';
 import { createTestContext, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
 
-// T167: every operation's `x-permission` in dashboard-api.openapi.yaml is enforced for each role.
-const CONTRACT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../specs/001-whatsapp-bulk-messaging/contracts/dashboard-api.openapi.yaml');
+// T167, T097: every operation's `x-permission` in the dashboard (001) and live chat (002) contracts
+// is enforced for each role (001 FR-007, 002 FR-041).
+const SPECS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../specs');
+const CONTRACTS = [
+  path.join(SPECS, '001-whatsapp-bulk-messaging/contracts/dashboard-api.openapi.yaml'),
+  path.join(SPECS, '002-team-inbox/contracts/inbox-api.openapi.yaml'),
+];
+/** The live event stream never ends, so a plain request would hang; inbox-realtime.int-spec.ts covers it. */
+const SKIP = new Set(['get /inbox/events']);
 const ROLES = ['ADMIN', 'MANAGER', 'AGENT'] as const;
 /** Documented operations that are not implemented yet (none since US7). */
 const NOT_YET = new Set<string>();
@@ -22,18 +29,22 @@ interface Operation {
 describe('Role permissions on every endpoint', () => {
   let ctx: TestContext;
   const agents = {} as Record<(typeof ROLES)[number], SignedInAgent>;
-  let operations: Operation[] = [];
+  const operations: Operation[] = [];
 
   beforeAll(async () => {
     ctx = await createTestContext();
     useNockLocalOnly(); // e.g. template sync must not reach the internet
     for (const role of ROLES) agents[role] = await signIn(ctx, role);
-    const doc = (await SwaggerParser.parse(CONTRACT)) as unknown as { paths: Record<string, Record<string, { 'x-permission'?: Permission }>> };
-    operations = Object.entries(doc.paths).flatMap(([route, ops]) =>
-      Object.entries(ops)
-        .filter(([, op]) => op && typeof op === 'object' && op['x-permission'] && !NOT_YET.has(route))
-        .map(([method, op]) => ({ method, route, permission: op['x-permission'] as Permission })),
-    );
+    for (const contract of CONTRACTS) {
+      const doc = (await SwaggerParser.parse(contract)) as unknown as { paths: Record<string, Record<string, { 'x-permission'?: Permission }>> };
+      operations.push(
+        ...Object.entries(doc.paths).flatMap(([route, ops]) =>
+          Object.entries(ops)
+            .filter(([method, op]) => op && typeof op === 'object' && op['x-permission'] && !NOT_YET.has(route) && !SKIP.has(`${method} ${route}`))
+            .map(([method, op]) => ({ method, route, permission: op['x-permission'] as Permission })),
+        ),
+      );
+    }
   });
   afterAll(async () => {
     restoreNetwork();
@@ -42,6 +53,8 @@ describe('Role permissions on every endpoint', () => {
 
   it('covers the documented operations', () => {
     expect(operations.length).toBeGreaterThan(50);
+    // Live chat operations are included (002 FR-041).
+    expect(operations.some((op) => op.route === '/inbox/team-metrics')).toBe(true);
   });
 
   it.each(ROLES)('%s gets 403 exactly where the role table says so', async (role) => {
