@@ -172,6 +172,7 @@ Stop conditions and results:
 | 24 hours without activity | `EXPIRED` |
 | The contact is blocked while a session runs | `BLOCKED` |
 | 50 steps without input, or an internal error | `FAILED` |
+| Buttons or list step gets a typed answer that is not an option and has no "other answer" branch | `FAILED` (reason `no valid answer`) |
 
 A jump ends the current session with `COMPLETED` (branch `jumped`) and starts a session in the target
 flow with `started_by = JUMP` and `parent_session_id`.

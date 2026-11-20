@@ -8,7 +8,7 @@ import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import { AuditService, type AuditActor } from '../../audit/audit.service.js';
 import { SettingsService } from '../../settings/settings.service.js';
-import { FLOW_INCLUDE, toFlowDetail, toFlowSummary, type FlowRow } from './flow-views.js';
+import { FLOW_INCLUDE, parseGraph, toFlowDetail, toFlowSummary, type FlowRow } from './flow-views.js';
 import { ReservedKeywords } from './reserved-keywords.js';
 
 export const CreateFlowSchema = z.strictObject({ name: z.string().trim().min(1).max(80), starterKey: z.string().max(40).optional() });
@@ -54,8 +54,10 @@ export class FlowsService {
     });
   }
 
+  /** The flow with its draft and what would block publishing it now (the editor shows these on open). */
   async get(id: string) {
-    return toFlowDetail(await this.load(id));
+    const row = await this.load(id);
+    return toFlowDetail(row, validateForPublish(parseGraph(row.draft), { reservedKeywords: await this.reserved.list() }));
   }
 
   async load(id: string): Promise<FlowRow> {
