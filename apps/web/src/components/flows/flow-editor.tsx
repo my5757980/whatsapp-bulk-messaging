@@ -12,6 +12,7 @@ import { toast } from '@/components/ui/toaster';
 import { api, ApiError } from '@/lib/api-client';
 import { toastError } from '@/lib/errors';
 import { addStep, flowKeys, PALETTE, pasteStep, removeStep, STEP_LABELS, type FlowDetail } from '@/lib/flows';
+import { AnalyticsBar, useFlowAnalytics, type AnalyticsPeriod } from './analytics-overlay';
 import { FlowCanvas } from './flow-canvas';
 import { FlowStatusBadge } from './flow-status-badge';
 import { ProblemsPanel } from './problems-panel';
@@ -52,6 +53,10 @@ export function FlowEditor({ initial, onReload }: { initial: FlowDetail; onReloa
   const [name, setName] = useState(initial.name);
   const [problems, setProblems] = useState<Problem[]>(initial.problems ?? []);
   const [secrets, setSecrets] = useState<FlowSecret[]>(initial.secrets);
+  // Analytics mode (003 US8): counts per step of the published version for a period.
+  const [analyticsOn, setAnalyticsOn] = useState(false);
+  const [period, setPeriod] = useState<AnalyticsPeriod>('7d');
+  const analytics = useFlowAnalytics(initial.id, period, analyticsOn);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // The graph customers meet, when the editor holds it (drives the "not published yet" hint).
   const [publishedGraph, setPublishedGraph] = useState<FlowGraph | null>(
@@ -248,6 +253,9 @@ export function FlowEditor({ initial, onReload }: { initial: FlowDetail; onReloa
             Redo
           </Button>
           <VersionsDrawer flowId={initial.id} prepare={autosave.flush} onRestored={() => void onReload()} />
+          <Button size="sm" variant={analyticsOn ? 'default' : 'outline'} aria-pressed={analyticsOn} onClick={() => setAnalyticsOn(!analyticsOn)}>
+            Analytics
+          </Button>
           {meta.status === 'PUBLISHED' && (
             <ConfirmDialog
               trigger={
@@ -267,6 +275,7 @@ export function FlowEditor({ initial, onReload }: { initial: FlowDetail; onReloa
           </Button>
         </div>
       </div>
+      {analyticsOn && <AnalyticsBar period={period} onPeriod={setPeriod} data={analytics.data} loading={analytics.isLoading} />}
       <div className="grid gap-4 xl:grid-cols-[15rem_minmax(0,1fr)_22rem]">
         <aside className="grid content-start gap-4">
           <section aria-labelledby="palette-title" className="grid gap-2 rounded-lg border bg-card p-3">
@@ -288,9 +297,14 @@ export function FlowEditor({ initial, onReload }: { initial: FlowDetail; onReloa
           <ProblemsPanel problems={problems} onFocusStep={focusStep} />
         </aside>
         <div ref={canvasBox} className="h-[70vh] min-h-[28rem] overflow-hidden rounded-lg border bg-muted/30">
-          <FlowCanvas graph={graph} problems={problems} selectedId={selectedId} onSelect={setSelectedId} onChange={change} />
+          <FlowCanvas graph={graph} problems={problems} selectedId={selectedId} onSelect={setSelectedId} onChange={change} stats={analyticsOn ? analytics.stats : undefined} />
         </div>
         <aside className="content-start rounded-lg border bg-card p-3">
+          {analyticsOn && selected && (
+            <a className="mb-3 block text-sm text-primary underline" href={`/api/flows/${initial.id}/analytics/steps/${selected.id}/dropped?period=${period}`} download>
+              Download the contacts who dropped at this step (CSV)
+            </a>
+          )}
           {selected ? (
             <StepForm
               key={selected.id}

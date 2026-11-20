@@ -1,5 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { InboxApiModule } from '../inbox/inbox.module.js';
+import { FlowAnalyticsController } from './analytics/flow-analytics.controller.js';
+import { FlowAnalyticsService } from './analytics/flow-analytics.service.js';
 import { FlowsController } from './definitions/flows.controller.js';
 import { FlowsService } from './definitions/flows.service.js';
 import { PublishService } from './definitions/publish.service.js';
@@ -30,7 +32,7 @@ export class FlowsDomainModule {}
 /** Flow builder endpoints (HTTP app only). */
 @Module({
   imports: [FlowsDomainModule, InboxApiModule],
-  providers: [FlowsService, PublishService, ReservedKeywords, FlowSecretsService, ApiTestService, FlowVersionsService],
-  controllers: [FlowsController, FlowStartController, FlowSecretsController, FlowVersionsController],
+  providers: [FlowsService, PublishService, ReservedKeywords, FlowSecretsService, ApiTestService, FlowVersionsService, FlowAnalyticsService],
+  controllers: [FlowsController, FlowStartController, FlowSecretsController, FlowVersionsController, FlowAnalyticsController],
 })
 export class FlowsApiModule {}

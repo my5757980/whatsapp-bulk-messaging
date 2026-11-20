@@ -111,4 +111,19 @@ describe('Chatbot flows API contract', () => {
     await check('post', '/flows/{id}/versions/{versionId}/restore', await call('post', `/flows/${id}/versions/${published.id}/restore`), 200);
     await check('post', '/flows/{id}/versions/{versionId}/restore', await call('post', `/flows/${id}/versions/${randomUUID()}/restore`), 404);
   });
+
+  it('US8: analytics and the dropped contacts CSV', async () => {
+    const created = await call('post', '/flows', { name: `Contract analytics ${randomUUID().slice(0, 6)}` });
+    const id = created.body.id as string;
+    await call('put', `/flows/${id}/draft`, { graph: graph(), draftRevision: 0 });
+    expect((await call('post', `/flows/${id}/publish`)).status).toBe(200);
+    await check('get', '/flows/{id}/analytics', await call('get', `/flows/${id}/analytics?period=30d`), 200);
+    await check('get', '/flows/{id}/analytics', await call('get', `/flows/${id}/analytics?period=custom&from=2026-01-01&to=2026-01-31`), 200);
+    await check('get', '/flows/{id}/analytics', await call('get', `/flows/${id}/analytics?period=custom`), 422);
+    await check('get', '/flows/{id}/analytics', await call('get', `/flows/${randomUUID()}/analytics`), 404);
+    const csv = await call('get', `/flows/${id}/analytics/steps/a/dropped?period=7d`);
+    expect(csv.status).toBe(200);
+    expect(csv.headers['content-type']).toContain('text/csv');
+    expect(csv.text.split(/\r?\n/)[0]).toBe('name,phone,result,ended_at');
+  });
 });

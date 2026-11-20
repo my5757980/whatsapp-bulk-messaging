@@ -199,15 +199,15 @@ contact's "I saw your ad for the sofa" sets the first-message tag and starts the
 
 ### Tests for User Story 6 (REQUIRED) ⚠️
 
-- [ ] T061 [P] [US6] Unit tests in packages/shared/src/flows/triggers.test.ts and apps/api/test/unit/flows/pattern-match.spec.ts: the safe-pattern check refuses nested quantifiers; a catastrophic pattern returns "no match" within the time limit; pattern after keywords in the order; first-message rules only for a first message; reserved keywords refused
-- [ ] T062 [P] [US6] Integration test apps/api/test/integration/flows-triggers.int-spec.ts: a template quick-reply reply with `context.id` of a 001 campaign message starts the linked flow; a pattern trigger stores the matched text as an answer; a first-message rule sets the contact's first-message tag (and starts its flow) only on the first message; an exact keyword beats a contains keyword; a `canInterrupt` trigger replaces a running session (`INTERRUPTED`); a duplicate exact keyword on the same number is refused at publish (`KEYWORD_TAKEN`)
-- [ ] T063 [P] [US6] Playwright e2e apps/web/e2e/flows-us6-triggers.spec.ts: add a first-message rule with a tag in the trigger panel, send a first message from a new number, and check the profile's first-message tag
+- [X] T061 [P] [US6] Unit tests in packages/shared/src/flows/triggers.test.ts and apps/api/test/unit/flows/pattern-match.spec.ts: the safe-pattern check refuses nested quantifiers; a catastrophic pattern returns "no match" within the time limit; pattern after keywords in the order; first-message rules only for a first message; reserved keywords refused
+- [X] T062 [P] [US6] Integration test apps/api/test/integration/flows-triggers.int-spec.ts: a template quick-reply reply with `context.id` of a 001 campaign message starts the linked flow; a pattern trigger stores the matched text as an answer; a first-message rule sets the contact's first-message tag (and starts its flow) only on the first message; an exact keyword beats a contains keyword; a `canInterrupt` trigger replaces a running session (`INTERRUPTED`); a duplicate exact keyword on the same number is refused at publish (`KEYWORD_TAKEN`)
+- [X] T063 [P] [US6] Playwright e2e apps/web/e2e/flows-us6-triggers.spec.ts: add a first-message rule with a tag in the trigger panel, send a first message from a new number, and check the profile's first-message tag
 
 ### Implementation for User Story 6
 
-- [ ] T064 [US6] Add pattern triggers: the safe-pattern check in packages/shared/src/flows/triggers.ts and time-limited matching with `node:vm` in apps/api/src/modules/flows/engine/trigger-matcher.ts (research R3)
-- [ ] T065 [US6] Add template-button triggers (resolve `context.id` → `messages.wa_message_id` → template, match the button text) and first-message rules (detect the contact's first inbound message, set `first_message_tag_id` with a journey entry by the flow, optionally start the flow) in apps/api/src/modules/flows/engine/trigger-matcher.ts and apps/api/src/modules/flows/engine/flow-router.ts
-- [ ] T066 [US6] Extend the trigger panel for all kinds (template and button pickers from the 001 templates API, tag picker, "can interrupt") in apps/web/src/components/flows/trigger-panel.tsx
+- [X] T064 [US6] Add pattern triggers: the safe-pattern check in packages/shared/src/flows/triggers.ts and time-limited matching with `node:vm` in apps/api/src/modules/flows/engine/trigger-matcher.ts (research R3)
+- [X] T065 [US6] Add template-button triggers (resolve `context.id` → `messages.wa_message_id` → template, match the button text) and first-message rules (detect the contact's first inbound message, set `first_message_tag_id` with a journey entry by the flow, optionally start the flow) in apps/api/src/modules/flows/engine/trigger-matcher.ts and apps/api/src/modules/flows/engine/flow-router.ts
+- [X] T066 [US6] Extend the trigger panel for all kinds (template and button pickers from the 001 templates API, tag picker, "can interrupt") in apps/web/src/components/flows/trigger-panel.tsx
 
 **Checkpoint**: US1–US6 work on their own.
 

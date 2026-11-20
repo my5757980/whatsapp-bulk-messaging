@@ -20,6 +20,7 @@ import '@xyflow/react/dist/style.css';
 import { useMemo, useState } from 'react';
 import { problemsByStep, removeStep, setBranch } from '@/lib/flows';
 import { StepNode, type StepNodeType } from './steps/step-node';
+import type { StepStats } from './analytics-overlay';
 import type { GraphChange } from './use-graph-history';
 
 const NODE_TYPES = { step: StepNode };
@@ -31,13 +32,15 @@ interface FlowCanvasProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onChange: GraphChange;
+  /** Analytics mode: counts per step (003 US8). */
+  stats?: Map<string, StepStats>;
 }
 
 /**
  * React Flow canvas over the graph (003 T027): steps are nodes, branches are edges. The graph is
  * the source of truth; positions are written back when a drag ends, so a drag is one undo step.
  */
-export function FlowCanvas({ graph, problems, selectedId, onSelect, onChange }: FlowCanvasProps) {
+export function FlowCanvas({ graph, problems, selectedId, onSelect, onChange, stats }: FlowCanvasProps) {
   const [measured, setMeasured] = useState<Record<string, Dimensions>>({});
   const [dragging, setDragging] = useState<Record<string, XYPosition>>({});
   const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
@@ -52,13 +55,13 @@ export function FlowCanvas({ graph, problems, selectedId, onSelect, onChange }: 
           id: step.id,
           type: 'step' as const,
           position: moving ?? step.position,
-          data: { step, isStart: graph.start === step.id, problems: problemMap.get(step.id) ?? [] },
+          data: { step, isStart: graph.start === step.id, problems: problemMap.get(step.id) ?? [], stats: stats ? (stats.get(step.id) ?? { entered: 0, continued: 0, dropped: 0, options: [] }) : null },
           selected: step.id === selectedId,
           dragging: moving !== undefined,
           ...(size ? { measured: size } : {}),
         };
       }),
-    [graph, problemMap, selectedId, dragging, measured],
+    [graph, problemMap, selectedId, dragging, measured, stats],
   );
 
   const edges = useMemo<Edge[]>(() => {

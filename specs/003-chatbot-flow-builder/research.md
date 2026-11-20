@@ -41,8 +41,10 @@ reference before release, as 001 and 002 did.
 
 - **Decision:** patterns are limited to 200 characters, checked at save time for nested quantifiers
   (a "safe pattern" rule that rejects constructs like `(a+)+`), and evaluated inside
-  `vm.runInNewContext` with a 25 ms timeout. A timeout counts as "no match" and is logged with the
-  trigger id. A unit test proves a catastrophic pattern returns within the limit.
+  a V8 context (`node:vm`, script compiled once, one shared context) with a 50 ms limit. The limit is
+  wall-clock time, which a busy worker can stretch, so a timeout gets one retry with 100 ms before it
+  counts as "no match" and is logged with the trigger id (planned at 25 ms; that gave false timeouts
+  under load). A unit test proves a catastrophic pattern returns within the limit.
 - **Rationale:** managers write their own patterns (inventory 7.2), and one bad pattern must not
   stall message handling.
 - **Alternatives:** the native `re2` module (linear time, but a native build in every image);
