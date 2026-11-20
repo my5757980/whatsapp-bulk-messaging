@@ -5,18 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { nextOptionKey } from '@/lib/flows';
-import { TEXTAREA_CLASS, VariablesHint } from './form-bits';
+import { FallbacksEditor } from './fallbacks-editor';
+import { cleanAnswerName, TEXTAREA_CLASS, VariablesHint } from './form-bits';
 import { GoesToSelect } from './goes-to-select';
 import type { StepPatch } from './step-form';
 
 type ButtonsStep = StepOf<'buttons'>;
 type ReplyButton = ButtonsStep['buttons'][number];
-
-/** Answer names must start with a letter and use lower-case letters, digits and _. */
-function answerName(value: string): string | undefined {
-  const cleaned = value.toLowerCase().replace(/[^a-z0-9_]/g, '').replace(/^[^a-z]+/, '').slice(0, 40);
-  return cleaned || undefined;
-}
 
 /** Buttons step: a message with up to 3 reply buttons, each leading to its own step. */
 export function ButtonsForm({ step, graph, onPatch }: { step: ButtonsStep; graph: FlowGraph; onPatch: StepPatch<ButtonsStep> }) {
@@ -120,10 +115,11 @@ export function ButtonsForm({ step, graph, onPatch }: { step: ButtonsStep; graph
           value={step.answerName ?? ''}
           placeholder="e.g. branch"
           maxLength={40}
-          onChange={(e) => onPatch({ answerName: answerName(e.target.value) }, 'answerName')}
+          onChange={(e) => onPatch({ answerName: cleanAnswerName(e.target.value) }, 'answerName')}
         />
         <p className="text-xs text-muted-foreground">Later steps can use it, for example {'{answer:branch}'}.</p>
       </div>
+      <FallbacksEditor texts={[step.text, step.header, step.footer]} fallbacks={step.fallbacks} onChange={(fallbacks) => onPatch({ fallbacks }, 'fallbacks')} />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { normalizePhrase, validateForPublish, type FlowGraph, type Problem } from '@wbm/shared';
+import { normalizePhrase, reachableSteps, validateForPublish, type FlowGraph, type Problem } from '@wbm/shared';
 import { AppError } from '../../../common/errors/app-error.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
@@ -102,6 +102,30 @@ export class PublishService {
         });
       }
     }
+    problems.push(...(await this.attributeProblems(graph)));
     return problems;
+  }
+
+  /** Answers saved to contact attributes need an existing attribute of a fitting type (FR-010, T035). */
+  private async attributeProblems(graph: FlowGraph): Promise<Problem[]> {
+    const reachable = reachableSteps(graph);
+    const targets = graph.steps.flatMap((step) => {
+      if (!reachable.has(step.id) || !(step.type === 'question' || step.type === 'buttons' || step.type === 'list') || !step.saveTo) return [];
+      return [{ step, key: step.saveTo.attributeKey, kind: step.type === 'question' ? step.answer.kind : 'text' }];
+    });
+    if (!targets.length) return [];
+    const definitions = await this.prisma.attributeDefinition.findMany({
+      where: { key: { in: [...new Set(targets.map((t) => t.key))] } },
+      select: { key: true, type: true },
+    });
+    const typeOf = new Map(definitions.map((d) => [d.key, d.type]));
+    return targets.flatMap(({ step, key, kind }): Problem[] => {
+      const type = typeOf.get(key);
+      if (!type) return [{ code: 'UNKNOWN_ATTRIBUTE', message: `The contact attribute "${key}" does not exist`, stepId: step.id, triggerId: null, field: 'saveTo' }];
+      // TEXT takes any answer; NUMBER and DATE need that answer kind; BOOLEAN is not an answer target.
+      const fits = type === 'TEXT' || (type === 'NUMBER' && kind === 'number') || (type === 'DATE' && kind === 'date');
+      if (fits) return [];
+      return [{ code: 'ATTRIBUTE_TYPE', message: `A ${kind} answer cannot be saved to the ${type.toLowerCase()} attribute "${key}"`, stepId: step.id, triggerId: null, field: 'saveTo' }];
+    });
   }
 }

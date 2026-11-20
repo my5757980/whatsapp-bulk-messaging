@@ -55,8 +55,8 @@ export const STEP_LABELS: Record<StepType, string> = {
   end: 'End',
 };
 
-/** Steps available so far; later stories add the rest. */
-export const PALETTE: StepType[] = ['message', 'buttons', 'handover', 'end'];
+/** Steps available so far; later stories add the rest (hand-over arrives with US3). */
+export const PALETTE: StepType[] = ['message', 'buttons', 'question', 'list', 'end'];
 
 /** A readable name for a branch of a step. */
 export function branchLabel(step: FlowStep, branch: string): string {
@@ -110,6 +110,22 @@ export function newStep(type: StepType, id: string, position: { x: number; y: nu
       return { id, type, position, text: '', mediaAssetId: null, fallbacks: {}, next: null };
     case 'buttons':
       return { id, type, position, text: '', buttons: [{ key: 'b1', title: 'Option 1', next: null }], timeoutMinutes: 60, onTimeout: null, onInvalid: null, fallbacks: {} };
+    case 'question':
+      return { id, type, position, text: '', answer: { kind: 'text' }, retries: 2, retryText: '', timeoutMinutes: 60, next: null, onInvalid: null, onTimeout: null, fallbacks: {} };
+    case 'list':
+      return {
+        id,
+        type,
+        position,
+        text: '',
+        buttonLabel: 'Choose',
+        sections: [{ rows: [{ key: 'r1', title: 'Option 1', next: null }] }],
+        sharedNext: null,
+        timeoutMinutes: 60,
+        onTimeout: null,
+        onInvalid: null,
+        fallbacks: {},
+      };
     case 'handover':
       return { id, type, position };
     case 'end':
@@ -161,9 +177,25 @@ export function removeStep(graph: FlowGraph, id: string): FlowGraph {
   return { ...graph, start: graph.start === id ? null : graph.start, steps };
 }
 
+/** Answer names in use, so new and copied steps get their own (publish refuses duplicates). */
+function answerNames(graph: FlowGraph): Set<string> {
+  return new Set(graph.steps.flatMap((s) => ('answerName' in s && s.answerName ? [s.answerName] : [])));
+}
+
+/** The first free answer name: `base`, then base_2, base_3, ... */
+export function uniqueAnswerName(graph: FlowGraph, base: string): string {
+  const used = answerNames(graph);
+  if (!used.has(base)) return base;
+  const stem = base.slice(0, 36);
+  for (let n = 2; ; n++) if (!used.has(`${stem}_${n}`)) return `${stem}_${n}`;
+}
+
 export function addStep(graph: FlowGraph, type: StepType, position: { x: number; y: number }): { graph: FlowGraph; id: string } {
   const id = nextStepId(graph, type);
-  return { id, graph: { ...graph, start: graph.start ?? id, steps: [...graph.steps, newStep(type, id, position)] } };
+  let step = newStep(type, id, position);
+  // A question needs an answer name to be published; start with a free one.
+  if (step.type === 'question') step = { ...step, answerName: uniqueAnswerName(graph, 'answer') };
+  return { id, graph: { ...graph, start: graph.start ?? id, steps: [...graph.steps, step] } };
 }
 
 /** A copy of a step (copy and paste, Duplicate): a new id, moved a little, links to missing steps dropped. */
@@ -172,6 +204,7 @@ export function pasteStep(graph: FlowGraph, source: FlowStep): { graph: FlowGrap
   const ids = new Set(graph.steps.map((s) => s.id));
   let copy = { ...structuredClone(source), id, position: { x: source.position.x + 40, y: source.position.y + 40 } } as FlowStep;
   for (const exit of branchesOf(copy)) if (exit.target !== null && !ids.has(exit.target)) copy = withBranch(copy, exit.branch, null);
+  if ('answerName' in copy && copy.answerName) copy = { ...copy, answerName: uniqueAnswerName(graph, copy.answerName) };
   return { id, graph: { ...graph, steps: [...graph.steps, copy] } };
 }
 

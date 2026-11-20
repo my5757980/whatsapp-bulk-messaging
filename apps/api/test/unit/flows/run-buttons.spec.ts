@@ -29,7 +29,7 @@ const graph = (onInvalid: string | null = null, onTimeout: string | null = null)
       { id: 'late', type: 'message', text: 'Write any time.', next: null },
     ],
   });
-const ctx = (g: FlowGraph): RunContext => ({ graph: g, render: (text) => text.replace('{first_name}', 'Sara') });
+const ctx = (g: FlowGraph): RunContext => ({ graph: g, render: (text) => text.replace('{first_name}', 'Sara'), answers: { today: '2026-11-20', normalizePhone: () => null } });
 const message = (replyId: string | null, text: string | null = 'x') => ({ kind: 'message' as const, text, replyId, contentType: replyId ? 'BUTTON_REPLY' : 'TEXT' });
 const sendsOf = (effects: FlowEffect[]) => effects.flatMap((e) => (e.kind === 'send' ? [e.message] : []));
 

@@ -5,7 +5,7 @@ import { MAX_STEPS_WITHOUT_INPUT, newSessionState, run, type RunContext } from '
 
 // 003 T008: the engine core - starting, message and end steps, the step cap, effects and tokens.
 const graph = (steps: unknown[], start = 'a'): FlowGraph => FlowGraphSchema.parse({ version: 1, start, steps });
-const ctx = (g: FlowGraph): RunContext => ({ graph: g, render: (text) => text });
+const ctx = (g: FlowGraph): RunContext => ({ graph: g, render: (text) => text, answers: { today: '2026-11-20', normalizePhone: () => null } });
 const kinds = (effects: FlowEffect[]) => effects.map((e) => e.kind);
 const sends = (effects: FlowEffect[]) => effects.filter((e) => e.kind === 'send').map((e) => (e.kind === 'send' ? e.message : null));
 
@@ -55,7 +55,7 @@ describe('flow engine core', () => {
 
   it('renders texts through the context', () => {
     const g = graph([{ id: 'a', type: 'message', text: 'Hi {first_name}', fallbacks: { first_name: 'there' } }]);
-    const result = run(newSessionState('s1'), { kind: 'start' }, { graph: g, render: (text, fallbacks) => text.replace('{first_name}', fallbacks.first_name ?? '') });
+    const result = run(newSessionState('s1'), { kind: 'start' }, { graph: g, render: (text, fallbacks) => text.replace('{first_name}', fallbacks.first_name ?? ''), answers: { today: '2026-11-20', normalizePhone: () => null } });
     expect(sends(result.effects)).toEqual([{ type: 'text', text: 'Hi there' }]);
   });
 

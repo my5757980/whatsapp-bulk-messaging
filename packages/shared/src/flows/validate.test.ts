@@ -65,4 +65,19 @@ describe('validateForPublish', () => {
     expect(codes(problems)).toEqual(['RESERVED_KEYWORD:kw']);
     expect(problems[0]!.message).toContain('stop');
   });
+
+  // 003 T035: answer names are unique, so {answer:name} always means one step.
+  it('reports an answer name used by two steps', () => {
+    const g = graph({
+      start: 'q1',
+      steps: [
+        { id: 'q1', type: 'question', text: 'Your name?', answerName: 'name', retryText: 'Please type your name.', next: 'q2' },
+        { id: 'q2', type: 'list', text: 'Which branch?', buttonLabel: 'Branches', sections: [{ rows: [{ key: 'dxb', title: 'Dubai' }] }], sharedNext: 'q3', answerName: 'name' },
+        { id: 'q3', type: 'buttons', text: 'Again?', buttons: [{ key: 'yes', title: 'Yes', next: null }], answerName: 'other' },
+      ],
+    });
+    const problems = validateForPublish(g).filter((p) => p.code !== 'BRANCH_NOT_CONNECTED');
+    expect(codes(problems)).toEqual(['DUPLICATE_ANSWER_NAME:q2']);
+    expect(problems[0]).toMatchObject({ field: 'answerName' });
+  });
 });

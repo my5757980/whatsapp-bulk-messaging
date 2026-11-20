@@ -6,6 +6,7 @@ import { MediaPicker, mediaLibraryKey, type MediaItem } from '@/components/inbox
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api-client';
+import { FallbacksEditor } from './fallbacks-editor';
 import { TEXTAREA_CLASS, VariablesHint } from './form-bits';
 import { GoesToSelect } from './goes-to-select';
 import type { StepPatch } from './step-form';
@@ -46,6 +47,7 @@ export function MessageForm({ step, graph, onPatch }: { step: StepOf<'message'>;
         )}
       </div>
       <GoesToSelect id="message-next" label="Then go to" graph={graph} fromId={step.id} value={step.next} onChange={(next) => onPatch({ next })} />
+      <FallbacksEditor texts={[step.text]} fallbacks={step.fallbacks} onChange={(fallbacks) => onPatch({ fallbacks }, 'fallbacks')} />
     </div>
   );
 }

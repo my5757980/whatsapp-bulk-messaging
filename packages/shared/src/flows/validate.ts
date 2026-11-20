@@ -124,12 +124,20 @@ export function validateForPublish(graph: FlowGraph, options: ValidateOptions = 
     return problems;
   }
   const reachable = reachableSteps(graph);
+  // Answer names are unique, so {answer:name} always means one step (T035).
+  const answerOwners = new Map<string, string>();
   for (const step of graph.steps) {
     if (!reachable.has(step.id)) {
       problems.push(stepProblem(step, 'UNREACHABLE_STEP', 'No branch leads to this step'));
       continue;
     }
     problems.push(...contentProblems(step));
+    const answerName = 'answerName' in step ? step.answerName : undefined;
+    if (answerName) {
+      const owner = answerOwners.get(answerName);
+      if (owner) problems.push(stepProblem(step, 'DUPLICATE_ANSWER_NAME', `The answer name "${answerName}" is already used by step "${owner}"`, 'answerName'));
+      else answerOwners.set(answerName, step.id);
+    }
     for (const exit of branchesOf(step)) {
       if (exit.required && exit.target === null) problems.push(stepProblem(step, 'BRANCH_NOT_CONNECTED', `Connect the "${exit.branch}" branch to a step`, exit.branch));
     }

@@ -8,7 +8,9 @@ import { STEP_LABELS, updateStep } from '@/lib/flows';
 import type { GraphChange } from '../use-graph-history';
 import { ButtonsForm } from './buttons-form';
 import { TEXTAREA_CLASS } from './form-bits';
+import { ListForm } from './list-form';
 import { MessageForm } from './message-form';
+import { QuestionForm } from './question-form';
 
 /** Changes fields of the selected step; `key` names the field so rapid edits are one undo step. */
 export type StepPatch<T extends FlowStep> = (values: Partial<T>, key?: string) => void;
@@ -52,6 +54,8 @@ export function StepForm({ step, graph, isStart, problems, onChange, onSetStart,
       </div>
       {step.type === 'message' && <MessageForm step={step} graph={graph} onPatch={patch} />}
       {step.type === 'buttons' && <ButtonsForm step={step} graph={graph} onPatch={patch} />}
+      {step.type === 'question' && <QuestionForm step={step} graph={graph} onPatch={patch} />}
+      {step.type === 'list' && <ListForm step={step} graph={graph} onPatch={patch} />}
       {step.type === 'handover' && (
         <div className="grid gap-1">
           <Label htmlFor="handover-note">Note for the team (optional)</Label>
@@ -66,7 +70,7 @@ export function StepForm({ step, graph, isStart, problems, onChange, onSetStart,
         </div>
       )}
       {step.type === 'end' && <p className="text-sm text-muted-foreground">The flow ends here. The chat stays open for your team.</p>}
-      {!['message', 'buttons', 'handover', 'end'].includes(step.type) && (
+      {!['message', 'buttons', 'question', 'list', 'handover', 'end'].includes(step.type) && (
         <p className="text-sm text-muted-foreground">This kind of step can be edited in a later version of the editor.</p>
       )}
       <div className="flex flex-wrap gap-2 border-t pt-3">

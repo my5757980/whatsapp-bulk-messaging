@@ -1,12 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { checkChatMedia, FlowGraphSchema, type FlowGraph } from '@wbm/shared';
+import { checkChatMedia, FlowGraphSchema, type AnswerContext, type FlowGraph } from '@wbm/shared';
 import { v7 as uuidv7 } from 'uuid';
+import { normalizePhone } from '../../../common/phone/phone.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
+import { QUEUES } from '../../../common/queue/queue.constants.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
+import { validateAttributeValue, type AttributeValue } from '../../contacts/attribute-validator.js';
 import { isLive } from '../../inbox/conversations/window.js';
 import { InboxPublisher } from '../../inbox/realtime/inbox-publisher.js';
+import { LiveChatSettingsService } from '../../inbox/settings/live-chat-settings.service.js';
 import { requestSendWorkerSync, sessionSendJob } from '../../sending/send-jobs.js';
+import { SettingsService } from '../../settings/settings.service.js';
+import { FLOW_TIMER_JOB, flowTimerJobId, todayIn, type FlowTimerData } from '../steps/flow-jobs.js';
 import type { FlowOutboundMessage, FlowSessionResult } from './effects.js';
 import { renderFlowText } from './render.js';
 import { newSessionState, run, type FlowInput, type RunResult, type SessionState } from './run.js';
@@ -49,6 +55,8 @@ interface AfterCommit {
   timers: Array<{ sessionId: string; token: number; purpose: 'delay' | 'timeout'; delayMs: number }>;
   apiCalls: Array<{ sessionId: string; token: number }>;
   touched: boolean;
+  /** A contact whose attributes a flow changed (live chat refreshes its profile). */
+  contactChanged: string | null;
 }
 
 type SessionRow = Prisma.FlowSessionGetPayload<object>;
@@ -68,6 +76,8 @@ export class FlowSessionService {
     private readonly prisma: PrismaService,
     private readonly queues: QueueRegistry,
     private readonly publisher: InboxPublisher,
+    private readonly settings: SettingsService,
+    private readonly liveChat: LiveChatSettingsService,
   ) {}
 
   /** Starts a flow for a chat; refuses when a session is already running unless asked to replace it. */
@@ -159,6 +169,21 @@ export class FlowSessionService {
     });
   }
 
+  /**
+   * Ends a session idle since before `cutoff` as EXPIRED (FR-032); false when it moved on or ended
+   * meanwhile. Called by the expiry sweep.
+   */
+  async expire(sessionId: string, cutoff: Date): Promise<boolean> {
+    const session = await this.prisma.flowSession.findUnique({ where: { id: sessionId }, select: { conversationId: true } });
+    if (!session) return false;
+    return this.inConversation(session.conversationId, async (tx) => {
+      const row = await tx.flowSession.findUnique({ where: { id: sessionId } });
+      if (!row || row.status !== 'RUNNING' || row.lastActivityAt >= cutoff) return false;
+      await this.finish(tx, row, 'EXPIRED');
+      return true;
+    });
+  }
+
   /** The session currently answering a chat, for the live chat banner. */
   async running(conversationId: string) {
     const row = await this.prisma.flowSession.findFirst({
@@ -180,7 +205,7 @@ export class FlowSessionService {
   // ---------- internals ----------
 
   private async inConversation<T>(conversationId: string, work: (tx: Tx, after: AfterCommit) => Promise<T>): Promise<T> {
-    const after: AfterCommit = { numberId: '', conversationId, sendItemIds: [], timers: [], apiCalls: [], touched: false };
+    const after: AfterCommit = { numberId: '', conversationId, sendItemIds: [], timers: [], apiCalls: [], touched: false, contactChanged: null };
     const result = await this.prisma.$transaction(
       async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`flow-conversation:${conversationId}`}::text))`;
@@ -234,9 +259,20 @@ export class FlowSessionService {
     };
     const result: RunResult = run(state, input, {
       graph: flow.graph,
-      render: (text, fallbacks, answers) => renderFlowText(text, contact, fallbacks, answers),
+      render: (text, fallbacks, answers, saved) =>
+        renderFlowText(text, saved ? { ...contact, attributes: { ...contact.attributes, ...saved } } : contact, fallbacks, answers),
+      answers: input.kind === 'message' ? await this.answerContext() : { today: todayIn('UTC'), normalizePhone: () => null },
     });
     await this.apply(tx, row, flow, result, conversation.lastCustomerMessageAt, after);
+  }
+
+  /** Only customer messages are checked as answers, so only they need the company settings. */
+  private async answerContext(): Promise<AnswerContext> {
+    const [company, liveChat] = await Promise.all([this.settings.get(), this.liveChat.get()]);
+    return {
+      today: todayIn(liveChat.timezone),
+      normalizePhone: (input) => normalizePhone(input, company.defaultCountryCode)?.e164 ?? null,
+    };
   }
 
   private async apply(tx: Tx, row: SessionRow, flow: FlowMeta, result: RunResult, lastCustomerMessageAt: Date | null, after: AfterCommit): Promise<void> {
@@ -287,10 +323,12 @@ export class FlowSessionService {
           ended = effect.reason ? { result: effect.result, reason: effect.reason } : { result: effect.result };
           break;
         case 'setAttributes':
+          await this.saveAttributes(tx, row, flow, effect.values, after);
+          break;
         case 'tags':
         case 'handover':
         case 'jump':
-          // Applied from their stories (US2–US4); the engine does not emit them before then.
+          // Applied from their stories (US3, US4); the engine does not emit them before then.
           this.logger.warn({ sessionId: row.id, effect: effect.kind }, 'Flow effect not handled yet');
           break;
       }
@@ -337,6 +375,54 @@ export class FlowSessionService {
     await tx.conversationEvent.create({
       data: { conversationId: row.conversationId, type: 'FLOW_ENDED', actorType: 'FLOW', data: { flowId: row.flowId, flowName, result, test: row.isTest } },
     });
+  }
+
+  /**
+   * Saves answers to contact attributes with the 001 type rules (FR-010) and records a journey entry
+   * by the flow on each of the contact's chats, as live chat edits do (002 FR-033). A value that no
+   * longer fits (attribute deleted or retyped after publishing) is skipped with a warning.
+   */
+  private async saveAttributes(tx: Tx, row: SessionRow, flow: FlowMeta, values: Record<string, string | number | null>, after: AfterCommit): Promise<void> {
+    if (!row.contactId) return;
+    const keys = Object.keys(values);
+    const [definitions, contact] = await Promise.all([
+      tx.attributeDefinition.findMany({ where: { key: { in: keys } }, select: { key: true, type: true } }),
+      tx.contact.findUnique({ where: { id: row.contactId }, select: { attributes: true } }),
+    ]);
+    if (!contact) return;
+    const typeOf = new Map(definitions.map((d) => [d.key, d.type]));
+    const attributes = { ...((contact.attributes ?? {}) as Record<string, unknown>) };
+    const changes: Array<{ key: string; from: unknown; to: AttributeValue | null }> = [];
+    for (const [key, raw] of Object.entries(values)) {
+      const type = typeOf.get(key);
+      const checked = type && raw !== null ? validateAttributeValue(type, raw) : null;
+      if (!type || (checked && !checked.ok)) {
+        this.logger.warn({ sessionId: row.id, attribute: key }, 'Flow answer does not fit the contact attribute; not saved');
+        continue;
+      }
+      const to = checked?.ok ? checked.value : null;
+      const from = attributes[key] ?? null;
+      if (JSON.stringify(from) === JSON.stringify(to)) continue;
+      if (to === null) delete attributes[key];
+      else attributes[key] = to;
+      changes.push({ key, from, to });
+    }
+    if (!changes.length) return;
+    await tx.contact.update({ where: { id: row.contactId }, data: { attributes: attributes as Prisma.InputJsonValue } });
+    const chats = await tx.conversation.findMany({ where: { contactId: row.contactId }, select: { id: true } });
+    const occurredAt = new Date();
+    await tx.conversationEvent.createMany({
+      data: changes.flatMap((change) =>
+        chats.map((chat) => ({
+          conversationId: chat.id,
+          type: 'ATTRIBUTE_CHANGED' as const,
+          actorType: 'FLOW' as const,
+          data: { key: change.key, from: change.from, to: change.to, flowId: flow.id, flowName: flow.name } as Prisma.InputJsonValue,
+          occurredAt,
+        })),
+      ),
+    });
+    after.contactChanged = row.contactId;
   }
 
   /** A flow message as a 002 chat item (origin AUTOMATIC, FR-030); returns its id. */
@@ -401,6 +487,7 @@ export class FlowSessionService {
         for (const itemId of after.sendItemIds) await this.publisher.itemCreated(itemId);
       }
       if (after.touched) await this.publisher.conversation(after.conversationId);
+      if (after.contactChanged) await this.publisher.contactUpdated(after.contactChanged);
       for (const timer of after.timers) await this.queueTimer(timer);
       for (const call of after.apiCalls) await this.queueApiCall(call);
     } catch (error) {
@@ -408,9 +495,12 @@ export class FlowSessionService {
     }
   }
 
-  /** Delayed `flow-timer` job (research R10); implemented with US2. */
+  /** Delayed `flow-timer` job carrying the wait token (research R10); a newer wait makes it stale. */
   protected async queueTimer(timer: AfterCommit['timers'][number]): Promise<void> {
-    this.logger.warn({ sessionId: timer.sessionId }, 'Flow timers arrive with US2');
+    const data: FlowTimerData = { sessionId: timer.sessionId, token: timer.token };
+    await this.queues
+      .get(QUEUES.FLOWS)
+      .add(FLOW_TIMER_JOB, data, { delay: timer.delayMs, jobId: flowTimerJobId(data), removeOnComplete: true, removeOnFail: 100 });
   }
 
   /** `flow-api` job (research R11); implemented with US5. */
