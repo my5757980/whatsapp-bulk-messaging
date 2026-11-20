@@ -619,8 +619,8 @@
   - seed 10,000 chats and one chat with 5,000 messages
   - measure list and chat-open times (SC-006) and webhook→SSE latency p95 (SC-001)
   - add root scripts `perf:inbox-seed` and `perf:inbox`
-- [ ] T102 [P] Add a CI smoke step in .github/workflows/ci.yml: start the standalone web image and the api in the docker-images job, and assert that `GET /api/inbox/events` delivers a `: ping` through the proxy within 20 s
-- [ ] T103 [P] Docs in README.md and specs/002-team-inbox/quickstart.md:
+- [X] T102 [P] Add a CI smoke step in .github/workflows/ci.yml: start the standalone web image and the api in the docker-images job, and assert that `GET /api/inbox/events` delivers a `: ping` through the proxy within 20 s
+- [X] T103 [P] Docs in README.md and specs/002-team-inbox/quickstart.md:
   - a Live chat section in README.md (UI terms, settings, push setup)
   - update specs/002-team-inbox/quickstart.md if steps changed
   - add an inbox section to specs/001-whatsapp-bulk-messaging/checklists/release.md

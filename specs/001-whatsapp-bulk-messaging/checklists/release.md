@@ -102,6 +102,17 @@ After fixes 5–7, the affected suites were re-run and pass:
   instead of extra lookups for the metric label and the cost check. This would raise webhook
   throughput by roughly 20%.
 
+## Live chat (feature 002)
+
+Feature 002 has its own checklist: [specs/002-team-inbox/checklists/release.md](../../002-team-inbox/checklists/release.md).
+Before releasing both features together, also check:
+
+- [ ] The 002 migrations are applied (`prisma migrate deploy` from the migration image).
+- [ ] The reverse proxy in front of the web app does not buffer `/api/inbox/events` and allows
+      long-lived connections (CI checks this for the standalone image without a proxy).
+- [ ] Browser push: the three `WEB_PUSH_*` variables are set together (or all empty to keep push off).
+- [ ] Prometheus has the new `WbmInboundMediaFailing` alert from `ops/alerts.yml`.
+
 ## 4. Before release
 
 - [x] Run the full integration project (29 files, 127 tests, 2026-11-19).
