@@ -36,6 +36,7 @@ export type StartOutcome = { started: true; sessionId: string } | { started: fal
 interface FlowMeta {
   id: string;
   name: string;
+  status: 'DRAFT' | 'PUBLISHED' | 'UNPUBLISHED';
   graph: FlowGraph;
   versionId: string | null;
 }
@@ -120,9 +121,10 @@ export class FlowSessionService {
       if (!row) return false;
       if (options.memberStartedOnly && row.startedBy !== 'MEMBER') return false;
       const flow = await this.loadFlow(row.flowId, row.flowVersionId);
-      if (!flow) {
+      // An unpublished (or deleted) flow ends its sessions at their next step (FR-004); tests run the draft.
+      if (!flow || (!row.isTest && flow.status !== 'PUBLISHED')) {
         await this.finish(tx, row, 'FLOW_UNPUBLISHED');
-        return false;
+        return true;
       }
       await this.step(tx, row, flow, this.stateOf(row), input, after);
       return true;
@@ -137,9 +139,14 @@ export class FlowSessionService {
       const row = await tx.flowSession.findUnique({ where: { id: sessionId } });
       if (!row || row.status !== 'RUNNING' || row.waitToken !== input.token) return;
       const flow = await this.loadFlow(row.flowId, row.flowVersionId);
-      if (!flow) return this.finish(tx, row, 'FLOW_UNPUBLISHED');
+      if (!flow || (!row.isTest && flow.status !== 'PUBLISHED')) return this.finish(tx, row, 'FLOW_UNPUBLISHED');
       await this.step(tx, row, flow, this.stateOf(row), input, after);
     });
+  }
+
+  /** The chat's running session, if any (id, flow and how it started). */
+  async runningSession(conversationId: string): Promise<{ id: string; flowId: string; startedBy: 'TRIGGER' | 'MEMBER' | 'JUMP' } | null> {
+    return this.prisma.flowSession.findFirst({ where: { conversationId, status: 'RUNNING' }, select: { id: true, flowId: true, startedBy: true } });
   }
 
   /** Ends the chat's running session (member took over, opt-out, block…); true when one ended. */
@@ -199,9 +206,9 @@ export class FlowSessionService {
   }
 
   private async loadFlow(flowId: string, versionId: string | null): Promise<FlowMeta | null> {
-    const flow = await this.prisma.flow.findUnique({ where: { id: flowId }, select: { id: true, name: true, draft: true, deletedAt: true } });
+    const flow = await this.prisma.flow.findUnique({ where: { id: flowId }, select: { id: true, name: true, status: true, draft: true, deletedAt: true } });
     if (!flow || flow.deletedAt) return null;
-    if (versionId === null) return { id: flow.id, name: flow.name, versionId: null, graph: FlowGraphSchema.parse(flow.draft) };
+    if (versionId === null) return { id: flow.id, name: flow.name, status: flow.status, versionId: null, graph: FlowGraphSchema.parse(flow.draft) };
     let graph = this.versionGraphs.get(versionId);
     if (!graph) {
       const version = await this.prisma.flowVersion.findUnique({ where: { id: versionId }, select: { graph: true } });
@@ -210,7 +217,7 @@ export class FlowSessionService {
       if (this.versionGraphs.size > 500) this.versionGraphs.clear();
       this.versionGraphs.set(versionId, graph);
     }
-    return { id: flow.id, name: flow.name, versionId, graph };
+    return { id: flow.id, name: flow.name, status: flow.status, versionId, graph };
   }
 
   /** Runs the engine for one input and applies its effects inside the transaction. */

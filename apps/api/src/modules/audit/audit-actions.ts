@@ -36,6 +36,16 @@ export const AUDIT_ACTIONS = [
   'media.removed',
   'livechat.settings_updated',
   'agent_rules.updated',
+  // Chatbot flows (feature 003, FR-039). Ids and names only; never message texts or secret values.
+  'flow.created',
+  'flow.updated',
+  'flow.duplicated',
+  'flow.deleted',
+  'flow.published',
+  'flow.unpublished',
+  'flow.restored',
+  'flow.test_numbers_updated',
+  'flow.secret_changed',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

@@ -15,6 +15,8 @@ export class AppError extends Error {
     readonly code: string,
     message: string,
     readonly details?: ErrorDetail[],
+    /** Extra top-level fields a contract adds to its error body (e.g. 003 PUBLISH_BLOCKED `problems`). */
+    readonly extra?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'AppError';
