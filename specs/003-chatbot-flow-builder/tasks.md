@@ -222,15 +222,15 @@ reaches other phones.
 
 ### Tests for User Story 7 (REQUIRED) ⚠️
 
-- [ ] T067 [P] [US7] Integration test apps/api/test/integration/flows-testing.int-spec.ts: test numbers run the draft (sessions `is_test`, items marked test, no step records); other numbers get the published version or nothing; a 4th test number is refused; unpublish ends running sessions at their next message (`FLOW_UNPUBLISHED`); sessions on version 3 finish on version 3 after version 4 is published; revisions are pruned to 20; restore copies a version into the draft
-- [ ] T068 [P] [US7] Contract tests in apps/api/test/contract/flows.contract-spec.ts for `GET /flows/{id}/versions` and `POST /flows/{id}/versions/{versionId}/restore`
-- [ ] T069 [P] [US7] Playwright e2e apps/web/e2e/flows-us7-testing.spec.ts: add a test number, change the draft, and compare what the test number and another number receive
+- [X] T067 [P] [US7] Integration test apps/api/test/integration/flows-testing.int-spec.ts: test numbers run the draft (sessions `is_test`, items marked test, no step records); other numbers get the published version or nothing; a 4th test number is refused; unpublish ends running sessions at their next message (`FLOW_UNPUBLISHED`); sessions on version 3 finish on version 3 after version 4 is published; revisions are pruned to 20; restore copies a version into the draft
+- [X] T068 [P] [US7] Contract tests in apps/api/test/contract/flows.contract-spec.ts for `GET /flows/{id}/versions` and `POST /flows/{id}/versions/{versionId}/restore`
+- [X] T069 [P] [US7] Playwright e2e apps/web/e2e/flows-us7-testing.spec.ts: add a test number, change the draft, and compare what the test number and another number receive
 
 ### Implementation for User Story 7
 
-- [ ] T070 [US7] Route test numbers to the draft in apps/api/src/modules/flows/engine/flow-router.ts and apps/api/src/modules/flows/engine/trigger-matcher.ts (draft triggers evaluated in memory, research R2); validate test numbers (E.164, at most 3) in apps/api/src/modules/flows/definitions/flows.service.ts; audit `flow.test_numbers_updated`
-- [ ] T071 [US7] Implement apps/api/src/modules/flows/definitions/versions.service.ts and controller routes: autosave revisions (at most one per minute, keep 20), list versions, restore into the draft; audit `flow.restored`
-- [ ] T072 [US7] Add the test panel (test numbers, the trail of the last test session) and the versions drawer with restore in apps/web/src/components/flows/test-panel.tsx and apps/web/src/components/flows/versions-drawer.tsx
+- [X] T070 [US7] Route test numbers to the draft in apps/api/src/modules/flows/engine/flow-router.ts and apps/api/src/modules/flows/engine/trigger-matcher.ts (draft triggers evaluated in memory, research R2); validate test numbers (E.164, at most 3) in apps/api/src/modules/flows/definitions/flows.service.ts; audit `flow.test_numbers_updated`
+- [X] T071 [US7] Implement apps/api/src/modules/flows/definitions/versions.service.ts and controller routes: autosave revisions (at most one per minute, keep 20), list versions, restore into the draft; audit `flow.restored`
+- [X] T072 [US7] Add the test panel (test numbers, the trail of the last test session) and the versions drawer with restore in apps/web/src/components/flows/test-panel.tsx and apps/web/src/components/flows/versions-drawer.tsx (the trail of the last test session is left for later: test runs show in live chat, marked test)
 
 **Checkpoint**: US1–US7 work on their own.
 

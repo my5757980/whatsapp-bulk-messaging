@@ -1,6 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { starterByKey, type StarterAttribute } from '@wbm/shared';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
@@ -12,12 +13,15 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/native-select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from '@/components/ui/toaster';
-import { api } from '@/lib/api-client';
+import { api, ApiError } from '@/lib/api-client';
 import { errorMessage, toastError } from '@/lib/errors';
 import { flowKeys, type FlowDetail, type FlowSummary } from '@/lib/flows';
 import { formatDateTime } from '@/lib/format';
+import { queryKeys } from '@/lib/query';
+import type { AttributeDefinition } from '@/lib/types';
 
 /** Chatbot flows list (003 T026): status, published version, triggers and the last 7 days. */
 export default function FlowsPage() {
@@ -144,23 +148,59 @@ function FlowsList() {
   );
 }
 
+interface StarterSummary {
+  key: string;
+  name: string;
+  description: string;
+  stepCount: number;
+  attributes: string[];
+}
+
+/** New flow, empty or from a starter written by us (003 T081, FR-037), with the offer to create missing attributes. */
 function NewFlowDialog() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
+  const [starterKey, setStarterKey] = useState('');
+  const [created, setCreated] = useState<{ id: string; missing: StarterAttribute[] } | null>(null);
+  const starters = useQuery({ queryKey: ['flow-starters'], queryFn: () => api<StarterSummary[]>('/flow-starters'), enabled: open });
+  const attributes = useQuery({ queryKey: queryKeys.attributes, queryFn: () => api<AttributeDefinition[]>('/attributes'), enabled: open && Boolean(starterKey) });
+  const chosen = starters.data?.find((s) => s.key === starterKey);
+
   const create = useMutation({
-    mutationFn: (value: string) => api<FlowDetail>('/flows', { method: 'POST', json: { name: value } }),
+    mutationFn: () => api<FlowDetail>('/flows', { method: 'POST', json: { name: name.trim(), ...(starterKey ? { starterKey } : {}) } }),
     onSuccess: (flow) => {
       void queryClient.invalidateQueries({ queryKey: flowKeys.list });
-      router.push(`/flows/${flow.id}`);
+      const existing = new Set((attributes.data ?? []).map((a) => a.key));
+      const missing = (starterByKey(starterKey)?.attributes ?? []).filter((a) => !existing.has(a.key));
+      if (missing.length) setCreated({ id: flow.id, missing });
+      else router.push(`/flows/${flow.id}`);
+    },
+    onError: toastError,
+  });
+  const createAttributes = useMutation({
+    mutationFn: async (missing: StarterAttribute[]) => {
+      for (const a of missing) {
+        try {
+          await api('/attributes', { method: 'POST', json: { key: a.key, label: a.label, type: a.type } });
+        } catch (error) {
+          // Someone created it meanwhile: that is fine.
+          if (!(error instanceof ApiError && error.status === 409)) throw error;
+        }
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.attributes });
+      toast.success('Attributes created');
+      if (created) router.push(`/flows/${created.id}`);
     },
     onError: toastError,
   });
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (name.trim()) create.mutate(name.trim());
+    if (name.trim()) create.mutate();
   }
 
   return (
@@ -169,21 +209,57 @@ function NewFlowDialog() {
         <Button>New flow</Button>
       </DialogTrigger>
       <DialogContent>
-        <form onSubmit={submit} className="grid gap-4">
-          <DialogHeader>
-            <DialogTitle>New flow</DialogTitle>
-            <DialogDescription>Give it a name your team will recognise. You can change it later.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-1">
-            <Label htmlFor="flow-name">Flow name</Label>
-            <Input id="flow-name" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} autoFocus />
+        {created ? (
+          <div className="grid gap-4">
+            <DialogHeader>
+              <DialogTitle>Create the attributes this starter uses?</DialogTitle>
+              <DialogDescription>The starter saves answers to these contact attributes, which do not exist yet. Publishing needs them.</DialogDescription>
+            </DialogHeader>
+            <ul className="grid gap-1 text-sm" data-testid="missing-attributes">
+              {created.missing.map((a) => (
+                <li key={a.key}>
+                  {a.label} <span className="text-muted-foreground">({a.key}, {a.type.toLowerCase()})</span>
+                </li>
+              ))}
+            </ul>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => router.push(`/flows/${created.id}`)}>
+                Open without them
+              </Button>
+              <Button onClick={() => createAttributes.mutate(created.missing)} disabled={createAttributes.isPending}>
+                {createAttributes.isPending ? 'Creating…' : 'Create attributes and open'}
+              </Button>
+            </DialogFooter>
           </div>
-          <DialogFooter>
-            <Button type="submit" disabled={!name.trim() || create.isPending}>
-              {create.isPending ? 'Creating…' : 'Create flow'}
-            </Button>
-          </DialogFooter>
-        </form>
+        ) : (
+          <form onSubmit={submit} className="grid gap-4">
+            <DialogHeader>
+              <DialogTitle>New flow</DialogTitle>
+              <DialogDescription>Give it a name your team will recognise. You can change it later.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-1">
+              <Label htmlFor="flow-name">Flow name</Label>
+              <Input id="flow-name" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} autoFocus />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="flow-starter">Start from</Label>
+              <NativeSelect id="flow-starter" value={starterKey} onChange={(e) => setStarterKey(e.target.value)}>
+                <option value="">An empty flow</option>
+                {starters.data?.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.name} ({s.stepCount} steps)
+                  </option>
+                ))}
+              </NativeSelect>
+              {chosen && <p className="text-xs text-muted-foreground">{chosen.description}</p>}
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={!name.trim() || create.isPending || (Boolean(starterKey) && attributes.isLoading)}>
+                {create.isPending ? 'Creating…' : 'Create flow'}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );

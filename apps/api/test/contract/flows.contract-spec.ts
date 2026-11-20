@@ -126,4 +126,14 @@ describe('Chatbot flows API contract', () => {
     expect(csv.headers['content-type']).toContain('text/csv');
     expect(csv.text.split(/\r?\n/)[0]).toBe('name,phone,result,ended_at');
   });
+
+  it('US9: starter flows', async () => {
+    const starters = await call('get', '/flow-starters');
+    await check('get', '/flow-starters', starters, 200);
+    expect((starters.body as Array<{ key: string }>).map((s) => s.key)).toContain('lead_capture');
+    const created = await call('post', '/flows', { name: `Contract starter ${randomUUID().slice(0, 6)}`, starterKey: 'lead_capture' });
+    await check('post', '/flows', created, 201);
+    expect(created.body.graph.steps.length).toBeGreaterThan(2);
+    await check('post', '/flows', await call('post', '/flows', { name: `Contract starter ${randomUUID().slice(0, 6)}`, starterKey: 'nope' }), 422);
+  });
 });

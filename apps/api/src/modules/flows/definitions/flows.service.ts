@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { emptyGraph, FlowGraphSchema, validateForPublish, type FlowGraph } from '@wbm/shared';
+import { emptyGraph, FlowGraphSchema, starterByKey, validateForPublish, type FlowGraph } from '@wbm/shared';
 import { z } from 'zod';
 import { AppError } from '../../../common/errors/app-error.js';
 import { normalizePhone } from '../../../common/phone/phone.js';
@@ -71,12 +71,14 @@ export class FlowsService {
   }
 
   async create(input: CreateFlowInput, actor: AuditActor) {
-    // Starter flows arrive with US9.
-    if (input.starterKey) throw AppError.validation('Unknown starter flow', [{ field: 'starterKey', issue: 'is not a starter flow' }]);
+    // A starter flow (FR-037) becomes the draft; nothing is published until the member publishes it.
+    const starter = input.starterKey ? starterByKey(input.starterKey) : undefined;
+    if (input.starterKey && !starter) throw AppError.validation('Unknown starter flow', [{ field: 'starterKey', issue: 'is not a starter flow' }]);
+    const draft = starter ? starter.graph : emptyGraph();
     const row = await this.withName(() =>
-      this.prisma.flow.create({ data: { name: input.name, draft: emptyGraph() as Prisma.InputJsonValue, createdById: actor.userId ?? null }, include: FLOW_INCLUDE }),
+      this.prisma.flow.create({ data: { name: input.name, draft: draft as Prisma.InputJsonValue, createdById: actor.userId ?? null }, include: FLOW_INCLUDE }),
     );
-    await this.audit.record(actor, 'flow.created', { type: 'flow', id: row.id }, { name: row.name });
+    await this.audit.record(actor, 'flow.created', { type: 'flow', id: row.id }, { name: row.name, ...(starter ? { starter: starter.key } : {}) });
     return toFlowDetail(row);
   }
 

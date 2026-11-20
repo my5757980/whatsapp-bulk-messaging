@@ -10,6 +10,7 @@ import { ReservedKeywords } from './definitions/reserved-keywords.js';
 import { FlowSecretsController } from './definitions/secrets.controller.js';
 import { FlowSecretsService } from './definitions/secrets.service.js';
 import { FlowSecretsVault } from './definitions/secrets-vault.js';
+import { FlowStartersController } from './definitions/starters.controller.js';
 import { FlowVersionsController } from './definitions/versions.controller.js';
 import { FlowVersionsService } from './definitions/versions.service.js';
 import { FlowRouter } from './engine/flow-router.js';
@@ -33,6 +34,6 @@ export class FlowsDomainModule {}
 @Module({
   imports: [FlowsDomainModule, InboxApiModule],
   providers: [FlowsService, PublishService, ReservedKeywords, FlowSecretsService, ApiTestService, FlowVersionsService, FlowAnalyticsService],
-  controllers: [FlowsController, FlowStartController, FlowSecretsController, FlowVersionsController, FlowAnalyticsController],
+  controllers: [FlowsController, FlowStartController, FlowSecretsController, FlowVersionsController, FlowAnalyticsController, FlowStartersController],
 })
 export class FlowsApiModule {}
