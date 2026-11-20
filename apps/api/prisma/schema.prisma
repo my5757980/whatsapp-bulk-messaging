@@ -50,6 +50,7 @@ enum ConsentSource {
   API
   KEYWORD
   MANUAL
+  AI_AGENT
 }
 
 enum AttributeType {
@@ -176,6 +177,8 @@ enum NotificationType {
   INBOX_REQUESTING
   INBOX_TRANSFERRED
   INBOX_MENTION
+  AI_USAGE
+  AI_FAILING
 }
 
 // ---------- Live chat enums (feature 002) ----------
@@ -242,6 +245,8 @@ enum JourneyEventType {
   FIRST_MESSAGE_TAG_CHANGED
   FLOW_STARTED
   FLOW_ENDED
+  AI_STARTED
+  AI_ENDED
 }
 
 enum JourneyActor {
@@ -249,6 +254,7 @@ enum JourneyActor {
   CUSTOMER
   SYSTEM
   FLOW
+  AI_AGENT
 }
 
 enum AgentRuleKind {
@@ -286,29 +292,39 @@ model User {
   consentEvents   ConsentEvent[]
 
   // Live chat (feature 002)
-  conversationsOwned     Conversation[]          @relation("ConversationOwner")
-  chatMessagesSent       ChatMessage[]           @relation("ChatMessageAuthor")
-  openingsFirstResponded ConversationOpening[]   @relation("OpeningFirstResponder")
-  openingsIntervened     ConversationOpening[]   @relation("OpeningIntervenedBy")
-  openingsResolved       ConversationOpening[]   @relation("OpeningResolvedBy")
-  journeyEvents          ConversationEvent[]
-  chatReadMarkers        ChatReadMarker[]
-  liveChatSettingsEdits  LiveChatSettings[]
-  agentRules             AgentRule[]             @relation("AgentRuleUser")
-  agentRulesCreated      AgentRule[]             @relation("AgentRuleCreator")
-  cannedMessages         CannedMessage[]
-  cannedFavorites        CannedMessageFavorite[]
-  notificationPreference NotificationPreference?
-  pushDevices            PushDevice[]
-  contactsBlocked        Contact[]               @relation("ContactBlockedBy")
-  messagesSent           Message[]               @relation("MessageSentBy")
-  mediaUploaded          MediaAsset[]            @relation("MediaUploadedBy")
-  flowsCreated           Flow[]                  @relation("FlowCreatedBy")
-  flowDraftsUpdated      Flow[]                  @relation("FlowDraftUpdatedBy")
-  flowVersionsCreated    FlowVersion[]           @relation("FlowVersionCreatedBy")
-  flowSessionsStarted    FlowSession[]           @relation("FlowSessionStartedBy")
-  flowSecretsCreated     FlowSecret[]            @relation("FlowSecretCreatedBy")
-  flowSecretsUpdated     FlowSecret[]            @relation("FlowSecretUpdatedBy")
+  conversationsOwned        Conversation[]          @relation("ConversationOwner")
+  chatMessagesSent          ChatMessage[]           @relation("ChatMessageAuthor")
+  openingsFirstResponded    ConversationOpening[]   @relation("OpeningFirstResponder")
+  openingsIntervened        ConversationOpening[]   @relation("OpeningIntervenedBy")
+  openingsResolved          ConversationOpening[]   @relation("OpeningResolvedBy")
+  journeyEvents             ConversationEvent[]
+  chatReadMarkers           ChatReadMarker[]
+  liveChatSettingsEdits     LiveChatSettings[]
+  agentRules                AgentRule[]             @relation("AgentRuleUser")
+  agentRulesCreated         AgentRule[]             @relation("AgentRuleCreator")
+  cannedMessages            CannedMessage[]
+  cannedFavorites           CannedMessageFavorite[]
+  notificationPreference    NotificationPreference?
+  pushDevices               PushDevice[]
+  contactsBlocked           Contact[]               @relation("ContactBlockedBy")
+  messagesSent              Message[]               @relation("MessageSentBy")
+  mediaUploaded             MediaAsset[]            @relation("MediaUploadedBy")
+  flowsCreated              Flow[]                  @relation("FlowCreatedBy")
+  flowDraftsUpdated         Flow[]                  @relation("FlowDraftUpdatedBy")
+  flowVersionsCreated       FlowVersion[]           @relation("FlowVersionCreatedBy")
+  flowSessionsStarted       FlowSession[]           @relation("FlowSessionStartedBy")
+  flowSecretsCreated        FlowSecret[]            @relation("FlowSecretCreatedBy")
+  flowSecretsUpdated        FlowSecret[]            @relation("FlowSecretUpdatedBy")
+  aiAgentsCreated           AiAgent[]               @relation("AiAgentCreatedBy")
+  aiAgentDraftsUpdated      AiAgent[]               @relation("AiAgentDraftUpdatedBy")
+  aiAgentVersionsCreated    AiAgentVersion[]        @relation("AiAgentVersionCreatedBy")
+  aiAgentNumbersAssigned    AiAgentNumber[]         @relation("AiAgentNumberAssignedBy")
+  aiAgentSecretsCreated     AiAgentSecret[]         @relation("AiAgentSecretCreatedBy")
+  aiAgentSecretsUpdated     AiAgentSecret[]         @relation("AiAgentSecretUpdatedBy")
+  aiKnowledgeSourcesCreated AiKnowledgeSource[]     @relation("AiKnowledgeSourceCreatedBy")
+  aiUnansweredResolved      AiUnansweredQuestion[]  @relation("AiUnansweredResolvedBy")
+  assistantRequests         AssistantRequest[]      @relation("AssistantRequestUser")
+  assistantActions          AssistantAction[]       @relation("AssistantActionUser")
 
   @@map("users")
 }
@@ -369,6 +385,11 @@ model Settings {
   defaultTimezone    String   @default("UTC") @map("default_timezone")
   optOutKeywords     String[] @default(["STOP", "UNSUBSCRIBE"]) @map("opt_out_keywords")
   optInKeywords      String[] @default(["START"]) @map("opt_in_keywords")
+  /// AI agent (feature 004): monthly limits, USD prices per million tokens, and the limit message.
+  aiReplyLimit       Int      @default(1000) @map("ai_reply_limit")
+  aiAssistantLimit   Int      @default(300) @map("ai_assistant_limit")
+  aiPrices           Json     @default("{\"model\":\"claude-opus-5-5\",\"input\":4,\"output\":20,\"cacheRead\":0.2,\"cacheWrite\":5}") @map("ai_prices")
+  aiLimitMessage     String?  @map("ai_limit_message")
   updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("settings")
@@ -397,11 +418,13 @@ model WhatsAppNumber {
   createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
-  campaigns     Campaign[]
-  messages      Message[]
-  conversations Conversation[]
-  flowNumbers   FlowNumber[]
-  flowSessions  FlowSession[]
+  campaigns       Campaign[]
+  messages        Message[]
+  conversations   Conversation[]
+  flowNumbers     FlowNumber[]
+  flowSessions    FlowSession[]
+  aiAgentNumber   AiAgentNumber?
+  aiConversations AiConversation[]
 
   @@map("whatsapp_numbers")
 }
@@ -429,11 +452,12 @@ model Contact {
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz
 
-  tags          ContactTag[]
-  consentEvents ConsentEvent[]
-  messages      Message[]
-  conversations Conversation[]
-  flowSessions  FlowSession[]
+  tags            ContactTag[]
+  consentEvents   ConsentEvent[]
+  messages        Message[]
+  conversations   Conversation[]
+  flowSessions    FlowSession[]
+  aiConversations AiConversation[]
 
   @@index([consentStatus])
   @@index([attributes], type: Gin)
@@ -801,11 +825,12 @@ model Conversation {
   createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz
   updatedAt             DateTime          @updatedAt @map("updated_at") @db.Timestamptz
 
-  items        ChatMessage[]
-  openings     ConversationOpening[]
-  events       ConversationEvent[]
-  readMarkers  ChatReadMarker[]
-  flowSessions FlowSession[]
+  items           ChatMessage[]
+  openings        ConversationOpening[]
+  events          ConversationEvent[]
+  readMarkers     ChatReadMarker[]
+  flowSessions    FlowSession[]
+  aiConversations AiConversation[]
 
   /// NULL contact ids (after erasure) stay distinct.
   @@unique([contactId, numberId])
@@ -850,6 +875,7 @@ model ChatMessage {
   failedAt       DateTime?       @map("failed_at") @db.Timestamptz
   createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+  aiReplies      AiReply[]
 
   @@index([conversationId, occurredAt, id])
   @@map("chat_messages")
@@ -1043,6 +1069,7 @@ enum FlowSessionStatus {
 
 enum FlowSessionResult {
   COMPLETED
+  HANDED_TO_AI
   HANDED_OVER
   TIMED_OUT
   STOPPED_BY_MEMBER
@@ -1067,6 +1094,7 @@ enum FlowStartedBy {
   TRIGGER
   MEMBER
   JUMP
+  AI_AGENT
 }
 
 /// A chatbot flow with its editable draft graph (contracts/flow-graph.md). Names are unique among
@@ -1245,4 +1273,406 @@ model FlowSecret {
 
   @@index([flowId])
   @@map("flow_secrets")
+}
+
+// ---------- AI agent (feature 004, specs/004-ai-agent/data-model.md) ----------
+
+enum AiAgentStatus {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
+}
+
+enum AiKnowledgeKind {
+  ANSWER
+  WEBSITE
+  FILE
+}
+
+enum AiKnowledgeStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum AiStartedBy {
+  CUSTOMER
+  FLOW
+}
+
+enum AiConversationStatus {
+  ACTIVE
+  ENDED
+}
+
+enum AiConversationResult {
+  HANDED_OVER
+  MEMBER_TOOK
+  CLOSED
+  EXPIRED
+  LIMIT_REACHED
+  FAILED
+  OPTED_OUT
+  BLOCKED
+  UNPUBLISHED
+}
+
+enum AiReplyKind {
+  REPLY
+  HANDOVER
+  FALLBACK
+  LIMIT
+}
+
+enum AiUsageKind {
+  REPLY
+  PREVIEW
+  ASSISTANT
+}
+
+enum AssistantRequestStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum AssistantActionKind {
+  SEND_CAMPAIGN
+  SCHEDULE_CAMPAIGN
+  DELETE_CONTACTS
+  DELETE_TAGS
+}
+
+enum AssistantActionStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  EXPIRED
+  FAILED
+}
+
+/// An AI agent with its editable draft configuration (contracts/agent-config.md). Names are unique
+/// among agents that are not deleted (partial unique index in the migration).
+model AiAgent {
+  id                 String          @id @default(uuid(7)) @db.Uuid
+  name               String          @db.Citext
+  status             AiAgentStatus   @default(DRAFT)
+  draft              Json            @default("{}")
+  /// +1 on every draft save; an older revision gets 409 DRAFT_CONFLICT.
+  draftRevision      Int             @default(0) @map("draft_revision")
+  draftUpdatedAt     DateTime?       @map("draft_updated_at") @db.Timestamptz
+  draftUpdatedById   String?         @map("draft_updated_by_id") @db.Uuid
+  draftUpdatedBy     User?           @relation("AiAgentDraftUpdatedBy", fields: [draftUpdatedById], references: [id], onDelete: SetNull)
+  publishedVersionId String?         @unique @map("published_version_id") @db.Uuid
+  publishedVersion   AiAgentVersion? @relation("AiAgentPublishedVersion", fields: [publishedVersionId], references: [id], onDelete: SetNull)
+  /// E.164 numbers that meet the draft (at most 3, check constraint in the migration).
+  testNumbers        String[]        @default([]) @map("test_numbers")
+  starterKey         String?         @map("starter_key") @db.VarChar(40)
+  createdById        String?         @map("created_by_id") @db.Uuid
+  createdBy          User?           @relation("AiAgentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+  /// Soft delete, so AI reply history keeps its agent.
+  deletedAt          DateTime?       @map("deleted_at") @db.Timestamptz
+
+  versions            AiAgentVersion[]       @relation("AiAgentVersions")
+  numbers             AiAgentNumber[]
+  secrets             AiAgentSecret[]
+  knowledgeSources    AiKnowledgeSource[]
+  conversations       AiConversation[]
+  unansweredQuestions AiUnansweredQuestion[]
+
+  @@map("ai_agents")
+}
+
+/// Published versions of an agent's configuration (numbered, immutable).
+model AiAgentVersion {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  agentId     String   @map("agent_id") @db.Uuid
+  agent       AiAgent  @relation("AiAgentVersions", fields: [agentId], references: [id], onDelete: Cascade)
+  number      Int
+  config      Json
+  createdById String?  @map("created_by_id") @db.Uuid
+  createdBy   User?    @relation("AiAgentVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  publishedFor  AiAgent?         @relation("AiAgentPublishedVersion")
+  conversations AiConversation[]
+
+  @@unique([agentId, number])
+  @@map("ai_agent_versions")
+}
+
+/// The agent that answers a number's messages that no flow trigger matched (one per number, FR-004).
+model AiAgentNumber {
+  numberId     String         @id @map("number_id") @db.Uuid
+  number       WhatsAppNumber @relation(fields: [numberId], references: [id], onDelete: Cascade)
+  agentId      String         @map("agent_id") @db.Uuid
+  agent        AiAgent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  assignedById String?        @map("assigned_by_id") @db.Uuid
+  assignedBy   User?          @relation("AiAgentNumberAssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+  assignedAt   DateTime       @default(now()) @map("assigned_at") @db.Timestamptz
+
+  @@index([agentId])
+  @@map("ai_agent_numbers")
+}
+
+/// Header secrets for API skills, encrypted with the 001 TokenCipher; never returned or logged.
+model AiAgentSecret {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  agentId        String   @map("agent_id") @db.Uuid
+  agent          AiAgent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  name           String   @db.VarChar(60)
+  valueEncrypted String   @map("value_encrypted")
+  createdById    String?  @map("created_by_id") @db.Uuid
+  createdBy      User?    @relation("AiAgentSecretCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById    String?  @map("updated_by_id") @db.Uuid
+  updatedBy      User?    @relation("AiAgentSecretUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([agentId])
+  @@map("ai_agent_secrets")
+}
+
+/// A written answer, a website or a file the agent answers from (shared by draft and versions).
+model AiKnowledgeSource {
+  id              String            @id @default(uuid(7)) @db.Uuid
+  agentId         String            @map("agent_id") @db.Uuid
+  agent           AiAgent           @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  kind            AiKnowledgeKind
+  title           String            @db.VarChar(200)
+  enabled         Boolean           @default(true)
+  status          AiKnowledgeStatus @default(PROCESSING)
+  errorCode       String?           @map("error_code") @db.VarChar(40)
+  errorMessage    String?           @map("error_message")
+  question        String?
+  answer          String?
+  /// Example answers from a starter that must be replaced before publishing (FR-005).
+  replaceMe       Boolean           @default(false) @map("replace_me")
+  url             String?
+  refreshWeekly   Boolean           @default(false) @map("refresh_weekly")
+  pagesRead       Int?              @map("pages_read")
+  storageKey      String?           @map("storage_key")
+  fileName        String?           @map("file_name")
+  mimeType        String?           @map("mime_type")
+  sizeBytes       Int?              @map("size_bytes")
+  /// Duplicate files are refused per agent (partial unique index in the migration).
+  sha256          String?           @db.Char(64)
+  charCount       Int               @default(0) @map("char_count")
+  chunkCount      Int               @default(0) @map("chunk_count")
+  lastRefreshedAt DateTime?         @map("last_refreshed_at") @db.Timestamptz
+  createdById     String?           @map("created_by_id") @db.Uuid
+  createdBy       User?             @relation("AiKnowledgeSourceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  chunks AiKnowledgeChunk[]
+
+  @@index([agentId, kind])
+  @@map("ai_knowledge_sources")
+}
+
+/// About 1,500 characters of a source's text, searchable through the generated tsvector (research R4).
+model AiKnowledgeChunk {
+  id        String                   @id @default(uuid(7)) @db.Uuid
+  sourceId  String                   @map("source_id") @db.Uuid
+  source    AiKnowledgeSource        @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  /// Copied from the source, for search.
+  agentId   String                   @map("agent_id") @db.Uuid
+  position  Int
+  title     String
+  heading   String?
+  url       String?
+  page      Int?
+  text      String
+  /// Generated in the migration from title, heading and text; read through $queryRaw only.
+  tsv       Unsupported("tsvector")?
+  createdAt DateTime                 @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([agentId])
+  @@index([sourceId, position])
+  @@map("ai_knowledge_chunks")
+}
+
+/// One stretch of a chat answered by one agent (data-model.md §3). At most one ACTIVE per chat
+/// (partial unique index in the migration).
+model AiConversation {
+  id                  String                @id @default(uuid(7)) @db.Uuid
+  conversationId      String                @map("conversation_id") @db.Uuid
+  conversation        Conversation          @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  agentId             String                @map("agent_id") @db.Uuid
+  agent               AiAgent               @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  /// Last version that answered; null for draft (test) turns.
+  versionId           String?               @map("version_id") @db.Uuid
+  version             AiAgentVersion?       @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  /// Null after contact erasure.
+  contactId           String?               @map("contact_id") @db.Uuid
+  contact             Contact?              @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  numberId            String                @map("number_id") @db.Uuid
+  number              WhatsAppNumber        @relation(fields: [numberId], references: [id], onDelete: Cascade)
+  test                Boolean               @default(false)
+  startedBy           AiStartedBy           @map("started_by")
+  status              AiConversationStatus  @default(ACTIVE)
+  result              AiConversationResult?
+  /// AI replies sent in this conversation (the reply cap, FR-023).
+  replies             Int                   @default(0)
+  /// Time of the last customer message a reply covered.
+  lastHandledAt       DateTime?             @map("last_handled_at") @db.Timestamptz
+  pendingConfirmation Json?                 @map("pending_confirmation")
+  unansweredStreak    Json?                 @map("unanswered_streak")
+  summary             String?
+  startedAt           DateTime              @default(now()) @map("started_at") @db.Timestamptz
+  lastActivityAt      DateTime              @default(now()) @map("last_activity_at") @db.Timestamptz
+  endedAt             DateTime?             @map("ended_at") @db.Timestamptz
+
+  replyRecords   AiReply[]
+  unansweredAsks AiUnansweredAsk[]
+
+  @@index([conversationId])
+  @@index([status, lastActivityAt])
+  @@map("ai_conversations")
+}
+
+/// The details of one AI reply or fixed message: what it used and what it cost (FR-020, FR-036).
+model AiReply {
+  id               String         @id @default(uuid(7)) @db.Uuid
+  aiConversationId String         @map("ai_conversation_id") @db.Uuid
+  aiConversation   AiConversation @relation(fields: [aiConversationId], references: [id], onDelete: Cascade)
+  chatMessageId    String?        @map("chat_message_id") @db.Uuid
+  chatMessage      ChatMessage?   @relation(fields: [chatMessageId], references: [id], onDelete: SetNull)
+  /// Copied references (no foreign keys), so history survives number or agent removal.
+  agentId          String         @map("agent_id") @db.Uuid
+  versionId        String?        @map("version_id") @db.Uuid
+  numberId         String?        @map("number_id") @db.Uuid
+  kind             AiReplyKind
+  test             Boolean        @default(false)
+  counted          Boolean        @default(false)
+  language         String?        @db.VarChar(10)
+  sources          Json           @default("[]")
+  skills           Json           @default("[]")
+  modelId          String         @map("model") @db.VarChar(60)
+  inputTokens      Int            @default(0) @map("input_tokens")
+  cacheReadTokens  Int            @default(0) @map("cache_read_tokens")
+  cacheWriteTokens Int            @default(0) @map("cache_write_tokens")
+  outputTokens     Int            @default(0) @map("output_tokens")
+  costMicros       BigInt         @default(0) @map("cost_micros")
+  durationMs       Int            @default(0) @map("duration_ms")
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([aiConversationId])
+  @@index([agentId, createdAt])
+  @@index([createdAt])
+  @@map("ai_replies")
+}
+
+/// Questions the agent could not answer (FR-015). Open questions are unique per agent and text
+/// (partial unique index in the migration).
+model AiUnansweredQuestion {
+  id           String    @id @default(uuid(7)) @db.Uuid
+  agentId      String    @map("agent_id") @db.Uuid
+  agent        AiAgent   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  text         String    @db.VarChar(300)
+  normalized   String    @db.VarChar(300)
+  askCount     Int       @default(0) @map("ask_count")
+  firstAskedAt DateTime  @default(now()) @map("first_asked_at") @db.Timestamptz
+  lastAskedAt  DateTime  @default(now()) @map("last_asked_at") @db.Timestamptz
+  resolvedAt   DateTime? @map("resolved_at") @db.Timestamptz
+  resolvedById String?   @map("resolved_by_id") @db.Uuid
+  resolvedBy   User?     @relation("AiUnansweredResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+
+  asks AiUnansweredAsk[]
+
+  @@index([agentId, resolvedAt])
+  @@map("ai_unanswered_questions")
+}
+
+/// One time a question was asked, linked to its AI conversation so contact erasure can remove it.
+model AiUnansweredAsk {
+  id               String               @id @default(uuid(7)) @db.Uuid
+  questionId       String               @map("question_id") @db.Uuid
+  question         AiUnansweredQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  aiConversationId String               @map("ai_conversation_id") @db.Uuid
+  aiConversation   AiConversation       @relation(fields: [aiConversationId], references: [id], onDelete: Cascade)
+  askedAt          DateTime             @default(now()) @map("asked_at") @db.Timestamptz
+
+  @@index([questionId])
+  @@index([aiConversationId])
+  @@map("ai_unanswered_asks")
+}
+
+/// Daily usage per kind, agent, number and test flag (unique expression index in the migration).
+model AiUsageDaily {
+  id               String      @id @default(uuid(7)) @db.Uuid
+  day              DateTime    @db.Date
+  kind             AiUsageKind
+  agentId          String?     @map("agent_id") @db.Uuid
+  numberId         String?     @map("number_id") @db.Uuid
+  test             Boolean     @default(false)
+  count            Int         @default(0)
+  inputTokens      BigInt      @default(0) @map("input_tokens")
+  cacheReadTokens  BigInt      @default(0) @map("cache_read_tokens")
+  cacheWriteTokens BigInt      @default(0) @map("cache_write_tokens")
+  outputTokens     BigInt      @default(0) @map("output_tokens")
+  costMicros       BigInt      @default(0) @map("cost_micros")
+
+  @@index([day])
+  @@map("ai_usage_daily")
+}
+
+/// Running totals of a month against the limits, and the alert level already sent (FR-038).
+model AiUsageMonth {
+  month               DateTime @id @db.Date
+  replies             Int      @default(0)
+  assistantRequests   Int      @default(0) @map("assistant_requests")
+  replyAlertLevel     Int      @default(0) @map("reply_alert_level") @db.SmallInt
+  assistantAlertLevel Int      @default(0) @map("assistant_alert_level") @db.SmallInt
+
+  @@map("ai_usage_months")
+}
+
+/// A member's request to the team assistant (US9).
+model AssistantRequest {
+  id               String                 @id @default(uuid(7)) @db.Uuid
+  userId           String                 @map("user_id") @db.Uuid
+  user             User                   @relation("AssistantRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  prompt           String
+  status           AssistantRequestStatus @default(QUEUED)
+  reply            String?
+  drafts           Json                   @default("[]")
+  errorCode        String?                @map("error_code") @db.VarChar(40)
+  inputTokens      Int                    @default(0) @map("input_tokens")
+  cacheReadTokens  Int                    @default(0) @map("cache_read_tokens")
+  cacheWriteTokens Int                    @default(0) @map("cache_write_tokens")
+  outputTokens     Int                    @default(0) @map("output_tokens")
+  costMicros       BigInt                 @default(0) @map("cost_micros")
+  createdAt        DateTime               @default(now()) @map("created_at") @db.Timestamptz
+  finishedAt       DateTime?              @map("finished_at") @db.Timestamptz
+
+  actions AssistantAction[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("assistant_requests")
+}
+
+/// An action the assistant prepared; it runs only when its member confirms it (FR-044).
+model AssistantAction {
+  id        String                @id @default(uuid(7)) @db.Uuid
+  requestId String                @map("request_id") @db.Uuid
+  request   AssistantRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  userId    String                @map("user_id") @db.Uuid
+  user      User                  @relation("AssistantActionUser", fields: [userId], references: [id], onDelete: Cascade)
+  kind      AssistantActionKind
+  params    Json
+  preview   Json
+  status    AssistantActionStatus @default(PENDING)
+  expiresAt DateTime              @map("expires_at") @db.Timestamptz
+  decidedAt DateTime?             @map("decided_at") @db.Timestamptz
+  result    Json?
+  createdAt DateTime              @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([requestId])
+  @@index([userId, status])
+  @@map("assistant_actions")
 }

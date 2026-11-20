@@ -7,6 +7,7 @@ import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import { SettingsService } from '../../settings/settings.service.js';
 import { normalizeKeyword } from '../../webhooks/handlers/inbound.handler.js';
 import { WebhookRouter, type WebhookChange, type WebhookChangeHandler } from '../../webhooks/webhook-router.js';
+import { AiAgentRouter } from '../../ai/turns/ai-router.js';
 import { FlowRouter } from '../../flows/engine/flow-router.js';
 import { AutoRepliesService } from '../automation/auto-replies.service.js';
 import { InboxNotifier } from '../notifications/inbox-notifier.js';
@@ -54,6 +55,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly notifier: InboxNotifier,
     private readonly metrics: MetricsService,
     private readonly flows: FlowRouter,
+    private readonly aiAgents: AiAgentRouter,
   ) {}
 
   onModuleInit(): void {
@@ -181,6 +183,20 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
       message: { contentType: msg.contentType, text: msg.text, replyId: typeof msg.payload.id === 'string' ? msg.payload.id : null, replyToWaId: msg.replyToWaId },
     });
     if (flowAnswered) return;
+    // AI agents answer what flows left (004 research R5); a queued AI turn replaces welcome/off-hours (FR-021).
+    const aiQueued = await this.aiAgents.onCustomerMessage({
+      conversationId: outcome.conversationId,
+      numberId,
+      contactId: contact.id,
+      senderPhone: phone.e164,
+      chatState: outcome.state,
+      optOutKeyword,
+      humanKeyword,
+      newChat: outcome.created,
+      contentType: msg.contentType,
+      text: msg.text,
+    });
+    if (aiQueued) return;
     await this.autoReplies.handle({
       conversationId: outcome.conversationId,
       contactId: contact.id,

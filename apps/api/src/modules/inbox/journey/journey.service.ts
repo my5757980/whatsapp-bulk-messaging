@@ -4,6 +4,12 @@ import type { JourneyActor, JourneyEventType, Prisma } from '../../../generated/
 import { InboxPublisher } from '../realtime/inbox-publisher.js';
 
 /** The flow name stored on flow journey entries (feature 003). */
+/** The agent name AI agent entries carry in their data (feature 004). */
+function agentNameOf(data: unknown): string | null {
+  const name = data && typeof data === 'object' ? (data as { agentName?: unknown }).agentName : null;
+  return typeof name === 'string' ? name : null;
+}
+
 function flowNameOf(data: unknown): string | null {
   const name = data && typeof data === 'object' ? (data as { flowName?: unknown }).flowName : null;
   return typeof name === 'string' ? name : null;
@@ -12,7 +18,7 @@ function flowNameOf(data: unknown): string | null {
 export interface JourneyEntry {
   type: string;
   at: string;
-  actor: { type: 'MEMBER' | 'CUSTOMER' | 'SYSTEM' | 'CAMPAIGN' | 'FLOW'; name: string | null };
+  actor: { type: 'MEMBER' | 'CUSTOMER' | 'SYSTEM' | 'CAMPAIGN' | 'FLOW' | 'AI_AGENT'; name: string | null };
   data: Record<string, unknown>;
 }
 
@@ -51,8 +57,9 @@ export class JourneyService {
         at: e.occurredAt.toISOString(),
         actor: {
           type: e.actorType,
-          // Flow entries name the flow (feature 003); members name the member.
-          name: e.actorType === 'MEMBER' ? (e.actorUser?.name ?? null) : e.actorType === 'FLOW' ? flowNameOf(e.data) : null,
+          // Flow entries name the flow (feature 003), AI agent entries the agent (feature 004); members name the member.
+          name:
+            e.actorType === 'MEMBER' ? (e.actorUser?.name ?? null) : e.actorType === 'FLOW' ? flowNameOf(e.data) : e.actorType === 'AI_AGENT' ? agentNameOf(e.data) : null,
         },
         data: (e.data ?? {}) as Record<string, unknown>,
         sortAt: e.occurredAt.getTime(),

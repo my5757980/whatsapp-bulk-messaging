@@ -172,7 +172,7 @@ export class FlowSessionService {
   }
 
   /** The chat's running session, if any (id, flow and how it started). */
-  async runningSession(conversationId: string): Promise<{ id: string; flowId: string; startedBy: 'TRIGGER' | 'MEMBER' | 'JUMP' } | null> {
+  async runningSession(conversationId: string): Promise<{ id: string; flowId: string; startedBy: 'TRIGGER' | 'MEMBER' | 'JUMP' | 'AI_AGENT' } | null> {
     return this.prisma.flowSession.findFirst({ where: { conversationId, status: 'RUNNING' }, select: { id: true, flowId: true, startedBy: true } });
   }
 

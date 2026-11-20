@@ -110,8 +110,9 @@ package versions before release.
      first, FR-016) and before welcome and off-hours messages. The router checks eligibility
      (below) and queues a turn; when it queues one, automatic replies are skipped (FR-021).
   2. Turns are BullMQ jobs `ai-turn` on the new `ai` queue in **debounce mode**: `delay: 2000` and
-     `deduplication: { id: "ai-turn-<conversationId>", ttl: 2000, extend: true, replace: true }`,
-     so a burst of messages becomes one turn (FR-018).
+     `deduplication: { id: "ai-turn-<conversationId>", replace: true, keepLastIfActive: true }`, so a
+     burst of messages becomes one turn (FR-018), and a message that arrives while a turn runs starts
+     one more turn when it finishes instead of being dropped (BullMQ 6.7 `keepLastIfActive`).
   3. The processor:
      - **Pre-checks** under the conversation's advisory lock: chat *Open*; contact neither blocked
        nor opted out; 24-hour window open; monthly limit not reached (else hand over with the

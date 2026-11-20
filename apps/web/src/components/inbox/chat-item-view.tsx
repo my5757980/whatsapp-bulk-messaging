@@ -57,8 +57,13 @@ function MediaBody({ item }: { item: ChatItem }) {
   }
 }
 
-/** The chatbot flow that sent an automatic message, if any (feature 003). */
-function flowName(item: ChatItem): string | null {
+/** The AI agent (feature 004, with "test" for draft replies) or chatbot flow (feature 003) that sent an automatic message. */
+function automationName(item: ChatItem): string | null {
+  const ai = item.payload.ai;
+  if (ai && typeof ai === 'object' && typeof (ai as { agentName?: unknown }).agentName === 'string') {
+    const { agentName, test } = ai as { agentName: string; test?: unknown };
+    return test === true ? `${agentName} · test` : agentName;
+  }
   const flow = item.payload.flow;
   return flow && typeof flow === 'object' && typeof (flow as { flowName?: unknown }).flowName === 'string' ? (flow as { flowName: string }).flowName : null;
 }
@@ -169,7 +174,7 @@ export function ChatItemView({ item }: { item: ChatItem }) {
         <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
           {item.kind === 'NOTE' && <span className="font-medium text-amber-700 dark:text-amber-300">Internal note ·</span>}
           {item.sentBy && <span>{item.sentBy.name} ·</span>}
-          {item.origin === 'AUTOMATIC' && <span>{flowName(item) ? `Automatic · ${flowName(item)} ·` : 'Automatic ·'}</span>}
+          {item.origin === 'AUTOMATIC' && <span>{automationName(item) ? `Automatic · ${automationName(item)} ·` : 'Automatic ·'}</span>}
           <span>{time(item.occurredAt)}</span>
           {ours && item.kind !== 'NOTE' && <Ticks status={item.status} />}
         </div>
