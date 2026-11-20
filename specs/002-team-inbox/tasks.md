@@ -599,7 +599,7 @@
 
 **Purpose**: observability, retention, RBAC and audit coverage, performance, docs and CI.
 
-- [ ] T096 [P] Extend retention and erasure, tests first, in apps/api/test/integration/retention.int-spec.ts and apps/api/src/modules/maintenance/retention.processor.ts:
+- [X] T096 [P] Extend retention and erasure, tests first, in apps/api/test/integration/retention.int-spec.ts and apps/api/src/modules/maintenance/retention.processor.ts:
   - apps/api/test/integration/retention.int-spec.ts: chat_messages, conversation_events and openings older than 12 months are purged; unreferenced INBOUND media and their S3 objects are deleted
   - apps/api/test/integration/contact-deletion.int-spec.ts: chat text, payload and media are erased; previews nulled; counts kept
   - then implement both in apps/api/src/modules/maintenance/retention.processor.ts and apps/api/src/modules/contacts/contact-deletion.service.ts
@@ -610,12 +610,12 @@
   - canned.created, canned.updated, canned.deleted
   - media.removed
   - livechat.settings_updated, agent_rules.updated
-- [ ] T099 [P] Add the inbox metrics to apps/api/src/common/metrics/metrics.service.ts:
+- [X] T099 [P] Add the inbox metrics to apps/api/src/common/metrics/metrics.service.ts:
   - `wbm_inbox_messages_total{direction,kind}`, `wbm_inbox_event_lag_seconds`, `wbm_inbox_sse_connections`, `wbm_inbound_media_failures_total`
   - update the instrumentation points
   - add the alert "inbound media failures above 10% over 15 min" to ops/alerts.yml, and pass apps/api/test/unit/alerts.spec.ts and promtool
 - [X] T100 [P] Extend the log redaction list in apps/api/src/common/logging/redaction.ts to cover chat text, captions, notes and push endpoints, with a unit test in apps/api/test/unit/logging-redaction.spec.ts
-- [ ] T101 [P] Add the performance seed and check in tools/perf/inbox-seed.ts and tools/perf/inbox-latency.ts:
+- [X] T101 [P] Add the performance seed and check in tools/perf/inbox-seed.ts and tools/perf/inbox-latency.ts:
   - seed 10,000 chats and one chat with 5,000 messages
   - measure list and chat-open times (SC-006) and webhook→SSE latency p95 (SC-001)
   - add root scripts `perf:inbox-seed` and `perf:inbox`
