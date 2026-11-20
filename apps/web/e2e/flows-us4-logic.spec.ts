@@ -22,7 +22,8 @@ test('US4: a two-rule condition and a tag step send each customer down the right
   const dubai = { phone: `+97156${suffix.slice(-6)}5`, name: `Rana ${suffix.slice(-4)}` };
   const abuDhabi = { phone: `+97158${suffix.slice(-6)}6`, name: `Omar ${suffix.slice(-4)}` };
   const keyword = `deliver${suffix.slice(-5)}`;
-  const attribute = `city_${suffix.slice(-5)}`;
+  // Not city_*: the 001 contacts e2e finds its "Attribute city" field by label in the same database.
+  const attribute = `area_${suffix.slice(-5)}`;
   const tag = `vip-${suffix.slice(-5)}`;
   const question = `Which city should we deliver to, ${suffix.slice(-4)}?`;
   const yes = 'Good news: we deliver to your city.';
