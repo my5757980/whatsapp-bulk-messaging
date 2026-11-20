@@ -1,9 +1,9 @@
-import type { FlowGraph, FlowStep } from '@wbm/shared';
+import { normalizePhrase, type FlowGraph, type FlowStep, type StepOf } from '@wbm/shared';
 import type { FlowEffect, FlowSessionResult } from './effects.js';
 
-// The flow interpreter (003 research R4, T009): pure. Given a session's state, one input and the
-// version's graph, it returns the next state and the effects to apply. It runs steps until it needs
-// the customer, a timer or an API reply, or the session ends. Later stories add step types.
+// The flow interpreter (003 research R4, T009, T025): pure. Given a session's state, one input and
+// the version's graph, it returns the next state and the effects to apply. It runs steps until it
+// needs the customer, a timer or an API reply, or the session ends. Later stories add step types.
 
 /** FR-033: a session that runs this many steps without a customer reply ends as FAILED. */
 export const MAX_STEPS_WITHOUT_INPUT = 50;
@@ -40,14 +40,30 @@ export interface RunResult {
   effects: FlowEffect[];
   /** True when this run ended the session. */
   ended: boolean;
+  /** True when the input was used by the session (false for stale taps and messages during a delay). */
+  consumed: boolean;
 }
 
 export function newSessionState(sessionId: string): SessionState {
   return { sessionId, currentStepId: null, wait: 'NONE', waitToken: 0, retries: 0, stepsSinceInput: 0, answers: {}, ended: false };
 }
 
+/** Id of a button or list row for the session's current wait (contracts/meta-graph-flows.md). */
+export function replyIdFor(state: Pick<SessionState, 'sessionId' | 'waitToken'>, key: string): string {
+  return `s:${state.sessionId}:${state.waitToken}:${key}`;
+}
+
+/** Splits a reply id; null when it is not one of ours. */
+export function parseReplyId(id: string): { sessionId: string; token: number; key: string } | null {
+  const match = /^s:([0-9a-f-]{36}):(\d+):([a-z0-9_-]{1,30})$/.exec(id);
+  return match ? { sessionId: match[1]!, token: Number(match[2]), key: match[3]! } : null;
+}
+
+type ButtonsStep = StepOf<'buttons'>;
+
 class Runner {
   readonly effects: FlowEffect[] = [];
+  consumed = false;
   private readonly steps: Map<string, FlowStep>;
 
   constructor(
@@ -57,20 +73,56 @@ class Runner {
     this.steps = new Map(ctx.graph.steps.map((s) => [s.id, s]));
   }
 
+  step(id: string | null): FlowStep | undefined {
+    return id === null ? undefined : this.steps.get(id);
+  }
+
   end(result: FlowSessionResult, reason?: string): RunResult {
     this.effects.push(reason ? { kind: 'end', result, reason } : { kind: 'end', result });
     this.state = { ...this.state, currentStepId: null, wait: 'NONE', ended: true };
-    return { state: this.state, effects: this.effects, ended: true };
+    return { state: this.state, effects: this.effects, ended: true, consumed: this.consumed };
   }
 
   idle(): RunResult {
-    return { state: this.state, effects: this.effects, ended: false };
+    return { state: this.state, effects: this.effects, ended: false, consumed: this.consumed };
+  }
+
+  /** The customer's input was used: the step counter restarts (FR-033). */
+  consume(): void {
+    this.consumed = true;
+    this.state = { ...this.state, stepsSinceInput: 0 };
   }
 
   /** Leaves the current step by a branch and moves to its target (null ends the session). */
   leave(step: FlowStep, branch: string, target: string | null): void {
     this.effects.push({ kind: 'stepLeft', stepId: step.id, branch });
     this.state = { ...this.state, currentStepId: target, wait: 'NONE', retries: 0 };
+  }
+
+  /** Leaves by an optional branch; ends with `result` when it leads nowhere. */
+  leaveOptional(step: FlowStep, branch: string, target: string | null, result: FlowSessionResult, reason?: string): RunResult {
+    this.leave(step, branch, target);
+    return target === null ? this.end(result, reason) : this.advance();
+  }
+
+  render(text: string, fallbacks: Record<string, string>): string {
+    return this.ctx.render(text, fallbacks, this.state.answers);
+  }
+
+  /** Starts waiting for the customer at a step: new token, then the step's timeout timer. */
+  waitForInput(step: FlowStep & { timeoutMinutes: number }): void {
+    this.state = { ...this.state, wait: 'INPUT', waitToken: this.state.waitToken + 1, retries: 0 };
+    void step;
+  }
+
+  scheduleTimeout(step: FlowStep & { timeoutMinutes: number }): void {
+    this.effects.push({ kind: 'schedule', stepId: step.id, purpose: 'timeout', delayMs: step.timeoutMinutes * 60_000 });
+  }
+
+  /** Records an answer and, when the step saves it, the attribute change. */
+  remember(step: { id: string; answerName?: string; saveTo?: { attributeKey: string } }, value: string | number): void {
+    if (step.answerName) this.state = { ...this.state, answers: { ...this.state.answers, [step.answerName]: value } };
+    if (step.saveTo) this.effects.push({ kind: 'setAttributes', stepId: step.id, values: { [step.saveTo.attributeKey]: value } });
   }
 
   /** Runs steps from the current one until a wait or the end. */
@@ -86,7 +138,7 @@ class Runner {
 
       switch (step.type) {
         case 'message': {
-          const text = step.text.trim() ? this.ctx.render(step.text, step.fallbacks, this.state.answers) : '';
+          const text = step.text.trim() ? this.render(step.text, step.fallbacks) : '';
           if (step.mediaAssetId) {
             this.effects.push({ kind: 'send', stepId: step.id, message: text ? { type: 'media', mediaAssetId: step.mediaAssetId, caption: text } : { type: 'media', mediaAssetId: step.mediaAssetId } });
           } else if (text) {
@@ -94,6 +146,22 @@ class Runner {
           }
           this.leave(step, 'next', step.next);
           continue;
+        }
+        case 'buttons': {
+          this.waitForInput(step);
+          this.effects.push({
+            kind: 'send',
+            stepId: step.id,
+            message: {
+              type: 'buttons',
+              text: this.render(step.text, step.fallbacks),
+              ...(step.header?.trim() ? { header: this.render(step.header, step.fallbacks) } : {}),
+              ...(step.footer?.trim() ? { footer: this.render(step.footer, step.fallbacks) } : {}),
+              buttons: step.buttons.map((b) => ({ id: replyIdFor(this.state, b.key), title: b.title })),
+            },
+          });
+          this.scheduleTimeout(step);
+          return this.idle();
         }
         case 'end':
           this.effects.push({ kind: 'stepLeft', stepId: step.id, branch: 'end' });
@@ -103,11 +171,31 @@ class Runner {
       }
     }
   }
+
+  /** A customer message while waiting at a buttons step. */
+  answerButtons(step: ButtonsStep, input: Extract<FlowInput, { kind: 'message' }>): RunResult {
+    let choice: ButtonsStep['buttons'][number] | undefined;
+    if (input.replyId) {
+      const reply = parseReplyId(input.replyId);
+      // A tap on an older message, or on another session's buttons, does not move the session.
+      if (!reply || reply.sessionId !== this.state.sessionId || reply.token !== this.state.waitToken) return this.idle();
+      choice = step.buttons.find((b) => b.key === reply.key);
+      if (!choice) return this.idle();
+    } else if (input.text?.trim()) {
+      const typed = normalizePhrase(input.text);
+      choice = step.buttons.find((b) => normalizePhrase(b.title) === typed);
+    }
+    this.consume();
+    if (!choice) return this.leaveOptional(step, 'onInvalid', step.onInvalid, 'FAILED', 'no valid answer');
+    this.remember(step, choice.title);
+    this.leave(step, choice.key, choice.next);
+    return this.advance();
+  }
 }
 
 /** Applies one input to a session and runs it as far as it can go. */
 export function run(state: SessionState, input: FlowInput, ctx: RunContext): RunResult {
-  if (state.ended) return { state, effects: [], ended: false };
+  if (state.ended) return { state, effects: [], ended: false, consumed: false };
   const runner = new Runner(state, ctx);
   switch (input.kind) {
     case 'start': {
@@ -115,10 +203,21 @@ export function run(state: SessionState, input: FlowInput, ctx: RunContext): Run
       runner.state = { ...state, currentStepId: ctx.graph.start, wait: 'NONE', waitToken: state.waitToken + 1, retries: 0, stepsSinceInput: 0 };
       return runner.advance();
     }
-    case 'message':
-    case 'timer':
+    case 'message': {
+      if (state.wait !== 'INPUT') return runner.idle();
+      const step = runner.step(state.currentStepId);
+      if (step?.type === 'buttons') return runner.answerButtons(step, input);
+      return runner.idle();
+    }
+    case 'timer': {
+      if (input.token !== state.waitToken) return runner.idle();
+      const step = runner.step(state.currentStepId);
+      if (!step) return runner.idle();
+      if (state.wait === 'INPUT' && step.type === 'buttons') return runner.leaveOptional(step, 'onTimeout', step.onTimeout, 'TIMED_OUT');
+      return runner.idle();
+    }
     case 'api':
-      // Waiting steps (buttons, lists, questions, delays, API calls) arrive with their stories.
+      // API steps arrive with US5.
       return runner.idle();
   }
 }
