@@ -11,6 +11,7 @@ import { JourneyService } from '../journey/journey.service.js';
 import { InboxPublisher } from '../realtime/inbox-publisher.js';
 import { ConversationsService } from './conversations.service.js';
 import type { Viewer } from './visibility.js';
+import { FlowSessionService } from '../../flows/engine/session.service.js';
 
 /** PATCH /inbox/conversations/{id}/contact (contracts/inbox-api.openapi.yaml). */
 export const EditContactSchema = z.strictObject({
@@ -38,6 +39,7 @@ export class ChatContactService {
     private readonly journey: JourneyService,
     private readonly publisher: InboxPublisher,
     private readonly audit: AuditService,
+    private readonly flows: FlowSessionService,
   ) {}
 
   async profile(contactId: string) {
@@ -130,6 +132,8 @@ export class ChatContactService {
     await this.prisma.contact.update({ where: { id: contactId }, data: blocked ? { blockedAt: new Date(), blockedById: user.id } : { blockedAt: null, blockedById: null } });
     await this.journey.recordForContact(contactId, { type: blocked ? 'BLOCKED' : 'UNBLOCKED', actorType: 'MEMBER', actorUserId: user.id });
     await this.audit.record({ userId: user.id, ip }, blocked ? 'contact.blocked' : 'contact.unblocked', { type: 'contact', id: contactId });
+    // A blocked contact's flows end at once (003 data model: BLOCKED).
+    if (blocked) for (const chat of chats) await this.flows.endRunning(chat.id, 'BLOCKED');
     await this.publisher.contactUpdated(contactId);
     // Live lists drop or restore the chats (realtime-events.md rule 1).
     for (const chat of chats) await this.publisher.conversation(chat.id, { state: chat.state, intervenedById: chat.intervenedById, blocked: !blocked });

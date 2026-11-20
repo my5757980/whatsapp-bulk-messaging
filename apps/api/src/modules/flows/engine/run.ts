@@ -219,6 +219,11 @@ class Runner {
           this.sendText(step, this.render(step.text, step.fallbacks));
           this.scheduleTimeout(step);
           return this.idle();
+        case 'handover':
+          // The chat waits for a person (002 Waiting for agent); the session hands over and ends.
+          this.effects.push(step.note?.trim() ? { kind: 'handover', stepId: step.id, note: step.note.trim() } : { kind: 'handover', stepId: step.id });
+          this.effects.push({ kind: 'stepLeft', stepId: step.id, branch: 'handover' });
+          return this.end('HANDED_OVER');
         case 'end':
           this.effects.push({ kind: 'stepLeft', stepId: step.id, branch: 'end' });
           return this.end('COMPLETED');

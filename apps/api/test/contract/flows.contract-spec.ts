@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { seedNumber, setDefaultCountry } from '../support/fixtures.js';
+import { seedContact, seedNumber, setDefaultCountry, uaePhone } from '../support/fixtures.js';
 import { createTestContext, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
 import { expectMatchesContract } from './openapi-validator.js';
 
@@ -8,6 +8,7 @@ import { expectMatchesContract } from './openapi-validator.js';
 describe('Chatbot flows API contract', () => {
   let ctx: TestContext;
   let manager: SignedInAgent;
+  let numberId: string;
 
   const check = async (method: string, route: string, res: { status: number; body: unknown }, expected: number) => {
     expect(res.status, JSON.stringify(res.body)).toBe(expected);
@@ -30,7 +31,7 @@ describe('Chatbot flows API contract', () => {
   beforeAll(async () => {
     ctx = await createTestContext();
     await setDefaultCountry(ctx, 'AE');
-    await seedNumber(ctx);
+    numberId = (await seedNumber(ctx)).id;
     manager = await signIn(ctx, 'MANAGER');
   });
 
@@ -56,5 +57,24 @@ describe('Chatbot flows API contract', () => {
     await check('post', '/flows/{id}/duplicate', await call('post', `/flows/${id}/duplicate`), 201);
     await check('post', '/flows/{id}/unpublish', await call('post', `/flows/${id}/unpublish`), 200);
     await check('delete', '/flows/{id}', await call('delete', `/flows/${id}`), 204);
+  });
+
+  it('US3: starting a flow from a chat and the running session', async () => {
+    const created = await call('post', '/flows', { name: `Contract chat ${randomUUID().slice(0, 6)}` });
+    const id = created.body.id as string;
+    await call('put', `/flows/${id}/draft`, { graph: graph(), draftRevision: 0 });
+    expect((await call('post', `/flows/${id}/publish`)).status).toBe(200);
+    const contact = await seedContact(ctx, uaePhone());
+    const chat = await ctx.prisma.conversation.create({ data: { contactId: contact.id, numberId, state: 'ACTIVE', lastCustomerMessageAt: new Date() } });
+    const base = `/inbox/conversations/${chat.id}`;
+
+    await check('get', '/inbox/conversations/{id}/flow-session', await call('get', `${base}/flow-session`), 200);
+    await check('get', '/inbox/conversations/{id}/flows', await call('get', `${base}/flows`), 200);
+    await check('get', '/inbox/conversations/{id}/flows', await call('get', `/inbox/conversations/${randomUUID()}/flows`), 404);
+    await check('post', '/inbox/conversations/{id}/flows', await call('post', `${base}/flows`, { flowId: randomUUID() }), 404);
+    await check('post', '/inbox/conversations/{id}/flows', await call('post', `${base}/flows`, { flowId: id }), 201);
+    await check('get', '/inbox/conversations/{id}/flow-session', await call('get', `${base}/flow-session`), 200);
+    await ctx.prisma.conversation.update({ where: { id: chat.id }, data: { lastCustomerMessageAt: new Date(Date.now() - 25 * 3_600_000) } });
+    await check('post', '/inbox/conversations/{id}/flows', await call('post', `${base}/flows`, { flowId: id }), 409);
   });
 });

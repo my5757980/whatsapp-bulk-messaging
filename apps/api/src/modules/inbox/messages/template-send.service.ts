@@ -11,6 +11,7 @@ import { ConversationsService } from '../conversations/conversations.service.js'
 import { ITEM_INCLUDE, toItemDto, type ChatItemDto } from '../conversations/conversation-views.js';
 import type { Viewer } from '../conversations/visibility.js';
 import { InboxPublisher } from '../realtime/inbox-publisher.js';
+import { FlowSessionService } from '../../flows/engine/session.service.js';
 
 /** POST /inbox/conversations/{id}/template (contracts/inbox-api.openapi.yaml). */
 export const SendTemplateSchema = z.strictObject({
@@ -32,6 +33,7 @@ export class TemplateSendService {
     private readonly conversations: ConversationsService,
     private readonly publisher: InboxPublisher,
     private readonly queues: QueueRegistry,
+    private readonly flows: FlowSessionService,
   ) {}
 
   async send(viewer: Viewer, conversationId: string, input: SendTemplateInput): Promise<ChatItemDto> {
@@ -60,6 +62,8 @@ export class TemplateSendService {
     }
     assertTemplateParams(template, input.params, Boolean(input.headerMediaAssetId), 'headerMediaAssetId');
     assertConsent(contact.consentStatus, template.category);
+    // A template from a member stops the flow answering the chat (003 FR-026).
+    await this.flows.stopForConversation(conversationId);
 
     // Sending takes the chat, like a reply (FR-020).
     if (chat.state !== 'INTERVENED') await this.conversations.take(viewer, chat);

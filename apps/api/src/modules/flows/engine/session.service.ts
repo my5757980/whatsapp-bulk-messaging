@@ -9,6 +9,7 @@ import type { Prisma } from '../../../generated/prisma/client.js';
 import { validateAttributeValue, type AttributeValue } from '../../contacts/attribute-validator.js';
 import { isLive } from '../../inbox/conversations/window.js';
 import { InboxPublisher } from '../../inbox/realtime/inbox-publisher.js';
+import { ChatRoutingService } from '../../inbox/routing/chat-routing.service.js';
 import { LiveChatSettingsService } from '../../inbox/settings/live-chat-settings.service.js';
 import { requestSendWorkerSync, sessionSendJob } from '../../sending/send-jobs.js';
 import { SettingsService } from '../../settings/settings.service.js';
@@ -57,6 +58,10 @@ interface AfterCommit {
   touched: boolean;
   /** A contact whose attributes a flow changed (live chat refreshes its profile). */
   contactChanged: string | null;
+  /** The chat moved to Waiting for agent (hand-over): alert members after commit. */
+  requested: boolean;
+  /** Notes added by hand-over steps, shown live after commit. */
+  noteIds: string[];
 }
 
 type SessionRow = Prisma.FlowSessionGetPayload<object>;
@@ -78,6 +83,7 @@ export class FlowSessionService {
     private readonly publisher: InboxPublisher,
     private readonly settings: SettingsService,
     private readonly liveChat: LiveChatSettingsService,
+    private readonly routing: ChatRoutingService,
   ) {}
 
   /** Starts a flow for a chat; refuses when a session is already running unless asked to replace it. */
@@ -184,13 +190,27 @@ export class FlowSessionService {
     });
   }
 
+  /** A member took, answered or sent a template in the chat: the flow stops (FR-026). */
+  async stopForConversation(conversationId: string): Promise<boolean> {
+    return this.endRunning(conversationId, 'STOPPED_BY_MEMBER');
+  }
+
+  /** A session as the live chat banner shows it (ended sessions too, e.g. a flow that finished at once). */
+  async describe(sessionId: string) {
+    const row = await this.prisma.flowSession.findUnique({ where: { id: sessionId }, include: { flow: { select: { name: true } } } });
+    return row ? this.toRunning(row) : null;
+  }
+
   /** The session currently answering a chat, for the live chat banner. */
   async running(conversationId: string) {
     const row = await this.prisma.flowSession.findFirst({
       where: { conversationId, status: 'RUNNING' },
       include: { flow: { select: { name: true } } },
     });
-    if (!row) return null;
+    return row ? this.toRunning(row) : null;
+  }
+
+  private toRunning(row: SessionRow & { flow: { name: string } }) {
     return {
       sessionId: row.id,
       flowId: row.flowId,
@@ -205,7 +225,7 @@ export class FlowSessionService {
   // ---------- internals ----------
 
   private async inConversation<T>(conversationId: string, work: (tx: Tx, after: AfterCommit) => Promise<T>): Promise<T> {
-    const after: AfterCommit = { numberId: '', conversationId, sendItemIds: [], timers: [], apiCalls: [], touched: false, contactChanged: null };
+    const after: AfterCommit = { numberId: '', conversationId, sendItemIds: [], timers: [], apiCalls: [], touched: false, contactChanged: null, requested: false, noteIds: [] };
     const result = await this.prisma.$transaction(
       async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`flow-conversation:${conversationId}`}::text))`;
@@ -325,10 +345,12 @@ export class FlowSessionService {
         case 'setAttributes':
           await this.saveAttributes(tx, row, flow, effect.values, after);
           break;
-        case 'tags':
         case 'handover':
+          await this.handOver(tx, row, flow, effect.note, now, after);
+          break;
+        case 'tags':
         case 'jump':
-          // Applied from their stories (US3, US4); the engine does not emit them before then.
+          // Applied from their stories (US4); the engine does not emit them before then.
           this.logger.warn({ sessionId: row.id, effect: effect.kind }, 'Flow effect not handled yet');
           break;
       }
@@ -425,6 +447,38 @@ export class FlowSessionService {
     after.contactChanged = row.contactId;
   }
 
+  /**
+   * Hand-over (FR-027): an Open chat moves to Waiting for agent as if the customer asked, with the
+   * 002 alert after commit; the optional note becomes a 002 note in the chat. A member-started
+   * session in a chat a member already has just ends.
+   */
+  private async handOver(tx: Tx, row: SessionRow, flow: FlowMeta, note: string | undefined, now: Date, after: AfterCommit): Promise<void> {
+    const moved = await tx.conversation.updateMany({ where: { id: row.conversationId, state: 'ACTIVE' }, data: { state: 'REQUESTING', unresolvedRequests: { increment: 1 } } });
+    if (moved.count) {
+      await tx.conversationEvent.create({
+        data: { conversationId: row.conversationId, type: 'REQUESTED', actorType: 'FLOW', data: { flowId: flow.id, flowName: flow.name }, occurredAt: now },
+      });
+      after.requested = true;
+    }
+    if (note) {
+      const id = uuidv7();
+      await tx.chatMessage.create({
+        data: {
+          id,
+          conversationId: row.conversationId,
+          kind: 'NOTE',
+          origin: 'AUTOMATIC',
+          contentType: 'TEXT',
+          text: note,
+          payload: { mentions: [], flow: { flowId: flow.id, flowName: flow.name, sessionId: row.id, test: row.isTest } },
+          occurredAt: now,
+        },
+      });
+      after.noteIds.push(id);
+    }
+    after.touched = true;
+  }
+
   /** A flow message as a 002 chat item (origin AUTOMATIC, FR-030); returns its id. */
   private async createItem(tx: Tx, row: SessionRow, flow: FlowMeta, stepId: string, message: FlowOutboundMessage, now: Date): Promise<string | null> {
     const id = uuidv7();
@@ -486,7 +540,11 @@ export class FlowSessionService {
         await requestSendWorkerSync(this.queues);
         for (const itemId of after.sendItemIds) await this.publisher.itemCreated(itemId);
       }
-      if (after.touched) await this.publisher.conversation(after.conversationId);
+      for (const noteId of after.noteIds) await this.publisher.itemCreated(noteId);
+      if (after.touched) {
+        await this.publisher.conversation(after.conversationId, after.requested ? { state: 'ACTIVE', intervenedById: null, blocked: false } : undefined);
+      }
+      if (after.requested) await this.routing.alertRequesting(after.conversationId);
       if (after.contactChanged) await this.publisher.contactUpdated(after.contactChanged);
       for (const timer of after.timers) await this.queueTimer(timer);
       for (const call of after.apiCalls) await this.queueApiCall(call);

@@ -82,4 +82,19 @@ describe('flow engine core', () => {
     expect(after.effects).toEqual([]);
     expect(after.ended).toBe(false);
   });
+
+  // 003 T040: hand-over asks for a person and ends the session.
+  it('hands over with the note and ends HANDED_OVER', () => {
+    const g = graph([
+      { id: 'a', type: 'message', text: 'Let me get someone.', next: 'b' },
+      { id: 'b', type: 'handover', note: '  Wants a callback  ' },
+    ]);
+    const result = run(newSessionState('s1'), { kind: 'start' }, ctx(g));
+    expect(result.ended).toBe(true);
+    expect(result.effects).toContainEqual({ kind: 'handover', stepId: 'b', note: 'Wants a callback' });
+    expect(result.effects).toContainEqual({ kind: 'stepLeft', stepId: 'b', branch: 'handover' });
+    expect(result.effects.at(-1)).toEqual({ kind: 'end', result: 'HANDED_OVER' });
+    const quiet = run(newSessionState('s2'), { kind: 'start' }, ctx(graph([{ id: 'a', type: 'handover' }])));
+    expect(quiet.effects).toContainEqual({ kind: 'handover', stepId: 'a' });
+  });
 });

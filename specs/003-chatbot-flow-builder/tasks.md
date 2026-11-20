@@ -95,18 +95,18 @@ the timeout message.
 
 ### Tests for User Story 2 (REQUIRED) ⚠️
 
-- [ ] T028 [P] [US2] Unit tests for answers in packages/shared/src/flows/answers.test.ts: text length; numbers (decimals, integer, min/max); email; phone normalised to E.164 with the default country; dates in several written forms, "today"/"tomorrow", earliest/latest
-- [ ] T029 [P] [US2] Unit tests for question and list steps in apps/api/test/unit/flows/run-questions.spec.ts: retry prompt up to `retries`, then `onInvalid`; media when text is expected is invalid; valid answers stored under `answerName` and an attribute effect when `saveTo` is set; list choice by row id and `sharedNext`; timeout follows `onTimeout` or ends with `TIMED_OUT`; fallbacks in texts
-- [ ] T030 [P] [US2] Integration test apps/api/test/integration/flows-questions.int-spec.ts: "Book a visit" end to end through webhooks; invalid date twice; attributes saved on the contact with journey entries by the flow; the timeout timer job (processed directly) runs the timeout branch; a stale timer (old token) does nothing; a session idle for 24 hours is ended `EXPIRED` by the expiry job
-- [ ] T031 [P] [US2] Playwright e2e apps/web/e2e/flows-us2-questions.spec.ts: build question and list steps in the editor, answer from mock inbound, and check the profile panel's attributes
+- [X] T028 [P] [US2] Unit tests for answers in packages/shared/src/flows/answers.test.ts: text length; numbers (decimals, integer, min/max); email; phone normalised to E.164 with the default country; dates in several written forms, "today"/"tomorrow", earliest/latest
+- [X] T029 [P] [US2] Unit tests for question and list steps in apps/api/test/unit/flows/run-questions.spec.ts: retry prompt up to `retries`, then `onInvalid`; media when text is expected is invalid; valid answers stored under `answerName` and an attribute effect when `saveTo` is set; list choice by row id and `sharedNext`; timeout follows `onTimeout` or ends with `TIMED_OUT`; fallbacks in texts
+- [X] T030 [P] [US2] Integration test apps/api/test/integration/flows-questions.int-spec.ts: "Book a visit" end to end through webhooks; invalid date twice; attributes saved on the contact with journey entries by the flow; the timeout timer job (processed directly) runs the timeout branch; a stale timer (old token) does nothing; a session idle for 24 hours is ended `EXPIRED` by the expiry job
+- [X] T031 [P] [US2] Playwright e2e apps/web/e2e/flows-us2-questions.spec.ts: build question and list steps in the editor, answer from mock inbound, and check the profile panel's attributes
 
 ### Implementation for User Story 2
 
-- [ ] T032 [US2] Implement packages/shared/src/flows/answers.ts (validators and normalisers per contracts/flow-graph.md "Answer kinds")
-- [ ] T033 [US2] Extend the engine for `question` and `list` steps (input waits, retries, `onInvalid`, `onTimeout`, answers, attribute effects with type checks) and add variable rendering in apps/api/src/modules/flows/engine/render.ts (002 saved-reply syntax plus `{answer:name}` and per-step fallbacks)
-- [ ] T034 [US2] Implement timers: schedule `flow-timer {sessionId, waitToken}` delayed jobs from session effects, process them in apps/api/src/modules/flows/steps/timer.processor.ts (ignore stale tokens), and add apps/api/src/modules/flows/steps/expiry.processor.ts (every 5 minutes, end sessions idle for 24 hours with `EXPIRED`)
-- [ ] T035 [US2] Add publish rules to packages/shared/src/flows/validate.ts and the server check in publish.service.ts: unique answer names, `saveTo` attributes exist with a compatible type (`UNKNOWN_ATTRIBUTE`, `ATTRIBUTE_TYPE`), list limits
-- [ ] T036 [US2] Add question and list node views and forms (answer kind options, retries, retry text, timeout, attribute picker, fallbacks editor) in apps/web/src/components/flows/steps/
+- [X] T032 [US2] Implement packages/shared/src/flows/answers.ts (validators and normalisers per contracts/flow-graph.md "Answer kinds")
+- [X] T033 [US2] Extend the engine for `question` and `list` steps (input waits, retries, `onInvalid`, `onTimeout`, answers, attribute effects with type checks) and add variable rendering in apps/api/src/modules/flows/engine/render.ts (002 saved-reply syntax plus `{answer:name}` and per-step fallbacks)
+- [X] T034 [US2] Implement timers: schedule `flow-timer {sessionId, waitToken}` delayed jobs from session effects, process them in apps/api/src/modules/flows/steps/timer.processor.ts (ignore stale tokens), and add apps/api/src/modules/flows/steps/expiry.processor.ts (every 5 minutes, end sessions idle for 24 hours with `EXPIRED`)
+- [X] T035 [US2] Add publish rules to packages/shared/src/flows/validate.ts and the server check in publish.service.ts: unique answer names, `saveTo` attributes exist with a compatible type (`UNKNOWN_ATTRIBUTE`, `ATTRIBUTE_TYPE`), list limits
+- [X] T036 [US2] Add question and list node views and forms (answer kind options, retries, retry text, timeout, attribute picker, fallbacks editor) in apps/web/src/components/flows/steps/
 
 **Checkpoint**: US1 and US2 work on their own.
 
