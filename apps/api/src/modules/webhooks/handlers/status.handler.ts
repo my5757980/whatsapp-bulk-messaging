@@ -5,6 +5,7 @@ import { isUniqueViolation } from '../../../common/prisma/prisma-errors.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { REDIS_CLIENT } from '../../../common/queue/queue.module.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
+import { InboxPublisher } from '../../inbox/realtime/inbox-publisher.js';
 import { RateCardService } from '../../rate-card/rate-card.controller.js';
 import { messageCost } from '../../reports/cost-calculator.js';
 import { WebhookRouter, type WebhookChange, type WebhookChangeHandler } from '../webhook-router.js';
@@ -36,6 +37,7 @@ export class StatusHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly metrics: MetricsService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly rateCard: RateCardService,
+    private readonly inbox: InboxPublisher,
   ) {}
 
   onModuleInit(): void {
@@ -52,9 +54,10 @@ export class StatusHandler implements WebhookChangeHandler, OnModuleInit {
     const key = bufferKey(status.wamid);
     await this.redis.multi().rpush(key, JSON.stringify(withoutPhone)).expire(key, BUFFER_TTL_SECONDS).exec();
     // The send worker may have stored the wamid between our lookup and the push: check again.
-    if (await this.prisma.message.findUnique({ where: { waMessageId: status.wamid }, select: { id: true } })) {
-      await this.applyBuffered(status.wamid);
-    }
+    const stored =
+      (await this.prisma.message.findUnique({ where: { waMessageId: status.wamid }, select: { id: true } })) ??
+      (await this.prisma.chatMessage.findUnique({ where: { waMessageId: status.wamid }, select: { id: true } }));
+    if (stored) await this.applyBuffered(status.wamid);
   }
 
   /** Applies buffered events once the send worker has stored the wamid. */
@@ -75,10 +78,10 @@ export class StatusHandler implements WebhookChangeHandler, OnModuleInit {
     if (cost !== null) await this.prisma.message.update({ where: { id: messageId }, data: { costUsdMicros: cost } });
   }
 
-  /** Returns false when no message has this wamid yet. */
+  /** Returns false when no message or live chat reply has this wamid yet. */
   async apply(status: ParsedStatus): Promise<boolean> {
-    const known = await this.prisma.message.findUnique({ where: { waMessageId: status.wamid }, select: { id: true } });
-    if (!known) return false;
+    const known = await this.prisma.message.findUnique({ where: { waMessageId: status.wamid }, select: { id: true, origin: true } });
+    if (!known) return this.applyToChatReply(status);
     if (status.status === 'deleted') return true; // kept in the raw webhook event only
 
     let newStatus: string | undefined;
@@ -117,7 +120,42 @@ export class StatusHandler implements WebhookChangeHandler, OnModuleInit {
     if (newStatus) {
       const message = await this.prisma.message.findUnique({ where: { id: known.id }, select: { number: { select: { phoneNumberId: true } } } });
       this.metrics.messagesTotal.inc({ status: newStatus, number: message?.number.phoneNumberId ?? 'unknown' });
+      // Live ticks for templates sent from a chat; broadcast ticks show when a chat is opened (002 R11).
+      if (known.origin === 'INBOX') {
+        const ref = await this.prisma.chatMessage.findUnique({ where: { messageId: known.id }, select: { id: true } });
+        if (ref) await this.inbox.itemStatus(ref.id);
+      }
     }
+    return true;
+  }
+
+  /**
+   * Status of a free-form live chat reply (002 T032, contracts/meta-graph-inbox.md §5): the same
+   * precedence rules and timestamps as messages. Returns false when no reply has this wamid.
+   */
+  private async applyToChatReply(status: ParsedStatus): Promise<boolean> {
+    const item = await this.prisma.chatMessage.findUnique({ where: { waMessageId: status.wamid }, select: { id: true, kind: true } });
+    if (!item || item.kind !== 'SESSION_OUT') return false;
+    if (status.status === 'deleted') return true;
+
+    let changed = false;
+    await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT 1 FROM chat_messages WHERE id = ${item.id}::uuid FOR NO KEY UPDATE`;
+        const current = await tx.chatMessage.findUniqueOrThrow({
+          where: { id: item.id },
+          select: { status: true, sentAt: true, deliveredAt: true, readAt: true, failedAt: true },
+        });
+        const update = computeStatusUpdate({ ...current, status: current.status ?? 'SENDING' }, status);
+        if (!update) return;
+        // Pricing is not tracked for free replies inside the window (service conversations).
+        const { billable: _billable, pricingCategory: _category, ...fields } = update;
+        changed = (await tx.chatMessage.updateMany({ where: { id: item.id, status: current.status }, data: fields })).count > 0;
+      },
+      { maxWait: 10_000 },
+    );
+    this.metrics.webhookLag.observe(Math.max(0, (Date.now() - status.timestamp.getTime()) / 1000));
+    if (changed) await this.inbox.itemStatus(item.id);
     return true;
   }
 }

@@ -5,6 +5,7 @@ import { normalizePhone, waIdToE164 } from '../../../common/phone/phone.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { REDIS_CLIENT } from '../../../common/queue/queue.module.js';
 import { ConsentService } from '../../contacts/consent.service.js';
+import { JourneyService } from '../../inbox/journey/journey.service.js';
 import { SettingsService } from '../../settings/settings.service.js';
 import { WebhookRouter, type WebhookChange, type WebhookChangeHandler } from '../webhook-router.js';
 
@@ -51,6 +52,7 @@ export class InboundHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly settings: SettingsService,
     private readonly consent: ConsentService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly journey: JourneyService,
   ) {}
 
   onModuleInit(): void {
@@ -87,11 +89,17 @@ export class InboundHandler implements WebhookChangeHandler, OnModuleInit {
           : null;
       const contact = await this.prisma.contact.upsert({
         where: { phoneE164: phone.e164 },
-        create: { phoneE164: phone.e164, countryCode: phone.country, name: profiles.get(from)?.slice(0, 120) ?? null },
+        // A contact first seen through their own message came organically (002 FR-033).
+        create: { phoneE164: phone.e164, countryCode: phone.country, name: profiles.get(from)?.slice(0, 120) ?? null, leadSource: 'Organic' },
         update: {},
         select: { id: true },
       });
-      if (status) await this.consent.setStatus(contact.id, status, 'KEYWORD', { note: `Replied "${keyword}"` });
+      if (status) {
+        const before = await this.prisma.contact.findUnique({ where: { id: contact.id }, select: { consentStatus: true } });
+        await this.consent.setStatus(contact.id, status, 'KEYWORD', { note: `Replied "${keyword}"` });
+        // Live chat journey (002 T070); only real changes are recorded.
+        if (before?.consentStatus !== status) await this.journey.consentChanged(contact.id, status, 'KEYWORD');
+      }
     }
     await this.redis.set(dedupeKey, '1', 'EX', DEDUPE_TTL_SECONDS);
   }

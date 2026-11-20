@@ -17,6 +17,7 @@ import { api } from '@/lib/api-client';
 import { errorMessage, toastError } from '@/lib/errors';
 import { formatDateTime, titleCase } from '@/lib/format';
 import { useMe } from '@/lib/session';
+import { AgentRulesDialog } from '@/components/inbox/agent-rules-dialog';
 
 type Role = 'ADMIN' | 'MANAGER' | 'AGENT';
 interface TeamMember {
@@ -135,6 +136,7 @@ function Team() {
                         </Button>
                       ) : null}
                       {u.status === 'INVITED' ? <InviteDialog onInvited={invalidate} resend={{ email: u.email, role: u.role }} /> : null}
+                      {u.role === 'AGENT' && u.status !== 'INVITED' ? <AgentRulesDialog userId={u.id} name={u.name} /> : null}
                     </TableCell>
                   </TableRow>
                 ))}

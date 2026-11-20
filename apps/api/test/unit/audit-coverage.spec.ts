@@ -44,6 +44,17 @@ describe('audit coverage', () => {
       'api_key.revoked',
       'settings.updated',
       'rate_card.updated',
+      'inbox.intervened',
+      'inbox.transferred',
+      'inbox.resolved',
+      'contact.blocked',
+      'contact.unblocked',
+      'canned.created',
+      'canned.updated',
+      'canned.deleted',
+      'media.removed',
+      'livechat.settings_updated',
+      'agent_rules.updated',
     ]);
   });
 

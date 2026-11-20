@@ -6,14 +6,13 @@ import { QUEUES } from '../../common/queue/queue.constants.js';
 import { QueueRegistry } from '../../common/queue/queue.module.js';
 import { CampaignsService } from '../campaigns/campaigns.service.js';
 import { DispatchScheduler, type DispatchJobData } from '../campaigns/dispatch-scheduler.js';
-import { planDispatch, sendJobId, type DispatchPlan } from './dispatch-planner.js';
-import { MAX_SEND_ATTEMPTS } from './send-outcome.js';
+import { planDispatch, type DispatchPlan } from './dispatch-planner.js';
+import { campaignSendJob } from './send-jobs.js';
 import { SendQueueManager } from './send-queue.manager.js';
 
 export type DispatchTick = Exclude<DispatchPlan, { action: 'claim' }> | { action: 'claim'; claimed: number };
 
 const TICK_MS = 1000;
-const FAILED_SEND_JOB_RETENTION_SECONDS = 7 * 24 * 3600;
 
 /**
  * Campaign dispatcher (T098, research R7). Each tick checks the number (kill switch,
@@ -79,19 +78,8 @@ export class DispatcherProcessor implements OnModuleInit {
                 FOR UPDATE SKIP LOCKED)
    RETURNING id`;
     if (claimed.length) {
-      await queue.addBulk(
-        claimed.map(({ id }) => ({
-          name: 'send',
-          data: { messageId: id },
-          opts: {
-            jobId: sendJobId(id),
-            attempts: MAX_SEND_ATTEMPTS,
-            backoff: { type: 'custom' },
-            removeOnComplete: true,
-            removeOnFail: { age: FAILED_SEND_JOB_RETENTION_SECONDS },
-          },
-        })),
-      );
+      // Priority 10, so live chat replies (priority 1) overtake a running broadcast (002 R3).
+      await queue.addBulk(claimed.map(({ id }) => campaignSendJob(id)));
     }
     return { action: 'claim', claimed: claimed.length };
   }

@@ -11,6 +11,7 @@ import { CampaignsService } from '../campaigns/campaigns.service.js';
 import { classifyMetaError, describeMetaError } from '../meta/meta-error-classifier.js';
 import { MetaApiError, MetaGraphClient, type PhoneNumberInfo } from '../meta/meta-graph.client.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
+import { requestSendWorkerSync } from '../sending/send-jobs.js';
 
 // WhatsApp number connection, validation and refresh (FR-001, FR-002, T085).
 
@@ -147,6 +148,7 @@ export class NumbersService {
       throw error;
     }
     await this.applyRateLimit(created);
+    await requestSendWorkerSync(this.queues);
     await this.audit.record(actor, 'number.connected', { type: 'whatsapp_number', id: created.id }, {
       label: created.label,
       wabaId: created.wabaId,

@@ -1,6 +1,7 @@
 // Shared helpers for the performance scripts (T196): a minimal dashboard API client that keeps the
 // session and CSRF cookies, polling, and PASS/FAIL reporting. Talks to the API directly, so the
 // web app does not need to run.
+import { createHmac, randomUUID } from 'node:crypto';
 
 export interface PerfEnv {
   apiUrl: string;
@@ -53,6 +54,11 @@ export class ApiClient {
     return (text ? JSON.parse(text) : undefined) as T;
   }
 
+  /** The session cookies, for requests made outside this client (the live event stream). */
+  cookieHeader(): string {
+    return [...this.cookies].map(([name, value]) => `${name}=${value}`).join('; ');
+  }
+
   get<T>(path: string): Promise<T> {
     return this.request<T>('GET', path);
   }
@@ -68,6 +74,64 @@ export class ApiClient {
   upload<T>(path: string, form: FormData): Promise<T> {
     return this.request<T>('POST', path, { form });
   }
+}
+
+/** The api's Meta app secret, from the environment or the repo's .env, to sign test webhooks. */
+export function metaAppSecret(): string {
+  if (!process.env.META_APP_SECRET) {
+    try {
+      process.loadEnvFile('.env');
+    } catch {
+      // No .env file: the variable must come from the environment.
+    }
+  }
+  const secret = process.env.META_APP_SECRET;
+  if (!secret) throw new Error("Set META_APP_SECRET to the api's value to send signed webhooks");
+  return secret;
+}
+
+export interface InboundText {
+  from: string;
+  name: string;
+  text: string;
+}
+
+/** Posts customer text messages to the api's webhook in one signed payload, as Meta would. */
+export async function postInboundTexts(env: PerfEnv, secret: string, phoneNumberId: string, messages: InboundText[]): Promise<void> {
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const waId = (phone: string) => phone.replace(/^\+/, '');
+  const raw = JSON.stringify({
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: 'PERF_WABA',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: { display_phone_number: '15550100', phone_number_id: phoneNumberId },
+              contacts: messages.map((m) => ({ profile: { name: m.name }, wa_id: waId(m.from) })),
+              messages: messages.map((m) => ({ from: waId(m.from), id: `wamid.perf.${randomUUID()}`, timestamp, type: 'text', text: { body: m.text } })),
+            },
+          },
+        ],
+      },
+    ],
+  });
+  const signature = `sha256=${createHmac('sha256', secret).update(raw).digest('hex')}`;
+  const res = await fetch(`${env.apiUrl}/api/webhooks/meta`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-hub-signature-256': signature },
+    body: raw,
+  });
+  if (!res.ok) throw new Error(`Webhook -> ${res.status}: ${(await res.text()).slice(0, 200)}`);
+}
+
+/** The 95th percentile of the samples (nearest rank). */
+export function p95(samples: number[]): number {
+  const sorted = [...samples].sort((a, b) => a - b);
+  return sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)] ?? Number.NaN;
 }
 
 /** Polls `check` until it returns a value; `check` may throw to stop early. */

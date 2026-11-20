@@ -13,6 +13,7 @@ import { AuditService, type AuditActor } from '../audit/audit.service.js';
 import { setAuthCookies } from '../auth/auth.cookies.js';
 import { AuthService, toPublicUser } from '../auth/auth.service.js';
 import { InvitationsService } from './invitations.service.js';
+import { ChatRoutingService } from '../inbox/routing/chat-routing.service.js';
 
 const RoleSchema = z.enum(['ADMIN', 'MANAGER', 'AGENT']);
 const InviteSchema = z.object({ email: z.email(), role: RoleSchema }).strict();
@@ -26,6 +27,7 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly auth: AuthService,
     private readonly audit: AuditService,
+    private readonly chatRouting: ChatRoutingService,
   ) {}
 
   async list() {
@@ -51,6 +53,7 @@ export class UsersService {
     const { before, after } = updated;
     if (before.role !== after.role) await this.audit.record(actor, 'user.role_changed', { type: 'user', id }, { from: before.role, to: after.role });
     if (before.status === 'ACTIVE' && after.status === 'DEACTIVATED') {
+      await this.chatRouting.releaseChats({ ownerId: id });
       await this.auth.revokeAllSessions(id);
       await this.audit.record(actor, 'user.deactivated', { type: 'user', id });
     }

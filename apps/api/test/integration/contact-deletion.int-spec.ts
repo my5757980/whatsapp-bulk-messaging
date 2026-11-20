@@ -1,4 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { StorageService } from '../../src/common/storage/storage.service.js';
 import { seedContact, seedNumber, seedRunningCampaign, seedTemplate, uaePhone } from '../support/fixtures.js';
 import { createTestContext, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
 
@@ -48,6 +50,45 @@ describe('Contact deletion', () => {
 
     const audit = await ctx.prisma.auditLog.findFirstOrThrow({ where: { action: 'contact.deleted', targetId: target.id } });
     expect(JSON.stringify(audit.metadata)).not.toContain(phone.slice(-7));
+  });
+
+  it('erases chat text, payloads and customer media but keeps chats and openings (002 FR-042)', async () => {
+    const storage = ctx.app.get(StorageService);
+    const number = await seedNumber(ctx);
+    const contact = await seedContact(ctx, uaePhone(), { name: 'Chat Person' });
+    const chat = await ctx.prisma.conversation.create({ data: { contactId: contact.id, numberId: number.id, lastMessagePreview: 'My address is 12 Palm St' } });
+    const customerKey = `inbound/erase-${randomUUID()}.jpg`;
+    const libraryKey = `library/erase-${randomUUID()}.jpg`;
+    await storage.put(customerKey, Buffer.from('jpeg'), 'image/jpeg');
+    await storage.put(libraryKey, Buffer.from('jpeg'), 'image/jpeg');
+    const customerMedia = await ctx.prisma.mediaAsset.create({ data: { storageKey: customerKey, mimeType: 'image/jpeg', sizeBytes: 4, purpose: 'INBOUND' } });
+    const libraryMedia = await ctx.prisma.mediaAsset.create({ data: { storageKey: libraryKey, mimeType: 'image/jpeg', sizeBytes: 4, purpose: 'LIBRARY', uploadedById: admin.userId } });
+    const now = new Date();
+    await ctx.prisma.chatMessage.createMany({
+      data: [
+        { conversationId: chat.id, kind: 'INBOUND', origin: 'CUSTOMER', contentType: 'IMAGE', text: 'my passport', mediaAssetId: customerMedia.id, payload: { mimeType: 'image/jpeg' }, occurredAt: now },
+        { conversationId: chat.id, kind: 'SESSION_OUT', origin: 'MEMBER', contentType: 'IMAGE', text: 'our menu', mediaAssetId: libraryMedia.id, status: 'SENT', occurredAt: now },
+        { conversationId: chat.id, kind: 'NOTE', origin: 'MEMBER', contentType: 'TEXT', text: 'VIP, lives at Palm St', payload: { mentions: [] }, occurredAt: now },
+      ],
+    });
+    await ctx.prisma.conversationEvent.create({ data: { conversationId: chat.id, type: 'ATTRIBUTE_CHANGED', actorType: 'MEMBER', data: { key: 'city', to: 'Dubai Marina' } } });
+    const opening = await ctx.prisma.conversationOpening.create({ data: { conversationId: chat.id, openedAt: now } });
+    await ctx.prisma.notification.create({ data: { userId: admin.userId, type: 'INBOX_REQUESTING', title: 'Waiting for an agent', body: 'Chat Person asked to talk to a person', link: `/inbox?c=${chat.id}` } });
+
+    expect((await admin.agent.delete(`/api/contacts/${contact.id}`).set('x-csrf-token', admin.csrf)).status).toBe(204);
+
+    expect(await ctx.prisma.conversation.findUniqueOrThrow({ where: { id: chat.id } })).toMatchObject({ contactId: null, lastMessagePreview: null });
+    const items = await ctx.prisma.chatMessage.findMany({ where: { conversationId: chat.id } });
+    expect(items).toHaveLength(3);
+    for (const item of items) expect(item).toMatchObject({ text: null, payload: {}, mediaAssetId: null });
+    expect(items.find((i) => i.kind === 'SESSION_OUT')?.status).toBe('SENT');
+    expect(await ctx.prisma.mediaAsset.findUnique({ where: { id: customerMedia.id } })).toBeNull();
+    await expect(storage.getBuffer(customerKey)).rejects.toThrow();
+    expect(await ctx.prisma.mediaAsset.findUnique({ where: { id: libraryMedia.id } })).not.toBeNull();
+    const event = await ctx.prisma.conversationEvent.findFirstOrThrow({ where: { conversationId: chat.id, type: 'ATTRIBUTE_CHANGED' } });
+    expect(event.data).toEqual({ key: 'city' });
+    expect(await ctx.prisma.notification.count({ where: { link: `/inbox?c=${chat.id}` } })).toBe(0);
+    expect(await ctx.prisma.conversationOpening.findUnique({ where: { id: opening.id } })).not.toBeNull();
   });
 
   it('is admin-only and returns 404 for unknown contacts', async () => {

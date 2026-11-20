@@ -22,6 +22,14 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...required, OPS_TOKEN: 'short' })).toThrow(/OPS_TOKEN/);
   });
 
+  it('accepts browser push keys only as a complete set (feature 002, FR-037)', () => {
+    const push = { WEB_PUSH_PUBLIC_KEY: 'BPublicKey', WEB_PUSH_PRIVATE_KEY: 'privateKey', WEB_PUSH_SUBJECT: 'mailto:it@company.example' };
+    expect(loadConfig({ ...required }).WEB_PUSH_PUBLIC_KEY).toBeUndefined();
+    expect(loadConfig({ ...required, ...push }).WEB_PUSH_SUBJECT).toBe('mailto:it@company.example');
+    expect(() => loadConfig({ ...required, WEB_PUSH_PUBLIC_KEY: 'BPublicKey' })).toThrow(/WEB_PUSH/);
+    expect(() => loadConfig({ ...required, ...push, WEB_PUSH_SUBJECT: 'it@company.example' })).toThrow(/WEB_PUSH_SUBJECT/);
+  });
+
   it('requires secure cookies and an https APP_URL in production', () => {
     const production = { ...required, NODE_ENV: 'production' };
     expect(() => loadConfig({ ...production, APP_URL: 'https://wa.example.com' })).toThrow(/COOKIE_SECURE/);

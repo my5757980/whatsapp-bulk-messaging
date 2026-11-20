@@ -60,6 +60,27 @@ export interface CreateTemplateBody {
   parameter_format?: 'POSITIONAL' | 'NAMED';
 }
 
+/** A free-form message inside the 24-hour window (002 contracts/meta-graph-inbox.md §2). */
+export type SessionMessagePayload =
+  | { to: string; type: 'text'; text: { body: string; preview_url: boolean } }
+  | { to: string; type: 'image' | 'video' | 'document'; media: { id?: string; link?: string; caption?: string; filename?: string } }
+  | { to: string; type: 'audio'; media: { id?: string; link?: string } };
+
+/** Metadata of media a customer sent (§3); the URL is short-lived and needs the same token. */
+export interface MediaInfo {
+  url: string;
+  mimeType: string | undefined;
+  fileSize: number | undefined;
+  sha256: string | undefined;
+}
+
+export class MediaTooLargeError extends Error {
+  constructor(readonly sizeBytes: number, readonly maxBytes: number) {
+    super(`Media is ${sizeBytes} bytes; the limit is ${maxBytes}`);
+    this.name = 'MediaTooLargeError';
+  }
+}
+
 export interface PhoneNumberInfo {
   id: string;
   displayPhoneNumber: string;
@@ -183,6 +204,69 @@ export class MetaGraphClient {
       status: body.status,
       throughputLevel: body.throughput?.level,
     };
+  }
+
+  /** Sends a free-form reply (text or media); returns the wamid. */
+  async sendSessionMessage(token: string, phoneNumberId: string, payload: SessionMessagePayload): Promise<{ waMessageId: string }> {
+    const content = payload.type === 'text' ? payload.text : payload.media;
+    const body = await this.request<{ messages?: Array<{ id: string }> }>('POST', `/${phoneNumberId}/messages`, token, {
+      json: { messaging_product: 'whatsapp', recipient_type: 'individual', to: payload.to, type: payload.type, [payload.type]: content },
+    });
+    const id = body.messages?.[0]?.id;
+    if (!id) throw new MetaApiError(200, undefined, undefined, 'Graph API response has no message id');
+    return { waMessageId: id };
+  }
+
+  /** Marks a customer message (and the conversation up to it) as read (§4). */
+  async markRead(token: string, phoneNumberId: string, waMessageId: string): Promise<void> {
+    await this.request('POST', `/${phoneNumberId}/messages`, token, {
+      json: { messaging_product: 'whatsapp', status: 'read', message_id: waMessageId },
+    });
+  }
+
+  /** Looks up media a customer sent (§3). */
+  async getMedia(token: string, mediaId: string): Promise<MediaInfo> {
+    const body = await this.request<{ url?: string; mime_type?: string; file_size?: number | string; sha256?: string }>('GET', `/${encodeURIComponent(mediaId)}`, token);
+    if (!body.url) throw new MetaApiError(200, undefined, undefined, 'Graph API media response has no url');
+    const size = body.file_size === undefined ? undefined : Number(body.file_size);
+    return { url: body.url, mimeType: body.mime_type, fileSize: Number.isFinite(size) ? size : undefined, sha256: body.sha256 };
+  }
+
+  /**
+   * Downloads media from the URL getMedia returned, with the same token. The token is only sent
+   * over https or to the configured Graph origin (mock-meta in development). Stops at maxBytes.
+   */
+  async downloadMedia(token: string, url: string, maxBytes: number): Promise<Buffer> {
+    const target = new URL(url);
+    if (target.protocol !== 'https:' && target.origin !== new URL(this.baseUrl).origin) {
+      throw new MetaApiError(0, undefined, undefined, `Refusing to send the token to ${target.origin}`);
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.max(this.timeoutMs, 60_000));
+    try {
+      let res: Response;
+      try {
+        res = await fetch(target, { headers: { authorization: `Bearer ${token}` }, signal: controller.signal });
+      } catch (error) {
+        throw toNetworkError(error);
+      }
+      if (!res.ok) throw new MetaApiError(res.status, undefined, undefined, `Media download failed with HTTP ${res.status}`);
+      const declared = Number(res.headers.get('content-length'));
+      if (Number.isFinite(declared) && declared > maxBytes) throw new MediaTooLargeError(declared, maxBytes);
+      const chunks: Buffer[] = [];
+      let total = 0;
+      for await (const chunk of res.body ?? []) {
+        total += (chunk as Uint8Array).byteLength;
+        if (total > maxBytes) {
+          controller.abort();
+          throw new MediaTooLargeError(total, maxBytes);
+        }
+        chunks.push(Buffer.from(chunk as Uint8Array));
+      }
+      return Buffer.concat(chunks);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   uploadMedia(token: string, phoneNumberId: string, file: Buffer, mimeType: string, filename: string): Promise<{ id: string }> {

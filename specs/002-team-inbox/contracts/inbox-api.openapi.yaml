@@ -1,0 +1,902 @@
+openapi: 3.1.0
+info:
+  title: WhatsApp Platform - Live Chat API
+  version: 0.1.0
+  description: >
+    Live chat endpoints used by the Next.js dashboard (feature 002-team-inbox). Same conventions as
+    the 001 dashboard API: httpOnly session cookie, an X-CSRF-Token header on every mutating request,
+    an x-permission on every operation, and the error shape {code, message, details, requestId}.
+    Phone fields are masked to the last 4 digits for the AGENT role. Visibility rules (FR-026-FR-028)
+    apply to every conversation-scoped operation. A conversation the caller may not see answers 404.
+
+    New permissions (added to packages/shared/permissions.ts):
+      inbox.view        ADMIN, MANAGER, AGENT  - open live chat and History (filtered for agents)
+      inbox.reply       ADMIN, MANAGER, AGENT  - intervene, reply, resolve, templates, notes, block, read
+      inbox.monitor     ADMIN, MANAGER         - see and act on chats intervened by others; transfer any
+      canned.manage     ADMIN, MANAGER         - create, edit and delete canned messages
+      media.manage      ADMIN, MANAGER         - remove media library items
+      livechat.settings ADMIN                  - working hours, automatic messages, keywords, auto-resolve, agent rules
+      inbox.metrics     ADMIN, MANAGER         - team view
+servers:
+  - url: /api
+security:
+  - sessionCookie: []
+tags:
+  - name: conversations
+  - name: messages
+  - name: realtime
+  - name: canned
+  - name: media
+  - name: settings
+  - name: notifications
+  - name: metrics
+
+paths:
+  /inbox/conversations:
+    get:
+      tags: [conversations]
+      summary: List live chats or History, filtered and visibility-scoped
+      x-permission: inbox.view
+      parameters:
+        - { name: view, in: query, schema: { type: string, enum: [live, history], default: live } }
+        - { name: state, in: query, description: live view only, schema: { $ref: '#/components/schemas/ConversationState' } }
+        - { name: mine, in: query, description: only chats intervened by the caller, schema: { type: boolean } }
+        - { name: numberId, in: query, schema: { type: string, format: uuid } }
+        - { name: tagId, in: query, schema: { type: string, format: uuid } }
+        - { name: attribute, in: query, description: '"key:value", exact match', schema: { type: string, maxLength: 200 } }
+        - { name: campaignId, in: query, description: contacts who received this campaign, schema: { type: string, format: uuid } }
+        - { name: q, in: query, description: contact name or phone digits, schema: { type: string, maxLength: 100 } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 30 } }
+      responses:
+        '200':
+          description: One page of chats, newest activity first, plus counts per tab for the same filters
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, counts]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ConversationSummary' } }
+                  nextCursor: { type: [string, 'null'] }
+                  counts:
+                    type: object
+                    properties:
+                      ACTIVE: { type: integer }
+                      REQUESTING: { type: integer }
+                      INTERVENED: { type: integer }
+                      HISTORY: { type: integer }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    post:
+      tags: [conversations]
+      summary: Open (or create) the chat with a contact on a number, to send a template
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contactId, numberId]
+              additionalProperties: false
+              properties:
+                contactId: { type: string, format: uuid }
+                numberId: { type: string, format: uuid }
+      responses:
+        '200': { description: The existing chat, content: { application/json: { schema: { $ref: '#/components/schemas/ConversationSummary' } } } }
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ConversationSummary' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /inbox/conversations/{id}:
+    get:
+      tags: [conversations]
+      summary: One chat with its profile panel data
+      x-permission: inbox.view
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Chat detail, content: { application/json: { schema: { $ref: '#/components/schemas/ConversationDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /inbox/conversations/{id}/items:
+    get:
+      tags: [messages]
+      summary: Timeline items, newest first; pass `before` to load older ones
+      x-permission: inbox.view
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: before, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: Items, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ChatItem' } }
+                  nextBefore: { type: [string, 'null'] }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /inbox/conversations/{id}/intervene:
+    post:
+      tags: [conversations]
+      summary: Take the chat over (exactly one winner)
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Taken, content: { application/json: { schema: { $ref: '#/components/schemas/ConversationSummary' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: ALREADY_TAKEN. details[0] names the current owner.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /inbox/conversations/{id}/resolve:
+    post:
+      tags: [conversations]
+      summary: End the intervention; the chat returns to Active
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Resolved, content: { application/json: { schema: { $ref: '#/components/schemas/ConversationSummary' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "NOT_INTERVENED, or intervened by someone else and the caller lacks inbox.monitor", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /inbox/conversations/{id}/transfer:
+    post:
+      tags: [conversations]
+      summary: Hand an intervened chat to another member (owner, or inbox.monitor for any chat)
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              additionalProperties: false
+              properties:
+                userId: { type: string, format: uuid }
+      responses:
+        '200': { description: Transferred, content: { application/json: { schema: { $ref: '#/components/schemas/ConversationSummary' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "NOT_INTERVENED, NOT_OWNER, or TARGET_CANNOT_SEE (agent rules exclude the target)", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /inbox/conversations/{id}/messages:
+    post:
+      tags: [messages]
+      summary: Send a free-form reply (text, media or canned) inside the 24-hour window
+      description: Intervenes automatically when the chat is Active or Requesting (FR-020). The window is re-checked by the sender (FR-014).
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              additionalProperties: false
+              properties:
+                type: { type: string, enum: [text, media, canned] }
+                text: { type: string, maxLength: 4096, description: "text body, or caption for media" }
+                mediaAssetId: { type: string, format: uuid, description: a LIBRARY asset }
+                mediaUrl: { type: string, format: uri, pattern: '^https://' }
+                fileName: { type: string, maxLength: 240 }
+                cannedMessageId: { type: string, format: uuid }
+                params:
+                  type: object
+                  description: values for {{n}} parameters of a canned message
+                  additionalProperties: { type: string, maxLength: 1024 }
+      responses:
+        '202': { description: Queued, content: { application/json: { schema: { $ref: '#/components/schemas/ChatItem' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: ALREADY_TAKEN (another member owns the chat), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: "WINDOW_CLOSED, NUMBER_UNAVAILABLE, FILE_TOO_LARGE, UNSUPPORTED_FILE_TYPE, PARAMS_MISSING, VALIDATION_FAILED", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /inbox/conversations/{id}/template:
+    post:
+      tags: [messages]
+      summary: Send an approved template (works in History too)
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [templateId]
+              additionalProperties: false
+              properties:
+                templateId: { type: string, format: uuid }
+                params:
+                  type: object
+                  description: values keyed like BODY.1, HEADER.1, BUTTON.0.1
+                  additionalProperties: { type: string, maxLength: 1024 }
+                headerMediaAssetId: { type: string, format: uuid }
+      responses:
+        '202': { description: Queued (a MESSAGE_REF item), content: { application/json: { schema: { $ref: '#/components/schemas/ChatItem' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { description: "CONTACT_OPTED_OUT, NO_OPT_IN, TEMPLATE_NOT_APPROVED, PARAMS_MISMATCH, NUMBER_UNAVAILABLE", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /inbox/conversations/{id}/notes:
+    post:
+      tags: [messages]
+      summary: Add an internal note (never sent to the customer)
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              additionalProperties: false
+              properties:
+                text: { type: string, minLength: 1, maxLength: 4096 }
+                mentions: { type: array, maxItems: 10, items: { type: string, format: uuid } }
+      responses:
+        '201': { description: Note created, content: { application/json: { schema: { $ref: '#/components/schemas/ChatItem' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /inbox/conversations/{id}/read:
+    post:
+      tags: [messages]
+      summary: Mark the chat read for the caller; also sends a read receipt to WhatsApp (best effort)
+      x-permission: inbox.view
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Marked }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /inbox/conversations/{id}/journey:
+    get:
+      tags: [conversations]
+      summary: Customer journey, newest first
+      x-permission: inbox.view
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: Journey entries
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/JourneyEntry' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /inbox/conversations/{id}/contact:
+    patch:
+      tags: [conversations]
+      summary: Edit the contact from the chat profile (recorded in the journey)
+      x-permission: contacts.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: [string, 'null'], maxLength: 120 }
+                attributes: { type: object, additionalProperties: true, description: typed per attribute definitions; null removes }
+                addTagIds: { type: array, items: { type: string, format: uuid } }
+                removeTagIds: { type: array, items: { type: string, format: uuid } }
+                firstMessageTagId: { type: [string, 'null'], format: uuid }
+      responses:
+        '200': { description: Updated profile, content: { application/json: { schema: { $ref: '#/components/schemas/ContactProfile' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /contacts/{id}/block:
+    post:
+      tags: [conversations]
+      summary: Block a contact's incoming messages
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Blocked }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [conversations]
+      summary: Unblock a contact
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Unblocked }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /inbox/unread:
+    get:
+      tags: [conversations]
+      summary: Total unread chats for the navigation badge
+      x-permission: inbox.view
+      responses:
+        '200':
+          description: Count
+          content: { application/json: { schema: { type: object, required: [total], properties: { total: { type: integer } } } } }
+
+  /inbox/members:
+    get:
+      tags: [conversations]
+      summary: Active members who can reply; with conversationId, only those who may see that chat (mentions)
+      x-permission: inbox.reply
+      parameters:
+        - { name: conversationId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, name, role]
+                  properties:
+                    id: { type: string, format: uuid }
+                    name: { type: string }
+                    role: { type: string, enum: [ADMIN, MANAGER, AGENT] }
+
+  /inbox/numbers:
+    get:
+      tags: [conversations]
+      summary: Company numbers a member can start a chat from (for "Message on WhatsApp")
+      x-permission: inbox.reply
+      responses:
+        '200':
+          description: Connected numbers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, label, displayPhoneNumber]
+                  properties:
+                    id: { type: string, format: uuid }
+                    label: { type: string }
+                    displayPhoneNumber: { type: string, description: "the company's own number, not a customer's" }
+
+  /inbox/events:
+    get:
+      tags: [realtime]
+      summary: Server-Sent Events stream of inbox changes (see realtime-events.md)
+      x-permission: inbox.view
+      parameters:
+        - { name: Last-Event-ID, in: header, required: false, schema: { type: string }, description: resume after this stream entry }
+      responses:
+        '200':
+          description: 'text/event-stream; events: conversation.upserted, message.created, message.status, note.created, conversation.window_closed, contact.updated, resync, plus ": ping" comments every 15 s'
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  /inbox/media/{id}:
+    get:
+      tags: [media]
+      summary: Stream a stored media file (inbound or library), behind authentication and visibility checks
+      x-permission: inbox.view
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: The file, with its Content-Type and Content-Disposition
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /canned-messages:
+    get:
+      tags: [canned]
+      summary: All canned messages, with the caller's favourites first
+      x-permission: inbox.view
+      parameters:
+        - { name: q, in: query, description: matches name or text, schema: { type: string, maxLength: 80 } }
+      responses:
+        '200':
+          description: Canned messages
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/CannedMessage' } } } }
+    post:
+      tags: [canned]
+      summary: Create a canned message (at most 200)
+      x-permission: canned.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CannedMessageInput' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/CannedMessage' } } } }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: LIMIT_REACHED or VALIDATION_FAILED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /canned-messages/{id}:
+    patch:
+      tags: [canned]
+      summary: Edit a canned message
+      x-permission: canned.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CannedMessageInput' } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/CannedMessage' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [canned]
+      summary: Delete a canned message
+      x-permission: canned.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /canned-messages/{id}/favorite:
+    put:
+      tags: [canned]
+      summary: Mark as the caller's favourite
+      x-permission: inbox.view
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Marked }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [canned]
+      summary: Remove from the caller's favourites
+      x-permission: inbox.view
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Removed }
+
+  /media-library:
+    get:
+      tags: [media]
+      summary: Media library items, newest first
+      x-permission: inbox.view
+      parameters:
+        - { name: kind, in: query, schema: { type: string, enum: [image, video, audio, document] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 30 } }
+      responses:
+        '200':
+          description: One page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/MediaItem' } }
+                  page: { $ref: '#/components/schemas/PageMeta' }
+    post:
+      tags: [media]
+      summary: Upload to the media library (chat limits, FR-015)
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                displayName: { type: string, maxLength: 240 }
+      responses:
+        '201': { description: Stored, content: { application/json: { schema: { $ref: '#/components/schemas/MediaItem' } } } }
+        '422': { description: FILE_TOO_LARGE or UNSUPPORTED_FILE_TYPE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /media-library/{id}:
+    delete:
+      tags: [media]
+      summary: Remove a library item (messages already sent keep their copy)
+      x-permission: media.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Removed }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /live-chat/settings:
+    get:
+      tags: [settings]
+      summary: Working hours, automatic messages, keywords and auto-resolve
+      x-permission: livechat.settings
+      responses:
+        '200': { description: Settings, content: { application/json: { schema: { $ref: '#/components/schemas/LiveChatSettings' } } } }
+    put:
+      tags: [settings]
+      summary: Replace the live chat settings
+      x-permission: livechat.settings
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/LiveChatSettings' } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/LiveChatSettings' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /users/{id}/agent-rules:
+    get:
+      tags: [settings]
+      summary: An agent's rules
+      x-permission: livechat.settings
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Rules, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AgentRule' } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [settings]
+      summary: Replace an agent's rules (an empty list removes the restriction)
+      x-permission: livechat.settings
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              maxItems: 50
+              items: { $ref: '#/components/schemas/AgentRuleInput' }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AgentRule' } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { description: NOT_AN_AGENT or VALIDATION_FAILED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /me/notification-preferences:
+    get:
+      tags: [notifications]
+      summary: The caller's sound preference
+      x-permission: inbox.view
+      responses:
+        '200':
+          description: Preferences
+          content: { application/json: { schema: { type: object, required: [soundEnabled], properties: { soundEnabled: { type: boolean } } } } }
+    put:
+      tags: [notifications]
+      summary: Save the caller's sound preference
+      x-permission: inbox.view
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [soundEnabled], additionalProperties: false, properties: { soundEnabled: { type: boolean } } }
+      responses:
+        '200':
+          description: Saved
+          content: { application/json: { schema: { type: object, properties: { soundEnabled: { type: boolean } } } } }
+
+  /me/push-devices:
+    get:
+      tags: [notifications]
+      summary: The caller's registered push devices (at most 5)
+      x-permission: inbox.view
+      responses:
+        '200':
+          description: Devices
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/PushDevice' } } } }
+    post:
+      tags: [notifications]
+      summary: Register a browser push subscription
+      x-permission: inbox.view
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [endpoint, keys]
+              additionalProperties: false
+              properties:
+                endpoint: { type: string, format: uri, pattern: '^https://' }
+                keys:
+                  type: object
+                  required: [p256dh, auth]
+                  properties: { p256dh: { type: string }, auth: { type: string } }
+                label: { type: string, maxLength: 80 }
+      responses:
+        '201': { description: Registered, content: { application/json: { schema: { $ref: '#/components/schemas/PushDevice' } } } }
+        '422': { description: DEVICE_LIMIT (5 already registered) or VALIDATION_FAILED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /me/push-devices/{id}:
+    patch:
+      tags: [notifications]
+      summary: Pause or resume a device
+      x-permission: inbox.view
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [paused], additionalProperties: false, properties: { paused: { type: boolean } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/PushDevice' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [notifications]
+      summary: Remove a device
+      x-permission: inbox.view
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Removed }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /push/vapid-public-key:
+    get:
+      tags: [notifications]
+      summary: Public VAPID key used by the browser to subscribe
+      x-permission: inbox.view
+      responses:
+        '200':
+          description: Key, or null when push is not configured
+          content: { application/json: { schema: { type: object, properties: { publicKey: { type: [string, 'null'] } } } } }
+
+  /inbox/team-metrics:
+    get:
+      tags: [metrics]
+      summary: Team view for a period (FR-039)
+      x-permission: inbox.metrics
+      parameters:
+        - { name: period, in: query, schema: { type: string, enum: [today, 7d, 30d], default: today } }
+      responses:
+        '200': { description: Metrics, content: { application/json: { schema: { $ref: '#/components/schemas/TeamMetrics' } } } }
+
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: sid }
+    csrfHeader: { type: apiKey, in: header, name: X-CSRF-Token }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+  responses:
+    NotFound:
+      description: Not found, or not visible to the caller
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationFailed:
+      description: VALIDATION_FAILED, with field details
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [ALREADY_TAKEN, WINDOW_CLOSED, NUMBER_UNAVAILABLE, CONTACT_OPTED_OUT, LIMIT_REACHED] }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: object, properties: { field: { type: string }, issue: { type: string } } }
+        requestId: { type: string }
+    PageMeta:
+      type: object
+      properties: { page: { type: integer }, pageSize: { type: integer }, total: { type: integer } }
+    ConversationState: { type: string, enum: [ACTIVE, REQUESTING, INTERVENED] }
+    MemberRef:
+      type: [object, 'null']
+      properties: { id: { type: string, format: uuid }, name: { type: string } }
+    ConversationSummary:
+      type: object
+      required: [id, numberId, state, inHistory, lastActivityAt, unread, blocked]
+      properties:
+        id: { type: string, format: uuid }
+        contactId: { type: [string, 'null'], format: uuid }
+        contactName: { type: [string, 'null'] }
+        phone: { type: [string, 'null'], description: masked for agents }
+        numberId: { type: string, format: uuid }
+        numberLabel: { type: string }
+        state: { $ref: '#/components/schemas/ConversationState' }
+        intervenedBy: { $ref: '#/components/schemas/MemberRef' }
+        inHistory: { type: boolean }
+        windowEndsAt: { type: [string, 'null'], format: date-time }
+        lastActivityAt: { type: string, format: date-time }
+        lastMessagePreview: { type: [string, 'null'] }
+        unread: { type: integer, maximum: 99 }
+        blocked: { type: boolean }
+        tags: { type: array, items: { type: string } }
+    ContactProfile:
+      type: object
+      properties:
+        contactId: { type: [string, 'null'], format: uuid }
+        name: { type: [string, 'null'] }
+        phone: { type: [string, 'null'] }
+        leadSource: { type: [string, 'null'] }
+        firstMessageTag: { type: [object, 'null'], properties: { id: { type: string }, name: { type: string } } }
+        consentStatus: { type: string, enum: [OPTED_IN, OPTED_OUT, UNKNOWN] }
+        consentSource: { type: [string, 'null'] }
+        consentAt: { type: [string, 'null'], format: date-time }
+        attributes: { type: object, additionalProperties: true }
+        tags: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string } } } }
+        blocked: { type: boolean }
+    ConversationDetail:
+      allOf:
+        - $ref: '#/components/schemas/ConversationSummary'
+        - type: object
+          properties:
+            profile: { $ref: '#/components/schemas/ContactProfile' }
+            lastActiveAt: { type: [string, 'null'], format: date-time }
+            templateMessageCount: { type: integer }
+            sessionMessageCount: { type: integer }
+            unresolvedRequests: { type: integer }
+            recentCampaigns:
+              type: array
+              maxItems: 10
+              items:
+                type: object
+                properties:
+                  campaignId: { type: string, format: uuid }
+                  name: { type: string }
+                  sentAt: { type: [string, 'null'], format: date-time }
+                  status: { type: string }
+            canReply: { type: boolean, description: "live window open, number usable, and the caller may act on the chat" }
+    ChatItem:
+      type: object
+      required: [id, kind, origin, contentType, occurredAt]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [INBOUND, SESSION_OUT, MESSAGE_REF, NOTE] }
+        origin: { type: string, enum: [CUSTOMER, MEMBER, AUTOMATIC, CAMPAIGN, API] }
+        contentType: { type: string, enum: [TEXT, IMAGE, VIDEO, AUDIO, DOCUMENT, STICKER, LOCATION, CONTACTS, BUTTON_REPLY, LIST_REPLY, FORM_REPLY, REACTION, TEMPLATE, UNSUPPORTED] }
+        text: { type: [string, 'null'] }
+        payload: { type: object, additionalProperties: true }
+        media:
+          type: [object, 'null']
+          properties:
+            id: { type: string, format: uuid }
+            mimeType: { type: string }
+            sizeBytes: { type: integer }
+            fileName: { type: [string, 'null'] }
+            state: { type: string, enum: [PENDING, READY, FAILED] }
+        status: { type: [string, 'null'], enum: [QUEUED, SENDING, SENT, DELIVERED, READ, FAILED, null] }
+        failureReason: { type: [string, 'null'] }
+        sentBy: { $ref: '#/components/schemas/MemberRef' }
+        template: { type: [object, 'null'], properties: { name: { type: string }, language: { type: string }, renderedText: { type: string } } }
+        campaign: { type: [object, 'null'], properties: { id: { type: string }, name: { type: string } } }
+        occurredAt: { type: string, format: date-time }
+    JourneyEntry:
+      type: object
+      required: [type, at, actor]
+      properties:
+        type: { type: string, examples: [INTERVENED, TRANSFERRED, RESOLVED, AUTO_RESOLVED, REQUESTED, TAG_ADDED, CAMPAIGN_SENT, CONSENT_CHANGED, BLOCKED] }
+        at: { type: string, format: date-time }
+        actor: { type: object, properties: { type: { type: string, enum: [MEMBER, CUSTOMER, SYSTEM, CAMPAIGN] }, name: { type: [string, 'null'] } } }
+        data: { type: object, additionalProperties: true }
+    CannedMessageInput:
+      type: object
+      required: [name, type]
+      additionalProperties: false
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        type: { type: string, enum: [TEXT, MEDIA] }
+        text: { type: string, maxLength: 4096 }
+        variableFallbacks: { type: object, additionalProperties: { type: string, maxLength: 200 } }
+        mediaAssetId: { type: string, format: uuid }
+        mediaUrl: { type: string, format: uri, pattern: '^https://' }
+        fileName: { type: string, maxLength: 240 }
+    CannedMessage:
+      type: object
+      required: [id, name, type, favorite, parameterCount]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        type: { type: string, enum: [TEXT, MEDIA] }
+        text: { type: string }
+        variableFallbacks: { type: object, additionalProperties: { type: string } }
+        mediaAssetId: { type: string, format: uuid }
+        mediaUrl: { type: string }
+        fileName: { type: string }
+        favorite: { type: boolean }
+        parameterCount: { type: integer }
+        createdBy: { $ref: '#/components/schemas/MemberRef' }
+        updatedAt: { type: string, format: date-time }
+    MediaItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: [string, 'null'] }
+        mimeType: { type: string }
+        sizeBytes: { type: integer }
+        kind: { type: string, enum: [image, video, audio, document] }
+        uploadedBy: { $ref: '#/components/schemas/MemberRef' }
+        createdAt: { type: string, format: date-time }
+    AutoContent:
+      type: [object, 'null']
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [TEMPLATE, TEXT, IMAGE, FILE] }
+        templateId: { type: string, format: uuid }
+        variables: { type: object, additionalProperties: true }
+        text: { type: string, maxLength: 4096 }
+        mediaAssetId: { type: string, format: uuid }
+    LiveChatSettings:
+      type: object
+      required: [timezone, workingHours, welcomeEnabled, offHoursEnabled, humanKeywords, autoResolve]
+      properties:
+        timezone: { type: string, examples: [Asia/Dubai] }
+        workingHours:
+          type: object
+          description: per weekday, a list of [start, end] times in HH:MM; an empty list means closed
+          properties:
+            mon: { $ref: '#/components/schemas/DayHours' }
+            tue: { $ref: '#/components/schemas/DayHours' }
+            wed: { $ref: '#/components/schemas/DayHours' }
+            thu: { $ref: '#/components/schemas/DayHours' }
+            fri: { $ref: '#/components/schemas/DayHours' }
+            sat: { $ref: '#/components/schemas/DayHours' }
+            sun: { $ref: '#/components/schemas/DayHours' }
+        welcomeEnabled: { type: boolean }
+        welcomeContent: { $ref: '#/components/schemas/AutoContent' }
+        offHoursEnabled: { type: boolean }
+        offHoursContent: { $ref: '#/components/schemas/AutoContent' }
+        humanKeywords: { type: array, maxItems: 5, items: { type: string, minLength: 1, maxLength: 60 } }
+        autoResolve: { type: boolean }
+    DayHours:
+      type: array
+      maxItems: 4
+      items:
+        type: array
+        minItems: 2
+        maxItems: 2
+        items: { type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' }
+    AgentRuleInput:
+      type: object
+      required: [kind]
+      additionalProperties: false
+      properties:
+        kind: { type: string, enum: [TAG, ATTRIBUTE] }
+        tagId: { type: string, format: uuid }
+        attributeKey: { type: string, maxLength: 60 }
+        attributeValue: { type: string, maxLength: 200 }
+    AgentRule:
+      type: object
+      required: [id, kind]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [TAG, ATTRIBUTE] }
+        tagId: { type: string, format: uuid }
+        tagName: { type: [string, 'null'] }
+        attributeKey: { type: string }
+        attributeValue: { type: string }
+    PushDevice:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        label: { type: [string, 'null'] }
+        paused: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        lastSuccessAt: { type: [string, 'null'], format: date-time }
+    TeamMetrics:
+      type: object
+      properties:
+        period: { type: string, enum: [today, 7d, 30d] }
+        live: { type: object, properties: { ACTIVE: { type: integer }, REQUESTING: { type: integer }, INTERVENED: { type: integer } } }
+        oldestRequestingSince: { type: [string, 'null'], format: date-time }
+        members:
+          type: array
+          items:
+            type: object
+            properties:
+              user: { $ref: '#/components/schemas/MemberRef' }
+              intervened: { type: integer }
+              resolved: { type: integer }
+              medianFirstResponseSeconds: { type: [number, 'null'] }
+              medianResolutionSeconds: { type: [number, 'null'] }

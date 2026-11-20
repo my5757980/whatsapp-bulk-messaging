@@ -105,8 +105,55 @@ describe('Retention', () => {
     expect((await ctx.prisma.importJob.findUniqueOrThrow({ where: { id: job.id } })).errorFileKey).toBeNull();
   });
 
+  it('purges live chat items, journey events and openings older than 12 months, and unused customer media (002)', async () => {
+    const storage = ctx.app.get(StorageService);
+    const contact = await seedContact(ctx, uaePhone());
+    const old = monthsAgo(13);
+    const recent = monthsAgo(11);
+    const chat = await ctx.prisma.conversation.create({ data: { contactId: contact.id, numberId, lastActivityAt: old, lastMessagePreview: 'Old private text' } });
+    const media = async (key: string, createdAt: Date) => {
+      await storage.put(key, Buffer.from('jpeg'), 'image/jpeg');
+      return ctx.prisma.mediaAsset.create({ data: { storageKey: key, mimeType: 'image/jpeg', sizeBytes: 4, purpose: 'INBOUND', createdAt } });
+    };
+    const oldMedia = await media(`inbound/retention-${randomUUID()}.jpg`, old);
+    const keptMedia = await media(`inbound/retention-${randomUUID()}.jpg`, old);
+    const item = (occurredAt: Date, mediaAssetId?: string) =>
+      ctx.prisma.chatMessage.create({ data: { conversationId: chat.id, kind: 'INBOUND', origin: 'CUSTOMER', contentType: mediaAssetId ? 'IMAGE' : 'TEXT', text: 'hello', mediaAssetId, occurredAt } });
+    const oldItem = await item(old, oldMedia.id);
+    const newItem = await item(recent, keptMedia.id);
+    const oldEvent = await ctx.prisma.conversationEvent.create({ data: { conversationId: chat.id, type: 'REQUESTED', actorType: 'CUSTOMER', occurredAt: old } });
+    const newEvent = await ctx.prisma.conversationEvent.create({ data: { conversationId: chat.id, type: 'REQUESTED', actorType: 'CUSTOMER', occurredAt: recent } });
+    const oldOpening = await ctx.prisma.conversationOpening.create({ data: { conversationId: chat.id, openedAt: old } });
+    const newOpening = await ctx.prisma.conversationOpening.create({ data: { conversationId: chat.id, openedAt: recent } });
+
+    const result = await retention.purgeLiveChat(new Date());
+    expect(result.chatItems).toBeGreaterThanOrEqual(1);
+    expect(await ctx.prisma.chatMessage.findUnique({ where: { id: oldItem.id } })).toBeNull();
+    expect(await ctx.prisma.chatMessage.findUnique({ where: { id: newItem.id } })).not.toBeNull();
+    expect(await ctx.prisma.conversationEvent.findUnique({ where: { id: oldEvent.id } })).toBeNull();
+    expect(await ctx.prisma.conversationEvent.findUnique({ where: { id: newEvent.id } })).not.toBeNull();
+    expect(await ctx.prisma.conversationOpening.findUnique({ where: { id: oldOpening.id } })).toBeNull();
+    expect(await ctx.prisma.conversationOpening.findUnique({ where: { id: newOpening.id } })).not.toBeNull();
+    // The chat stays, without its old preview.
+    expect(await ctx.prisma.conversation.findUniqueOrThrow({ where: { id: chat.id } })).toMatchObject({ lastMessagePreview: null });
+    // Media no item uses is deleted with its file; media still in use is kept.
+    expect(await ctx.prisma.mediaAsset.findUnique({ where: { id: oldMedia.id } })).toBeNull();
+    await expect(storage.getBuffer(oldMedia.storageKey)).rejects.toThrow();
+    expect(await ctx.prisma.mediaAsset.findUnique({ where: { id: keptMedia.id } })).not.toBeNull();
+    expect((await storage.getBuffer(keptMedia.storageKey)).length).toBe(4);
+  });
+
   it('runs every step daily on the maintenance queue', async () => {
-    expect(await retention.run()).toEqual({ campaigns: expect.any(Number), messages: expect.any(Number), webhookEvents: expect.any(Number), files: expect.any(Number) });
+    expect(await retention.run()).toEqual({
+      campaigns: expect.any(Number),
+      messages: expect.any(Number),
+      webhookEvents: expect.any(Number),
+      files: expect.any(Number),
+      chatItems: expect.any(Number),
+      chatEvents: expect.any(Number),
+      chatOpenings: expect.any(Number),
+      chatMedia: expect.any(Number),
+    });
     const scheduler = await ctx.app.get(QueueRegistry).get(QUEUES.MAINTENANCE).getJobScheduler('retention');
     expect(scheduler?.pattern).toBe('15 3 * * *');
   });

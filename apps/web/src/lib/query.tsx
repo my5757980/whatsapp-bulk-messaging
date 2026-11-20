@@ -19,6 +19,15 @@ export const queryKeys = {
   attributes: ['attributes'] as const,
   audiencePreview: (body: unknown) => ['audience-preview', body] as const,
   settings: ['settings'] as const,
+  // Live chat (feature 002): everything under ['inbox'] is refreshed together on resync.
+  inbox: ['inbox'] as const,
+  inboxLists: ['inbox', 'conversations'] as const,
+  inboxConversations: (filters?: Record<string, unknown>) => ['inbox', 'conversations', filters ?? {}] as const,
+  inboxConversation: (id: string) => ['inbox', 'conversation', id] as const,
+  inboxItems: (id: string) => ['inbox', 'items', id] as const,
+  inboxUnread: ['inbox', 'unread'] as const,
+  notificationPrefs: ['notification-preferences'] as const,
+  pushDevices: ['push-devices'] as const,
 };
 
 export function QueryProvider({ children }: { children: ReactNode }) {

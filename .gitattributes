@@ -1,0 +1,2 @@
+# Sample media must keep its exact bytes (the PDF is plain text with byte offsets).
+samples/media/** binary

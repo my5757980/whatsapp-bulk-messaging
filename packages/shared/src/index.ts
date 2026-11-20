@@ -4,3 +4,4 @@ export * from './permissions.js';
 export * from './status.js';
 export * from './template-rules.js';
 export * from './variables.js';
+export * from './chat-media-limits.js';

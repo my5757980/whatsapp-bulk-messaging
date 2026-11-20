@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { MessageOnWhatsApp } from '@/components/inbox/message-on-whatsapp';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,16 +23,36 @@ import type { AttributeDefinition, ConsentStatusValue, ContactDetail } from '@/l
 /** Contact detail: profile, tags, attributes, consent history and deletion (T128). */
 export default function ContactDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const contact = useQuery({ queryKey: queryKeys.contact(id), queryFn: () => api<ContactDetail>(`/contacts/${id}`) });
-  const attributes = useQuery({ queryKey: queryKeys.attributes, queryFn: () => api<AttributeDefinition[]>('/attributes') });
+  const contact = useQuery({
+    queryKey: queryKeys.contact(id),
+    queryFn: () => api<ContactDetail>(`/contacts/${id}`),
+  });
+  const attributes = useQuery({
+    queryKey: queryKeys.attributes,
+    queryFn: () => api<AttributeDefinition[]>('/attributes'),
+  });
 
-  if (contact.isLoading || attributes.isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
-  if (contact.error || !contact.data) return <p className="text-sm text-destructive">{errorMessage(contact.error)}</p>;
+  if (contact.isLoading || attributes.isLoading)
+    return <p className="text-sm text-muted-foreground">Loading…</p>;
+  if (contact.error || !contact.data)
+    return <p className="text-sm text-destructive">{errorMessage(contact.error)}</p>;
   // Remount the editors when the contact changes so their state starts from the saved values.
-  return <ContactView key={JSON.stringify(contact.data)} contact={contact.data} definitions={attributes.data ?? []} />;
+  return (
+    <ContactView
+      key={JSON.stringify(contact.data)}
+      contact={contact.data}
+      definitions={attributes.data ?? []}
+    />
+  );
 }
 
-function ContactView({ contact, definitions }: { contact: ContactDetail; definitions: AttributeDefinition[] }) {
+function ContactView({
+  contact,
+  definitions,
+}: {
+  contact: ContactDetail;
+  definitions: AttributeDefinition[];
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { can } = usePermissions();
@@ -41,7 +62,8 @@ function ContactView({ contact, definitions }: { contact: ContactDetail; definit
   const [note, setNote] = useState('');
 
   const save = useMutation({
-    mutationFn: (body: Record<string, unknown>) => api<ContactDetail>(`/contacts/${contact.id}`, { method: 'PATCH', json: body }),
+    mutationFn: (body: Record<string, unknown>) =>
+      api<ContactDetail>(`/contacts/${contact.id}`, { method: 'PATCH', json: body }),
     onSuccess: async () => {
       toast.success('Contact saved');
       setNote('');
@@ -79,7 +101,10 @@ function ContactView({ contact, definitions }: { contact: ContactDetail; definit
   function submitConsent(event: FormEvent) {
     event.preventDefault();
     setError(null);
-    save.mutate({ consentStatus: consent, ...(note.trim() ? { consentSourceNote: note.trim() } : {}) });
+    save.mutate({
+      consentStatus: consent,
+      ...(note.trim() ? { consentSourceNote: note.trim() } : {}),
+    });
   }
 
   return (
@@ -94,24 +119,29 @@ function ContactView({ contact, definitions }: { contact: ContactDetail; definit
             {contact.phone} · {contact.countryCode} · added {formatDateTime(contact.createdAt)}
           </p>
         </div>
-        <Can permission="contacts.delete">
-          <ConfirmDialog
-            trigger={<Button variant="destructive">Delete contact data</Button>}
-            title="Delete this contact's personal data?"
-            description="The contact, consent history and uploaded details are removed. Campaign totals keep delivery outcomes without the phone number. This cannot be undone."
-            confirmLabel="Delete data"
-            confirmVariant="destructive"
-            onConfirm={() =>
-              api(`/contacts/${contact.id}`, { method: 'DELETE' })
-                .then(() => {
-                  toast.success('Contact data deleted');
-                  void queryClient.invalidateQueries({ queryKey: ['contacts'] });
-                  router.replace('/contacts');
-                })
-                .catch(toastError)
-            }
-          />
-        </Can>
+        <div className="flex flex-wrap gap-2">
+          <Can permission="inbox.reply">
+            <MessageOnWhatsApp contactId={contact.id} />
+          </Can>
+          <Can permission="contacts.delete">
+            <ConfirmDialog
+              trigger={<Button variant="destructive">Delete contact data</Button>}
+              title="Delete this contact's personal data?"
+              description="The contact, consent history and uploaded details are removed. Campaign totals keep delivery outcomes without the phone number. This cannot be undone."
+              confirmLabel="Delete data"
+              confirmVariant="destructive"
+              onConfirm={() =>
+                api(`/contacts/${contact.id}`, { method: 'DELETE' })
+                  .then(() => {
+                    toast.success('Contact data deleted');
+                    void queryClient.invalidateQueries({ queryKey: ['contacts'] });
+                    router.replace('/contacts');
+                  })
+                  .catch(toastError)
+              }
+            />
+          </Can>
+        </div>
       </div>
 
       {error ? (
@@ -140,10 +170,17 @@ function ContactView({ contact, definitions }: { contact: ContactDetail; definit
                 return (
                   <div key={def.key} className="grid gap-1.5">
                     <Label htmlFor={`attr-${def.key}`}>
-                      {def.label} <span className="text-xs text-muted-foreground">({def.type.toLowerCase()})</span>
+                      {def.label}{' '}
+                      <span className="text-xs text-muted-foreground">
+                        ({def.type.toLowerCase()})
+                      </span>
                     </Label>
                     {def.type === 'BOOLEAN' ? (
-                      <NativeSelect id={`attr-${def.key}`} name={`attr-${def.key}`} defaultValue={value === undefined ? '' : String(value)}>
+                      <NativeSelect
+                        id={`attr-${def.key}`}
+                        name={`attr-${def.key}`}
+                        defaultValue={value === undefined ? '' : String(value)}
+                      >
                         <option value="">Not set</option>
                         <option value="true">Yes</option>
                         <option value="false">No</option>
@@ -152,7 +189,9 @@ function ContactView({ contact, definitions }: { contact: ContactDetail; definit
                       <Input
                         id={`attr-${def.key}`}
                         name={`attr-${def.key}`}
-                        type={def.type === 'DATE' ? 'date' : def.type === 'NUMBER' ? 'number' : 'text'}
+                        type={
+                          def.type === 'DATE' ? 'date' : def.type === 'NUMBER' ? 'number' : 'text'
+                        }
                         step="any"
                         defaultValue={value === undefined ? '' : String(value)}
                       />
@@ -175,7 +214,10 @@ function ContactView({ contact, definitions }: { contact: ContactDetail; definit
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-base">
-            Consent <Badge variant={consentLabel[contact.consentStatus].variant}>{consentLabel[contact.consentStatus].label}</Badge>
+            Consent{' '}
+            <Badge variant={consentLabel[contact.consentStatus].variant}>
+              {consentLabel[contact.consentStatus].label}
+            </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-4">
@@ -183,29 +225,50 @@ function ContactView({ contact, definitions }: { contact: ContactDetail; definit
             <form onSubmit={submitConsent} className="flex flex-wrap items-end gap-3">
               <div className="grid gap-1.5">
                 <Label htmlFor="consent">Status</Label>
-                <NativeSelect id="consent" className="w-40" value={consent} onChange={(e) => setConsent(e.target.value as ConsentStatusValue)}>
+                <NativeSelect
+                  id="consent"
+                  className="w-40"
+                  value={consent}
+                  onChange={(e) => setConsent(e.target.value as ConsentStatusValue)}
+                >
                   <option value="OPTED_IN">Opted in</option>
                   <option value="UNKNOWN">Unknown</option>
                   <option value="OPTED_OUT">Opted out</option>
                 </NativeSelect>
               </div>
               <div className="grid min-w-64 flex-1 gap-1.5">
-                <Label htmlFor="consent-note">Source note {consent === 'OPTED_IN' ? '(required for opt-in)' : '(optional)'}</Label>
-                <Input id="consent-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} placeholder="Customer asked in store on 12 Nov" />
+                <Label htmlFor="consent-note">
+                  Source note {consent === 'OPTED_IN' ? '(required for opt-in)' : '(optional)'}
+                </Label>
+                <Input
+                  id="consent-note"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  maxLength={500}
+                  placeholder="Customer asked in store on 12 Nov"
+                />
               </div>
-              <Button type="submit" variant="secondary" disabled={consent === contact.consentStatus || save.isPending}>
+              <Button
+                type="submit"
+                variant="secondary"
+                disabled={consent === contact.consentStatus || save.isPending}
+              >
                 Update consent
               </Button>
             </form>
           ) : null}
           <div className="grid gap-2">
             <div className="text-sm font-medium">History</div>
-            {!contact.consentHistory.length ? <p className="text-sm text-muted-foreground">No consent changes recorded yet.</p> : null}
+            {!contact.consentHistory.length ? (
+              <p className="text-sm text-muted-foreground">No consent changes recorded yet.</p>
+            ) : null}
             <ol className="grid gap-2">
               {contact.consentHistory.map((h) => (
                 <li key={`${h.createdAt}-${h.status}`} className="rounded-md border p-3 text-sm">
                   <div className="flex items-center gap-2">
-                    <Badge variant={consentLabel[h.status].variant}>{consentLabel[h.status].label}</Badge>
+                    <Badge variant={consentLabel[h.status].variant}>
+                      {consentLabel[h.status].label}
+                    </Badge>
                     <span className="text-muted-foreground">
                       {titleCase(h.source)} · {formatDateTime(h.createdAt)}
                     </span>

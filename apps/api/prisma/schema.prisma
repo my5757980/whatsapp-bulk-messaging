@@ -1,4 +1,5 @@
-// Data model for feature 001-whatsapp-bulk-messaging (specs/.../data-model.md, T025).
+// Data model for feature 001-whatsapp-bulk-messaging (specs/.../data-model.md, T025) and
+// feature 002-team-inbox live chat (specs/002-team-inbox/data-model.md, T013).
 // Conventions: uuid v7 ids, snake_case tables/columns, timestamptz, money as integer USD micros.
 
 generator client {
@@ -94,6 +95,8 @@ enum TemplateStatus {
 enum MediaPurpose {
   TEMPLATE_SAMPLE
   CAMPAIGN_HEADER
+  LIBRARY
+  INBOUND
 }
 
 enum CampaignState {
@@ -122,6 +125,7 @@ enum RetargetStatus {
 enum MessageOrigin {
   CAMPAIGN
   API
+  INBOX
 }
 
 enum MessageStatus {
@@ -169,6 +173,86 @@ enum NotificationType {
   CAMPAIGN_AUTO_PAUSED
   QUALITY_DROPPED
   CREDENTIALS_FAILED
+  INBOX_REQUESTING
+  INBOX_TRANSFERRED
+  INBOX_MENTION
+}
+
+// ---------- Live chat enums (feature 002) ----------
+
+enum ConversationState {
+  ACTIVE
+  REQUESTING
+  INTERVENED
+}
+
+enum ChatItemKind {
+  INBOUND
+  SESSION_OUT
+  MESSAGE_REF
+  NOTE
+}
+
+enum ChatOrigin {
+  CUSTOMER
+  MEMBER
+  AUTOMATIC
+  CAMPAIGN
+  API
+}
+
+enum ChatContentType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
+  STICKER
+  LOCATION
+  CONTACTS
+  BUTTON_REPLY
+  LIST_REPLY
+  FORM_REPLY
+  REACTION
+  TEMPLATE
+  UNSUPPORTED
+}
+
+enum MediaState {
+  PENDING
+  READY
+  FAILED
+}
+
+enum JourneyEventType {
+  REQUESTED
+  INTERVENED
+  TRANSFERRED
+  RESOLVED
+  AUTO_RESOLVED
+  TAG_ADDED
+  TAG_REMOVED
+  ATTRIBUTE_CHANGED
+  CONSENT_CHANGED
+  BLOCKED
+  UNBLOCKED
+  FIRST_MESSAGE_TAG_CHANGED
+}
+
+enum JourneyActor {
+  MEMBER
+  CUSTOMER
+  SYSTEM
+}
+
+enum AgentRuleKind {
+  TAG
+  ATTRIBUTE
+}
+
+enum CannedType {
+  TEXT
+  MEDIA
 }
 
 // ---------- Access & audit ----------
@@ -194,6 +278,25 @@ model User {
   importJobs      ImportJob[]
   templates       Template[]
   consentEvents   ConsentEvent[]
+
+  // Live chat (feature 002)
+  conversationsOwned     Conversation[]          @relation("ConversationOwner")
+  chatMessagesSent       ChatMessage[]           @relation("ChatMessageAuthor")
+  openingsFirstResponded ConversationOpening[]   @relation("OpeningFirstResponder")
+  openingsIntervened     ConversationOpening[]   @relation("OpeningIntervenedBy")
+  openingsResolved       ConversationOpening[]   @relation("OpeningResolvedBy")
+  journeyEvents          ConversationEvent[]
+  chatReadMarkers        ChatReadMarker[]
+  liveChatSettingsEdits  LiveChatSettings[]
+  agentRules             AgentRule[]             @relation("AgentRuleUser")
+  agentRulesCreated      AgentRule[]             @relation("AgentRuleCreator")
+  cannedMessages         CannedMessage[]
+  cannedFavorites        CannedMessageFavorite[]
+  notificationPreference NotificationPreference?
+  pushDevices            PushDevice[]
+  contactsBlocked        Contact[]               @relation("ContactBlockedBy")
+  messagesSent           Message[]               @relation("MessageSentBy")
+  mediaUploaded          MediaAsset[]            @relation("MediaUploadedBy")
 
   @@map("users")
 }
@@ -282,8 +385,9 @@ model WhatsAppNumber {
   createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
-  campaigns Campaign[]
-  messages  Message[]
+  campaigns     Campaign[]
+  messages      Message[]
+  conversations Conversation[]
 
   @@map("whatsapp_numbers")
 }
@@ -300,12 +404,21 @@ model Contact {
   consentSource     ConsentSource? @map("consent_source")
   consentSourceNote String?        @map("consent_source_note")
   consentAt         DateTime?      @map("consent_at") @db.Timestamptz
+  /// Blocked contacts' messages are stored but raise no alert or automatic reply (002 FR-034).
+  blockedAt         DateTime?      @map("blocked_at") @db.Timestamptz
+  blockedById       String?        @map("blocked_by_id") @db.Uuid
+  blockedBy         User?          @relation("ContactBlockedBy", fields: [blockedById], references: [id], onDelete: SetNull)
+  /// Organic, API, Campaign upload, Import or a custom source (002 FR-033).
+  leadSource        String?        @map("lead_source") @db.VarChar(80)
+  firstMessageTagId String?        @map("first_message_tag_id") @db.Uuid
+  firstMessageTag   Tag?           @relation("ContactFirstMessageTag", fields: [firstMessageTagId], references: [id], onDelete: SetNull)
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz
 
   tags          ContactTag[]
   consentEvents ConsentEvent[]
   messages      Message[]
+  conversations Conversation[]
 
   @@index([consentStatus])
   @@index([attributes], type: Gin)
@@ -320,6 +433,9 @@ model Tag {
   name      String       @unique
   createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
   contacts  ContactTag[]
+
+  agentRules           AgentRule[]
+  firstMessageContacts Contact[]   @relation("ContactFirstMessageTag")
 
   @@map("tags")
 }
@@ -439,11 +555,20 @@ model MediaAsset {
   metaHeaderHandle String?      @map("meta_header_handle")
   /// { "<phoneNumberId>": { "id": "...", "uploadedAt": "..." } }
   metaMediaIds     Json         @default("{}") @map("meta_media_ids")
+  /// Name shown in the media library (002 FR-032).
+  displayName      String?      @map("display_name") @db.VarChar(240)
+  uploadedById     String?      @map("uploaded_by_id") @db.Uuid
+  uploadedBy       User?        @relation("MediaUploadedBy", fields: [uploadedById], references: [id], onDelete: SetNull)
+  /// Removed from the media library; kept while sent chat messages still show it (002 FR-032).
+  removedAt        DateTime?    @map("removed_at") @db.Timestamptz
   createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz
 
-  templates Template[] @relation("TemplateHeaderMedia")
-  campaigns Campaign[] @relation("CampaignHeaderMedia")
+  templates      Template[]      @relation("TemplateHeaderMedia")
+  campaigns      Campaign[]      @relation("CampaignHeaderMedia")
+  chatMessages   ChatMessage[]
+  cannedMessages CannedMessage[]
 
+  @@index([purpose, createdAt(sort: Desc)])
   @@map("media_assets")
 }
 
@@ -489,41 +614,47 @@ model Campaign {
 }
 
 model Message {
-  id               String          @id @default(uuid(7)) @db.Uuid
+  id               String         @id @default(uuid(7)) @db.Uuid
   origin           MessageOrigin
-  campaignId       String?         @map("campaign_id") @db.Uuid
-  campaign         Campaign?       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  apiKeyId         String?         @map("api_key_id") @db.Uuid
-  apiKey           ApiKey?         @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
-  contactId        String?         @map("contact_id") @db.Uuid
-  contact          Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  campaignId       String?        @map("campaign_id") @db.Uuid
+  campaign         Campaign?      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  apiKeyId         String?        @map("api_key_id") @db.Uuid
+  apiKey           ApiKey?        @relation(fields: [apiKeyId], references: [id], onDelete: SetNull)
+  contactId        String?        @map("contact_id") @db.Uuid
+  contact          Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
   /// Null after contact deletion (FR-015).
-  phoneE164        String?         @map("phone_e164")
-  recipientCountry String          @map("recipient_country") @db.Char(2)
-  numberId         String          @map("number_id") @db.Uuid
-  number           WhatsAppNumber  @relation(fields: [numberId], references: [id])
-  templateId       String          @map("template_id") @db.Uuid
-  template         Template        @relation(fields: [templateId], references: [id])
-  resolvedParams   Json            @default("{}") @map("resolved_params")
-  status           MessageStatus   @default(PENDING)
-  skipReason       SkipReason?     @map("skip_reason")
-  failureCode      Int?            @map("failure_code")
-  failureReason    String?         @map("failure_reason")
-  attempts         Int             @default(0)
-  waMessageId      String?         @unique @map("wa_message_id")
-  pricingCategory  String?         @map("pricing_category")
+  phoneE164        String?        @map("phone_e164")
+  recipientCountry String         @map("recipient_country") @db.Char(2)
+  numberId         String         @map("number_id") @db.Uuid
+  number           WhatsAppNumber @relation(fields: [numberId], references: [id])
+  templateId       String         @map("template_id") @db.Uuid
+  template         Template       @relation(fields: [templateId], references: [id])
+  resolvedParams   Json           @default("{}") @map("resolved_params")
+  status           MessageStatus  @default(PENDING)
+  skipReason       SkipReason?    @map("skip_reason")
+  failureCode      Int?           @map("failure_code")
+  failureReason    String?        @map("failure_reason")
+  attempts         Int            @default(0)
+  waMessageId      String?        @unique @map("wa_message_id")
+  pricingCategory  String?        @map("pricing_category")
   billable         Boolean?
-  costUsdMicros    BigInt?         @map("cost_usd_micros")
-  queuedAt         DateTime?       @map("queued_at") @db.Timestamptz
-  sentAt           DateTime?       @map("sent_at") @db.Timestamptz
-  deliveredAt      DateTime?       @map("delivered_at") @db.Timestamptz
-  readAt           DateTime?       @map("read_at") @db.Timestamptz
-  failedAt         DateTime?       @map("failed_at") @db.Timestamptz
-  createdAt        DateTime        @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt        DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+  costUsdMicros    BigInt?        @map("cost_usd_micros")
+  queuedAt         DateTime?      @map("queued_at") @db.Timestamptz
+  sentAt           DateTime?      @map("sent_at") @db.Timestamptz
+  deliveredAt      DateTime?      @map("delivered_at") @db.Timestamptz
+  readAt           DateTime?      @map("read_at") @db.Timestamptz
+  failedAt         DateTime?      @map("failed_at") @db.Timestamptz
+  /// Member who sent this template from a chat (origin INBOX, 002 R12).
+  sentByUserId     String?        @map("sent_by_user_id") @db.Uuid
+  sentBy           User?          @relation("MessageSentBy", fields: [sentByUserId], references: [id], onDelete: SetNull)
+  /// Sent by a welcome or off-hours rule (002 R10).
+  automatic        Boolean        @default(false)
+  createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz
 
   events             MessageEvent[]
   idempotencyRecords IdempotencyRecord[]
+  chatItem           ChatMessage?
 
   /// At most one message per recipient per campaign (FR-022). NULLs are distinct in Postgres,
   /// so API messages (no campaign) and anonymised rows (no contact) never collide.
@@ -627,4 +758,237 @@ model Notification {
 
   @@index([userId, readAt])
   @@map("notifications")
+}
+
+// ---------- Live chat (feature 002, specs/002-team-inbox/data-model.md) ----------
+
+/// One chat per contact per company number. The 24-hour window is derived from
+/// last_customer_message_at and never stored (research R5).
+model Conversation {
+  id                    String            @id @default(uuid(7)) @db.Uuid
+  contactId             String?           @map("contact_id") @db.Uuid
+  contact               Contact?          @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  numberId              String            @map("number_id") @db.Uuid
+  number                WhatsAppNumber    @relation(fields: [numberId], references: [id])
+  state                 ConversationState @default(ACTIVE)
+  /// Required while state = INTERVENED (check constraint in the migration).
+  intervenedById        String?           @map("intervened_by_id") @db.Uuid
+  intervenedBy          User?             @relation("ConversationOwner", fields: [intervenedById], references: [id], onDelete: SetNull)
+  intervenedAt          DateTime?         @map("intervened_at") @db.Timestamptz
+  lastCustomerMessageAt DateTime?         @map("last_customer_message_at") @db.Timestamptz
+  lastInboundAt         DateTime?         @map("last_inbound_at") @db.Timestamptz
+  lastActivityAt        DateTime          @default(now()) @map("last_activity_at") @db.Timestamptz
+  lastMessagePreview    String?           @map("last_message_preview") @db.VarChar(120)
+  /// "Talk to a person" requests since the chat was last resolved (FR-021).
+  unresolvedRequests    Int               @default(0) @map("unresolved_requests")
+  createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  items       ChatMessage[]
+  openings    ConversationOpening[]
+  events      ConversationEvent[]
+  readMarkers ChatReadMarker[]
+
+  /// NULL contact ids (after erasure) stay distinct.
+  @@unique([contactId, numberId])
+  @@index([state, lastActivityAt(sort: Desc)])
+  @@index([intervenedById])
+  @@index([numberId, lastActivityAt(sort: Desc)])
+  @@index([lastCustomerMessageAt])
+  @@map("conversations")
+}
+
+/// Every timeline item: inbound messages, free-form replies, notes and references to messages rows.
+model ChatMessage {
+  id             String          @id @default(uuid(7)) @db.Uuid
+  conversationId String          @map("conversation_id") @db.Uuid
+  conversation   Conversation    @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  kind           ChatItemKind
+  origin         ChatOrigin
+  contentType    ChatContentType @map("content_type")
+  /// Body, caption or note; null after contact erasure.
+  text           String?
+  payload        Json            @default("{}")
+  mediaAssetId   String?         @map("media_asset_id") @db.Uuid
+  mediaAsset     MediaAsset?     @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  mediaState     MediaState?     @map("media_state")
+  /// MESSAGE_REF rows point to a campaign, API or inbox-template message (check constraint).
+  messageId      String?         @unique @map("message_id") @db.Uuid
+  message        Message?        @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  /// Customer wamid (INBOUND) or ours (SESSION_OUT); unique, so repeated webhooks add nothing.
+  waMessageId    String?         @unique @map("wa_message_id")
+  replyToWaId    String?         @map("reply_to_wa_id")
+  /// SESSION_OUT only, reusing the 001 status enum.
+  status         MessageStatus?
+  failureCode    Int?            @map("failure_code")
+  failureReason  String?         @map("failure_reason")
+  attempts       Int             @default(0)
+  sentByUserId   String?         @map("sent_by_user_id") @db.Uuid
+  sentBy         User?           @relation("ChatMessageAuthor", fields: [sentByUserId], references: [id], onDelete: SetNull)
+  occurredAt     DateTime        @map("occurred_at") @db.Timestamptz
+  sentAt         DateTime?       @map("sent_at") @db.Timestamptz
+  deliveredAt    DateTime?       @map("delivered_at") @db.Timestamptz
+  readAt         DateTime?       @map("read_at") @db.Timestamptz
+  failedAt       DateTime?       @map("failed_at") @db.Timestamptz
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([conversationId, occurredAt, id])
+  @@map("chat_messages")
+}
+
+/// One row per conversation start, for team metrics and the once-only welcome message.
+model ConversationOpening {
+  id                String       @id @default(uuid(7)) @db.Uuid
+  conversationId    String       @map("conversation_id") @db.Uuid
+  conversation      Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  openedAt          DateTime     @map("opened_at") @db.Timestamptz
+  firstHumanReplyAt DateTime?    @map("first_human_reply_at") @db.Timestamptz
+  firstResponderId  String?      @map("first_responder_id") @db.Uuid
+  firstResponder    User?        @relation("OpeningFirstResponder", fields: [firstResponderId], references: [id], onDelete: SetNull)
+  intervenedAt      DateTime?    @map("intervened_at") @db.Timestamptz
+  intervenedById    String?      @map("intervened_by_id") @db.Uuid
+  intervenedBy      User?        @relation("OpeningIntervenedBy", fields: [intervenedById], references: [id], onDelete: SetNull)
+  resolvedAt        DateTime?    @map("resolved_at") @db.Timestamptz
+  /// Null for auto-resolve.
+  resolvedById      String?      @map("resolved_by_id") @db.Uuid
+  resolvedBy        User?        @relation("OpeningResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
+  welcomeSentAt     DateTime?    @map("welcome_sent_at") @db.Timestamptz
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([conversationId, openedAt(sort: Desc)])
+  @@index([openedAt])
+  @@map("conversation_openings")
+}
+
+/// The customer journey shown beside a chat.
+model ConversationEvent {
+  id             String           @id @default(uuid(7)) @db.Uuid
+  conversationId String           @map("conversation_id") @db.Uuid
+  conversation   Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  type           JourneyEventType
+  actorType      JourneyActor     @map("actor_type")
+  actorUserId    String?          @map("actor_user_id") @db.Uuid
+  actorUser      User?            @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  data           Json             @default("{}")
+  occurredAt     DateTime         @default(now()) @map("occurred_at") @db.Timestamptz
+  createdAt      DateTime         @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([conversationId, occurredAt(sort: Desc)])
+  @@map("conversation_events")
+}
+
+model ChatReadMarker {
+  userId         String       @map("user_id") @db.Uuid
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversationId String       @map("conversation_id") @db.Uuid
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  lastReadAt     DateTime     @map("last_read_at") @db.Timestamptz
+
+  @@id([userId, conversationId])
+  @@index([conversationId])
+  @@map("chat_read_markers")
+}
+
+/// Singleton (id = 1, check constraint), created on first use.
+model LiveChatSettings {
+  id              Int      @id @default(1)
+  /// IANA time zone for working hours.
+  timezone        String   @default("UTC")
+  /// {"mon":[["09:00","18:00"]], ..., "sun":[]}
+  workingHours    Json     @default("{\"mon\":[[\"09:00\",\"18:00\"]],\"tue\":[[\"09:00\",\"18:00\"]],\"wed\":[[\"09:00\",\"18:00\"]],\"thu\":[[\"09:00\",\"18:00\"]],\"fri\":[[\"09:00\",\"18:00\"]],\"sat\":[],\"sun\":[]}") @map("working_hours")
+  welcomeEnabled  Boolean  @default(false) @map("welcome_enabled")
+  welcomeContent  Json?    @map("welcome_content")
+  offHoursEnabled Boolean  @default(false) @map("off_hours_enabled")
+  offHoursContent Json?    @map("off_hours_content")
+  /// At most 5, normalised (trimmed, single spaces, upper-case).
+  humanKeywords   String[] @default([]) @map("human_keywords")
+  autoResolve     Boolean  @default(false) @map("auto_resolve")
+  updatedById     String?  @map("updated_by_id") @db.Uuid
+  updatedBy       User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("live_chat_settings")
+}
+
+/// Limits an agent to chats whose contact matches any rule (FR-028). Replaced as a whole set, so
+/// duplicates are removed by the service (NULL columns make a unique index ineffective here).
+model AgentRule {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  userId         String        @map("user_id") @db.Uuid
+  user           User          @relation("AgentRuleUser", fields: [userId], references: [id], onDelete: Cascade)
+  kind           AgentRuleKind
+  tagId          String?       @map("tag_id") @db.Uuid
+  tag            Tag?          @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  attributeKey   String?       @map("attribute_key")
+  attributeValue String?       @map("attribute_value")
+  createdById    String?       @map("created_by_id") @db.Uuid
+  createdBy      User?         @relation("AgentRuleCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([userId])
+  @@map("agent_rules")
+}
+
+/// Saved replies (FR-030), at most 200; names are unique ignoring case (citext).
+model CannedMessage {
+  id                String      @id @default(uuid(7)) @db.Uuid
+  name              String      @unique @db.Citext
+  type              CannedType
+  text              String?     @db.VarChar(4096)
+  /// {"first_name":"there","attr:city":"your city"}
+  variableFallbacks Json        @default("{}") @map("variable_fallbacks")
+  mediaAssetId      String?     @map("media_asset_id") @db.Uuid
+  mediaAsset        MediaAsset? @relation(fields: [mediaAssetId], references: [id], onDelete: SetNull)
+  mediaUrl          String?     @map("media_url")
+  fileName          String?     @map("file_name") @db.VarChar(240)
+  createdById       String?     @map("created_by_id") @db.Uuid
+  createdBy         User?       @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+
+  favorites CannedMessageFavorite[]
+
+  @@map("canned_messages")
+}
+
+model CannedMessageFavorite {
+  userId          String        @map("user_id") @db.Uuid
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cannedMessageId String        @map("canned_message_id") @db.Uuid
+  cannedMessage   CannedMessage @relation(fields: [cannedMessageId], references: [id], onDelete: Cascade)
+  createdAt       DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  @@id([userId, cannedMessageId])
+  @@map("canned_message_favorites")
+}
+
+/// Created on first change; sound is on by default.
+model NotificationPreference {
+  userId       String   @id @map("user_id") @db.Uuid
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  soundEnabled Boolean  @default(true) @map("sound_enabled")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("notification_preferences")
+}
+
+/// Browser push subscriptions, at most 5 per user (FR-037); removed on a 404 or 410 from the push service.
+model PushDevice {
+  id            String    @id @default(uuid(7)) @db.Uuid
+  userId        String    @map("user_id") @db.Uuid
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint      String    @unique
+  p256dh        String
+  auth          String
+  label         String    @db.VarChar(80)
+  paused        Boolean   @default(false)
+  lastSuccessAt DateTime? @map("last_success_at") @db.Timestamptz
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([userId])
+  @@map("push_devices")
 }

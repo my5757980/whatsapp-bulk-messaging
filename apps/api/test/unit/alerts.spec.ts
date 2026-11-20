@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 // T194: ops/alerts.yml covers the R19 alerts and only uses metrics the code exports.
 // (Rule syntax is checked by `promtool check rules` in CI.)
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ALERTS = readFileSync(path.resolve(HERE, '../../../../ops/alerts.yml'), 'utf8');
+// Windows checkouts may have CRLF line endings; the rules are matched on LF.
+const ALERTS = readFileSync(path.resolve(HERE, '../../../../ops/alerts.yml'), 'utf8').replace(/\r\n/g, '\n');
 const METRICS_SOURCE = readFileSync(path.resolve(HERE, '../../src/common/metrics/metrics.service.ts'), 'utf8');
 
 /** The rule block of one alert: from its `- alert:` line to the next one. */
@@ -31,6 +32,10 @@ describe('alert rules', () => {
     expect(rule('WbmSendQueueStalled')).toMatch(/wbm_queue_depth\{queue=~"send-\.\+"\}\[5m\]/);
     expect(rule('WbmWebhookLagHigh')).toMatch(/histogram_quantile\(0\.95[\s\S]*> 60/);
     expect(rule('WbmNoWebhooksWhileRunning')).toMatch(/wbm_campaigns_running\[15m\][\s\S]*wbm_webhook_lag_seconds_count\[15m\]/);
+  });
+
+  it('warn when live chat media downloads fail (002 T099)', () => {
+    expect(rule('WbmInboundMediaFailing')).toMatch(/wbm_inbound_media_failures_total\[15m\][\s\S]*wbm_inbox_messages_total[\s\S]*> 0\.10/);
   });
 
   it('give every alert a severity and a summary', () => {

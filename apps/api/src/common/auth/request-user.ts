@@ -23,3 +23,8 @@ export const CurrentUser = createParamDecorator((_data: unknown, ctx: ExecutionC
 export function clientIp(req: Request): string | undefined {
   return req.ip ?? req.socket?.remoteAddress ?? undefined;
 }
+
+/** Injects the caller's IP address, or null, for audit entries. */
+export const ClientIp = createParamDecorator((_data: unknown, ctx: ExecutionContext): string | null => {
+  return clientIp(ctx.switchToHttp().getRequest<Request>()) ?? null;
+});

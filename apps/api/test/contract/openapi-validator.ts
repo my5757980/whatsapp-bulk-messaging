@@ -6,9 +6,10 @@ import { fileURLToPath } from 'node:url';
 
 /**
  * Contract-test helper (T015): validates an HTTP response body against the documented
- * OpenAPI 3.1 response schema in specs/001-whatsapp-bulk-messaging/contracts/.
+ * OpenAPI 3.1 response schema in specs/001-whatsapp-bulk-messaging/contracts/ or, for live chat,
+ * specs/002-team-inbox/contracts/.
  */
-export type ContractFile = 'dashboard-api.openapi.yaml' | 'public-api.openapi.yaml';
+export type ContractFile = 'dashboard-api.openapi.yaml' | 'public-api.openapi.yaml' | 'inbox-api.openapi.yaml';
 
 interface MediaTypeObject {
   schema?: object;
@@ -23,17 +24,16 @@ interface OpenApiDocument {
   paths: Record<string, Record<string, OperationObject>>;
 }
 
-const contractsDir = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '../../../../specs/001-whatsapp-bulk-messaging/contracts',
-);
+const specsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../specs');
+const contractsDir = (file: ContractFile) =>
+  path.join(specsDir, file === 'inbox-api.openapi.yaml' ? '002-team-inbox' : '001-whatsapp-bulk-messaging', 'contracts');
 
 const documents = new Map<ContractFile, Promise<OpenApiDocument>>();
 
 function loadDocument(file: ContractFile): Promise<OpenApiDocument> {
   let doc = documents.get(file);
   if (!doc) {
-    doc = SwaggerParser.dereference(path.join(contractsDir, file)) as unknown as Promise<OpenApiDocument>;
+    doc = SwaggerParser.dereference(path.join(contractsDir(file), file)) as unknown as Promise<OpenApiDocument>;
     documents.set(file, doc);
   }
   return doc;

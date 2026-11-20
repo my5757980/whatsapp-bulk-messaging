@@ -9,6 +9,8 @@ import { Prisma } from '../../generated/prisma/client.js';
 // Data retention (data-model.md §Retention, T195):
 // - finished campaigns and their messages: 12 months after they ended; API messages: 12 months
 // - webhook events and uploaded CSV files (sources and error reports): 30 days
+// - live chat (002 FR-042): chat items, journey events and openings 12 months; old list previews are
+//   cleared, and customer media no chat item uses any more is deleted with its file
 // Audit logs are never purged here (the spec keeps them at least 12 months).
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -17,9 +19,16 @@ const SHORT_LIVED_DAYS = 30;
 const UPLOADS_PREFIX = 'uploads/';
 const BATCH = 5_000;
 
-type PurgeTable = 'messages' | 'campaign_upload_rows' | 'webhook_events';
+type PurgeTable = 'messages' | 'campaign_upload_rows' | 'webhook_events' | 'chat_messages' | 'conversation_events' | 'conversation_openings';
 
-export interface RetentionResult {
+export interface LiveChatRetentionResult {
+  chatItems: number;
+  chatEvents: number;
+  chatOpenings: number;
+  chatMedia: number;
+}
+
+export interface RetentionResult extends LiveChatRetentionResult {
   campaigns: number;
   messages: number;
   webhookEvents: number;
@@ -43,7 +52,7 @@ export class RetentionService {
 
   /** Runs every purge; one failing step does not stop the others, but fails the job. */
   async run(now = new Date()): Promise<RetentionResult> {
-    const result: RetentionResult = { campaigns: 0, messages: 0, webhookEvents: 0, files: 0 };
+    const result: RetentionResult = { campaigns: 0, messages: 0, webhookEvents: 0, files: 0, chatItems: 0, chatEvents: 0, chatOpenings: 0, chatMedia: 0 };
     const failures: string[] = [];
     const step = async (name: string, fn: () => Promise<void>) => {
       try {
@@ -60,6 +69,9 @@ export class RetentionService {
     });
     await step('files', async () => {
       result.files = await this.purgeUploadFiles(now);
+    });
+    await step('live chat', async () => {
+      Object.assign(result, await this.purgeLiveChat(now));
     });
     this.logger.log({ ...result }, 'Retention run finished');
     if (failures.length) throw new Error(`Retention partly failed: ${failures.join('; ')}`);
@@ -83,6 +95,49 @@ export class RetentionService {
     }
     messages += await this.deleteInBatches('messages', Prisma.sql`campaign_id IS NULL AND created_at < ${cutoff}`);
     return { campaigns: campaigns.length, messages };
+  }
+
+  /** Live chat content older than 12 months (002 FR-042, data-model §6). Chats themselves stay. */
+  async purgeLiveChat(now: Date): Promise<LiveChatRetentionResult> {
+    const cutoff = monthsBefore(now, CAMPAIGN_MONTHS);
+    const chatItems = await this.deleteInBatches('chat_messages', Prisma.sql`occurred_at < ${cutoff}`);
+    const chatEvents = await this.deleteInBatches('conversation_events', Prisma.sql`occurred_at < ${cutoff}`);
+    const chatOpenings = await this.deleteInBatches('conversation_openings', Prisma.sql`opened_at < ${cutoff}`);
+    // A quiet chat's preview is the text of a message that is now gone.
+    await this.prisma.$executeRaw`
+      UPDATE conversations SET last_message_preview = NULL
+       WHERE last_activity_at < ${cutoff} AND last_message_preview IS NOT NULL`;
+    const chatMedia = await this.purgeUnusedCustomerMedia(now);
+    return { chatItems, chatEvents, chatOpenings, chatMedia };
+  }
+
+  /**
+   * Customer media (INBOUND) that no chat item references any more, after retention or contact
+   * erasure. The file goes first; a row stays when its file could not be deleted, for the next run.
+   */
+  async purgeUnusedCustomerMedia(now: Date): Promise<number> {
+    const settled = new Date(now.getTime() - DAY_MS);
+    let total = 0;
+    for (;;) {
+      const unused = await this.prisma.$queryRaw<Array<{ id: string; storage_key: string }>>`
+        SELECT m.id, m.storage_key FROM media_assets m
+         WHERE m.purpose = 'INBOUND' AND m.created_at < ${settled}
+           AND NOT EXISTS (SELECT 1 FROM chat_messages c WHERE c.media_asset_id = m.id)
+         LIMIT ${BATCH}`;
+      const removed: string[] = [];
+      for (const media of unused) {
+        try {
+          await this.storage.delete(media.storage_key);
+          removed.push(media.id);
+        } catch (error) {
+          this.logger.warn({ err: (error as Error).message, mediaAssetId: media.id }, 'Could not delete a customer media file');
+        }
+      }
+      if (removed.length) await this.prisma.mediaAsset.deleteMany({ where: { id: { in: removed } } });
+      total += removed.length;
+      if (removed.length < unused.length) throw new Error(`${unused.length - removed.length} customer media files could not be deleted`);
+      if (unused.length < BATCH) return total;
+    }
   }
 
   async purgeWebhookEvents(now: Date): Promise<number> {

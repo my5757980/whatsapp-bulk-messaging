@@ -1,6 +1,6 @@
 'use client';
 
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Permission } from '@wbm/shared';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -8,10 +8,13 @@ import type { ReactNode } from 'react';
 import { NotificationsBell } from '@/components/layout/notifications-bell';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api-client';
+import { useInboxEvents, useNewMessageSound } from '@/lib/inbox-events';
+import { queryKeys } from '@/lib/query';
 import { useMe } from '@/lib/session';
 import { cn } from '@/lib/utils';
 
 const NAV: Array<{ href: string; label: string; permission: Permission }> = [
+  { href: '/inbox', label: 'Live chat', permission: 'inbox.view' },
   { href: '/campaigns', label: 'Campaigns', permission: 'campaigns.view' },
   { href: '/contacts', label: 'Contacts', permission: 'contacts.view' },
   { href: '/templates', label: 'Templates', permission: 'templates.view' },
@@ -25,6 +28,17 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const canChat = me.data?.permissions.includes('inbox.view') ?? false;
+  // One live event stream per tab, on every dashboard page (badges and sound work everywhere).
+  useInboxEvents(canChat);
+  useNewMessageSound(canChat);
+  const unread = useQuery({
+    queryKey: queryKeys.inboxUnread,
+    queryFn: () => api<{ total: number }>('/inbox/unread'),
+    enabled: canChat,
+    refetchInterval: 60_000,
+    retry: false,
+  });
 
   async function signOut() {
     await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
@@ -52,13 +66,28 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 pathname.startsWith(item.href.split('/').slice(0, 2).join('/')) && 'bg-accent font-medium',
               )}
             >
-              {item.label}
+              <span className="flex items-center justify-between gap-2">
+                {item.label}
+                {item.href === '/inbox' && (unread.data?.total ?? 0) > 0 && (
+                  <span
+                    className="rounded-full bg-primary px-2 py-0.5 text-xs font-medium text-primary-foreground"
+                    aria-label={`${unread.data!.total} unread chats`}
+                  >
+                    {unread.data!.total > 99 ? '99+' : unread.data!.total}
+                  </span>
+                )}
+              </span>
             </Link>
           ))}
         </nav>
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-end gap-3 border-b px-6 py-3 text-sm">
+          {canChat && (
+            <Link href="/account/notifications" className="text-muted-foreground hover:text-foreground">
+              Alerts
+            </Link>
+          )}
           <NotificationsBell />
           <span className="text-muted-foreground">
             {me.data.name} · {me.data.role.toLowerCase()}

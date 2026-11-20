@@ -49,8 +49,29 @@ const EnvSchema = z.object({
     .string()
     .optional()
     .transform((v) => (v ? v : undefined)),
+  /** Browser push (VAPID) for live chat alerts: set all three or none (feature 002, FR-037). */
+  WEB_PUSH_PUBLIC_KEY: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+  WEB_PUSH_PRIVATE_KEY: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+  WEB_PUSH_SUBJECT: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : undefined))
+    .refine((v) => v === undefined || /^(mailto:|https:\/\/)/.test(v), 'must start with mailto: or https://'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 }).superRefine((env, ctx) => {
+  const pushKeys = [env.WEB_PUSH_PUBLIC_KEY, env.WEB_PUSH_PRIVATE_KEY, env.WEB_PUSH_SUBJECT].filter(Boolean).length;
+  if (pushKeys > 0 && pushKeys < 3) {
+    ctx.addIssue({ code: 'custom', path: ['WEB_PUSH_PUBLIC_KEY'], message: 'set WEB_PUSH_PUBLIC_KEY, WEB_PUSH_PRIVATE_KEY and WEB_PUSH_SUBJECT together, or none' });
+  }
   // Production session cookies must never travel over plain HTTP (T198).
   if (env.NODE_ENV !== 'production') return;
   if (!env.COOKIE_SECURE) ctx.addIssue({ code: 'custom', path: ['COOKIE_SECURE'], message: 'must be "true" in production' });

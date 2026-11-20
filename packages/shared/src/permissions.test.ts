@@ -14,6 +14,12 @@ const table: Array<[string, Permission[], { ADMIN: boolean; MANAGER: boolean; AG
   ['export data', ['data.export'], { ADMIN: true, MANAGER: true, AGENT: false }],
   ['view full phone numbers', ['phones.full'], { ADMIN: true, MANAGER: true, AGENT: false }],
   ['view audit log', ['audit.view'], { ADMIN: true, MANAGER: false, AGENT: false }],
+  // Feature 002 live chat (spec FR-041)
+  ['open live chat and History; intervene, reply, resolve, notes, block', ['inbox.view', 'inbox.reply'], { ADMIN: true, MANAGER: true, AGENT: true }],
+  ['see and act on chats intervened by others; transfer any chat', ['inbox.monitor'], { ADMIN: true, MANAGER: true, AGENT: false }],
+  ['create, edit and delete saved replies; remove library media', ['canned.manage', 'media.manage'], { ADMIN: true, MANAGER: true, AGENT: false }],
+  ['working hours, automatic messages, keywords, auto-resolve, agent rules', ['livechat.settings'], { ADMIN: true, MANAGER: false, AGENT: false }],
+  ['team view', ['inbox.metrics'], { ADMIN: true, MANAGER: true, AGENT: false }],
 ];
 
 describe('permission matrix (spec.md role table)', () => {
@@ -29,8 +35,8 @@ describe('permission matrix (spec.md role table)', () => {
     expect(permissionsFor(Role.ADMIN)).toEqual(expect.arrayContaining([...ALL_PERMISSIONS]));
   });
 
-  it('agents are read-only with masked phones', () => {
-    expect(permissionsFor(Role.AGENT).sort()).toEqual(['campaigns.view', 'contacts.view', 'templates.view'].sort());
+  it('agents view campaigns, contacts and templates, and work in live chat, with masked phones', () => {
+    expect(permissionsFor(Role.AGENT).sort()).toEqual(['campaigns.view', 'contacts.view', 'inbox.reply', 'inbox.view', 'templates.view'].sort());
   });
 
   it('only admins may delete contact data', () => {

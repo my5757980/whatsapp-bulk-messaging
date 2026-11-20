@@ -153,12 +153,74 @@ jobs:
           context: .
           file: apps/api/Dockerfile
           push: false
+          load: true
           tags: wbm-api:ci
+      - name: Build the migration image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          target: migrate
+          push: false
+          load: true
+          tags: wbm-migrate:ci
       - name: Build the web image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: apps/web/Dockerfile
           push: false
+          load: true
           build-args: API_INTERNAL_URL=http://api:4000
           tags: wbm-web:ci
+      # 002 T102: the live chat event stream must pass through the standalone web server's /api
+      # proxy without buffering; a ": ping" comment has to arrive within 20 seconds.
+      - name: Smoke-test live chat events through the web proxy
+        run: |
+          set -euo pipefail
+          ADMIN_PASSWORD="$(openssl rand -hex 16)"
+          OPS_TOKEN="$(openssl rand -hex 24)"
+          cat > smoke.env <<EOF
+          NODE_ENV=production
+          DATABASE_URL=postgresql://wbm:wbm@postgres:5432/wbm
+          REDIS_URL=redis://redis:6379
+          TOKEN_ENCRYPTION_KEY=$(openssl rand -base64 32)
+          OPS_TOKEN=$OPS_TOKEN
+          META_APP_SECRET=$(openssl rand -hex 16)
+          META_WEBHOOK_VERIFY_TOKEN=$(openssl rand -hex 16)
+          APP_URL=https://wbm.example.test
+          COOKIE_SECURE=true
+          S3_ENDPOINT=http://minio:9000
+          S3_BUCKET=wbm
+          S3_ACCESS_KEY=wbm
+          S3_SECRET_KEY=wbm-secret-key
+          EOF
+          docker network create wbm
+          docker run -d --network wbm --name postgres -e POSTGRES_USER=wbm -e POSTGRES_PASSWORD=wbm -e POSTGRES_DB=wbm postgres:16
+          docker run -d --network wbm --name redis redis:7
+          docker run -d --network wbm --name minio -e MINIO_ROOT_USER=wbm -e MINIO_ROOT_PASSWORD=wbm-secret-key cgr.dev/chainguard/minio:latest server /data
+          for i in $(seq 1 60); do docker exec postgres pg_isready -U wbm >/dev/null 2>&1 && break; sleep 1; done
+          docker run --rm --network wbm --env-file smoke.env wbm-migrate:ci
+          docker run --rm --network wbm --env-file smoke.env wbm-migrate:ci npx tsx prisma/seed.ts --admin-email smoke@company.test --admin-password "$ADMIN_PASSWORD"
+          docker run -d --network wbm --name api --env-file smoke.env -p 4000:4000 wbm-api:ci
+          docker run -d --network wbm --name web -p 3000:3000 wbm-web:ci
+          dump() { docker logs api 2>&1 | tail -60; docker logs web 2>&1 | tail -30; }
+          up=no
+          for i in $(seq 1 60); do
+            if curl -sf -H "x-ops-token: $OPS_TOKEN" http://localhost:4000/api/health >/dev/null && curl -sf -o /dev/null http://localhost:3000/login; then up=yes; break; fi
+            sleep 2
+          done
+          if [ "$up" != yes ]; then echo "api or web did not start"; dump; exit 1; fi
+          # Session cookies are Secure (production); over plain HTTP the cookie is passed by hand.
+          curl -sS -D login-headers.txt -o /dev/null -H 'content-type: application/json' \
+            -d "{\"email\":\"smoke@company.test\",\"password\":\"$ADMIN_PASSWORD\"}" http://localhost:3000/api/auth/login
+          SID="$(grep -i '^set-cookie: sid=' login-headers.txt | head -1 | sed -E 's/^[Ss]et-[Cc]ookie: (sid=[^;]+).*/\1/' | tr -d '\r' || true)"
+          if [ -z "$SID" ]; then echo "sign-in through the proxy returned no session"; cat login-headers.txt; dump; exit 1; fi
+          # Pings come every 15 s; read the stream for 20 s as a browser would (compression allowed).
+          timeout 20 curl -sN --compressed -H "Cookie: $SID" -H 'accept: text/event-stream' http://localhost:3000/api/inbox/events > events.txt || true
+          head -c 300 events.txt; echo
+          if grep -q '^: ping' events.txt; then
+            echo "A live chat ping arrived through the web proxy within 20 seconds"
+          else
+            echo "No ping through the web proxy within 20 seconds"; dump; exit 1
+          fi
