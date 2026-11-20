@@ -24,6 +24,10 @@ export type UpdateFlowInput = z.infer<typeof UpdateFlowSchema>;
 export const SaveDraftSchema = z.strictObject({ graph: FlowGraphSchema, draftRevision: z.int().min(0) });
 export type SaveDraftInput = z.infer<typeof SaveDraftSchema>;
 
+/** Autosave keeps one revision a minute and the newest 20 (FR-007). */
+const REVISION_EVERY_MS = 60_000;
+export const REVISIONS_KEPT = 20;
+
 /**
  * Flow definitions (003 T022, FR-001, FR-002, FR-005): list, create, rename, numbers, priority,
  * test numbers, duplicate, delete (not while published) and draft saves with a revision check.
@@ -148,7 +152,23 @@ export class FlowsService {
       await this.load(id);
       throw AppError.conflict('Someone saved a newer version of this flow; reload to continue', 'DRAFT_CONFLICT');
     }
+    await this.recordRevision(id, graph, userId);
     return { draftRevision: input.draftRevision + 1, problems: validateForPublish(graph, { reservedKeywords: await this.reserved.list() }) };
+  }
+
+  /**
+   * Autosave revisions (003 T071, FR-007): at most one a minute (the latest takes later saves within
+   * its minute), and only the newest 20 are kept.
+   */
+  async recordRevision(flowId: string, graph: unknown, userId: string | null): Promise<void> {
+    const last = await this.prisma.flowVersion.findFirst({ where: { flowId, kind: 'REVISION' }, orderBy: { createdAt: 'desc' }, select: { id: true, createdAt: true } });
+    if (last && Date.now() - last.createdAt.getTime() < REVISION_EVERY_MS) {
+      await this.prisma.flowVersion.update({ where: { id: last.id }, data: { graph: graph as Prisma.InputJsonValue, createdById: userId } });
+    } else {
+      await this.prisma.flowVersion.create({ data: { flowId, kind: 'REVISION', graph: graph as Prisma.InputJsonValue, createdById: userId } });
+    }
+    const stale = await this.prisma.flowVersion.findMany({ where: { flowId, kind: 'REVISION' }, orderBy: { createdAt: 'desc' }, skip: REVISIONS_KEPT, select: { id: true } });
+    if (stale.length) await this.prisma.flowVersion.deleteMany({ where: { id: { in: stale.map((v) => v.id) } } });
   }
 
   private async normaliseTestNumbers(values: string[]): Promise<string[]> {

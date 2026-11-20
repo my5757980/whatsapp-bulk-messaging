@@ -98,4 +98,17 @@ describe('Chatbot flows API contract', () => {
     await call('put', `/flows/${id}/draft`, { graph: { version: 1, start: null, triggers: [], steps: [] }, draftRevision: 1 });
     await check('delete', '/flows/{id}/secrets/{secretId}', await call('delete', `/flows/${id}/secrets/${secret.body.id}`), 204);
   });
+
+  it('US7: versions and restore', async () => {
+    const created = await call('post', '/flows', { name: `Contract versions ${randomUUID().slice(0, 6)}` });
+    const id = created.body.id as string;
+    await call('put', `/flows/${id}/draft`, { graph: graph(), draftRevision: 0 });
+    expect((await call('post', `/flows/${id}/publish`)).status).toBe(200);
+    const versions = await call('get', `/flows/${id}/versions`);
+    await check('get', '/flows/{id}/versions', versions, 200);
+    await check('get', '/flows/{id}/versions', await call('get', `/flows/${randomUUID()}/versions`), 404);
+    const published = (versions.body as Array<{ id: string; kind: string }>).find((v) => v.kind === 'PUBLISHED')!;
+    await check('post', '/flows/{id}/versions/{versionId}/restore', await call('post', `/flows/${id}/versions/${published.id}/restore`), 200);
+    await check('post', '/flows/{id}/versions/{versionId}/restore', await call('post', `/flows/${id}/versions/${randomUUID()}/restore`), 404);
+  });
 });

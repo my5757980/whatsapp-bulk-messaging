@@ -8,6 +8,8 @@ import { ReservedKeywords } from './definitions/reserved-keywords.js';
 import { FlowSecretsController } from './definitions/secrets.controller.js';
 import { FlowSecretsService } from './definitions/secrets.service.js';
 import { FlowSecretsVault } from './definitions/secrets-vault.js';
+import { FlowVersionsController } from './definitions/versions.controller.js';
+import { FlowVersionsService } from './definitions/versions.service.js';
 import { FlowRouter } from './engine/flow-router.js';
 import { FlowSessionService } from './engine/session.service.js';
 import { TriggerMatcher } from './engine/trigger-matcher.js';
@@ -28,7 +30,7 @@ export class FlowsDomainModule {}
 /** Flow builder endpoints (HTTP app only). */
 @Module({
   imports: [FlowsDomainModule, InboxApiModule],
-  providers: [FlowsService, PublishService, ReservedKeywords, FlowSecretsService, ApiTestService],
-  controllers: [FlowsController, FlowStartController, FlowSecretsController],
+  providers: [FlowsService, PublishService, ReservedKeywords, FlowSecretsService, ApiTestService, FlowVersionsService],
+  controllers: [FlowsController, FlowStartController, FlowSecretsController, FlowVersionsController],
 })
 export class FlowsApiModule {}

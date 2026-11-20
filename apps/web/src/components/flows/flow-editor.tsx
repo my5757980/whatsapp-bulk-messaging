@@ -16,6 +16,8 @@ import { FlowCanvas } from './flow-canvas';
 import { FlowStatusBadge } from './flow-status-badge';
 import { ProblemsPanel } from './problems-panel';
 import { SecretsPanel, type FlowSecret } from './secrets-panel';
+import { TestPanel } from './test-panel';
+import { VersionsDrawer } from './versions-drawer';
 import { StepForm } from './steps/step-form';
 import { TriggerPanel } from './trigger-panel';
 import { useDraftAutosave, type SaveStatus } from './use-draft-autosave';
@@ -245,6 +247,7 @@ export function FlowEditor({ initial, onReload }: { initial: FlowDetail; onReloa
           <Button size="sm" variant="outline" onClick={redo} disabled={!canRedo} title="Redo (Ctrl+Y)">
             Redo
           </Button>
+          <VersionsDrawer flowId={initial.id} prepare={autosave.flush} onRestored={() => void onReload()} />
           {meta.status === 'PUBLISHED' && (
             <ConfirmDialog
               trigger={
@@ -280,6 +283,7 @@ export function FlowEditor({ initial, onReload }: { initial: FlowDetail; onReloa
             <p className="text-xs text-muted-foreground">Drag from a way out on the right of a step to another step to connect them.</p>
           </section>
           <TriggerPanel graph={graph} problems={problems} onChange={change} />
+          <TestPanel flowId={initial.id} testNumbers={initial.testNumbers} />
           <SecretsPanel flowId={initial.id} secrets={secrets} onChange={setSecrets} />
           <ProblemsPanel problems={problems} onFocusStep={focusStep} />
         </aside>
