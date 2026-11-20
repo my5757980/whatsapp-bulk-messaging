@@ -213,7 +213,9 @@ See `.specify/memory/constitution.md` for code quality, testing, performance, se
 - TypeScript 6.0 on Node.js 26 LTS + Next.js 16.4 + React 19.3 + TanStack Query 5 + Tailwind CSS 4 (web); NestJS 12.5 + Prisma 7.10 + BullMQ 6.7 + ioredis 6 + nestjs-pino 5 + zod 4 + argon2 + csv-parse 7 + libphonenumber-js + AWS SDK S3 v3 + prom-client 15 (api/worker) (001-whatsapp-bulk-messaging)
 - PostgreSQL 16+ (Neon in production, Docker locally) via Prisma migrations; Redis 7+ (noeviction, AOF) for queues and rate limits; S3-compatible object storage (MinIO locally) for uploads and media (001-whatsapp-bulk-messaging)
 - Same stack as 001, plus `web-push` (VAPID browser push), Server-Sent Events through the Next.js `/api` proxy fed by the Redis Stream `wbm:inbox:events`, and new Postgres tables for conversations and the chat timeline (002-team-inbox)
+- Same stack as 001 and 002, plus `@xyflow/react` 12.12.1 (flow canvas), a BullMQ `flows` queue for timers and API steps, and new Postgres tables for flows, versions, triggers, sessions and secrets (003-chatbot-flow-builder)
 
 ## Recent Changes
+- 003-chatbot-flow-builder: flow builder planned: versioned JSON graphs, a pure session interpreter in the worker, React Flow editor (see specs/003-chatbot-flow-builder/plan.md)
 - 002-team-inbox: live chat planned: SSE with Redis Stream replay, per-number priority send jobs, Web Push (see specs/002-team-inbox/plan.md)
 - 001-whatsapp-bulk-messaging: Added TypeScript 6.0 on Node.js 26 LTS + Next.js 16.4, NestJS 12.5, Prisma 7.10, BullMQ 6.7 (see specs/001-whatsapp-bulk-messaging/plan.md)

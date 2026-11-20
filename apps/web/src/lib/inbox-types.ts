@@ -70,7 +70,10 @@ export type ChatContentType =
   | 'FORM_REPLY'
   | 'REACTION'
   | 'TEMPLATE'
-  | 'UNSUPPORTED';
+  | 'UNSUPPORTED'
+  // Reply buttons and lists sent by chatbot flows (feature 003)
+  | 'BUTTONS'
+  | 'LIST';
 
 export type ChatItemStatus = 'QUEUED' | 'SENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
 

@@ -3,10 +3,16 @@ import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { JourneyActor, JourneyEventType, Prisma } from '../../../generated/prisma/client.js';
 import { InboxPublisher } from '../realtime/inbox-publisher.js';
 
+/** The flow name stored on flow journey entries (feature 003). */
+function flowNameOf(data: unknown): string | null {
+  const name = data && typeof data === 'object' ? (data as { flowName?: unknown }).flowName : null;
+  return typeof name === 'string' ? name : null;
+}
+
 export interface JourneyEntry {
   type: string;
   at: string;
-  actor: { type: 'MEMBER' | 'CUSTOMER' | 'SYSTEM' | 'CAMPAIGN'; name: string | null };
+  actor: { type: 'MEMBER' | 'CUSTOMER' | 'SYSTEM' | 'CAMPAIGN' | 'FLOW'; name: string | null };
   data: Record<string, unknown>;
 }
 
@@ -43,7 +49,11 @@ export class JourneyService {
       ...events.map((e) => ({
         type: e.type,
         at: e.occurredAt.toISOString(),
-        actor: { type: e.actorType, name: e.actorType === 'MEMBER' ? (e.actorUser?.name ?? null) : null },
+        actor: {
+          type: e.actorType,
+          // Flow entries name the flow (feature 003); members name the member.
+          name: e.actorType === 'MEMBER' ? (e.actorUser?.name ?? null) : e.actorType === 'FLOW' ? flowNameOf(e.data) : null,
+        },
         data: (e.data ?? {}) as Record<string, unknown>,
         sortAt: e.occurredAt.getTime(),
       })),

@@ -38,6 +38,10 @@ describe('alert rules', () => {
     expect(rule('WbmInboundMediaFailing')).toMatch(/wbm_inbound_media_failures_total\[15m\][\s\S]*wbm_inbox_messages_total[\s\S]*> 0\.10/);
   });
 
+  it('warn when chatbot flow API calls fail (003 T082)', () => {
+    expect(rule('WbmFlowApiFailing')).toMatch(/wbm_flow_api_calls_total\{outcome!="success"\}\[15m\][\s\S]*> 0\.20[\s\S]*>= 20/);
+  });
+
   it('give every alert a severity and a summary', () => {
     const names = [...ALERTS.matchAll(/- alert: (\w+)/g)].map((m) => m[1]!);
     expect(names.length).toBeGreaterThanOrEqual(5);

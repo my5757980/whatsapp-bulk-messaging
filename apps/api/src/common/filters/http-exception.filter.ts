@@ -36,9 +36,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
     let code = 'INTERNAL_ERROR';
     let message = 'Something went wrong';
     let details: ErrorDetail[] | undefined;
+    let extra: Record<string, unknown> | undefined;
 
     if (exception instanceof AppError) {
-      ({ status, code, message, details } = exception);
+      ({ status, code, message, details, extra } = exception);
     } else if (exception instanceof ZodError) {
       status = HttpStatus.UNPROCESSABLE_ENTITY;
       code = 'VALIDATION_FAILED';
@@ -58,6 +59,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
       this.logger.error({ err: exception, requestId }, 'Unhandled error');
     }
 
-    res.status(status).json({ code, message, ...(details ? { details } : {}), ...(requestId ? { requestId } : {}) });
+    res.status(status).json({ code, message, ...(details ? { details } : {}), ...(extra ?? {}), ...(requestId ? { requestId } : {}) });
   }
 }

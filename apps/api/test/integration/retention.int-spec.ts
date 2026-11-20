@@ -143,6 +143,28 @@ describe('Retention', () => {
     expect((await storage.getBuffer(keptMedia.storageKey)).length).toBe(4);
   });
 
+  it('purges chatbot flow sessions that ended over 12 months ago, with their step records (003)', async () => {
+    const number = await seedNumber(ctx);
+    const contact = await seedContact(ctx, uaePhone());
+    const chat = await ctx.prisma.conversation.create({ data: { contactId: contact.id, numberId: number.id } });
+    const flow = await ctx.prisma.flow.create({ data: { name: `Retention flow ${randomUUID().slice(0, 6)}`, draft: { version: 1, start: null, triggers: [], steps: [] } } });
+    const ended = (monthsAgo: number) => {
+      const at = new Date();
+      at.setUTCMonth(at.getUTCMonth() - monthsAgo);
+      return ctx.prisma.flowSession.create({
+        data: { flowId: flow.id, conversationId: chat.id, contactId: contact.id, numberId: number.id, startedBy: 'TRIGGER', status: 'ENDED', result: 'COMPLETED', startedAt: at, endedAt: at },
+      });
+    };
+    const old = await ended(13);
+    await ctx.prisma.flowSessionStep.create({ data: { sessionId: old.id, flowId: flow.id, stepId: 'a', enteredAt: old.startedAt } });
+    const recent = await ended(11);
+
+    expect(await retention.purgeFlowSessions(new Date())).toBeGreaterThanOrEqual(1);
+    expect(await ctx.prisma.flowSession.findUnique({ where: { id: old.id } })).toBeNull();
+    expect(await ctx.prisma.flowSessionStep.count({ where: { sessionId: old.id } })).toBe(0);
+    expect(await ctx.prisma.flowSession.findUnique({ where: { id: recent.id } })).not.toBeNull();
+  });
+
   it('runs every step daily on the maintenance queue', async () => {
     expect(await retention.run()).toEqual({
       campaigns: expect.any(Number),
@@ -153,6 +175,7 @@ describe('Retention', () => {
       chatEvents: expect.any(Number),
       chatOpenings: expect.any(Number),
       chatMedia: expect.any(Number),
+      flowSessions: expect.any(Number),
     });
     const scheduler = await ctx.app.get(QueueRegistry).get(QUEUES.MAINTENANCE).getJobScheduler('retention');
     expect(scheduler?.pattern).toBe('15 3 * * *');

@@ -6,10 +6,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toaster';
 import { api, ApiError } from '@/lib/api-client';
+import { Can } from '@/lib/permissions';
 import { STATE_LABEL, type ChatItemPage, type ConversationDetail, type ConversationSummary } from '@/lib/inbox-types';
 import { queryKeys } from '@/lib/query';
 import { ChatItemView } from './chat-item-view';
 import { Composer } from './composer';
+import { FlowSessionBanner, StartFlowButton } from './flow-start';
 import { TransferDialog } from './transfer-dialog';
 
 /** Marks the chat read at most every 3 s while it is open and the tab is visible (R8). */
@@ -92,6 +94,11 @@ export function ChatView({ id, meId, canMonitor }: { id: string; meId: string; c
             {chat.inHistory ? 'Past chat' : STATE_LABEL[chat.state]}
             {chat.state === 'INTERVENED' && chat.intervenedBy ? ` · ${mine ? 'you' : chat.intervenedBy.name}` : ''}
           </Badge>
+          {!chat.inHistory && (
+            <Can permission="inbox.reply">
+              <StartFlowButton chatId={chat.id} disabled={chat.state === 'INTERVENED' && !mine} />
+            </Can>
+          )}
           {chat.state !== 'INTERVENED' && (
             <Button size="sm" onClick={() => act.mutate('intervene')} disabled={act.isPending}>
               Take chat
@@ -120,6 +127,7 @@ export function ChatView({ id, meId, canMonitor }: { id: string; meId: string; c
         <div ref={bottom} />
       </div>
 
+      <FlowSessionBanner chatId={chat.id} refreshKey={`${newestId ?? ''}:${chat.state}`} />
       <Composer chat={chat} meId={meId} />
     </section>
   );

@@ -80,6 +80,36 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  // ---- Chatbot flows (feature 003, T082) ----
+
+  readonly flowSessionsTotal = new Counter({
+    name: 'wbm_flow_sessions_total',
+    help: 'Finished chatbot flow sessions by result (test runs left out)',
+    labelNames: ['result'] as const,
+    registers: [this.registry],
+  });
+
+  readonly flowStepsTotal = new Counter({
+    name: 'wbm_flow_steps_total',
+    help: 'Chatbot flow steps entered, by step type (test runs left out)',
+    labelNames: ['type'] as const,
+    registers: [this.registry],
+  });
+
+  readonly flowApiCallsTotal = new Counter({
+    name: 'wbm_flow_api_calls_total',
+    help: 'API step calls by outcome: success, error_status, timeout, blocked or failed',
+    labelNames: ['outcome'] as const,
+    registers: [this.registry],
+  });
+
+  readonly flowApiDuration = new Histogram({
+    name: 'wbm_flow_api_duration_seconds',
+    help: 'Seconds an API step call took, until its reply or failure',
+    buckets: [0.1, 0.25, 0.5, 1, 2, 5, 10],
+    registers: [this.registry],
+  });
+
   constructor() {
     collectDefaultMetrics({ register: this.registry });
   }

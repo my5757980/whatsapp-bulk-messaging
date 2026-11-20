@@ -6,7 +6,7 @@ import { api } from '@/lib/api-client';
 interface JourneyEntry {
   type: string;
   at: string;
-  actor: { type: 'MEMBER' | 'CUSTOMER' | 'SYSTEM' | 'CAMPAIGN'; name: string | null };
+  actor: { type: 'MEMBER' | 'CUSTOMER' | 'SYSTEM' | 'CAMPAIGN' | 'FLOW'; name: string | null };
   data: Record<string, unknown>;
 }
 
@@ -43,6 +43,10 @@ function describe(entry: JourneyEntry): string {
       return `Campaign "${entry.actor.name ?? ''}" sent`;
     case 'API_SENT':
       return `Template "${String(d.template ?? '')}" sent by the API`;
+    case 'FLOW_STARTED':
+      return `Chatbot flow "${String(d.flowName ?? '')}" started${d.test ? ' (test)' : ''}`;
+    case 'FLOW_ENDED':
+      return `Chatbot flow "${String(d.flowName ?? '')}" ended: ${String(d.result ?? '').toLowerCase().replace(/_/g, ' ')}`;
     default:
       return entry.type;
   }

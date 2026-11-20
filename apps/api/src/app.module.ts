@@ -9,6 +9,7 @@ import { AuditModule } from './modules/audit/audit.service.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { ApiFeaturesModule } from './modules/domain.module.js';
 import { HealthModule } from './modules/health/health.controller.js';
+import { FlowsApiModule } from './modules/flows/flows.module.js';
 import { InboxApiModule } from './modules/inbox/inbox.module.js';
 import { MetaModule } from './modules/meta/meta.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.service.js';
@@ -33,6 +34,7 @@ import { WebhooksApiModule } from './modules/webhooks/webhooks.module.js';
     WebhooksApiModule,
     ApiFeaturesModule,
     InboxApiModule,
+    FlowsApiModule,
   ],
 })
 export class AppModule {}

@@ -34,3 +34,17 @@ describe('sanitizeLogObject: live chat (feature 002)', () => {
     expect(out.auth).toBe('[REDACTED]');
   });
 });
+
+// 003 T084: flow answers, mapped API fields and stored secret values never reach the logs.
+describe('sanitizeLogObject: chatbot flows (feature 003)', () => {
+  it('removes session answers, mapped reply fields and stored secret values', () => {
+    const out = sanitizeLogObject({
+      session: { id: 's1', answers: { email: 'sara@example.com', order: 'A-100' } },
+      mapped: { status: 'shipped' },
+      flowSecret: { name: 'Shop token', valueEncrypted: 'v1:abc:def:ghi' },
+    }) as Record<string, unknown>;
+    expect(out.session).toEqual({ id: 's1', answers: '[REDACTED]' });
+    expect(out.mapped).toBe('[REDACTED]');
+    expect(out.flowSecret).toEqual({ name: 'Shop token', valueEncrypted: '[REDACTED]' });
+  });
+});

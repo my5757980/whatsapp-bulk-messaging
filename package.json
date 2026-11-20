@@ -15,7 +15,7 @@
     "build": "npm run build -w @wbm/shared && npm run build -w @wbm/api && npm run build -w @wbm/web",
     "dev": "concurrently -k -n shared,api,worker,web,mock -c gray,blue,magenta,green,yellow \"npm run dev -w @wbm/shared\" \"npm run dev -w @wbm/api\" \"npm run dev:worker -w @wbm/api\" \"npm run dev -w @wbm/web\" \"npm run dev -w @wbm/mock-meta\"",
     "lint": "eslint .",
-    "lint:contracts": "redocly lint specs/001-whatsapp-bulk-messaging/contracts/dashboard-api.openapi.yaml specs/001-whatsapp-bulk-messaging/contracts/public-api.openapi.yaml specs/002-team-inbox/contracts/inbox-api.openapi.yaml",
+    "lint:contracts": "redocly lint specs/001-whatsapp-bulk-messaging/contracts/dashboard-api.openapi.yaml specs/001-whatsapp-bulk-messaging/contracts/public-api.openapi.yaml specs/002-team-inbox/contracts/inbox-api.openapi.yaml specs/003-chatbot-flow-builder/contracts/flows-api.openapi.yaml",
     "format": "prettier --write .",
     "typecheck": "npm run typecheck --workspaces --if-present && tsc -p tools/perf/tsconfig.json",
     "test": "npm run test --workspaces --if-present",
@@ -29,7 +29,8 @@
     "perf:campaign": "tsx tools/perf/campaign-10k.ts",
     "perf:import": "tsx tools/perf/import-50k.ts",
     "perf:inbox-seed": "tsx tools/perf/inbox-seed.ts",
-    "perf:inbox": "tsx tools/perf/inbox-latency.ts"
+    "perf:inbox": "tsx tools/perf/inbox-latency.ts",
+    "perf:flows": "tsx tools/perf/flows-latency.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

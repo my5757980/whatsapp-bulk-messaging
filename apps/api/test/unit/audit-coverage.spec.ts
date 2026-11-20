@@ -6,7 +6,7 @@ import { AUDIT_ACTIONS } from '../../src/modules/audit/audit-actions.js';
 
 // T175: every audited action of data-model.md §1 is recorded somewhere in the code base.
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
-/** Actions whose recording is still pending (none since US7). */
+/** Actions whose recording arrives with a later story (none since 003 US7). */
 const PENDING_US7 = new Set<string>();
 
 function sources(dir: string): string[] {
@@ -55,6 +55,15 @@ describe('audit coverage', () => {
       'media.removed',
       'livechat.settings_updated',
       'agent_rules.updated',
+      'flow.created',
+      'flow.updated',
+      'flow.duplicated',
+      'flow.deleted',
+      'flow.published',
+      'flow.unpublished',
+      'flow.restored',
+      'flow.test_numbers_updated',
+      'flow.secret_changed',
     ]);
   });
 

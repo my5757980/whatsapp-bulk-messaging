@@ -1,0 +1,539 @@
+openapi: 3.1.0
+info:
+  title: WhatsApp Platform - Chatbot Flows API
+  version: 0.1.0
+  description: >
+    Flow builder endpoints used by the Next.js dashboard (feature 003-chatbot-flow-builder). Same
+    conventions as 001 and 002: httpOnly session cookie, an X-CSRF-Token header on every mutating
+    request, an x-permission on every operation, and the error shape {code, message, details,
+    requestId}. The graph document is specified in flow-graph.md; responses carry it as `graph`.
+
+    New permission (added to packages/shared/permissions.ts):
+      flows.manage   ADMIN, MANAGER  - create, edit, test, publish, unpublish, delete flows; analytics; secrets
+    Live chat operations reuse inbox.reply (ADMIN, MANAGER, AGENT) and 002's visibility rules.
+servers:
+  - url: /api
+security:
+  - sessionCookie: []
+tags:
+  - name: flows
+  - name: versions
+  - name: analytics
+  - name: secrets
+  - name: live-chat
+
+paths:
+  /flows:
+    get:
+      tags: [flows]
+      summary: List flows (deleted flows excluded)
+      x-permission: flows.manage
+      responses:
+        '200':
+          description: Flows, by priority then name
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/FlowSummary' } } } }
+    post:
+      tags: [flows]
+      summary: Create a flow, empty or from a starter
+      x-permission: flows.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1, maxLength: 80 }
+                starterKey: { type: string, maxLength: 40 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/FlowDetail' } } } }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /flows/{id}:
+    get:
+      tags: [flows]
+      summary: A flow with its draft graph, secrets (names only) and published version
+      x-permission: flows.manage
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Flow, content: { application/json: { schema: { $ref: '#/components/schemas/FlowDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [flows]
+      summary: Change name, priority, numbers or test numbers
+      x-permission: flows.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1, maxLength: 80 }
+                priority: { type: integer, minimum: 1, maximum: 1000 }
+                allNumbers: { type: boolean }
+                numberIds: { type: array, maxItems: 50, items: { type: string, format: uuid } }
+                testNumbers: { type: array, maxItems: 3, items: { type: string, maxLength: 20 } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/FlowDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "NAME_TAKEN, or KEYWORD_TAKEN when a published flow's numbers would overlap another flow's exact keyword", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [flows]
+      summary: Delete a flow that is not published (analytics stay as history)
+      x-permission: flows.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: FLOW_PUBLISHED (unpublish first), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /flows/{id}/duplicate:
+    post:
+      tags: [flows]
+      summary: Copy the flow's draft into a new unpublished flow ("<name> (copy)")
+      x-permission: flows.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/FlowDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /flows/{id}/draft:
+    put:
+      tags: [flows]
+      summary: Save the draft (autosave); always stores a structurally valid graph and returns publish problems
+      x-permission: flows.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [graph, draftRevision]
+              additionalProperties: false
+              properties:
+                graph: { type: object, description: flow-graph.md document }
+                draftRevision: { type: integer, minimum: 0, description: the revision the editor loaded }
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [draftRevision, problems]
+                properties:
+                  draftRevision: { type: integer }
+                  problems: { type: array, items: { $ref: '#/components/schemas/Problem' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: DRAFT_CONFLICT (someone saved a newer draft), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: VALIDATION_FAILED when the document does not match flow-graph.md, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /flows/{id}/publish:
+    post:
+      tags: [versions]
+      summary: Publish the draft as a new version
+      x-permission: flows.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Published, content: { application/json: { schema: { $ref: '#/components/schemas/FlowDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: PUBLISH_BLOCKED with every problem
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [code, message, problems]
+                properties:
+                  code: { type: string, enum: [PUBLISH_BLOCKED] }
+                  message: { type: string }
+                  problems: { type: array, minItems: 1, items: { $ref: '#/components/schemas/Problem' } }
+                  requestId: { type: string }
+
+  /flows/{id}/unpublish:
+    post:
+      tags: [versions]
+      summary: Stop new sessions; running sessions end at their next step (FLOW_UNPUBLISHED)
+      x-permission: flows.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Unpublished, content: { application/json: { schema: { $ref: '#/components/schemas/FlowDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /flows/{id}/versions:
+    get:
+      tags: [versions]
+      summary: Published versions and the last 20 autosave revisions, newest first
+      x-permission: flows.manage
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: Versions
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/FlowVersion' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /flows/{id}/versions/{versionId}/restore:
+    post:
+      tags: [versions]
+      summary: Copy a version or revision into the draft
+      x-permission: flows.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: versionId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Draft replaced, content: { application/json: { schema: { $ref: '#/components/schemas/FlowDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /flows/{id}/analytics:
+    get:
+      tags: [analytics]
+      summary: Session results and per-step counts for a period (company time zone; test sessions excluded)
+      x-permission: flows.manage
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: period, in: query, schema: { type: string, enum: [today, 7d, 30d, custom], default: 7d } }
+        - { name: from, in: query, schema: { type: string, format: date }, description: required for custom }
+        - { name: to, in: query, schema: { type: string, format: date }, description: required for custom }
+        - { name: versionId, in: query, schema: { type: string, format: uuid }, description: default the published version }
+      responses:
+        '200': { description: Analytics, content: { application/json: { schema: { $ref: '#/components/schemas/FlowAnalytics' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /flows/{id}/analytics/steps/{stepId}/dropped:
+    get:
+      tags: [analytics]
+      summary: CSV of contacts whose session ended at this step without completing (same period filters)
+      x-permission: flows.manage
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: stepId, in: path, required: true, schema: { type: string, pattern: '^[a-z0-9_-]{1,40}$' } }
+        - { name: period, in: query, schema: { type: string, enum: [today, 7d, 30d, custom], default: 7d } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: 'text/csv; columns: name, phone, result, ended_at'
+          content: { text/csv: { schema: { type: string } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /flows/{id}/secrets:
+    post:
+      tags: [secrets]
+      summary: Store a secret header value for API steps (never returned)
+      x-permission: flows.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, value]
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1, maxLength: 60 }
+                value: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '201': { description: Stored, content: { application/json: { schema: { $ref: '#/components/schemas/FlowSecret' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /flows/{id}/secrets/{secretId}:
+    put:
+      tags: [secrets]
+      summary: Rename a secret or replace its value
+      x-permission: flows.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: secretId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1, maxLength: 60 }
+                value: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/FlowSecret' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [secrets]
+      summary: Delete a secret no draft or published version uses
+      x-permission: flows.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: secretId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: SECRET_IN_USE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /flows/{id}/api-test:
+    post:
+      tags: [flows]
+      summary: Run an API step once with sample values (same safety rules as at run time)
+      x-permission: flows.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [step]
+              additionalProperties: false
+              properties:
+                step: { type: object, description: an `api` step from flow-graph.md }
+                answers: { type: object, additionalProperties: { type: string, maxLength: 1000 } }
+                contactId: { type: string, format: uuid, description: fills contact variables from this contact }
+      responses:
+        '200':
+          description: The call's outcome (also returned for failed calls)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, durationMs]
+                properties:
+                  ok: { type: boolean }
+                  status: { type: [integer, 'null'] }
+                  durationMs: { type: integer }
+                  body: { description: 'parsed JSON, or text cut to 2 KB' }
+                  mapped: { type: object, additionalProperties: true }
+                  error: { type: [string, 'null'], examples: [TIMEOUT, BLOCKED_ADDRESS, NOT_HTTPS, TOO_LARGE, NOT_JSON] }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /flow-starters:
+    get:
+      tags: [flows]
+      summary: Starter flows written by us
+      x-permission: flows.manage
+      responses:
+        '200':
+          description: Starters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [key, name, description, stepCount]
+                  properties:
+                    key: { type: string }
+                    name: { type: string }
+                    description: { type: string }
+                    stepCount: { type: integer }
+                    attributes: { type: array, items: { type: string }, description: attribute keys the starter uses }
+
+  /inbox/conversations/{id}/flows:
+    get:
+      tags: [live-chat]
+      summary: Published flows that serve this chat's number (for "Start a flow")
+      x-permission: inbox.reply
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: Flows
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object, required: [id, name], properties: { id: { type: string, format: uuid }, name: { type: string } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [live-chat]
+      summary: Start a published flow for this customer (FR-031); a running session ends as INTERRUPTED
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [flowId]
+              additionalProperties: false
+              properties:
+                flowId: { type: string, format: uuid }
+      responses:
+        '201': { description: Started, content: { application/json: { schema: { $ref: '#/components/schemas/RunningSession' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: WINDOW_CLOSED, CHAT_TAKEN_BY_OTHER, CONTACT_BLOCKED, CONTACT_OPTED_OUT or FLOW_NOT_PUBLISHED
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
+  /inbox/conversations/{id}/flow-session:
+    get:
+      tags: [live-chat]
+      summary: The flow currently answering this chat, if any (shown above the reply box)
+      x-permission: inbox.view
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: Running session or null
+          content: { application/json: { schema: { oneOf: [{ $ref: '#/components/schemas/RunningSession' }, { type: 'null' }] } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: sid }
+    csrfHeader: { type: apiKey, in: header, name: X-CSRF-Token }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+  responses:
+    NotFound:
+      description: Not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationFailed:
+      description: VALIDATION_FAILED, with field details
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [VALIDATION_FAILED, NAME_TAKEN, DRAFT_CONFLICT, FLOW_PUBLISHED, KEYWORD_TAKEN, SECRET_IN_USE, WINDOW_CLOSED] }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: object, properties: { field: { type: string }, issue: { type: string } } }
+        requestId: { type: string }
+    MemberRef:
+      type: [object, 'null']
+      properties: { id: { type: string, format: uuid }, name: { type: string } }
+    Problem:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [MISSING_CONTENT, BRANCH_NOT_CONNECTED, UNREACHABLE_STEP, LIMIT_EXCEEDED, UNKNOWN_ATTRIBUTE, ATTRIBUTE_TYPE, KEYWORD_TAKEN, RESERVED_KEYWORD, UNSAFE_PATTERN, LOOP_WITHOUT_WAIT, JUMP_TARGET_NOT_PUBLISHED, NOT_HTTPS] }
+        message: { type: string }
+        stepId: { type: [string, 'null'] }
+        triggerId: { type: [string, 'null'] }
+        field: { type: [string, 'null'] }
+    PublishedVersionRef:
+      type: [object, 'null']
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: integer }
+        publishedAt: { type: string, format: date-time }
+        publishedBy: { $ref: '#/components/schemas/MemberRef' }
+    FlowSummary:
+      type: object
+      required: [id, name, status, priority, allNumbers, numberIds, testNumbers, publishedVersion, draftUpdatedAt, triggers]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [DRAFT, PUBLISHED, UNPUBLISHED] }
+        priority: { type: integer }
+        allNumbers: { type: boolean }
+        numberIds: { type: array, items: { type: string, format: uuid } }
+        testNumbers: { type: array, items: { type: string } }
+        publishedVersion: { $ref: '#/components/schemas/PublishedVersionRef' }
+        draftUpdatedAt: { type: [string, 'null'], format: date-time }
+        hasUnpublishedChanges: { type: boolean }
+        triggers: { type: array, items: { type: string }, description: short descriptions of the published (or draft) triggers }
+        last7Days: { type: object, properties: { started: { type: integer }, completed: { type: integer } } }
+    FlowDetail:
+      type: object
+      required: [id, name, status, priority, allNumbers, numberIds, testNumbers, publishedVersion, draftUpdatedAt, graph, draftRevision, secrets]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [DRAFT, PUBLISHED, UNPUBLISHED] }
+        priority: { type: integer }
+        allNumbers: { type: boolean }
+        numberIds: { type: array, items: { type: string, format: uuid } }
+        testNumbers: { type: array, items: { type: string } }
+        publishedVersion: { $ref: '#/components/schemas/PublishedVersionRef' }
+        draftUpdatedAt: { type: [string, 'null'], format: date-time }
+        hasUnpublishedChanges: { type: boolean }
+        graph: { type: object, description: the draft (flow-graph.md) }
+        draftRevision: { type: integer }
+        problems: { type: array, items: { $ref: '#/components/schemas/Problem' } }
+        secrets: { type: array, items: { $ref: '#/components/schemas/FlowSecret' } }
+    FlowVersion:
+      type: object
+      required: [id, kind, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [PUBLISHED, REVISION] }
+        number: { type: [integer, 'null'] }
+        createdAt: { type: string, format: date-time }
+        createdBy: { $ref: '#/components/schemas/MemberRef' }
+        current: { type: boolean, description: true for the version customers meet }
+    FlowSecret:
+      type: object
+      required: [id, name, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        updatedAt: { type: string, format: date-time }
+    FlowAnalytics:
+      type: object
+      required: [period, from, to, totals, steps]
+      properties:
+        period: { type: string, enum: [today, 7d, 30d, custom] }
+        from: { type: string, format: date-time }
+        to: { type: string, format: date-time }
+        versionId: { type: [string, 'null'], format: uuid }
+        totals:
+          type: object
+          properties:
+            started: { type: integer }
+            completed: { type: integer }
+            handedOver: { type: integer }
+            timedOut: { type: integer }
+            stoppedByMember: { type: integer }
+            optedOut: { type: integer }
+            interrupted: { type: integer }
+            failed: { type: integer }
+            other: { type: integer, description: 'window closed, send failed, unpublished, expired or blocked' }
+            running: { type: integer }
+        steps:
+          type: array
+          items:
+            type: object
+            required: [stepId, entered, continued, dropped]
+            properties:
+              stepId: { type: string }
+              entered: { type: integer }
+              continued: { type: integer }
+              dropped: { type: integer }
+              options: { type: array, items: { type: object, properties: { key: { type: string }, count: { type: integer } } } }
+    RunningSession:
+      type: object
+      required: [sessionId, flowId, flowName, startedAt, startedBy]
+      properties:
+        sessionId: { type: string, format: uuid }
+        flowId: { type: string, format: uuid }
+        flowName: { type: string }
+        stepId: { type: [string, 'null'] }
+        startedAt: { type: string, format: date-time }
+        startedBy: { type: string, enum: [TRIGGER, MEMBER, JUMP] }
+        test: { type: boolean }

@@ -216,6 +216,9 @@ enum ChatContentType {
   REACTION
   TEMPLATE
   UNSUPPORTED
+  /// Outbound interactive reply buttons and lists sent by flows (feature 003).
+  BUTTONS
+  LIST
 }
 
 enum MediaState {
@@ -237,12 +240,15 @@ enum JourneyEventType {
   BLOCKED
   UNBLOCKED
   FIRST_MESSAGE_TAG_CHANGED
+  FLOW_STARTED
+  FLOW_ENDED
 }
 
 enum JourneyActor {
   MEMBER
   CUSTOMER
   SYSTEM
+  FLOW
 }
 
 enum AgentRuleKind {
@@ -297,6 +303,12 @@ model User {
   contactsBlocked        Contact[]               @relation("ContactBlockedBy")
   messagesSent           Message[]               @relation("MessageSentBy")
   mediaUploaded          MediaAsset[]            @relation("MediaUploadedBy")
+  flowsCreated           Flow[]                  @relation("FlowCreatedBy")
+  flowDraftsUpdated      Flow[]                  @relation("FlowDraftUpdatedBy")
+  flowVersionsCreated    FlowVersion[]           @relation("FlowVersionCreatedBy")
+  flowSessionsStarted    FlowSession[]           @relation("FlowSessionStartedBy")
+  flowSecretsCreated     FlowSecret[]            @relation("FlowSecretCreatedBy")
+  flowSecretsUpdated     FlowSecret[]            @relation("FlowSecretUpdatedBy")
 
   @@map("users")
 }
@@ -388,6 +400,8 @@ model WhatsAppNumber {
   campaigns     Campaign[]
   messages      Message[]
   conversations Conversation[]
+  flowNumbers   FlowNumber[]
+  flowSessions  FlowSession[]
 
   @@map("whatsapp_numbers")
 }
@@ -419,6 +433,7 @@ model Contact {
   consentEvents ConsentEvent[]
   messages      Message[]
   conversations Conversation[]
+  flowSessions  FlowSession[]
 
   @@index([consentStatus])
   @@index([attributes], type: Gin)
@@ -434,8 +449,9 @@ model Tag {
   createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz
   contacts  ContactTag[]
 
-  agentRules           AgentRule[]
-  firstMessageContacts Contact[]   @relation("ContactFirstMessageTag")
+  agentRules            AgentRule[]
+  firstMessageContacts  Contact[]     @relation("ContactFirstMessageTag")
+  flowFirstMessageRules FlowTrigger[] @relation("FlowTriggerFirstMessageTag")
 
   @@map("tags")
 }
@@ -538,8 +554,9 @@ model Template {
   createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz
   updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz
 
-  campaigns Campaign[]
-  messages  Message[]
+  campaigns    Campaign[]
+  messages     Message[]
+  flowTriggers FlowTrigger[]
 
   @@unique([wabaId, name, language])
   @@index([status])
@@ -784,10 +801,11 @@ model Conversation {
   createdAt             DateTime          @default(now()) @map("created_at") @db.Timestamptz
   updatedAt             DateTime          @updatedAt @map("updated_at") @db.Timestamptz
 
-  items       ChatMessage[]
-  openings    ConversationOpening[]
-  events      ConversationEvent[]
-  readMarkers ChatReadMarker[]
+  items        ChatMessage[]
+  openings     ConversationOpening[]
+  events       ConversationEvent[]
+  readMarkers  ChatReadMarker[]
+  flowSessions FlowSession[]
 
   /// NULL contact ids (after erasure) stay distinct.
   @@unique([contactId, numberId])
@@ -991,4 +1009,240 @@ model PushDevice {
 
   @@index([userId])
   @@map("push_devices")
+}
+
+// ---------- Chatbot flows (feature 003, specs/003-chatbot-flow-builder/data-model.md) ----------
+
+enum FlowStatus {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
+}
+
+enum FlowVersionKind {
+  PUBLISHED
+  REVISION
+}
+
+enum FlowTriggerKind {
+  KEYWORD
+  PATTERN
+  TEMPLATE_BUTTON
+  FIRST_MESSAGE
+}
+
+enum KeywordMatch {
+  EXACT
+  CONTAINS
+}
+
+enum FlowSessionStatus {
+  RUNNING
+  ENDED
+}
+
+enum FlowSessionResult {
+  COMPLETED
+  HANDED_OVER
+  TIMED_OUT
+  STOPPED_BY_MEMBER
+  OPTED_OUT
+  INTERRUPTED
+  WINDOW_CLOSED
+  SEND_FAILED
+  FLOW_UNPUBLISHED
+  EXPIRED
+  BLOCKED
+  FAILED
+}
+
+enum FlowWait {
+  NONE
+  INPUT
+  DELAY
+  API
+}
+
+enum FlowStartedBy {
+  TRIGGER
+  MEMBER
+  JUMP
+}
+
+/// A chatbot flow with its editable draft graph (contracts/flow-graph.md). Names are unique among
+/// flows that are not deleted (partial unique index in the migration).
+model Flow {
+  id                 String       @id @default(uuid(7)) @db.Uuid
+  name               String       @db.Citext
+  status             FlowStatus   @default(DRAFT)
+  /// Lower runs first when triggers tie (FR-020).
+  priority           Int          @default(100)
+  allNumbers         Boolean      @default(true) @map("all_numbers")
+  publishedVersionId String?      @unique @map("published_version_id") @db.Uuid
+  publishedVersion   FlowVersion? @relation("FlowPublishedVersion", fields: [publishedVersionId], references: [id], onDelete: SetNull)
+  draft              Json         @default("{}")
+  /// +1 on every draft save; an older revision gets 409 DRAFT_CONFLICT.
+  draftRevision      Int          @default(0) @map("draft_revision")
+  draftUpdatedAt     DateTime?    @map("draft_updated_at") @db.Timestamptz
+  draftUpdatedById   String?      @map("draft_updated_by_id") @db.Uuid
+  draftUpdatedBy     User?        @relation("FlowDraftUpdatedBy", fields: [draftUpdatedById], references: [id], onDelete: SetNull)
+  /// E.164 numbers that run the draft (at most 3, check constraint in the migration).
+  testNumbers        String[]     @default([]) @map("test_numbers")
+  starterKey         String?      @map("starter_key") @db.VarChar(40)
+  createdById        String?      @map("created_by_id") @db.Uuid
+  createdBy          User?        @relation("FlowCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt          DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime     @updatedAt @map("updated_at") @db.Timestamptz
+  deletedAt          DateTime?    @map("deleted_at") @db.Timestamptz
+
+  versions FlowVersion[] @relation("FlowVersions")
+  numbers  FlowNumber[]
+  triggers FlowTrigger[]
+  sessions FlowSession[]
+  secrets  FlowSecret[]
+
+  @@map("flows")
+}
+
+model FlowNumber {
+  flowId   String         @map("flow_id") @db.Uuid
+  flow     Flow           @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  numberId String         @map("number_id") @db.Uuid
+  number   WhatsAppNumber @relation(fields: [numberId], references: [id], onDelete: Cascade)
+
+  @@id([flowId, numberId])
+  @@index([numberId])
+  @@map("flow_numbers")
+}
+
+/// Published versions (numbered, immutable) and autosave revisions (last 20 kept).
+model FlowVersion {
+  id          String          @id @default(uuid(7)) @db.Uuid
+  flowId      String          @map("flow_id") @db.Uuid
+  flow        Flow            @relation("FlowVersions", fields: [flowId], references: [id], onDelete: Cascade)
+  kind        FlowVersionKind
+  /// 1, 2, 3… for published versions; null for revisions (NULLs stay distinct in the unique index).
+  number      Int?
+  graph       Json
+  createdById String?         @map("created_by_id") @db.Uuid
+  createdBy   User?           @relation("FlowVersionCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  publishedFor Flow?         @relation("FlowPublishedVersion")
+  triggers     FlowTrigger[]
+  sessions     FlowSession[]
+
+  @@unique([flowId, number])
+  @@index([flowId, kind, createdAt(sort: Desc)])
+  @@map("flow_versions")
+}
+
+/// Triggers of published versions, written on publish for fast matching (research R2).
+model FlowTrigger {
+  id                String          @id @default(uuid(7)) @db.Uuid
+  flowId            String          @map("flow_id") @db.Uuid
+  flow              Flow            @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  flowVersionId     String          @map("flow_version_id") @db.Uuid
+  flowVersion       FlowVersion     @relation(fields: [flowVersionId], references: [id], onDelete: Cascade)
+  triggerKey        String          @map("trigger_key") @db.VarChar(40)
+  kind              FlowTriggerKind
+  match             KeywordMatch?
+  /// Normalised: lower case, single spaces, trimmed.
+  phrase            String?         @db.VarChar(200)
+  pattern           String?         @db.VarChar(200)
+  templateId        String?         @map("template_id") @db.Uuid
+  template          Template?       @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  buttonText        String?         @map("button_text") @db.VarChar(25)
+  firstMessageTagId String?         @map("first_message_tag_id") @db.Uuid
+  firstMessageTag   Tag?            @relation("FlowTriggerFirstMessageTag", fields: [firstMessageTagId], references: [id], onDelete: SetNull)
+  /// First-message rules can only set the tag without starting the flow.
+  startFlow         Boolean         @default(true) @map("start_flow")
+  /// Pattern triggers can store the matched text as an answer.
+  answerName        String?         @map("answer_name") @db.VarChar(40)
+  canInterrupt      Boolean         @default(false) @map("can_interrupt")
+
+  @@index([kind, phrase])
+  @@index([templateId, buttonText])
+  @@index([flowId])
+  @@map("flow_triggers")
+}
+
+/// One contact's run through one flow version (data-model.md §3). At most one RUNNING session per
+/// conversation (partial unique index in the migration).
+model FlowSession {
+  id              String             @id @default(uuid(7)) @db.Uuid
+  flowId          String             @map("flow_id") @db.Uuid
+  flow            Flow               @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  /// Null for test sessions running a draft.
+  flowVersionId   String?            @map("flow_version_id") @db.Uuid
+  flowVersion     FlowVersion?       @relation(fields: [flowVersionId], references: [id], onDelete: SetNull)
+  conversationId  String             @map("conversation_id") @db.Uuid
+  conversation    Conversation       @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  /// Null after contact erasure.
+  contactId       String?            @map("contact_id") @db.Uuid
+  contact         Contact?           @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  numberId        String             @map("number_id") @db.Uuid
+  number          WhatsAppNumber     @relation(fields: [numberId], references: [id], onDelete: Cascade)
+  status          FlowSessionStatus  @default(RUNNING)
+  result          FlowSessionResult?
+  failureReason   String?            @map("failure_reason") @db.VarChar(120)
+  currentStepId   String?            @map("current_step_id") @db.VarChar(40)
+  wait            FlowWait           @default(NONE)
+  /// +1 on every move; timers, API jobs and reply ids carry it so stale ones do nothing.
+  waitToken       Int                @default(0) @map("wait_token")
+  waitUntil       DateTime?          @map("wait_until") @db.Timestamptz
+  retries         Int                @default(0)
+  stepsSinceInput Int                @default(0) @map("steps_since_input")
+  answers         Json               @default("{}")
+  isTest          Boolean            @default(false) @map("is_test")
+  startedBy       FlowStartedBy      @map("started_by")
+  startedByUserId String?            @map("started_by_user_id") @db.Uuid
+  startedByUser   User?              @relation("FlowSessionStartedBy", fields: [startedByUserId], references: [id], onDelete: SetNull)
+  triggerKey      String?            @map("trigger_key") @db.VarChar(40)
+  parentSessionId String?            @map("parent_session_id") @db.Uuid
+  startedAt       DateTime           @default(now()) @map("started_at") @db.Timestamptz
+  lastActivityAt  DateTime           @default(now()) @map("last_activity_at") @db.Timestamptz
+  endedAt         DateTime?          @map("ended_at") @db.Timestamptz
+
+  steps FlowSessionStep[]
+
+  @@index([status, lastActivityAt])
+  @@index([flowId, startedAt])
+  @@index([conversationId, startedAt(sort: Desc)])
+  @@map("flow_sessions")
+}
+
+/// Each step a (non-test) session entered and how it left, for analytics (research R12).
+model FlowSessionStep {
+  id            BigInt      @id @default(autoincrement())
+  sessionId     String      @map("session_id") @db.Uuid
+  session       FlowSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  flowId        String      @map("flow_id") @db.Uuid
+  flowVersionId String?     @map("flow_version_id") @db.Uuid
+  stepId        String      @map("step_id") @db.VarChar(40)
+  enteredAt     DateTime    @default(now()) @map("entered_at") @db.Timestamptz
+  leftAt        DateTime?   @map("left_at") @db.Timestamptz
+  branch        String?     @db.VarChar(60)
+
+  @@index([flowId, flowVersionId, stepId, enteredAt])
+  @@index([sessionId])
+  @@map("flow_session_steps")
+}
+
+/// Encrypted header values for API steps (001 TokenCipher); never returned by the API.
+model FlowSecret {
+  id             String   @id @default(uuid(7)) @db.Uuid
+  flowId         String   @map("flow_id") @db.Uuid
+  flow           Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  name           String   @db.VarChar(60)
+  valueEncrypted String   @map("value_encrypted")
+  createdById    String?  @map("created_by_id") @db.Uuid
+  createdBy      User?    @relation("FlowSecretCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById    String?  @map("updated_by_id") @db.Uuid
+  updatedBy      User?    @relation("FlowSecretUpdatedBy", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@index([flowId])
+  @@map("flow_secrets")
 }

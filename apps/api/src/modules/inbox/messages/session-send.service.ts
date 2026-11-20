@@ -16,6 +16,7 @@ import { previewOf } from '../inbound/message-parser.js';
 import type { ChatContentType } from '../inbox-common.js';
 import { MediaLibraryService } from '../media-library/media-library.service.js';
 import { InboxPublisher } from '../realtime/inbox-publisher.js';
+import { FlowSessionService } from '../../flows/engine/session.service.js';
 
 /** POST /inbox/conversations/{id}/messages (contracts/inbox-api.openapi.yaml). */
 export const SendMessageSchema = z
@@ -69,6 +70,7 @@ export class SessionSendService {
     private readonly publisher: InboxPublisher,
     private readonly queues: QueueRegistry,
     private readonly library: MediaLibraryService,
+    private readonly flows: FlowSessionService,
   ) {}
 
   async send(viewer: Viewer, conversationId: string, input: SendMessageInput): Promise<ChatItemDto> {
@@ -85,6 +87,8 @@ export class SessionSendService {
       throw new AppError(HttpStatus.CONFLICT, 'ALREADY_TAKEN', `${owner} has taken this chat`, [{ field: 'intervenedBy', issue: owner }]);
     }
     const outgoing = await this.resolve(chat, input);
+    // A member's reply stops the flow answering the chat, also one the member started (003 FR-026).
+    await this.flows.stopForConversation(conversationId);
     // Replying takes the chat, so every reply has an owner (FR-020).
     if (chat.state !== 'INTERVENED') await this.conversations.take(viewer, chat);
 

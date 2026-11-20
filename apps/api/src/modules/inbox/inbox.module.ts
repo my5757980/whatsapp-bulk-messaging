@@ -96,5 +96,7 @@ export class InboxDomainModule {}
     NotesController,
     TeamMetricsController,
   ],
+  // Flows from live chat (feature 003) use the 002 visibility rules.
+  exports: [ConversationsService],
 })
 export class InboxApiModule {}

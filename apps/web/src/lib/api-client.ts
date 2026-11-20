@@ -12,6 +12,8 @@ export class ApiError extends Error {
     readonly code: string,
     message: string,
     readonly details?: ApiErrorDetail[],
+    /** Other top-level fields of the error body (003 PUBLISH_BLOCKED adds `problems`). */
+    readonly extra?: Record<string, unknown>,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -53,8 +55,13 @@ export async function api<T>(path: string, init: ApiRequestInit = {}): Promise<T
     window.location.assign('/login');
   }
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { code?: string; message?: string; details?: ApiErrorDetail[] };
-    throw new ApiError(res.status, body.code ?? 'HTTP_ERROR', body.message ?? res.statusText, body.details);
+    const { code, message, details, ...extra } = (await res.json().catch(() => ({}))) as {
+      code?: string;
+      message?: string;
+      details?: ApiErrorDetail[];
+      [field: string]: unknown;
+    };
+    throw new ApiError(res.status, code ?? 'HTTP_ERROR', message ?? res.statusText, details, extra);
   }
   if (res.status === 204) return undefined as T;
   const type = res.headers.get('content-type') ?? '';

@@ -20,6 +20,8 @@ const table: Array<[string, Permission[], { ADMIN: boolean; MANAGER: boolean; AG
   ['create, edit and delete saved replies; remove library media', ['canned.manage', 'media.manage'], { ADMIN: true, MANAGER: true, AGENT: false }],
   ['working hours, automatic messages, keywords, auto-resolve, agent rules', ['livechat.settings'], { ADMIN: true, MANAGER: false, AGENT: false }],
   ['team view', ['inbox.metrics'], { ADMIN: true, MANAGER: true, AGENT: false }],
+  // Feature 003 chatbot flows (spec FR-038); agents start published flows with inbox.reply
+  ['build, test, publish and analyse chatbot flows; API-step secrets', ['flows.manage'], { ADMIN: true, MANAGER: true, AGENT: false }],
 ];
 
 describe('permission matrix (spec.md role table)', () => {

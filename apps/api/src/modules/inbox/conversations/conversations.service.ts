@@ -25,6 +25,7 @@ import {
 } from './conversation-views.js';
 import { canAccess, seesAll, visibleSql, type Viewer } from './visibility.js';
 import { isLive } from './window.js';
+import { FlowSessionService } from '../../flows/engine/session.service.js';
 
 export const ConversationListQuerySchema = z.object({
   view: z.enum(['live', 'history']).default('live'),
@@ -83,6 +84,7 @@ export class ConversationsService {
     private readonly timeline: ChatTimelineService,
     private readonly routing: ChatRoutingService,
     private readonly audit: AuditService,
+    private readonly flows: FlowSessionService,
   ) {}
 
   /** Hands a taken chat to another member who may see it (FR-022): the owner, or an admin or manager. */
@@ -362,6 +364,8 @@ export class ConversationsService {
       const owner = current?.intervenedBy?.name ?? 'Another member';
       throw new AppError(HttpStatus.CONFLICT, 'ALREADY_TAKEN', `${owner} has already taken this chat`, [{ field: 'intervenedBy', issue: owner }]);
     }
+    // A member who takes the chat stops the flow answering it (003 FR-026).
+    await this.flows.stopForConversation(row.id);
     await this.publisher.conversation(row.id, previous(row));
   }
 

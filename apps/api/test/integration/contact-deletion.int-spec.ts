@@ -91,6 +91,18 @@ describe('Contact deletion', () => {
     expect(await ctx.prisma.conversationOpening.findUnique({ where: { id: opening.id } })).not.toBeNull();
   });
 
+  it('clears chatbot flow answers and the contact link of its sessions (003)', async () => {
+    const number = await seedNumber(ctx);
+    const contact = await seedContact(ctx, uaePhone());
+    const chat = await ctx.prisma.conversation.create({ data: { contactId: contact.id, numberId: number.id } });
+    const flow = await ctx.prisma.flow.create({ data: { name: `Erasure flow ${randomUUID().slice(0, 6)}`, draft: { version: 1, start: null, triggers: [], steps: [] } } });
+    const session = await ctx.prisma.flowSession.create({
+      data: { flowId: flow.id, conversationId: chat.id, contactId: contact.id, numberId: number.id, startedBy: 'TRIGGER', status: 'ENDED', result: 'COMPLETED', answers: { email: 'sara@example.com' }, endedAt: new Date() },
+    });
+    expect((await admin.agent.delete(`/api/contacts/${contact.id}`).set('x-csrf-token', admin.csrf)).status).toBe(204);
+    expect(await ctx.prisma.flowSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ contactId: null, answers: {} });
+  });
+
   it('is admin-only and returns 404 for unknown contacts', async () => {
     const contact = await seedContact(ctx, uaePhone());
     const manager = await signIn(ctx, 'MANAGER');

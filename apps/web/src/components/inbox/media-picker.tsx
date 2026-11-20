@@ -37,7 +37,17 @@ export async function uploadToLibrary(file: File, displayName?: string): Promise
  * Attach a file to a reply (T066): from the media library or from the computer (stored in the
  * library first, so it can be reused), with an optional caption (none for audio).
  */
-export function MediaPicker({ onSend, disabled }: { onSend: (item: MediaItem, caption: string) => void; disabled?: boolean }) {
+export function MediaPicker({
+  onSend,
+  disabled,
+  purpose = 'send',
+}: {
+  onSend: (item: MediaItem, caption: string) => void;
+  disabled?: boolean;
+  /** 'choose' picks a file for a flow step (003): no caption, the step text is the caption. */
+  purpose?: 'send' | 'choose';
+}) {
+  const choosing = purpose === 'choose';
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [chosen, setChosen] = useState<MediaItem | null>(null);
@@ -68,12 +78,12 @@ export function MediaPicker({ onSend, disabled }: { onSend: (item: MediaItem, ca
     >
       <DialogTrigger asChild>
         <Button type="button" size="sm" variant="outline" disabled={disabled}>
-          Attach
+          {choosing ? 'Choose file' : 'Attach'}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Send a file</DialogTitle>
+          <DialogTitle>{choosing ? 'Choose a file' : 'Send a file'}</DialogTitle>
           <DialogDescription>Images up to 5 MB, video and audio up to 16 MB, documents up to 100 MB.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
@@ -107,7 +117,7 @@ export function MediaPicker({ onSend, disabled }: { onSend: (item: MediaItem, ca
               ))}
             </ul>
           </div>
-          {chosen && chosen.kind !== 'audio' && (
+          {!choosing && chosen && chosen.kind !== 'audio' && (
             <div className="grid gap-1">
               <Label htmlFor="attach-caption">Caption (optional)</Label>
               <Input id="attach-caption" value={caption} maxLength={1024} onChange={(e) => setCaption(e.target.value)} />
@@ -124,7 +134,7 @@ export function MediaPicker({ onSend, disabled }: { onSend: (item: MediaItem, ca
             }}
             disabled={!chosen || upload.isPending}
           >
-            Send {chosen ? `"${chosen.displayName ?? 'file'}"` : 'file'}
+            {choosing ? 'Use' : 'Send'} {chosen ? `"${chosen.displayName ?? 'file'}"` : 'file'}
           </Button>
         </DialogFooter>
       </DialogContent>

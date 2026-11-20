@@ -20,13 +20,14 @@ Content (exactly one):
   --audio <file> [--voice]       --document <file> [--filename <name>]
   --location <lat,lng> [--label <name>] [--address <text>]
   --contact-card "<name>,<phone>"
-  --button-reply <title>         --quick-reply <text>   (a template quick-reply button)
-  --list-reply <title> [--description <text>]
+  --button-reply <title> [--button-id <id>]   (a tap on a reply button)
+  --list-reply <title> [--list-id <id>] [--description <text>]
+  --quick-reply <text> [--context <wamid>]    (a template quick-reply button; --context names the template message)
   --form-reply '<json>'          --reaction <emoji> --to-wamid <wamid>   (an empty emoji removes it)
   --unsupported
 
 Options:
-  --name <profile name>   --caption <text>   --reply-to <wamid>   --wamid <fixed id>
+  --name <profile name>   --caption <text>   --reply-to <wamid> (alias --context)   --wamid <fixed id>
   --at <offset>           message time relative to now, e.g. -25h, -30m, -2d
   --phone-number-id <id>  (default MOCK_PHONE)    --waba <id> (default MOCK_WABA)`;
 
@@ -98,6 +99,9 @@ const { values } = parseArgs({
     'button-reply': { type: 'string' },
     'quick-reply': { type: 'string' },
     'list-reply': { type: 'string' },
+    'button-id': { type: 'string' },
+    'list-id': { type: 'string' },
+    context: { type: 'string' },
     description: { type: 'string' },
     'form-reply': { type: 'string' },
     reaction: { type: 'string' },
@@ -193,7 +197,7 @@ async function buildContent(): Promise<Record<string, unknown>> {
     }
     case 'button-reply': {
       const title = values['button-reply']!;
-      return { type: 'interactive', interactive: { type: 'button_reply', button_reply: { id: slug(title), title } } };
+      return { type: 'interactive', interactive: { type: 'button_reply', button_reply: { id: values['button-id'] ?? slug(title), title } } };
     }
     case 'quick-reply': {
       const text = values['quick-reply']!;
@@ -202,7 +206,7 @@ async function buildContent(): Promise<Record<string, unknown>> {
     case 'list-reply': {
       const title = values['list-reply']!;
       const description = values.description ? { description: values.description } : {};
-      return { type: 'interactive', interactive: { type: 'list_reply', list_reply: { id: slug(title), title, ...description } } };
+      return { type: 'interactive', interactive: { type: 'list_reply', list_reply: { id: values['list-id'] ?? slug(title), title, ...description } } };
     }
     case 'form-reply': {
       const json = values['form-reply']!;
@@ -236,7 +240,7 @@ const message = {
   id: values.wamid ?? `wamid.in.${Date.now()}${Math.floor(Math.random() * 1000)}`,
   timestamp: String(Math.floor((Date.now() + (values.at ? offsetMs(values.at) : 0)) / 1000)),
   ...content,
-  ...(values['reply-to'] ? { context: { from: '15550100', id: values['reply-to'] } } : {}),
+  ...((values['reply-to'] ?? values.context) ? { context: { from: '15550100', id: values['reply-to'] ?? values.context } } : {}),
 } as InboundMessage;
 
 const status = await postSigned(

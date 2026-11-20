@@ -41,6 +41,8 @@ export class ContactDeletionService {
         UPDATE conversation_events SET data = jsonb_build_object('key', data->'key')
          WHERE type = 'ATTRIBUTE_CHANGED' AND conversation_id = ANY(${chatIds}::uuid[])`,
       this.prisma.notification.deleteMany({ where: { link: { in: chatIds.map((id) => `/inbox?c=${id}`) } } }),
+      // Flow answers are what the customer typed (003 T083); sessions stay for analytics without them.
+      this.prisma.flowSession.updateMany({ where: { contactId }, data: { answers: {}, contactId: null } }),
       this.prisma.contact.delete({ where: { id: contactId } }),
     ]);
     // Files after the commit; one that cannot be deleted now is left for the retention job.

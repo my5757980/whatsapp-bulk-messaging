@@ -170,3 +170,37 @@ export function run(main: () => Promise<void>): void {
     process.exitCode = 1;
   });
 }
+
+/** One live event stream; calls `onText` with each new message's text and its arrival time. */
+export async function openStream(url: string, cookie: string, onText: (text: string, at: number) => void): Promise<AbortController> {
+  const abort = new AbortController();
+  const res = await fetch(url, { headers: { cookie, accept: 'text/event-stream' }, signal: abort.signal });
+  if (!res.ok || !res.body) throw new Error(`Event stream -> ${res.status}`);
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  void (async () => {
+    let buffer = '';
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) return;
+        buffer += value;
+        let end: number;
+        while ((end = buffer.indexOf('\n\n')) >= 0) {
+          const block = buffer.slice(0, end);
+          buffer = buffer.slice(end + 2);
+          if (!/^event: message\.created$/m.test(block)) continue;
+          const data = block
+            .split('\n')
+            .filter((line) => line.startsWith('data: '))
+            .map((line) => line.slice(6))
+            .join('\n');
+          const text = (JSON.parse(data) as { item?: { text?: string | null } }).item?.text;
+          if (text) onText(text, Date.now());
+        }
+      }
+    } catch {
+      // Aborted at the end of the run.
+    }
+  })();
+  return abort;
+}
