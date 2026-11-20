@@ -19,9 +19,30 @@ const SECRET_KEYS = new Set([
   'x-ops-token',
   'x-csrf-token',
   'x-hub-signature-256',
+  // Browser push subscriptions (feature 002): the endpoint and keys let anyone send alerts.
+  'endpoint',
+  'keys',
+  'p256dh',
+  'auth',
 ]);
 
-const CONTENT_KEYS = new Set(['text', 'messagetext', 'resolvedparams', 'templateparams', 'params', 'body_text']);
+const CONTENT_KEYS = new Set([
+  'text',
+  'messagetext',
+  'resolvedparams',
+  'templateparams',
+  'params',
+  'body_text',
+  // Live chat (feature 002): captions, notes, list previews, rendered templates, automatic messages.
+  'caption',
+  'note',
+  'preview',
+  'lastmessagepreview',
+  'last_message_preview',
+  'renderedtext',
+  'welcomecontent',
+  'offhourscontent',
+]);
 
 const PHONE_KEYS = new Set([
   'phone',

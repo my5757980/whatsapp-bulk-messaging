@@ -566,28 +566,28 @@
 
 ### Tests for User Story 8 (REQUIRED - Constitution Principle V) ⚠️
 
-- [ ] T089 [P] [US8] Integration test in apps/api/test/integration/inbox-notes-metrics.int-spec.ts:
+- [X] T089 [P] [US8] Integration test in apps/api/test/integration/inbox-notes-metrics.int-spec.ts:
   - a note creates a NOTE item visible to the team; no Graph call (nock has no interceptor); mentions → INBOX_MENTION notification
   - openings: `first_human_reply_at` is set by the first member reply or template, not by automatic messages; intervene and resolve times are recorded
   - team metrics for today, 7d and 30d give counts and medians that match a fixture computed by hand
   - an agent gets 403 on the team view
   - a manager can open any intervened chat
-- [ ] T090 [P] [US8] Add contract tests for POST notes and GET /inbox/team-metrics to apps/api/test/contract/inbox.contract-spec.ts
-- [ ] T091 [P] [US8] Playwright e2e for the quickstart US8 row in apps/web/e2e/inbox-us8-team-view.spec.ts
+- [X] T090 [P] [US8] Add contract tests for POST notes and GET /inbox/team-metrics to apps/api/test/contract/inbox.contract-spec.ts
+- [X] T091 [P] [US8] Playwright e2e for the quickstart US8 row in apps/web/e2e/inbox-us8-team-view.spec.ts
 
 ### Implementation for User Story 8
 
-- [ ] T092 [US8] Implement notes in apps/api/src/modules/inbox/messages/notes.service.ts and the controller:
+- [X] T092 [US8] Implement notes in apps/api/src/modules/inbox/messages/notes.service.ts and the controller:
   - `POST /inbox/conversations/{id}/notes`
   - mentions validated against active members who can see the chat
   - notifications and push (T087), publish `note.created`
-- [ ] T093 [US8] Keep openings up to date in apps/api/src/modules/inbox/messages/session-send.service.ts, template-send.service.ts and conversations.service.ts:
+- [X] T093 [US8] Keep openings up to date in apps/api/src/modules/inbox/messages/session-send.service.ts, template-send.service.ts and conversations.service.ts:
   - set `first_human_reply_at` and `first_responder_id` in session-send.service.ts and template-send.service.ts for non-automatic sends
   - set intervened and resolved times in conversations.service.ts
-- [ ] T094 [US8] Implement the team view in apps/api/src/modules/inbox/metrics/team-metrics.service.ts and team-metrics.controller.ts:
+- [X] T094 [US8] Implement the team view in apps/api/src/modules/inbox/metrics/team-metrics.service.ts and team-metrics.controller.ts:
   - live counts by state, and the oldest REQUESTING time
   - per member: intervened, resolved, and `percentile_cont(0.5)` of first response and resolution over the openings in the period, in the company time zone
-- [ ] T095 [US8] Build the notes and team view UI in apps/web/src/components/inbox/composer.tsx and apps/web/src/app/(dashboard)/inbox/team/page.tsx:
+- [X] T095 [US8] Build the notes and team view UI in apps/web/src/components/inbox/composer.tsx and apps/web/src/app/(dashboard)/inbox/team/page.tsx:
   - a note mode in composer.tsx with an @-mention picker; notes styled distinctly in chat-view.tsx
   - apps/web/src/app/(dashboard)/inbox/team/page.tsx with a period selector and a member table
 
@@ -614,7 +614,7 @@
   - `wbm_inbox_messages_total{direction,kind}`, `wbm_inbox_event_lag_seconds`, `wbm_inbox_sse_connections`, `wbm_inbound_media_failures_total`
   - update the instrumentation points
   - add the alert "inbound media failures above 10% over 15 min" to ops/alerts.yml, and pass apps/api/test/unit/alerts.spec.ts and promtool
-- [ ] T100 [P] Extend the log redaction list in apps/api/src/common/logging/redaction.ts to cover chat text, captions, notes and push endpoints, with a unit test in apps/api/test/unit/logging-redaction.spec.ts
+- [X] T100 [P] Extend the log redaction list in apps/api/src/common/logging/redaction.ts to cover chat text, captions, notes and push endpoints, with a unit test in apps/api/test/unit/logging-redaction.spec.ts
 - [ ] T101 [P] Add the performance seed and check in tools/perf/inbox-seed.ts and tools/perf/inbox-latency.ts:
   - seed 10,000 chats and one chat with 5,000 messages
   - measure list and chat-open times (SC-006) and webhook→SSE latency p95 (SC-001)
