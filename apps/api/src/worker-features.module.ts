@@ -4,6 +4,8 @@ import { CampaignProgressProcessor } from './modules/campaigns/campaign-progress
 import { ScheduleReconcilerProcessor } from './modules/campaigns/schedule-reconciler.processor.js';
 import { AiDomainModule } from './modules/ai/ai.module.js';
 import { KnowledgeQueueProcessor } from './modules/ai/knowledge/knowledge-queue.processor.js';
+import { KnowledgeProcessor } from './modules/ai/knowledge/knowledge.processor.js';
+import { TurnProcessor } from './modules/ai/turns/turn.processor.js';
 import { AiQueueProcessor } from './modules/ai/turns/ai-queue.processor.js';
 import { DomainModule } from './modules/domain.module.js';
 import { ImportProcessor } from './modules/imports/import.processor.js';
@@ -68,6 +70,8 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     // AI agent (feature 004)
     AiQueueProcessor,
     KnowledgeQueueProcessor,
+    KnowledgeProcessor,
+    TurnProcessor,
     InboxNotifyProcessor,
     PushService,
     SessionSendProcessor,

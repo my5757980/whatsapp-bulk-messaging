@@ -61,6 +61,18 @@ function checkAddress(url: URL): void {
   if ((isIP(host) && isBlockedAddress(host)) || host === 'localhost' || host.endsWith('.localhost')) throw new KnowledgeError('BLOCKED_ADDRESS');
 }
 
+/** Parses and checks a website address before it is stored (NOT_HTTPS, BLOCKED_ADDRESS). */
+export function checkWebsiteAddress(address: string): URL {
+  let url: URL;
+  try {
+    url = new URL(address);
+  } catch {
+    throw new KnowledgeError('FETCH_FAILED', 'The address is not a valid URL.');
+  }
+  checkAddress(url);
+  return url;
+}
+
 function fetchOnce(url: URL, accept: string): Promise<Fetched> {
   return new Promise<Fetched>((resolve, reject) => {
     let settled = false;
