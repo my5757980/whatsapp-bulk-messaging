@@ -624,7 +624,7 @@
   - a Live chat section in README.md (UI terms, settings, push setup)
   - update specs/002-team-inbox/quickstart.md if steps changed
   - add an inbox section to specs/001-whatsapp-bulk-messaging/checklists/release.md
-- [ ] T104 Run every quickstart.md row end to end (locally where memory allows, otherwise in CI), fix gaps, and record the results in specs/002-team-inbox/checklists/release.md
+- [X] T104 Run every quickstart.md row end to end (locally where memory allows, otherwise in CI), fix gaps, and record the results in specs/002-team-inbox/checklists/release.md
 
 ---
 

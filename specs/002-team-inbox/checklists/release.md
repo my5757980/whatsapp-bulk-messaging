@@ -27,7 +27,7 @@ staging hardware, a real browser push test over HTTPS, and the product owner's s
 | `promtool check rules ops/alerts.yml` | ✅ PASS | 7 rules, including the new `WbmInboundMediaFailing` |
 | gitleaks (history) | ✅ PASS | `.gitleaks.toml` keeps the default rules and allows only the two public example Web Push keys used by tests |
 | Docker images + live event smoke (T102) | ✅ PASS | CI `docker-images` (commit 2210817): api, migration and web images build; with the api in production mode and the standalone web server, a sign-in through the web `/api` proxy gets `: ping` on `/api/inbox/events` within 20 s (step took 37 s in total) |
-| Playwright e2e | ✅ PASS | CI `e2e-smoke`: 15 specs, the 7 of feature 001 and `inbox-us1-live-chat` … `inbox-us8-team-view` (green through commit fe02624; re-run on each push) |
+| Playwright e2e | ✅ PASS | CI `e2e-smoke`: 15 specs, the 7 of feature 001 and `inbox-us1-live-chat` … `inbox-us8-team-view` (all green on commit c5f30c1, together with build-test, secret-scan and docker-images) |
 | Performance SC-006 / SC-001 | 🟡 NOT RUN | `npm run perf:inbox-seed` and `npm run perf:inbox` are ready (T101). They need the api, the worker and Docker services; run them on staging hardware |
 
 ## 2. Quickstart validation rows (§3)
