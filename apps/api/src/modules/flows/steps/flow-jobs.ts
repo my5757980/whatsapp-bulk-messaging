@@ -9,6 +9,14 @@ export interface FlowTimerData {
   token: number;
 }
 
+/** An API step call for one wait of a session (research R11). */
+export const FLOW_API_JOB = 'flow-api';
+export interface FlowApiData {
+  sessionId: string;
+  token: number;
+}
+export const flowApiJobId = (data: FlowApiData): string => `flow-api-${data.sessionId}-${data.token}`;
+
 /** Every 5 minutes: sessions idle for 24 hours end as EXPIRED (FR-032). */
 export const FLOW_EXPIRY_JOB = 'flow-expiry';
 

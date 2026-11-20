@@ -142,3 +142,33 @@ describe('jumps and the end step', () => {
     expect(start(graph([{ id: 'a', type: 'end' }])).effects.at(-1)).toEqual({ kind: 'end', result: 'COMPLETED' });
   });
 });
+
+// 003 T058: an API step waits for its call; success maps answers, failure takes the failed branch.
+describe('API steps', () => {
+  const lookup = graph([
+    { id: 'call', type: 'api', url: 'https://shop.example.com/orders/{answer:topic}', map: [{ path: 'status', answerName: 'status' }], success: 'ok', failed: 'sorry' },
+    { id: 'ok', type: 'message', text: 'Your order is {answer:status}.', next: null },
+    { id: 'sorry', type: 'message', text: 'We could not check your order.', next: null },
+  ], 'call');
+
+  it('waits for the call, then follows success with the mapped answers', () => {
+    const waiting = start(lookup);
+    expect(waiting.state).toMatchObject({ wait: 'API', currentStepId: 'call' });
+    expect(waiting.effects).toContainEqual({ kind: 'callApi', stepId: 'call' });
+    expect(run(waiting.state, { kind: 'message', text: 'hello?', replyId: null, contentType: 'TEXT' }, ctx(lookup)).effects).toEqual([]);
+    expect(run(waiting.state, { kind: 'api', token: waiting.state.waitToken - 1, ok: true, mapped: {} }, ctx(lookup)).effects).toEqual([]);
+
+    const done = run(waiting.state, { kind: 'api', token: waiting.state.waitToken, ok: true, mapped: { status: 'shipped' } }, ctx(lookup));
+    expect(done.effects).toContainEqual({ kind: 'stepLeft', stepId: 'call', branch: 'success' });
+    expect(sendsOf(done.effects)).toEqual(['Your order is shipped.']);
+    expect(done.state.answers).toMatchObject({ status: 'shipped' });
+  });
+
+  it('follows the failed branch without mapping anything', () => {
+    const waiting = start(lookup);
+    const failed = run(waiting.state, { kind: 'api', token: waiting.state.waitToken, ok: false, mapped: { status: 'ignored' } }, ctx(lookup));
+    expect(failed.effects).toContainEqual({ kind: 'stepLeft', stepId: 'call', branch: 'failed' });
+    expect(sendsOf(failed.effects)).toEqual(['We could not check your order.']);
+    expect(failed.state.answers).not.toHaveProperty('status');
+  });
+});

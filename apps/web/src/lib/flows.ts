@@ -56,7 +56,7 @@ export const STEP_LABELS: Record<StepType, string> = {
 };
 
 /** Steps available so far; later stories add the rest (hand-over arrives with US3). */
-export const PALETTE: StepType[] = ['message', 'buttons', 'question', 'list', 'tags', 'attributes', 'condition', 'delay', 'jump', 'end'];
+export const PALETTE: StepType[] = ['message', 'buttons', 'question', 'list', 'tags', 'attributes', 'condition', 'delay', 'api', 'jump', 'end'];
 
 /** A readable name for a branch of a step. */
 export function branchLabel(step: FlowStep, branch: string): string {
@@ -102,12 +102,14 @@ export function stepSummary(step: FlowStep): string {
       return `Wait ${durationText(step.seconds)}`;
     case 'jump':
       return step.flowId ? 'Continue in another flow' : 'No flow chosen';
+    case 'api': {
+      const host = /^https:\/\/([^/?#]+)/i.exec(step.url.trim())?.[1];
+      return host ? `${step.method} ${host}` : 'No address yet';
+    }
     case 'handover':
       return 'The chat waits for a person in live chat';
     case 'end':
       return 'The flow ends';
-    default:
-      return STEP_LABELS[step.type];
   }
 }
 
@@ -163,6 +165,8 @@ export function newStep(type: StepType, id: string, position: { x: number; y: nu
       return { id, type, position, seconds: 60, next: null };
     case 'jump':
       return { id, type, position, flowId: null };
+    case 'api':
+      return { id, type, position, method: 'GET', url: '', headers: [], query: [], timeoutSeconds: 5, map: [], success: null, failed: null };
     case 'handover':
       return { id, type, position };
     case 'end':

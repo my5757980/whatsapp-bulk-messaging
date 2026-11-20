@@ -77,4 +77,25 @@ describe('Chatbot flows API contract', () => {
     await ctx.prisma.conversation.update({ where: { id: chat.id }, data: { lastCustomerMessageAt: new Date(Date.now() - 25 * 3_600_000) } });
     await check('post', '/inbox/conversations/{id}/flows', await call('post', `${base}/flows`, { flowId: id }), 409);
   });
+
+  it('US5: secrets and the test request', async () => {
+    const created = await call('post', '/flows', { name: `Contract secrets ${randomUUID().slice(0, 6)}` });
+    const id = created.body.id as string;
+    const secret = await call('post', `/flows/${id}/secrets`, { name: 'Token', value: 'abc-123' });
+    await check('post', '/flows/{id}/secrets', secret, 201);
+    await check('post', '/flows/{id}/secrets', await call('post', `/flows/${id}/secrets`, { name: '' }), 422);
+    await check('put', '/flows/{id}/secrets/{secretId}', await call('put', `/flows/${id}/secrets/${secret.body.id}`, { name: 'Shop token' }), 200);
+    await check('put', '/flows/{id}/secrets/{secretId}', await call('put', `/flows/${id}/secrets/${randomUUID()}`, { name: 'x' }), 404);
+
+    // The test request refuses private addresses without calling them.
+    const step = { id: 'call', type: 'api', url: 'https://10.0.0.5/orders', headers: [{ name: 'Authorization', value: `Bearer {secret:${secret.body.id}}` }] };
+    await check('post', '/flows/{id}/api-test', await call('post', `/flows/${id}/api-test`, { step }), 200);
+    await check('post', '/flows/{id}/api-test', await call('post', `/flows/${id}/api-test`, { step: { id: 'm', type: 'message', text: 'hi' } }), 422);
+
+    // A secret the draft uses cannot be deleted; once unused it can.
+    await call('put', `/flows/${id}/draft`, { graph: { version: 1, start: 'call', triggers: [], steps: [step] }, draftRevision: 0 });
+    await check('delete', '/flows/{id}/secrets/{secretId}', await call('delete', `/flows/${id}/secrets/${secret.body.id}`), 409);
+    await call('put', `/flows/${id}/draft`, { graph: { version: 1, start: null, triggers: [], steps: [] }, draftRevision: 1 });
+    await check('delete', '/flows/{id}/secrets/{secretId}', await call('delete', `/flows/${id}/secrets/${secret.body.id}`), 204);
+  });
 });

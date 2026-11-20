@@ -153,9 +153,11 @@ reference before release, as 001 and 002 did.
   - The engine pauses at an API step and queues `flow-api {sessionId, waitToken}` on the `flows`
     queue; the job makes the call and resumes the session with the result. The inbound worker never
     waits on outside systems.
-  - Requests use Node's `fetch` with an undici `Agent` whose DNS lookup rejects private, loopback,
-    link-local, multicast and reserved IPv4/IPv6 ranges at connect time (no DNS-rebinding gap),
-    HTTPS only, no redirects, timeout 1–10 s, response cap 100 KB, JSON replies only for mapping.
+  - Requests use Node's own `https` client with a DNS `lookup` that rejects private, loopback,
+    link-local, multicast and reserved IPv4/IPv6 ranges at connect time (no DNS-rebinding gap;
+    address literals are checked before connecting), HTTPS only, no redirects, timeout 1–10 s,
+    response cap 100 KB, JSON replies only for mapping. (Planned with an undici `Agent`; Node's
+    client gives the same connect-time check without adding an HTTP library to the API.)
   - Mapping uses simple dotted paths (`order.status`, `items.0.name`) into named answers.
   - Secret header values live in `flow_secrets`, encrypted with 001's `TokenCipher`, referenced from
     the graph as `{secret:<id>}` and shown as `••••` after saving (FR-015). Values never enter logs,

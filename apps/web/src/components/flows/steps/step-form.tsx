@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { STEP_LABELS, updateStep } from '@/lib/flows';
+import type { FlowSecret } from '../secrets-panel';
 import type { GraphChange } from '../use-graph-history';
+import { ApiStepForm } from './api-step-form';
 import { ButtonsForm } from './buttons-form';
 import { TEXTAREA_CLASS } from './form-bits';
 import { AttributesForm } from './attributes-form';
@@ -29,10 +31,13 @@ interface StepFormProps {
   onSetStart: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  /** For API steps: the flow (test requests) and its secrets (header values). */
+  flowId: string;
+  secrets: FlowSecret[];
 }
 
 /** The side panel for the selected step: its problems, its form and step actions. */
-export function StepForm({ step, graph, isStart, problems, onChange, onSetStart, onDuplicate, onDelete }: StepFormProps) {
+export function StepForm({ step, graph, isStart, problems, onChange, onSetStart, onDuplicate, onDelete, flowId, secrets }: StepFormProps) {
   const patch: StepPatch<FlowStep> = (values, key) =>
     onChange((g) => updateStep(g, step.id, (current) => ({ ...current, ...values }) as FlowStep), key ? `${step.id}:${key}` : undefined);
 
@@ -80,9 +85,7 @@ export function StepForm({ step, graph, isStart, problems, onChange, onSetStart,
         </div>
       )}
       {step.type === 'end' && <p className="text-sm text-muted-foreground">The flow ends here. The chat stays open for your team.</p>}
-      {step.type === 'api' && (
-        <p className="text-sm text-muted-foreground">This kind of step can be edited in a later version of the editor.</p>
-      )}
+      {step.type === 'api' && <ApiStepForm step={step} graph={graph} flowId={flowId} secrets={secrets} onPatch={patch} />}
       <div className="flex flex-wrap gap-2 border-t pt-3">
         <Button type="button" size="sm" variant="outline" onClick={onSetStart} disabled={isStart}>
           {isStart ? 'Start step' : 'Make this the start'}

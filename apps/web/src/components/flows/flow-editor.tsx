@@ -15,6 +15,7 @@ import { addStep, flowKeys, PALETTE, pasteStep, removeStep, STEP_LABELS, type Fl
 import { FlowCanvas } from './flow-canvas';
 import { FlowStatusBadge } from './flow-status-badge';
 import { ProblemsPanel } from './problems-panel';
+import { SecretsPanel, type FlowSecret } from './secrets-panel';
 import { StepForm } from './steps/step-form';
 import { TriggerPanel } from './trigger-panel';
 import { useDraftAutosave, type SaveStatus } from './use-draft-autosave';
@@ -48,6 +49,7 @@ export function FlowEditor({ initial, onReload }: { initial: FlowDetail; onReloa
   const [meta, setMeta] = useState<FlowMeta>(() => metaOf(initial));
   const [name, setName] = useState(initial.name);
   const [problems, setProblems] = useState<Problem[]>(initial.problems ?? []);
+  const [secrets, setSecrets] = useState<FlowSecret[]>(initial.secrets);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // The graph customers meet, when the editor holds it (drives the "not published yet" hint).
   const [publishedGraph, setPublishedGraph] = useState<FlowGraph | null>(
@@ -278,6 +280,7 @@ export function FlowEditor({ initial, onReload }: { initial: FlowDetail; onReloa
             <p className="text-xs text-muted-foreground">Drag from a way out on the right of a step to another step to connect them.</p>
           </section>
           <TriggerPanel graph={graph} problems={problems} onChange={change} />
+          <SecretsPanel flowId={initial.id} secrets={secrets} onChange={setSecrets} />
           <ProblemsPanel problems={problems} onFocusStep={focusStep} />
         </aside>
         <div ref={canvasBox} className="h-[70vh] min-h-[28rem] overflow-hidden rounded-lg border bg-muted/30">
@@ -295,6 +298,8 @@ export function FlowEditor({ initial, onReload }: { initial: FlowDetail; onReloa
               onSetStart={() => change((g) => ({ ...g, start: selected.id }))}
               onDuplicate={() => paste(selected)}
               onDelete={() => deleteStep(selected.id)}
+              flowId={initial.id}
+              secrets={secrets}
             />
           ) : (
             <p className="text-sm text-muted-foreground">Select a step on the canvas to edit it, or add one from the left.</p>

@@ -148,17 +148,17 @@ each case; a jump continues in "Main menu".
 
 ### Tests for User Story 4 (REQUIRED) ⚠️
 
-- [ ] T045 [P] [US4] Unit tests for conditions in packages/shared/src/flows/conditions.test.ts: every operator per subject, `all`/`any`, case-insensitive text, numbers and dates, tags, consent, working hours with a time zone
-- [ ] T046 [P] [US4] Unit tests in apps/api/test/unit/flows/run-logic.spec.ts (tags and attribute effects, condition branches, delay waits with a timer, jump ends with branch `jumped` and starts the target, end) and loop checks in packages/shared/src/flows/validate.test.ts (cycle without a waiting step refused, cycle with a question allowed)
-- [ ] T047 [P] [US4] Integration test apps/api/test/integration/flows-logic.int-spec.ts: tags and attributes change on the contact with journey entries by the flow; working-hours branch; a 5-second delay processed through its timer; a jump to a published flow; two flows jumping to each other without a question cannot be published (`LOOP_WITHOUT_WAIT`); a jump to an unpublished flow is refused (`JUMP_TARGET_NOT_PUBLISHED`)
-- [ ] T048 [P] [US4] Playwright e2e apps/web/e2e/flows-us4-logic.spec.ts: build a condition with two rules and a tag step in the editor and verify both branches from mock inbound
+- [X] T045 [P] [US4] Unit tests for conditions in packages/shared/src/flows/conditions.test.ts: every operator per subject, `all`/`any`, case-insensitive text, numbers and dates, tags, consent, working hours with a time zone
+- [X] T046 [P] [US4] Unit tests in apps/api/test/unit/flows/run-logic.spec.ts (tags and attribute effects, condition branches, delay waits with a timer, jump ends with branch `jumped` and starts the target, end) and loop checks in packages/shared/src/flows/validate.test.ts (cycle without a waiting step refused, cycle with a question allowed)
+- [X] T047 [P] [US4] Integration test apps/api/test/integration/flows-logic.int-spec.ts: tags and attributes change on the contact with journey entries by the flow; working-hours branch; a 5-second delay processed through its timer; a jump to a published flow; two flows jumping to each other without a question cannot be published (`LOOP_WITHOUT_WAIT`); a jump to an unpublished flow is refused (`JUMP_TARGET_NOT_PUBLISHED`)
+- [X] T048 [P] [US4] Playwright e2e apps/web/e2e/flows-us4-logic.spec.ts: build a condition with two rules and a tag step in the editor and verify both branches from mock inbound
 
 ### Implementation for User Story 4
 
-- [ ] T049 [US4] Implement packages/shared/src/flows/conditions.ts
-- [ ] T050 [US4] Extend apps/api/src/modules/flows/engine/run.ts and apps/api/src/modules/flows/engine/session.service.ts for `tags`, `attributes`, `condition` (facts: contact fields, attributes, tags, consent, 002 working hours), `delay` (timer) and `jump` (child session with `parent_session_id`, `started_by = JUMP`)
-- [ ] T051 [US4] Add loop detection (following jumps into published targets) and jump-target checks to packages/shared/src/flows/validate.ts and publish.service.ts
-- [ ] T052 [US4] Add node views and forms for tags, attributes, condition (rule builder), delay, jump and end in apps/web/src/components/flows/steps/
+- [X] T049 [US4] Implement packages/shared/src/flows/conditions.ts
+- [X] T050 [US4] Extend apps/api/src/modules/flows/engine/run.ts and apps/api/src/modules/flows/engine/session.service.ts for `tags`, `attributes`, `condition` (facts: contact fields, attributes, tags, consent, 002 working hours), `delay` (timer) and `jump` (child session with `parent_session_id`, `started_by = JUMP`)
+- [X] T051 [US4] Add loop detection (following jumps into published targets) and jump-target checks to packages/shared/src/flows/validate.ts and publish.service.ts
+- [X] T052 [US4] Add node views and forms for tags, attributes, condition (rule builder), delay, jump and end in apps/web/src/components/flows/steps/
 
 **Checkpoint**: US1–US4 work on their own.
 

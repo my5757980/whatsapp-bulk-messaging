@@ -7,6 +7,7 @@ import { ImportProcessor } from './modules/imports/import.processor.js';
 import { InboundChatHandler } from './modules/inbox/inbound/inbound-chat.handler.js';
 import { InboundMediaProcessor } from './modules/inbox/inbound/inbound-media.processor.js';
 import { FlowsDomainModule } from './modules/flows/flows.module.js';
+import { FlowApiProcessor } from './modules/flows/steps/api-step.processor.js';
 import { FlowExpiryProcessor } from './modules/flows/steps/expiry.processor.js';
 import { FlowsQueueProcessor } from './modules/flows/steps/flows-queue.processor.js';
 import { FlowTimerProcessor } from './modules/flows/steps/timer.processor.js';
@@ -60,6 +61,7 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     FlowsQueueProcessor,
     FlowTimerProcessor,
     FlowExpiryProcessor,
+    FlowApiProcessor,
     InboxNotifyProcessor,
     PushService,
     SessionSendProcessor,

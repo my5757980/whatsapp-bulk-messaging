@@ -4,7 +4,7 @@ import type { FlowEffect, FlowSessionResult } from './effects.js';
 // The flow interpreter (003 research R4, T009, T025): pure. Given a session's state, one input and
 // the version's graph, it returns the next state and the effects to apply. It runs steps until it
 // needs the customer, a timer or an API reply, or the session ends. Later stories add step types
-// (US2: questions and lists; US4: tags, attributes, conditions, delays and jumps).
+// (US2: questions and lists; US4: tags, attributes, conditions, delays and jumps; US5: API calls).
 
 /** FR-033: a session that runs this many steps without a customer reply ends as FAILED. */
 export const MAX_STEPS_WITHOUT_INPUT = 50;
@@ -289,6 +289,11 @@ class Runner {
           this.state = { ...this.state, wait: 'DELAY', waitToken: this.state.waitToken + 1 };
           this.effects.push({ kind: 'schedule', stepId: step.id, purpose: 'delay', delayMs: step.seconds * 1000 });
           return this.idle();
+        case 'api':
+          // The flows queue makes the call (never the inbound worker) and resumes with its result.
+          this.state = { ...this.state, wait: 'API', waitToken: this.state.waitToken + 1 };
+          this.effects.push({ kind: 'callApi', stepId: step.id });
+          return this.idle();
         case 'jump':
           if (!step.flowId) return this.end('FAILED', 'no flow to continue in');
           // The session service starts the target flow in the same chat after this session ends.
@@ -304,7 +309,8 @@ class Runner {
           this.effects.push({ kind: 'stepLeft', stepId: step.id, branch: 'end' });
           return this.end('COMPLETED');
         default:
-          return this.end('FAILED', `the "${step.type}" step is not supported yet`);
+          // Every step type is handled above; a graph from a newer version would end here.
+          return this.end('FAILED', 'this step type is not supported');
       }
     }
   }
@@ -390,8 +396,14 @@ export function run(state: SessionState, input: FlowInput, ctx: RunContext): Run
       }
       return runner.idle();
     }
-    case 'api':
-      // API steps arrive with US5.
-      return runner.idle();
+    case 'api': {
+      if (state.wait !== 'API' || input.token !== state.waitToken) return runner.idle();
+      const step = runner.step(state.currentStepId);
+      if (step?.type !== 'api') return runner.idle();
+      // Mapped reply fields become answers only when the call succeeded.
+      if (input.ok) runner.state = { ...runner.state, answers: { ...runner.state.answers, ...input.mapped } };
+      runner.leave(step, input.ok ? 'success' : 'failed', input.ok ? step.success : step.failed);
+      return runner.advance();
+    }
   }
 }

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { checkChatMedia, FlowGraphSchema, type AnswerContext, type FlowGraph } from '@wbm/shared';
+import { checkChatMedia, FlowGraphSchema, type AnswerContext, type FlowGraph, type StepOf } from '@wbm/shared';
 import { v7 as uuidv7 } from 'uuid';
 import { normalizePhone } from '../../../common/phone/phone.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
@@ -13,7 +13,7 @@ import { ChatRoutingService } from '../../inbox/routing/chat-routing.service.js'
 import { LiveChatSettingsService } from '../../inbox/settings/live-chat-settings.service.js';
 import { requestSendWorkerSync, sessionSendJob } from '../../sending/send-jobs.js';
 import { SettingsService } from '../../settings/settings.service.js';
-import { FLOW_TIMER_JOB, flowTimerJobId, todayIn, type FlowTimerData } from '../steps/flow-jobs.js';
+import { FLOW_API_JOB, FLOW_TIMER_JOB, flowApiJobId, flowTimerJobId, todayIn, type FlowApiData, type FlowTimerData } from '../steps/flow-jobs.js';
 import type { FlowOutboundMessage, FlowSessionResult } from './effects.js';
 import { renderFlowText } from './render.js';
 import { newSessionState, run, type FlowFacts, type FlowInput, type RunResult, type SessionState } from './run.js';
@@ -197,6 +197,21 @@ export class FlowSessionService {
       await this.finish(tx, row, 'EXPIRED');
       return true;
     });
+  }
+
+  /** What a flow-api job needs: the step, the answers and the contact; null once the wait is over. */
+  async apiCall(sessionId: string, token: number): Promise<{ flowId: string; step: StepOf<'api'>; answers: Record<string, unknown>; contact: { name: string | null; phoneE164: string | null; attributes: Record<string, unknown> } } | null> {
+    const row = await this.prisma.flowSession.findUnique({ where: { id: sessionId }, include: { contact: { select: { name: true, phoneE164: true, attributes: true } } } });
+    if (!row || row.status !== 'RUNNING' || row.wait !== 'API' || row.waitToken !== token) return null;
+    const flow = await this.loadFlow(row.flowId, row.flowVersionId);
+    const step = flow?.graph.steps.find((s) => s.id === row.currentStepId);
+    if (!flow || step?.type !== 'api') return null;
+    return {
+      flowId: row.flowId,
+      step,
+      answers: (row.answers ?? {}) as Record<string, unknown>,
+      contact: { name: row.contact?.name ?? null, phoneE164: row.contact?.phoneE164 ?? null, attributes: (row.contact?.attributes ?? {}) as Record<string, unknown> },
+    };
   }
 
   /** A member took, answered or sent a template in the chat: the flow stops (FR-026). */
@@ -650,8 +665,9 @@ export class FlowSessionService {
       .add(FLOW_TIMER_JOB, data, { delay: timer.delayMs, jobId: flowTimerJobId(data), removeOnComplete: true, removeOnFail: 100 });
   }
 
-  /** `flow-api` job (research R11); implemented with US5. */
+  /** `flow-api` job for the API step the session waits at (research R11). */
   protected async queueApiCall(call: AfterCommit['apiCalls'][number]): Promise<void> {
-    this.logger.warn({ sessionId: call.sessionId }, 'Flow API steps arrive with US5');
+    const data: FlowApiData = { sessionId: call.sessionId, token: call.token };
+    await this.queues.get(QUEUES.FLOWS).add(FLOW_API_JOB, data, { jobId: flowApiJobId(data), removeOnComplete: true, removeOnFail: 100 });
   }
 }

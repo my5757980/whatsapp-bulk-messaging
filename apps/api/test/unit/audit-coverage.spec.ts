@@ -6,8 +6,8 @@ import { AUDIT_ACTIONS } from '../../src/modules/audit/audit-actions.js';
 
 // T175: every audited action of data-model.md §1 is recorded somewhere in the code base.
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
-/** Actions whose recording arrives with a later story (003: restore with US7, secrets with US5). */
-const PENDING_US7 = new Set<string>(['flow.restored', 'flow.secret_changed']);
+/** Actions whose recording arrives with a later story (003: restore with US7). */
+const PENDING_US7 = new Set<string>(['flow.restored']);
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
