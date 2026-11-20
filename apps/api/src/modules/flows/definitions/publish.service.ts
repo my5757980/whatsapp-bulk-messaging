@@ -1,9 +1,10 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { normalizePhrase, reachableSteps, validateForPublish, type FlowGraph, type Problem } from '@wbm/shared';
+import { jumpsWithoutWait, normalizePhrase, reachableSteps, validateForPublish, type FlowGraph, type Problem } from '@wbm/shared';
 import { AppError } from '../../../common/errors/app-error.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import { AuditService, type AuditActor } from '../../audit/audit.service.js';
+import { validateAttributeValue, type AttributeType } from '../../contacts/attribute-validator.js';
 import { FLOW_INCLUDE, parseGraph, toFlowDetail, type FlowRow } from './flow-views.js';
 import { FlowsService } from './flows.service.js';
 import { ReservedKeywords } from './reserved-keywords.js';
@@ -103,29 +104,122 @@ export class PublishService {
       }
     }
     problems.push(...(await this.attributeProblems(graph)));
+    problems.push(...(await this.jumpProblems(row, graph)));
     return problems;
   }
 
-  /** Answers saved to contact attributes need an existing attribute of a fitting type (FR-010, T035). */
+  /**
+   * Answers saved to contact attributes, and attribute steps, need existing attributes of a fitting
+   * type (FR-010, FR-011, T035, T051): TEXT takes any value; NUMBER and DATE need answers of that kind;
+   * fixed values must already be valid for the attribute; the contact name or phone needs TEXT.
+   */
   private async attributeProblems(graph: FlowGraph): Promise<Problem[]> {
     const reachable = reachableSteps(graph);
-    const targets = graph.steps.flatMap((step) => {
-      if (!reachable.has(step.id) || !(step.type === 'question' || step.type === 'buttons' || step.type === 'list') || !step.saveTo) return [];
-      return [{ step, key: step.saveTo.attributeKey, kind: step.type === 'question' ? step.answer.kind : 'text' }];
-    });
+    type Target = { stepId: string; key: string; field: string; issue: (type: AttributeType) => string | null };
+    const targets: Target[] = [];
+    for (const step of graph.steps) {
+      if (!reachable.has(step.id)) continue;
+      if ((step.type === 'question' || step.type === 'buttons' || step.type === 'list') && step.saveTo) {
+        const kind = step.type === 'question' ? step.answer.kind : 'text';
+        const key = step.saveTo.attributeKey;
+        targets.push({
+          stepId: step.id,
+          key,
+          field: 'saveTo',
+          issue: (type) => (type === 'TEXT' || (type === 'NUMBER' && kind === 'number') || (type === 'DATE' && kind === 'date') ? null : `A ${kind} answer cannot be saved to the ${type.toLowerCase()} attribute "${key}"`),
+        });
+      }
+      if (step.type === 'attributes') {
+        for (const item of step.set) {
+          const value = item.value;
+          targets.push({
+            stepId: step.id,
+            key: item.key,
+            field: 'set',
+            issue: (type) => {
+              // Clearing fits any type; answers are checked when they are saved.
+              if (!value || value.source === 'answer') return null;
+              if (value.source === 'field') return type === 'TEXT' ? null : `The contact ${value.key} can only be saved to a text attribute, not "${item.key}"`;
+              return validateAttributeValue(type, value.value).ok ? null : `"${value.value}" is not a valid ${type.toLowerCase()} for the attribute "${item.key}"`;
+            },
+          });
+        }
+      }
+    }
     if (!targets.length) return [];
     const definitions = await this.prisma.attributeDefinition.findMany({
       where: { key: { in: [...new Set(targets.map((t) => t.key))] } },
       select: { key: true, type: true },
     });
     const typeOf = new Map(definitions.map((d) => [d.key, d.type]));
-    return targets.flatMap(({ step, key, kind }): Problem[] => {
-      const type = typeOf.get(key);
-      if (!type) return [{ code: 'UNKNOWN_ATTRIBUTE', message: `The contact attribute "${key}" does not exist`, stepId: step.id, triggerId: null, field: 'saveTo' }];
-      // TEXT takes any answer; NUMBER and DATE need that answer kind; BOOLEAN is not an answer target.
-      const fits = type === 'TEXT' || (type === 'NUMBER' && kind === 'number') || (type === 'DATE' && kind === 'date');
-      if (fits) return [];
-      return [{ code: 'ATTRIBUTE_TYPE', message: `A ${kind} answer cannot be saved to the ${type.toLowerCase()} attribute "${key}"`, stepId: step.id, triggerId: null, field: 'saveTo' }];
+    return targets.flatMap((target): Problem[] => {
+      const type = typeOf.get(target.key);
+      if (!type) return [{ code: 'UNKNOWN_ATTRIBUTE', message: `The contact attribute "${target.key}" does not exist`, stepId: target.stepId, triggerId: null, field: target.field }];
+      const issue = target.issue(type);
+      return issue ? [{ code: 'ATTRIBUTE_TYPE', message: issue, stepId: target.stepId, triggerId: null, field: target.field }] : [];
     });
+  }
+
+  /**
+   * Jumps (T051): the target must be published, and following jumps made without waiting for the
+   * customer must not come round in a loop (this draft plus the published versions it reaches).
+   */
+  private async jumpProblems(row: FlowRow, graph: FlowGraph): Promise<Problem[]> {
+    const reachable = reachableSteps(graph);
+    const jumps = graph.steps.flatMap((step) => (step.type === 'jump' && step.flowId && reachable.has(step.id) ? [{ stepId: step.id, flowId: step.flowId }] : []));
+    if (!jumps.length) return [];
+    const problems: Problem[] = [];
+    const targets = await this.prisma.flow.findMany({
+      where: { id: { in: [...new Set(jumps.map((j) => j.flowId))] } },
+      select: { id: true, name: true, status: true, deletedAt: true },
+    });
+    const byId = new Map(targets.map((t) => [t.id, t]));
+    for (const jump of jumps) {
+      if (jump.flowId === row.id) continue;
+      const target = byId.get(jump.flowId);
+      if (target && !target.deletedAt && target.status === 'PUBLISHED') continue;
+      problems.push({
+        code: 'JUMP_TARGET_NOT_PUBLISHED',
+        message: target && !target.deletedAt ? `The flow "${target.name}" is not published` : 'The flow to continue in no longer exists',
+        stepId: jump.stepId,
+        triggerId: null,
+        field: 'flowId',
+      });
+    }
+
+    const graphs = new Map<string, FlowGraph | null>([[row.id, graph]]);
+    const graphOf = async (id: string): Promise<FlowGraph | null> => {
+      if (!graphs.has(id)) {
+        const flow = await this.prisma.flow.findFirst({ where: { id, status: 'PUBLISHED', deletedAt: null }, select: { publishedVersion: { select: { graph: true } } } });
+        graphs.set(id, flow?.publishedVersion ? parseGraph(flow.publishedVersion.graph) : null);
+      }
+      return graphs.get(id) ?? null;
+    };
+    const onPath = new Set<string>();
+    const cleared = new Set<string>();
+    const loops = async (id: string, depth: number): Promise<boolean> => {
+      if (depth > 25) return false;
+      onPath.add(id);
+      const g = await graphOf(id);
+      for (const next of g ? jumpsWithoutWait(g) : []) {
+        if (onPath.has(next)) return true;
+        if (!cleared.has(next) && (await loops(next, depth + 1))) return true;
+      }
+      onPath.delete(id);
+      cleared.add(id);
+      return false;
+    };
+    if (await loops(row.id, 0)) {
+      const direct = new Set(jumpsWithoutWait(graph));
+      const first = jumps.find((j) => direct.has(j.flowId)) ?? jumps[0]!;
+      problems.push({
+        code: 'LOOP_WITHOUT_WAIT',
+        message: 'Jumps between flows go round in a loop without waiting for the customer; add a question, buttons or a list on the way',
+        stepId: first.stepId,
+        triggerId: null,
+        field: null,
+      });
+    }
+    return problems;
   }
 }

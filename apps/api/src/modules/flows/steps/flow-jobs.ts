@@ -15,14 +15,5 @@ export const FLOW_EXPIRY_JOB = 'flow-expiry';
 /** BullMQ job ids may not contain ":", so ids use "-". */
 export const flowTimerJobId = (data: FlowTimerData): string => `flow-timer-${data.sessionId}-${data.token}`;
 
-/** YYYY-MM-DD of `now` in a time zone (company "today" for date answers); UTC when the zone is unknown. */
-export function todayIn(timeZone: string, now: Date = new Date()): string {
-  let parts: Intl.DateTimeFormatPart[];
-  try {
-    parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(now);
-  } catch {
-    return now.toISOString().slice(0, 10);
-  }
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? '';
-  return `${part('year')}-${part('month')}-${part('day')}`;
-}
+/** The company's "today" for date answers (shared with 003 conditions). */
+export { todayIn } from '@wbm/shared';

@@ -16,7 +16,7 @@ import { SettingsService } from '../../settings/settings.service.js';
 import { FLOW_TIMER_JOB, flowTimerJobId, todayIn, type FlowTimerData } from '../steps/flow-jobs.js';
 import type { FlowOutboundMessage, FlowSessionResult } from './effects.js';
 import { renderFlowText } from './render.js';
-import { newSessionState, run, type FlowInput, type RunResult, type SessionState } from './run.js';
+import { newSessionState, run, type FlowFacts, type FlowInput, type RunResult, type SessionState } from './run.js';
 
 type Tx = Prisma.TransactionClient;
 
@@ -96,35 +96,44 @@ export class FlowSessionService {
         if (!request.replaceRunning) return { started: false as const, reason: 'busy' as const };
         await this.finish(tx, running, request.replaceRunning);
       }
-      const conversation = await tx.conversation.findUniqueOrThrow({ where: { id: request.conversationId }, select: { numberId: true, contactId: true } });
-      const id = uuidv7();
-      const answers = request.answers ?? {};
-      const row = await tx.flowSession.create({
-        data: {
-          id,
-          flowId: flow.id,
-          flowVersionId: flow.versionId,
-          conversationId: request.conversationId,
-          contactId: conversation.contactId,
-          numberId: conversation.numberId,
-          isTest: request.isTest ?? false,
-          startedBy: request.startedBy,
-          startedByUserId: request.startedByUserId ?? null,
-          triggerKey: request.triggerKey ?? null,
-          parentSessionId: request.parentSessionId ?? null,
-          answers: answers as Prisma.InputJsonValue,
-        },
-      });
-      if (conversation.contactId) {
-        await tx.conversationEvent.create({
-          data: { conversationId: request.conversationId, type: 'FLOW_STARTED', actorType: 'FLOW', data: { flowId: flow.id, flowName: flow.name, test: request.isTest ?? false } },
-        });
-      }
-      const state: SessionState = { ...newSessionState(id), answers };
-      await this.step(tx, row, flow, state, { kind: 'start' }, after);
+      const id = await this.createAndRun(tx, flow, request, after);
       return { started: true as const, sessionId: id };
     });
     return outcome;
+  }
+
+  /**
+   * Creates a session and runs the flow from its start step, inside the caller's transaction. A jump
+   * passes the parent's answers and step count, so loops of jumps still stop after 50 steps (FR-033).
+   */
+  private async createAndRun(tx: Tx, flow: FlowMeta, request: StartRequest & { stepsSinceInput?: number }, after: AfterCommit): Promise<string> {
+    const conversation = await tx.conversation.findUniqueOrThrow({ where: { id: request.conversationId }, select: { numberId: true, contactId: true } });
+    const id = uuidv7();
+    const answers = request.answers ?? {};
+    const row = await tx.flowSession.create({
+      data: {
+        id,
+        flowId: flow.id,
+        flowVersionId: flow.versionId,
+        conversationId: request.conversationId,
+        contactId: conversation.contactId,
+        numberId: conversation.numberId,
+        isTest: request.isTest ?? false,
+        startedBy: request.startedBy,
+        startedByUserId: request.startedByUserId ?? null,
+        triggerKey: request.triggerKey ?? null,
+        parentSessionId: request.parentSessionId ?? null,
+        answers: answers as Prisma.InputJsonValue,
+      },
+    });
+    if (conversation.contactId) {
+      await tx.conversationEvent.create({
+        data: { conversationId: request.conversationId, type: 'FLOW_STARTED', actorType: 'FLOW', data: { flowId: flow.id, flowName: flow.name, test: request.isTest ?? false } },
+      });
+    }
+    const state: SessionState = { ...newSessionState(id), answers, stepsSinceInput: request.stepsSinceInput ?? 0 };
+    await this.step(tx, row, flow, state, { kind: 'start' }, after);
+    return id;
   }
 
   /**
@@ -282,8 +291,26 @@ export class FlowSessionService {
       render: (text, fallbacks, answers, saved) =>
         renderFlowText(text, saved ? { ...contact, attributes: { ...contact.attributes, ...saved } } : contact, fallbacks, answers),
       answers: input.kind === 'message' ? await this.answerContext() : { today: todayIn('UTC'), normalizePhone: () => null },
+      ...(flow.graph.steps.some((st) => st.type === 'condition' || st.type === 'attributes') ? { facts: await this.factsFor(tx, row, contact) } : {}),
     });
     await this.apply(tx, row, flow, result, conversation.lastCustomerMessageAt, after);
+  }
+
+  /** What conditions and attribute steps read: contact name and phone, attributes, tags, consent, working hours. */
+  private async factsFor(tx: Tx, row: SessionRow, contact: { name: string | null; phoneE164: string | null; attributes: Record<string, unknown> }): Promise<FlowFacts> {
+    const [tags, consent, liveChat] = await Promise.all([
+      row.contactId ? tx.contactTag.findMany({ where: { contactId: row.contactId }, select: { tagId: true } }) : Promise.resolve([]),
+      row.contactId ? tx.contact.findUnique({ where: { id: row.contactId }, select: { consentStatus: true } }) : Promise.resolve(null),
+      this.liveChat.get(),
+    ]);
+    return {
+      fields: { name: contact.name, phone: contact.phoneE164 },
+      attributes: contact.attributes,
+      tagIds: tags.map((t) => t.tagId),
+      consent: consent?.consentStatus ?? 'UNKNOWN',
+      workingHours: { hours: liveChat.workingHours, timezone: liveChat.timezone },
+      now: new Date(),
+    };
   }
 
   /** Only customer messages are checked as answers, so only they need the company settings. */
@@ -299,6 +326,8 @@ export class FlowSessionService {
     const now = new Date();
     let state = result.state;
     let ended: { result: FlowSessionResult; reason?: string } | null = null;
+    /** The flow a jump continues in, started once this session has ended. */
+    let jumpTo: FlowMeta | null = null;
     const openRows = new Map<string, bigint>();
 
     for (const effect of result.effects) {
@@ -349,9 +378,11 @@ export class FlowSessionService {
           await this.handOver(tx, row, flow, effect.note, now, after);
           break;
         case 'tags':
+          await this.saveTags(tx, row, flow, effect.add, effect.remove, after);
+          break;
         case 'jump':
-          // Applied from their stories (US4); the engine does not emit them before then.
-          this.logger.warn({ sessionId: row.id, effect: effect.kind }, 'Flow effect not handled yet');
+          jumpTo = await this.jumpTarget(effect.flowId, row.isTest);
+          if (!jumpTo) ended = { result: 'FAILED', reason: 'the flow to continue in is not published' };
           break;
       }
     }
@@ -363,6 +394,23 @@ export class FlowSessionService {
         data: { ...this.stateData(state, now), status: 'ENDED', result: ended.result, failureReason: ended.reason?.slice(0, 120) ?? null, endedAt: now },
       });
       await this.endJourney(tx, row, flow.name, ended.result);
+      if (jumpTo && ended.result === 'COMPLETED') {
+        await this.createAndRun(
+          tx,
+          jumpTo,
+          {
+            flowId: jumpTo.id,
+            versionId: jumpTo.versionId,
+            conversationId: row.conversationId,
+            startedBy: 'JUMP',
+            parentSessionId: row.id,
+            isTest: row.isTest,
+            answers: state.answers,
+            stepsSinceInput: state.stepsSinceInput,
+          },
+          after,
+        );
+      }
     } else {
       await tx.flowSession.update({ where: { id: row.id }, data: this.stateData(state, now) });
     }
@@ -445,6 +493,47 @@ export class FlowSessionService {
       ),
     });
     after.contactChanged = row.contactId;
+  }
+
+  /** The published version a jump continues in (a test run continues in the draft); null when not available. */
+  private async jumpTarget(flowId: string, isTest: boolean): Promise<FlowMeta | null> {
+    const target = await this.prisma.flow.findUnique({ where: { id: flowId }, select: { status: true, publishedVersionId: true, deletedAt: true } });
+    if (!target || target.deletedAt) return null;
+    if (isTest) return this.loadFlow(flowId, null);
+    if (target.status !== 'PUBLISHED' || !target.publishedVersionId) return null;
+    return this.loadFlow(flowId, target.publishedVersionId);
+  }
+
+  /**
+   * Adds and removes contact tags (FR-011) with journey entries by the flow on each of the
+   * contact's chats, as live chat edits do; tags deleted since publishing are skipped.
+   */
+  private async saveTags(tx: Tx, row: SessionRow, flow: FlowMeta, add: string[], remove: string[], after: AfterCommit): Promise<void> {
+    if (!row.contactId) return;
+    const contactId = row.contactId;
+    const [known, current] = await Promise.all([
+      tx.tag.findMany({ where: { id: { in: [...add, ...remove] } }, select: { id: true, name: true } }),
+      tx.contactTag.findMany({ where: { contactId }, select: { tagId: true } }),
+    ]);
+    const nameOf = new Map(known.map((t) => [t.id, t.name]));
+    const has = new Set(current.map((t) => t.tagId));
+    const added = [...new Set(add)].filter((id) => nameOf.has(id) && !has.has(id));
+    const removed = [...new Set(remove)].filter((id) => nameOf.has(id) && has.has(id));
+    if (!added.length && !removed.length) return;
+    if (added.length) await tx.contactTag.createMany({ data: added.map((tagId) => ({ contactId, tagId })), skipDuplicates: true });
+    if (removed.length) await tx.contactTag.deleteMany({ where: { contactId, tagId: { in: removed } } });
+    const chats = await tx.conversation.findMany({ where: { contactId }, select: { id: true } });
+    const occurredAt = new Date();
+    const changes = [
+      ...added.map((id) => ({ type: 'TAG_ADDED' as const, tag: nameOf.get(id)! })),
+      ...removed.map((id) => ({ type: 'TAG_REMOVED' as const, tag: nameOf.get(id)! })),
+    ];
+    await tx.conversationEvent.createMany({
+      data: changes.flatMap((change) =>
+        chats.map((chat) => ({ conversationId: chat.id, type: change.type, actorType: 'FLOW' as const, data: { tag: change.tag, flowId: flow.id, flowName: flow.name }, occurredAt })),
+      ),
+    });
+    after.contactChanged = contactId;
   }
 
   /**

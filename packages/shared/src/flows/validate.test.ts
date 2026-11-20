@@ -66,6 +66,40 @@ describe('validateForPublish', () => {
     expect(problems[0]!.message).toContain('stop');
   });
 
+  // 003 T046: a loop must wait for the customer somewhere (a question, buttons or a list).
+  it('refuses a loop that never waits for the customer, and allows one through a question', () => {
+    const spinning = graph({
+      start: 'a',
+      steps: [
+        { id: 'a', type: 'message', text: 'Hi', next: 'b' },
+        { id: 'b', type: 'delay', seconds: 5, next: 'a' },
+      ],
+    });
+    expect(codes(validateForPublish(spinning))).toEqual(['LOOP_WITHOUT_WAIT:a']);
+    const asking = graph({
+      start: 'a',
+      steps: [
+        { id: 'a', type: 'message', text: 'Hi', next: 'q' },
+        { id: 'q', type: 'question', text: 'Again?', answerName: 'again', retryText: 'Please answer.', next: 'a' },
+      ],
+    });
+    expect(validateForPublish(asking)).toEqual([]);
+  });
+
+  it('needs every condition rule complete', () => {
+    const g = graph({
+      start: 'c',
+      steps: [
+        { id: 'c', type: 'condition', rules: [{ subject: { kind: 'attribute', key: 'city' }, op: 'equals' }], yes: 'y', no: 'n' },
+        { id: 'y', type: 'end' },
+        { id: 'n', type: 'end' },
+      ],
+    });
+    expect(codes(validateForPublish(g))).toEqual(['MISSING_CONTENT:c']);
+    const wrongOp = graph({ start: 'c', steps: [{ id: 'c', type: 'condition', rules: [{ subject: { kind: 'tag', tagId: '0193a0de-0000-7000-8000-000000000001' }, op: 'equals', value: 'x' }], yes: 'y', no: 'n' }, { id: 'y', type: 'end' }, { id: 'n', type: 'end' }] });
+    expect(codes(validateForPublish(wrongOp))).toEqual(['MISSING_CONTENT:c']);
+  });
+
   // 003 T035: answer names are unique, so {answer:name} always means one step.
   it('reports an answer name used by two steps', () => {
     const g = graph({

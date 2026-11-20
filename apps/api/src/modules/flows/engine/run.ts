@@ -1,10 +1,10 @@
-import { checkAnswer, normalizePhrase, type AnswerContext, type FlowGraph, type FlowStep, type StepOf } from '@wbm/shared';
+import { checkAnswer, evaluateCondition, normalizePhrase, type AnswerContext, type FlowGraph, type FlowStep, type StepOf, type WorkingHours } from '@wbm/shared';
 import type { FlowEffect, FlowSessionResult } from './effects.js';
 
 // The flow interpreter (003 research R4, T009, T025): pure. Given a session's state, one input and
 // the version's graph, it returns the next state and the effects to apply. It runs steps until it
 // needs the customer, a timer or an API reply, or the session ends. Later stories add step types
-// (US2: questions and lists).
+// (US2: questions and lists; US4: tags, attributes, conditions, delays and jumps).
 
 /** FR-033: a session that runs this many steps without a customer reply ends as FAILED. */
 export const MAX_STEPS_WITHOUT_INPUT = 50;
@@ -30,15 +30,31 @@ export type FlowInput =
   | { kind: 'timer'; token: number }
   | { kind: 'api'; token: number; ok: boolean; mapped: Record<string, unknown> };
 
+/** What condition and attribute steps read about the contact; the session service loads it. */
+export interface FlowFacts {
+  fields: { name: string | null; phone: string | null };
+  attributes: Record<string, unknown>;
+  tagIds: string[];
+  consent: string;
+  /** 002 working hours in the company time zone. */
+  workingHours: { hours: Partial<WorkingHours>; timezone: string };
+  now: Date;
+}
+
+/** For flows without condition or attribute steps, which never read facts. */
+const NO_FACTS: FlowFacts = { fields: { name: null, phone: null }, attributes: {}, tagIds: [], consent: 'UNKNOWN', workingHours: { hours: {}, timezone: 'UTC' }, now: new Date(0) };
+
 export interface RunContext {
   graph: FlowGraph;
   /**
    * Fills variables (`{first_name}`, `{attr:key}`, `{answer:name}`) with the step's fallbacks;
    * `attributes` holds values this run saved, so `{attr:key}` shows them before they are stored.
    */
-  render: (text: string, fallbacks: Record<string, string>, answers: Record<string, unknown>, attributes?: Record<string, string | number>) => string;
+  render: (text: string, fallbacks: Record<string, string>, answers: Record<string, unknown>, attributes?: Record<string, string | number | null>) => string;
   /** "Today" in the company time zone and the 001 phone rules, for question answers (FR-009). */
   answers: AnswerContext;
+  /** Contact facts for conditions and attribute steps (US4). */
+  facts?: FlowFacts;
 }
 
 export interface RunResult {
@@ -75,8 +91,11 @@ type WaitingStep = ButtonsStep | ListStep | QuestionStep;
 class Runner {
   readonly effects: FlowEffect[] = [];
   consumed = false;
-  /** Attribute values saved during this run (shown by `{attr:key}` before they are stored). */
-  private readonly saved: Record<string, string | number> = {};
+  /** Attribute values saved during this run (null clears); shown and compared before they are stored. */
+  private readonly saved: Record<string, string | number | null> = {};
+  /** Facts about the contact, and its tags as changed during this run. */
+  private readonly facts: FlowFacts;
+  private readonly tags: Set<string>;
   private readonly steps: Map<string, FlowStep>;
 
   constructor(
@@ -84,6 +103,23 @@ class Runner {
     private readonly ctx: RunContext,
   ) {
     this.steps = new Map(ctx.graph.steps.map((s) => [s.id, s]));
+    this.facts = ctx.facts ?? NO_FACTS;
+    this.tags = new Set(this.facts.tagIds);
+  }
+
+  /** The value an attribute step sets: fixed text, an answer, the contact name or phone, or null (clear). */
+  valueOf(source: StepOf<'attributes'>['set'][number]['value']): string | number | null {
+    if (!source) return null;
+    switch (source.source) {
+      case 'static':
+        return source.value;
+      case 'answer': {
+        const answer = this.state.answers[source.name];
+        return typeof answer === 'string' || typeof answer === 'number' ? answer : null;
+      }
+      case 'field':
+        return source.key === 'name' ? this.facts.fields.name : this.facts.fields.phone;
+    }
   }
 
   step(id: string | null): FlowStep | undefined {
@@ -219,6 +255,46 @@ class Runner {
           this.sendText(step, this.render(step.text, step.fallbacks));
           this.scheduleTimeout(step);
           return this.idle();
+        case 'tags': {
+          if (step.add.length || step.remove.length) {
+            this.effects.push({ kind: 'tags', stepId: step.id, add: step.add, remove: step.remove });
+            for (const id of step.add) this.tags.add(id);
+            for (const id of step.remove) this.tags.delete(id);
+          }
+          this.leave(step, 'next', step.next);
+          continue;
+        }
+        case 'attributes': {
+          const values: Record<string, string | number | null> = {};
+          for (const item of step.set) values[item.key] = this.valueOf(item.value);
+          if (Object.keys(values).length) {
+            this.effects.push({ kind: 'setAttributes', stepId: step.id, values });
+            Object.assign(this.saved, values);
+          }
+          this.leave(step, 'next', step.next);
+          continue;
+        }
+        case 'condition': {
+          const holds = evaluateCondition(step.join, step.rules, {
+            ...this.facts,
+            attributes: { ...this.facts.attributes, ...this.saved },
+            answers: this.state.answers,
+            tagIds: this.tags,
+          });
+          this.leave(step, holds ? 'yes' : 'no', holds ? step.yes : step.no);
+          continue;
+        }
+        case 'delay':
+          // Messages during a delay are not answers; the timer (with this token) continues the flow.
+          this.state = { ...this.state, wait: 'DELAY', waitToken: this.state.waitToken + 1 };
+          this.effects.push({ kind: 'schedule', stepId: step.id, purpose: 'delay', delayMs: step.seconds * 1000 });
+          return this.idle();
+        case 'jump':
+          if (!step.flowId) return this.end('FAILED', 'no flow to continue in');
+          // The session service starts the target flow in the same chat after this session ends.
+          this.effects.push({ kind: 'jump', stepId: step.id, flowId: step.flowId });
+          this.effects.push({ kind: 'stepLeft', stepId: step.id, branch: 'jumped' });
+          return this.end('COMPLETED');
         case 'handover':
           // The chat waits for a person (002 Waiting for agent); the session hands over and ends.
           this.effects.push(step.note?.trim() ? { kind: 'handover', stepId: step.id, note: step.note.trim() } : { kind: 'handover', stepId: step.id });
@@ -290,7 +366,7 @@ export function run(state: SessionState, input: FlowInput, ctx: RunContext): Run
   switch (input.kind) {
     case 'start': {
       if (!ctx.graph.start) return runner.end('FAILED', 'the flow has no start step');
-      runner.state = { ...state, currentStepId: ctx.graph.start, wait: 'NONE', waitToken: state.waitToken + 1, retries: 0, stepsSinceInput: 0 };
+      runner.state = { ...state, currentStepId: ctx.graph.start, wait: 'NONE', waitToken: state.waitToken + 1, retries: 0 };
       return runner.advance();
     }
     case 'message': {
@@ -307,6 +383,10 @@ export function run(state: SessionState, input: FlowInput, ctx: RunContext): Run
       if (!step) return runner.idle();
       if (state.wait === 'INPUT' && (step.type === 'buttons' || step.type === 'list' || step.type === 'question')) {
         return runner.leaveOptional(step, 'onTimeout', step.onTimeout, 'TIMED_OUT');
+      }
+      if (state.wait === 'DELAY' && step.type === 'delay') {
+        runner.leave(step, 'next', step.next);
+        return runner.advance();
       }
       return runner.idle();
     }

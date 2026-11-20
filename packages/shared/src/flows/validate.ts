@@ -1,4 +1,5 @@
-import { branchesOf, type FlowGraph, type FlowStep, type FlowTrigger } from './graph.js';
+import { opNeedsValue, opsFor } from './conditions.js';
+import { branchesOf, type FlowGraph, type FlowStep, type FlowTrigger, type StepType } from './graph.js';
 import { isReservedKeyword } from './triggers.js';
 
 // Publish checks (003 FR-003, research R14, T021). Pure; the API adds checks that need the database
@@ -69,7 +70,10 @@ function contentProblems(step: FlowStep): Problem[] {
     case 'attributes':
       return !step.set.length ? missing('Choose at least one attribute to set', 'set') : [];
     case 'condition':
-      return !step.rules.length ? missing('Add at least one rule', 'rules') : [];
+      if (!step.rules.length) return missing('Add at least one rule', 'rules');
+      return step.rules.some((r) => !opsFor(r.subject).includes(r.op) || (opNeedsValue(r.op) && blank(r.value)))
+        ? missing('Complete every rule: choose a comparison that fits and the value to compare with', 'rules')
+        : [];
     case 'api':
       if (blank(step.url)) return missing('Add the address to call', 'url');
       return /^https:\/\//i.test(step.url.trim()) ? [] : [stepProblem(step, 'NOT_HTTPS', 'The address must start with https://', 'url')];
@@ -99,6 +103,49 @@ function triggerProblems(trigger: FlowTrigger, options: ValidateOptions): Proble
       if (!trigger.templateId) return [triggerProblem(trigger, 'MISSING_CONTENT', 'Choose the template', 'templateId')];
       return blank(trigger.buttonText) ? [triggerProblem(trigger, 'MISSING_CONTENT', 'Choose the quick-reply button', 'buttonText')] : [];
   }
+}
+
+/** Steps that wait for the customer, so a loop through one of them cannot spin on its own (FR-033). */
+const WAITING: ReadonlySet<StepType> = new Set(['question', 'buttons', 'list']);
+
+/** One step of each loop (among the given steps) that never waits for the customer. */
+export function loopsWithoutWait(graph: FlowGraph, only?: ReadonlySet<string>): string[] {
+  const byId = new Map(graph.steps.filter((s) => !only || only.has(s.id)).map((s) => [s.id, s]));
+  const state = new Map<string, 'open' | 'done'>();
+  const found = new Set<string>();
+  const visit = (id: string): void => {
+    state.set(id, 'open');
+    const step = byId.get(id);
+    if (step && !WAITING.has(step.type)) {
+      for (const exit of branchesOf(step)) {
+        if (!exit.target || !byId.has(exit.target)) continue;
+        const seen = state.get(exit.target);
+        if (seen === 'open') found.add(exit.target);
+        else if (!seen) visit(exit.target);
+      }
+    }
+    state.set(id, 'done');
+  };
+  for (const id of byId.keys()) if (!state.has(id)) visit(id);
+  return [...found];
+}
+
+/** Flows a session jumps to from the start without waiting for the customer (loops across flows). */
+export function jumpsWithoutWait(graph: FlowGraph): string[] {
+  const byId = new Map(graph.steps.map((s) => [s.id, s]));
+  const seen = new Set<string>();
+  const targets = new Set<string>();
+  const queue = graph.start ? [graph.start] : [];
+  while (queue.length) {
+    const id = queue.shift()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const step = byId.get(id);
+    if (!step || WAITING.has(step.type)) continue;
+    if (step.type === 'jump' && step.flowId) targets.add(step.flowId);
+    for (const exit of branchesOf(step)) if (exit.target) queue.push(exit.target);
+  }
+  return [...targets];
 }
 
 /** Steps reachable from the start step by following branches. */
@@ -141,6 +188,9 @@ export function validateForPublish(graph: FlowGraph, options: ValidateOptions = 
     for (const exit of branchesOf(step)) {
       if (exit.required && exit.target === null) problems.push(stepProblem(step, 'BRANCH_NOT_CONNECTED', `Connect the "${exit.branch}" branch to a step`, exit.branch));
     }
+  }
+  for (const id of loopsWithoutWait(graph, reachable)) {
+    problems.push({ code: 'LOOP_WITHOUT_WAIT', message: 'These steps go round in a loop without waiting for the customer; add a question, buttons or a list to the loop', stepId: id, triggerId: null, field: null });
   }
   for (const trigger of graph.triggers) problems.push(...triggerProblems(trigger, options));
   return problems;

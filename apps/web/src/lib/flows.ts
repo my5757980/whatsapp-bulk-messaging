@@ -56,7 +56,7 @@ export const STEP_LABELS: Record<StepType, string> = {
 };
 
 /** Steps available so far; later stories add the rest (hand-over arrives with US3). */
-export const PALETTE: StepType[] = ['message', 'buttons', 'question', 'list', 'end'];
+export const PALETTE: StepType[] = ['message', 'buttons', 'question', 'list', 'tags', 'attributes', 'condition', 'delay', 'jump', 'end'];
 
 /** A readable name for a branch of a step. */
 export function branchLabel(step: FlowStep, branch: string): string {
@@ -90,6 +90,18 @@ export function stepSummary(step: FlowStep): string {
     case 'list':
     case 'question':
       return step.text.trim() || 'No text yet';
+    case 'tags': {
+      const parts = [step.add.length ? `add ${step.add.length} tag${step.add.length === 1 ? '' : 's'}` : '', step.remove.length ? `remove ${step.remove.length}` : ''].filter(Boolean);
+      return parts.length ? parts.join(' · ').replace(/^./, (c) => c.toUpperCase()) : 'No tags chosen';
+    }
+    case 'attributes':
+      return step.set.length ? `Set ${step.set.length} attribute${step.set.length === 1 ? '' : 's'}` : 'No attributes chosen';
+    case 'condition':
+      return step.rules.length ? `${step.rules.length} rule${step.rules.length === 1 ? '' : 's'}: ${step.join === 'all' ? 'all must match' : 'any may match'}` : 'No rules yet';
+    case 'delay':
+      return `Wait ${durationText(step.seconds)}`;
+    case 'jump':
+      return step.flowId ? 'Continue in another flow' : 'No flow chosen';
     case 'handover':
       return 'The chat waits for a person in live chat';
     case 'end':
@@ -97,6 +109,21 @@ export function stepSummary(step: FlowStep): string {
     default:
       return STEP_LABELS[step.type];
   }
+}
+
+/** 90 -> "90 seconds", 300 -> "5 minutes", 7200 -> "2 hours". */
+export function durationText(seconds: number): string {
+  const [n, unit] = seconds % 3600 === 0 ? [seconds / 3600, 'hour'] : seconds % 60 === 0 ? [seconds / 60, 'minute'] : [seconds, 'second'];
+  return `${n} ${unit}${n === 1 ? '' : 's'}`;
+}
+
+/** Answer names the flow's steps set, for attribute and condition steps that read answers. */
+export function answerNamesIn(graph: FlowGraph): string[] {
+  const names = graph.steps.flatMap((s) => {
+    if (s.type === 'api') return s.map.map((m) => m.answerName);
+    return 'answerName' in s && s.answerName ? [s.answerName] : [];
+  });
+  return [...new Set(names)];
 }
 
 export function nextStepId(graph: FlowGraph, type: StepType): string {
@@ -126,6 +153,16 @@ export function newStep(type: StepType, id: string, position: { x: number; y: nu
         onInvalid: null,
         fallbacks: {},
       };
+    case 'tags':
+      return { id, type, position, add: [], remove: [], next: null };
+    case 'attributes':
+      return { id, type, position, set: [], next: null };
+    case 'condition':
+      return { id, type, position, join: 'all', rules: [{ subject: { kind: 'workingHours' }, op: 'inside' }], yes: null, no: null };
+    case 'delay':
+      return { id, type, position, seconds: 60, next: null };
+    case 'jump':
+      return { id, type, position, flowId: null };
     case 'handover':
       return { id, type, position };
     case 'end':
