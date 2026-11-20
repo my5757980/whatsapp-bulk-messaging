@@ -46,27 +46,27 @@ test('US1: a keyword starts a published flow and a button tap continues it', asy
 
   // Create the flow from the list.
   await page.goto('/flows');
-  await page.getByRole('button', { name: 'New flow' }).click();
+  await page.getByRole('button', { name: 'New flow', exact: true }).click();
   await page.getByLabel('Flow name').fill(`Opening hours ${suffix}`);
-  await page.getByRole('button', { name: 'Create flow' }).click();
+  await page.getByRole('button', { name: 'Create flow', exact: true }).click();
   await expect(page).toHaveURL(/\/flows\/[0-9a-f-]{36}$/);
 
   // The two answers first, then the buttons step that leads to them (made the start step).
-  await page.getByRole('button', { name: 'Add Message step' }).click();
+  await page.getByRole('button', { name: 'Add Message step', exact: true }).click();
   await page.getByLabel('Message', { exact: true }).fill('Dubai branch: open 9am to 6pm');
-  await page.getByRole('button', { name: 'Add Message step' }).click();
+  await page.getByRole('button', { name: 'Add Message step', exact: true }).click();
   await page.getByLabel('Message', { exact: true }).fill('Sharjah branch: open 10am to 8pm');
-  await page.getByRole('button', { name: 'Add Buttons step' }).click();
+  await page.getByRole('button', { name: 'Add Buttons step', exact: true }).click();
   await page.getByLabel('Message', { exact: true }).fill(question);
   await page.getByLabel('Button 1', { exact: true }).fill('Dubai');
-  await page.getByRole('button', { name: 'Add button' }).click();
+  await page.getByRole('button', { name: 'Add button', exact: true }).click();
   await page.getByLabel('Button 2', { exact: true }).fill('Sharjah');
   await page.getByLabel('Button 1 goes to').selectOption('message-1');
   await page.getByLabel('Button 2 goes to').selectOption('message-2');
-  await page.getByRole('button', { name: 'Make this the start' }).click();
+  await page.getByRole('button', { name: 'Make this the start', exact: true }).click();
   await expect(page.getByTestId('flow-step').filter({ hasText: question })).toContainText('Start');
 
-  await page.getByRole('button', { name: 'Add keyword' }).click();
+  await page.getByRole('button', { name: 'Add keyword', exact: true }).click();
   await page.getByLabel('Keywords 1').fill(keyword);
   await expect(page.getByTestId('save-status')).toHaveText('All changes saved', { timeout: 15_000 });
   await expect(page.getByTestId('no-problems')).toBeVisible();
