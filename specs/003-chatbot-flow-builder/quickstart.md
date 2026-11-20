@@ -37,7 +37,7 @@ The ids of buttons and list rows are in the flow message's details in live chat 
 | US4 Logic | Add a condition on the tag "VIP" and on working hours, an add-tag step, a 10-second delay and a jump to "Main menu". | The right branch runs for each case; the tag appears in the journey as added by the flow; the jump continues in Main menu. Two flows jumping to each other without a question cannot be published. |
 | US5 API step | Point an API step at a test endpoint (for example a local HTTPS mock) returning `{"status":"shipped"}`, map `status` to `order_status`, use **Test request**, then run the flow. Make the endpoint slow. | The test shows status 200 and the reply. The customer sees "shipped". With the slow endpoint the failed branch runs within the timeout. `http://` and `https://10.0.0.5` are refused. |
 | US6 Triggers | Link the "Yes, interested" button of a campaign template to "Lead follow-up"; add a pattern trigger `^ORD-\d{5}$`; add a first-message rule "saw your ad" with the tag "Sofa ad". | Tapping the template button starts the flow. "ORD-12345" starts the order flow. The new contact's profile shows the first-message tag "Sofa ad". |
-| US7 Test numbers | Add your phone as a test number, change the draft's first message without publishing, and send the keyword from the test phone and from another phone. Unpublish. | The test phone gets the draft text (marked "test" in live chat); the other phone gets the published text. After unpublishing, the keyword starts nothing. |
+| US7 Test numbers and versions | Add your phone as a test number, change the draft's first message without publishing, and send the keyword from the test phone and from another phone. Publish again, open **Versions** and **Restore** version 1. Unpublish. | The test phone gets the draft text (marked "test" in live chat); the other phone gets the published text. Version 1's steps come back into the draft and the replaced draft is listed as an autosave. After unpublishing, the keyword starts nothing. |
 | US8 Analytics | Run 10 sessions where 4 stop answering at the second question; open analytics for today. | Totals show 10 started and 4 timed out; the second question shows 4 dropped; the CSV lists those 4 contacts. |
 | US9 Starters | Create a flow from "Lead capture", edit its texts and publish. | A full draft opens with our texts; missing attributes are offered for creation. |
 
@@ -50,6 +50,7 @@ npm test                    # unit: graph schema and validator, trigger matching
 npm run test:integration    # flows-build-publish, flows-questions, flows-live-chat, flows-logic, flows-api-step, flows-triggers, flows-testing, flows-analytics
 npm run test:contract       # flows responses vs contracts/flows-api.openapi.yaml
 npm run test:e2e            # Playwright: flows-us1 … flows-us9 with mock-meta
+$env:PERF_NUMBER_ID="<number id>"; npm run perf:flows   # SC-001 with the api and worker running
 ```
 
 ## 5. Troubleshooting

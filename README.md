@@ -14,6 +14,7 @@ WhatsApp Cloud API. One company, a small team, prices in USD.
 | Team (US6) | Admin, manager and agent roles. Agents see masked phone numbers, and an audit log records every sensitive action. |
 | Public API (US7) | Other company systems send templates with an API key, with idempotency keys and per-key rate limits. |
 | Live chat (feature 002) | A shared team inbox for customer replies: live updates, take, transfer and close chats, the 24-hour reply window, templates from a chat, saved replies, a media library, customer profiles and blocking, welcome and off-hours messages, browser alerts, internal notes and a team view. See [Live chat](#live-chat). |
+| Chatbot flows (feature 003) | Automatic conversations built on a canvas: buttons, lists, questions that save answers to contacts, conditions, delays, safe API calls, hand-over to live chat, test numbers, versions, analytics and starter flows. See [Chatbot flows](#chatbot-flows). |
 
 ## Architecture
 
@@ -79,6 +80,43 @@ npx --no-install web-push generate-vapid-keys
 
 Browsers allow push only on HTTPS (or `http://localhost`). How alerts look depends on the browser
 and the device.
+
+## Chatbot flows
+
+Feature 003 ([spec](specs/003-chatbot-flow-builder/spec.md), [quickstart](specs/003-chatbot-flow-builder/quickstart.md)).
+
+- **Build:** *Flows → New flow*, empty or from one of six starter flows written by us. Add steps from
+  the left, connect a step's ways out to other steps on the canvas (or with the "goes to" lists in the
+  step panel), copy and paste, and undo up to 20 changes. The draft saves itself a second after each
+  change; the problems panel lists what blocks publishing.
+- **Steps:** message (text or a media library file), buttons (up to 3), list (up to 10 options),
+  question (text, number, email, phone or date, with retries and a timeout), tags, attributes,
+  condition (attributes, answers, contact fields, tags, consent, working hours), delay (5 seconds to
+  23 hours), API call, go to another flow, hand over to a person, and end.
+- **Triggers:** keywords (exact or contains), patterns, quick-reply buttons of templates and
+  first-message rules (a contact's very first message; they can also set the first-message tag).
+  Order: first-message rules, exact keyword, contains keyword, pattern, template button. Opt-out,
+  opt-in and "talk to a person" keywords never start a flow.
+- **With live chat:** flows answer Open chats only. Taking a chat, replying or sending a template
+  stops the flow; "talk to a person" and hand-over steps move the chat to *Waiting for agent*; STOP
+  ends the flow without a reply. Members start a published flow from a chat with **Start a flow**
+  while the 24-hour window is open.
+- **Testing and versions:** up to three test numbers run the draft (marked "test", left out of
+  analytics). Each publish makes a numbered version, and sessions finish on the version they started
+  on. *Versions* lists published versions and the last 20 autosaves; restoring copies one into the
+  draft.
+- **Analytics:** the editor's *Analytics* mode shows results for today, 7 or 30 days, and per step how
+  many entered, moved on or dropped, with counts per option and a CSV of the contacts who dropped.
+- **API-step safety:** HTTPS only. Private, loopback, link-local, multicast and reserved addresses
+  are refused, and every address a name resolves to is checked at connect time, so a name cannot
+  lead into the company network; no redirects; a 1-10 second timeout; replies over 100 KB or not in
+  JSON fail. Header secrets are stored encrypted, shown
+  as •••• and never returned or logged. *Send test request* follows the same rules.
+- **Permissions:** admins and managers build and publish (`flows.manage`); agents start flows from
+  chats (`inbox.reply`).
+
+Performance check (SC-001, a reply queued within 3 seconds for 95% of messages with 20 customers
+writing at once): `PERF_NUMBER_ID=<id> npm run perf:flows` with the api and the worker running.
 
 ## Getting started
 
@@ -156,6 +194,13 @@ the web proxy.
   [live events](specs/002-team-inbox/contracts/realtime-events.md),
   [quickstart](specs/002-team-inbox/quickstart.md), [tasks](specs/002-team-inbox/tasks.md) and
   [release checklist](specs/002-team-inbox/checklists/release.md)
+- Chatbot flows (feature 003): [spec](specs/003-chatbot-flow-builder/spec.md),
+  [plan](specs/003-chatbot-flow-builder/plan.md), [research](specs/003-chatbot-flow-builder/research.md),
+  [data model](specs/003-chatbot-flow-builder/data-model.md),
+  [flows API](specs/003-chatbot-flow-builder/contracts/flows-api.openapi.yaml),
+  [flow graph](specs/003-chatbot-flow-builder/contracts/flow-graph.md),
+  [quickstart](specs/003-chatbot-flow-builder/quickstart.md), [tasks](specs/003-chatbot-flow-builder/tasks.md) and
+  [release checklist](specs/003-chatbot-flow-builder/checklists/release.md)
 - Architecture decisions:
   - [ADR-0001 Frontend stack](history/adr/0001-frontend-stack.md)
   - [ADR-0002 Backend runtime, process model and monorepo](history/adr/0002-backend-runtime-process-model-and-monorepo.md)

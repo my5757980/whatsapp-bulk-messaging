@@ -245,14 +245,14 @@ out, 4 dropped at that step, and the CSV lists those 4 contacts.
 
 ### Tests for User Story 8 (REQUIRED) ⚠️
 
-- [ ] T073 [P] [US8] Integration test apps/api/test/integration/flows-analytics.int-spec.ts: seeded sessions give exact totals per result, entered/continued/dropped per step and counts per option for today, 7 days, 30 days and a custom range in the company time zone; test sessions are excluded; the dropped CSV lists the right contacts
-- [ ] T074 [P] [US8] Contract tests in apps/api/test/contract/flows.contract-spec.ts for `GET /flows/{id}/analytics` and the dropped CSV
-- [ ] T075 [P] [US8] Playwright e2e apps/web/e2e/flows-us8-analytics.spec.ts: run sessions, open analytics mode, and check the step badges and the totals bar against the API
+- [X] T073 [P] [US8] Integration test apps/api/test/integration/flows-analytics.int-spec.ts: seeded sessions give exact totals per result, entered/continued/dropped per step and counts per option for today, 7 days, 30 days and a custom range in the company time zone; test sessions are excluded; the dropped CSV lists the right contacts
+- [X] T074 [P] [US8] Contract tests in apps/api/test/contract/flows.contract-spec.ts for `GET /flows/{id}/analytics` and the dropped CSV
+- [X] T075 [P] [US8] Playwright e2e apps/web/e2e/flows-us8-analytics.spec.ts: run sessions, open analytics mode, and check the step badges and the totals bar against the API
 
 ### Implementation for User Story 8
 
-- [ ] T076 [US8] Implement apps/api/src/modules/flows/analytics/flow-analytics.service.ts and flow-analytics.controller.ts (SQL over `flow_sessions` and `flow_session_steps`, research R12; CSV download)
-- [ ] T077 [US8] Add analytics mode to the editor (period selector, totals bar, entered/continued/dropped badges, option counts, CSV download) in apps/web/src/components/flows/analytics-overlay.tsx
+- [X] T076 [US8] Implement apps/api/src/modules/flows/analytics/flow-analytics.service.ts and flow-analytics.controller.ts (SQL over `flow_sessions` and `flow_session_steps`, research R12; CSV download)
+- [X] T077 [US8] Add analytics mode to the editor (period selector, totals bar, entered/continued/dropped badges, option counts, CSV download) in apps/web/src/components/flows/analytics-overlay.tsx
 
 **Checkpoint**: US1–US8 work on their own.
 
@@ -266,13 +266,13 @@ out, 4 dropped at that step, and the CSV lists those 4 contacts.
 
 ### Tests for User Story 9 (REQUIRED) ⚠️
 
-- [ ] T078 [P] [US9] Unit test packages/shared/src/flows/starters/starters.test.ts: every starter parses with the graph schema, passes the publish checks (with its attributes), and has original text
-- [ ] T079 [P] [US9] Playwright e2e apps/web/e2e/flows-us9-starters.spec.ts: create from "Lead capture", accept the offer to create missing attributes, publish and run it
+- [X] T078 [P] [US9] Unit test packages/shared/src/flows/starters/starters.test.ts: every starter parses with the graph schema, passes the publish checks (with its attributes), and has original text
+- [X] T079 [P] [US9] Playwright e2e apps/web/e2e/flows-us9-starters.spec.ts: create from "Lead capture", accept the offer to create missing attributes, publish and run it
 
 ### Implementation for User Story 9
 
-- [ ] T080 [US9] Write the starters in packages/shared/src/flows/starters/ (FAQ menu, lead capture, appointment request, order status lookup, feedback rating, business hours reply), serve them from apps/api/src/modules/flows/definitions/starters.controller.ts (`GET /flow-starters`) and accept `starterKey` in `POST /flows`
-- [ ] T081 [US9] Add the starter picker to the new-flow dialog and the "create missing attributes" offer in apps/web/src/app/(dashboard)/flows/page.tsx
+- [X] T080 [US9] Write the starters in packages/shared/src/flows/starters/ (FAQ menu, lead capture, appointment request, order status lookup, feedback rating, business hours reply), serve them from apps/api/src/modules/flows/definitions/starters.controller.ts (`GET /flow-starters`) and accept `starterKey` in `POST /flows`
+- [X] T081 [US9] Add the starter picker to the new-flow dialog and the "create missing attributes" offer in apps/web/src/app/(dashboard)/flows/page.tsx
 
 **Checkpoint**: all stories work on their own.
 
@@ -280,14 +280,14 @@ out, 4 dropped at that step, and the CSV lists those 4 contacts.
 
 ## Phase 12: Polish & Cross-Cutting Concerns
 
-- [ ] T082 [P] Add metrics `wbm_flow_sessions_total{result}`, `wbm_flow_steps_total{type}`, `wbm_flow_api_calls_total{outcome}` and `wbm_flow_api_duration_seconds` in apps/api/src/common/metrics/metrics.service.ts with their instrumentation points; add the alert `WbmFlowApiFailing` (over 20% failed API calls in 15 minutes, at least 20 calls) to ops/alerts.yml and apps/api/test/unit/alerts.spec.ts
-- [ ] T083 [P] Extend retention and erasure, tests first: ended sessions and their step records older than 12 months in apps/api/test/integration/retention.int-spec.ts and apps/api/src/modules/maintenance/retention.processor.ts; contact deletion clears session answers and the contact link in apps/api/test/integration/contact-deletion.int-spec.ts and apps/api/src/modules/contacts/contact-deletion.service.ts
-- [ ] T084 [P] Add `answers` and API-step secret fields to the log redaction list in apps/api/src/common/logging/redaction.ts with cases in apps/api/test/unit/logging-redaction.spec.ts
-- [ ] T085 [P] Add the flow audit actions (research R15) to apps/api/src/modules/audit/audit-actions.ts and apps/api/test/unit/audit-coverage.spec.ts
-- [ ] T086 [P] Add contracts/flows-api.openapi.yaml to the contracts read by apps/api/test/integration/rbac.int-spec.ts and fix any permission mismatch
-- [ ] T087 [P] Add the performance check tools/perf/flows-latency.ts (SC-001: customer message to queued flow reply, p95 with 20 concurrent customers) and the root script `perf:flows`
-- [ ] T088 [P] Docs: a Flows section in README.md (steps, triggers, testing, analytics, API-step safety), update specs/003-chatbot-flow-builder/quickstart.md if steps changed, and update the AiSensy inventory's roadmap numbering in docs/research/aisensy/feature-inventory-2026-11-19.md (the flow builder is 003)
-- [ ] T089 Run every quickstart row end to end (in CI where the machine's memory does not allow it) and record the results in specs/003-chatbot-flow-builder/checklists/release.md
+- [X] T082 [P] Add metrics `wbm_flow_sessions_total{result}`, `wbm_flow_steps_total{type}`, `wbm_flow_api_calls_total{outcome}` and `wbm_flow_api_duration_seconds` in apps/api/src/common/metrics/metrics.service.ts with their instrumentation points; add the alert `WbmFlowApiFailing` (over 20% failed API calls in 15 minutes, at least 20 calls) to ops/alerts.yml and apps/api/test/unit/alerts.spec.ts
+- [X] T083 [P] Extend retention and erasure, tests first: ended sessions and their step records older than 12 months in apps/api/test/integration/retention.int-spec.ts and apps/api/src/modules/maintenance/retention.processor.ts; contact deletion clears session answers and the contact link in apps/api/test/integration/contact-deletion.int-spec.ts and apps/api/src/modules/contacts/contact-deletion.service.ts
+- [X] T084 [P] Add `answers` and API-step secret fields to the log redaction list in apps/api/src/common/logging/redaction.ts with cases in apps/api/test/unit/logging-redaction.spec.ts
+- [X] T085 [P] Add the flow audit actions (research R15) to apps/api/src/modules/audit/audit-actions.ts and apps/api/test/unit/audit-coverage.spec.ts
+- [X] T086 [P] Add contracts/flows-api.openapi.yaml to the contracts read by apps/api/test/integration/rbac.int-spec.ts and fix any permission mismatch
+- [X] T087 [P] Add the performance check tools/perf/flows-latency.ts (SC-001: customer message to queued flow reply, p95 with 20 concurrent customers) and the root script `perf:flows`
+- [X] T088 [P] Docs: a Flows section in README.md (steps, triggers, testing, analytics, API-step safety), update specs/003-chatbot-flow-builder/quickstart.md if steps changed, and update the AiSensy inventory's roadmap numbering in docs/research/aisensy/feature-inventory-2026-11-19.md (the flow builder is 003)
+- [X] T089 Run every quickstart row end to end (in CI where the machine's memory does not allow it) and record the results in specs/003-chatbot-flow-builder/checklists/release.md
 
 ---
 
