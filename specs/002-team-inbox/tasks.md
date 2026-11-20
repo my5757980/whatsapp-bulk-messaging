@@ -603,7 +603,7 @@
   - apps/api/test/integration/retention.int-spec.ts: chat_messages, conversation_events and openings older than 12 months are purged; unreferenced INBOUND media and their S3 objects are deleted
   - apps/api/test/integration/contact-deletion.int-spec.ts: chat text, payload and media are erased; previews nulled; counts kept
   - then implement both in apps/api/src/modules/maintenance/retention.processor.ts and apps/api/src/modules/contacts/contact-deletion.service.ts
-- [ ] T097 [P] Make apps/api/test/integration/rbac.int-spec.ts read x-permission from both contract files (001 dashboard and 002 inbox) and check every inbox operation for each role (FR-041). Fix any mismatch.
+- [X] T097 [P] Make apps/api/test/integration/rbac.int-spec.ts read x-permission from both contract files (001 dashboard and 002 inbox) and check every inbox operation for each role (FR-041). Fix any mismatch.
 - [X] T098 [P] Add the new audit actions to apps/api/src/modules/audit/audit-actions.ts and confirm apps/api/test/unit/audit-coverage.spec.ts passes:
   - inbox.intervened, inbox.transferred, inbox.resolved
   - contact.blocked, contact.unblocked
