@@ -6,6 +6,8 @@ import { DomainModule } from './modules/domain.module.js';
 import { ImportProcessor } from './modules/imports/import.processor.js';
 import { InboundChatHandler } from './modules/inbox/inbound/inbound-chat.handler.js';
 import { InboundMediaProcessor } from './modules/inbox/inbound/inbound-media.processor.js';
+import { FlowsDomainModule } from './modules/flows/flows.module.js';
+import { FlowsQueueProcessor } from './modules/flows/steps/flows-queue.processor.js';
 import { InboxDomainModule } from './modules/inbox/inbox.module.js';
 import { InboxQueueProcessor } from './modules/inbox/inbox-queue.processor.js';
 import { InboxNotifyProcessor } from './modules/inbox/notifications/inbox-notify.processor.js';
@@ -31,7 +33,7 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
  * integration tests, which drive the processors directly with a stub ProcessorRegistry.
  */
 @Module({
-  imports: [DomainModule, WebhooksWorkerModule, InboxDomainModule],
+  imports: [DomainModule, WebhooksWorkerModule, InboxDomainModule, FlowsDomainModule],
   providers: [
     StatusHandler,
     InboundHandler,
@@ -53,6 +55,7 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     InboundMediaProcessor,
     ReadReceiptProcessor,
     InboxQueueProcessor,
+    FlowsQueueProcessor,
     InboxNotifyProcessor,
     PushService,
     SessionSendProcessor,

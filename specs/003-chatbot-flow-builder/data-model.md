@@ -67,6 +67,8 @@ Written on publish from the published graph; deleted on unpublish or when replac
 | template_id | uuid? FK templates `CASCADE` | template-button triggers |
 | button_text | varchar(25)? | the quick-reply button's text |
 | first_message_tag_id | uuid? FK tags `SET NULL` | first-message rules |
+| start_flow | boolean, default true | a first-message rule may only set the tag |
+| answer_name | varchar(40)? | pattern triggers can store the matched text as an answer |
 | can_interrupt | boolean, default false | FR-022 |
 
 Indexes: `(kind, phrase)`, `(template_id, button_text)`.

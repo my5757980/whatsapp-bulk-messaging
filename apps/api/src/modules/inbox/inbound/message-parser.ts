@@ -179,6 +179,8 @@ export function previewOf(item: { contentType: ChatContentType; text: string | n
   switch (item.contentType) {
     case 'TEXT':
     case 'TEMPLATE':
+    case 'BUTTONS':
+    case 'LIST':
       line = clean(item.text);
       break;
     case 'IMAGE':

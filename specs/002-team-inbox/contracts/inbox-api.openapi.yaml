@@ -755,7 +755,7 @@ components:
         id: { type: string, format: uuid }
         kind: { type: string, enum: [INBOUND, SESSION_OUT, MESSAGE_REF, NOTE] }
         origin: { type: string, enum: [CUSTOMER, MEMBER, AUTOMATIC, CAMPAIGN, API] }
-        contentType: { type: string, enum: [TEXT, IMAGE, VIDEO, AUDIO, DOCUMENT, STICKER, LOCATION, CONTACTS, BUTTON_REPLY, LIST_REPLY, FORM_REPLY, REACTION, TEMPLATE, UNSUPPORTED] }
+        contentType: { type: string, enum: [TEXT, IMAGE, VIDEO, AUDIO, DOCUMENT, STICKER, LOCATION, CONTACTS, BUTTON_REPLY, LIST_REPLY, FORM_REPLY, REACTION, TEMPLATE, UNSUPPORTED, BUTTONS, LIST] }
         text: { type: [string, 'null'] }
         payload: { type: object, additionalProperties: true }
         media:
@@ -778,7 +778,7 @@ components:
       properties:
         type: { type: string, examples: [INTERVENED, TRANSFERRED, RESOLVED, AUTO_RESOLVED, REQUESTED, TAG_ADDED, CAMPAIGN_SENT, CONSENT_CHANGED, BLOCKED] }
         at: { type: string, format: date-time }
-        actor: { type: object, properties: { type: { type: string, enum: [MEMBER, CUSTOMER, SYSTEM, CAMPAIGN] }, name: { type: [string, 'null'] } } }
+        actor: { type: object, properties: { type: { type: string, enum: [MEMBER, CUSTOMER, SYSTEM, CAMPAIGN, FLOW] }, name: { type: [string, 'null'] } } }
         data: { type: object, additionalProperties: true }
     CannedMessageInput:
       type: object

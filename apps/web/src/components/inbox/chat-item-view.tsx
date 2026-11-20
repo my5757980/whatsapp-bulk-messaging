@@ -57,6 +57,12 @@ function MediaBody({ item }: { item: ChatItem }) {
   }
 }
 
+/** The chatbot flow that sent an automatic message, if any (feature 003). */
+function flowName(item: ChatItem): string | null {
+  const flow = item.payload.flow;
+  return flow && typeof flow === 'object' && typeof (flow as { flowName?: unknown }).flowName === 'string' ? (flow as { flowName: string }).flowName : null;
+}
+
 function Body({ item }: { item: ChatItem }) {
   const p = item.payload;
   switch (item.contentType) {
@@ -109,6 +115,29 @@ function Body({ item }: { item: ChatItem }) {
       return <pre className="max-w-full overflow-x-auto whitespace-pre-wrap text-xs">{JSON.stringify(p.response ?? {}, null, 2)}</pre>;
     case 'REACTION':
       return <p className="text-sm">{str(p.emoji) ? `Reacted ${String(p.emoji)} to a message` : 'Removed a reaction'}</p>;
+    case 'BUTTONS':
+    case 'LIST': {
+      // A chatbot flow's reply buttons or list (feature 003); the customer taps one in WhatsApp.
+      const options =
+        item.contentType === 'BUTTONS'
+          ? (Array.isArray(p.buttons) ? (p.buttons as Array<{ title?: string }>) : [])
+          : (Array.isArray(p.sections) ? (p.sections as Array<{ rows?: Array<{ title?: string }> }>) : []).flatMap((s) => s.rows ?? []);
+      return (
+        <div className="grid gap-1 text-sm">
+          {str(p.header) && <p className="font-medium">{str(p.header)}</p>}
+          <p className="whitespace-pre-wrap break-words">{item.text}</p>
+          {str(p.footer) && <p className="text-xs text-muted-foreground">{str(p.footer)}</p>}
+          <ul className="mt-1 grid gap-1" aria-label={item.contentType === 'BUTTONS' ? 'Reply buttons' : 'List options'}>
+            {item.contentType === 'LIST' && str(p.buttonLabel) && <li className="text-xs text-muted-foreground">☰ {str(p.buttonLabel)}</li>}
+            {options.map((option, i) => (
+              <li key={i} className="rounded border bg-background px-2 py-1 text-center text-xs">
+                {option.title}
+              </li>
+            ))}
+          </ul>
+        </div>
+      );
+    }
     case 'TEMPLATE':
       return (
         <div className="grid gap-1 text-sm">
@@ -140,7 +169,7 @@ export function ChatItemView({ item }: { item: ChatItem }) {
         <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
           {item.kind === 'NOTE' && <span className="font-medium text-amber-700 dark:text-amber-300">Internal note ·</span>}
           {item.sentBy && <span>{item.sentBy.name} ·</span>}
-          {item.origin === 'AUTOMATIC' && <span>Automatic ·</span>}
+          {item.origin === 'AUTOMATIC' && <span>{flowName(item) ? `Automatic · ${flowName(item)} ·` : 'Automatic ·'}</span>}
           <span>{time(item.occurredAt)}</span>
           {ours && item.kind !== 'NOTE' && <Ticks status={item.status} />}
         </div>

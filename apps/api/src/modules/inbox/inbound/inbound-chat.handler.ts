@@ -7,6 +7,7 @@ import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import { SettingsService } from '../../settings/settings.service.js';
 import { normalizeKeyword } from '../../webhooks/handlers/inbound.handler.js';
 import { WebhookRouter, type WebhookChange, type WebhookChangeHandler } from '../../webhooks/webhook-router.js';
+import { FlowRouter } from '../../flows/engine/flow-router.js';
 import { AutoRepliesService } from '../automation/auto-replies.service.js';
 import { InboxNotifier } from '../notifications/inbox-notifier.js';
 import { onCustomerMessage } from '../conversations/conversation-state.js';
@@ -52,6 +53,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly autoReplies: AutoRepliesService,
     private readonly notifier: InboxNotifier,
     private readonly metrics: MetricsService,
+    private readonly flows: FlowRouter,
   ) {}
 
   onModuleInit(): void {
@@ -81,12 +83,13 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
       const normalized = parsed.text !== null ? normalizeKeyword(parsed.text) : null;
       const humanKeyword = normalized !== null && humanKeywords.includes(normalized);
       // Opt-out and opt-in keywords never get an automatic reply either (FR-036).
-      const consentKeyword = normalized !== null && (optOutKeywords.includes(normalized) || optInKeywords.includes(normalized));
-      await this.store(number.id, parsed, defaultCountryCode, humanKeyword, consentKeyword);
+      const optOutKeyword = normalized !== null && optOutKeywords.includes(normalized);
+      const consentKeyword = optOutKeyword || (normalized !== null && optInKeywords.includes(normalized));
+      await this.store(number.id, parsed, defaultCountryCode, humanKeyword, consentKeyword, optOutKeyword);
     }
   }
 
-  private async store(numberId: string, msg: ParsedInbound, defaultCountry: string, humanKeyword: boolean, consentKeyword: boolean): Promise<void> {
+  private async store(numberId: string, msg: ParsedInbound, defaultCountry: string, humanKeyword: boolean, consentKeyword: boolean, optOutKeyword: boolean): Promise<void> {
     const phone = normalizePhone(waIdToE164(msg.waId), defaultCountry);
     if (!phone) {
       this.logger.warn({ numberId }, 'Customer message from a number that cannot be normalised; not added to live chat');
@@ -151,7 +154,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
       const newOpening = startsOpening(chat.last_customer_message_at, msg.occurredAt);
       if (newOpening) await tx.conversationOpening.create({ data: { conversationId: chat.id, openedAt: msg.occurredAt } });
       if (created) await this.timeline.backfill(tx, chat.id, contact.id, numberId);
-      return { conversationId: chat.id, created, previous, becameRequesting, newOpening };
+      return { conversationId: chat.id, created, previous, becameRequesting, newOpening, state: next.state };
     });
     if (!outcome) return;
     this.metrics.inboxMessagesTotal.inc({ direction: 'in', kind: msg.contentType.toLowerCase() });
@@ -164,6 +167,20 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     // A chat that starts waiting for an agent gets that alert instead of a new-message alert.
     if (outcome.becameRequesting) await this.routing.alertRequesting(outcome.conversationId);
     else await this.notifier.queue({ kind: 'message', conversationId: outcome.conversationId, itemId });
+    // Chatbot flows answer first (003 research R5); a flow answer replaces welcome/off-hours (FR-029).
+    const flowAnswered = await this.flows.onCustomerMessage({
+      conversationId: outcome.conversationId,
+      numberId,
+      contactId: contact.id,
+      senderPhone: phone.e164,
+      chatState: outcome.state,
+      optOutKeyword,
+      optInKeyword: consentKeyword && !optOutKeyword,
+      humanKeyword,
+      newChat: outcome.created,
+      message: { contentType: msg.contentType, text: msg.text, replyId: typeof msg.payload.id === 'string' ? msg.payload.id : null, replyToWaId: msg.replyToWaId },
+    });
+    if (flowAnswered) return;
     await this.autoReplies.handle({
       conversationId: outcome.conversationId,
       contactId: contact.id,

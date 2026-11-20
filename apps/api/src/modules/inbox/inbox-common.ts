@@ -20,6 +20,9 @@ export const CHAT_CONTENT_TYPES = [
   'REACTION',
   'TEMPLATE',
   'UNSUPPORTED',
+  // Reply buttons and lists sent by chatbot flows (feature 003)
+  'BUTTONS',
+  'LIST',
 ] as const;
 
 export type ChatContentType = (typeof CHAT_CONTENT_TYPES)[number];

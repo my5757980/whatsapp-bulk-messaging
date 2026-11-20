@@ -60,11 +60,15 @@ export interface CreateTemplateBody {
   parameter_format?: 'POSITIONAL' | 'NAMED';
 }
 
-/** A free-form message inside the 24-hour window (002 contracts/meta-graph-inbox.md §2). */
+/**
+ * A free-form message inside the 24-hour window (002 contracts/meta-graph-inbox.md §2), including
+ * the reply buttons and lists that chatbot flows send (003 contracts/meta-graph-flows.md).
+ */
 export type SessionMessagePayload =
   | { to: string; type: 'text'; text: { body: string; preview_url: boolean } }
   | { to: string; type: 'image' | 'video' | 'document'; media: { id?: string; link?: string; caption?: string; filename?: string } }
-  | { to: string; type: 'audio'; media: { id?: string; link?: string } };
+  | { to: string; type: 'audio'; media: { id?: string; link?: string } }
+  | { to: string; type: 'interactive'; interactive: Record<string, unknown> };
 
 /** Metadata of media a customer sent (§3); the URL is short-lived and needs the same token. */
 export interface MediaInfo {
@@ -208,7 +212,7 @@ export class MetaGraphClient {
 
   /** Sends a free-form reply (text or media); returns the wamid. */
   async sendSessionMessage(token: string, phoneNumberId: string, payload: SessionMessagePayload): Promise<{ waMessageId: string }> {
-    const content = payload.type === 'text' ? payload.text : payload.media;
+    const content = payload.type === 'text' ? payload.text : payload.type === 'interactive' ? payload.interactive : payload.media;
     const body = await this.request<{ messages?: Array<{ id: string }> }>('POST', `/${phoneNumberId}/messages`, token, {
       json: { messaging_product: 'whatsapp', recipient_type: 'individual', to: payload.to, type: payload.type, [payload.type]: content },
     });
