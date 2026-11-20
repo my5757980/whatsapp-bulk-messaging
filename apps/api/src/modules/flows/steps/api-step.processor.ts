@@ -1,4 +1,5 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { FlowSecretsVault } from '../definitions/secrets-vault.js';
 import { FlowSessionService } from '../engine/session.service.js';
 import { ApiCallError, callApi, mapFields } from './api-client.js';
@@ -20,6 +21,7 @@ export class FlowApiProcessor implements OnModuleInit {
     private readonly flowsQueue: FlowsQueueProcessor,
     private readonly sessions: FlowSessionService,
     private readonly vault: FlowSecretsVault,
+    private readonly metrics: MetricsService,
   ) {}
 
   onModuleInit(): void {
@@ -31,14 +33,22 @@ export class FlowApiProcessor implements OnModuleInit {
     if (!call) return;
     let ok = false;
     let mapped: Record<string, string | number> = {};
+    let outcome = 'failed';
+    const started = Date.now();
     try {
       const secrets = await this.vault.values(call.flowId, secretIdsIn(call.step));
       const reply = await callApi(buildApiRequest(call.step, { contact: call.contact, answers: call.answers, secrets }));
       ok = reply.status >= 200 && reply.status < 300;
+      outcome = ok ? 'success' : 'error_status';
       if (ok) mapped = mapFields(reply.body, call.step.map);
       else this.logger.warn({ sessionId: data.sessionId, stepId: call.step.id, status: reply.status }, 'Flow API step got an error status');
     } catch (error) {
-      this.logger.warn({ sessionId: data.sessionId, stepId: call.step.id, reason: error instanceof ApiCallError ? error.reason : 'NETWORK' }, 'Flow API step failed');
+      const reason = error instanceof ApiCallError ? error.reason : 'NETWORK';
+      outcome = reason === 'TIMEOUT' ? 'timeout' : reason === 'BLOCKED_ADDRESS' ? 'blocked' : 'failed';
+      this.logger.warn({ sessionId: data.sessionId, stepId: call.step.id, reason }, 'Flow API step failed');
+    } finally {
+      this.metrics.flowApiCallsTotal.inc({ outcome });
+      this.metrics.flowApiDuration.observe((Date.now() - started) / 1000);
     }
     await this.sessions.resume(data.sessionId, { kind: 'api', token: data.token, ok, mapped });
   }

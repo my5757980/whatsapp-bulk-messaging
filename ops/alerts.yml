@@ -109,3 +109,21 @@ groups:
           description: >-
             Prometheus cannot scrape this process, so the other alerts may stay silent. Check the
             container, its HEALTHCHECK and the X-Ops-Token used by the scrape job.
+
+      - alert: WbmFlowApiFailing
+        expr: |
+          (
+            sum(increase(wbm_flow_api_calls_total{outcome!="success"}[15m]))
+              /
+            sum(increase(wbm_flow_api_calls_total[15m]))
+          ) > 0.20
+          and on()
+          sum(increase(wbm_flow_api_calls_total[15m])) >= 20
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 20% of chatbot flow API calls failed in the last 15 minutes
+          description: >-
+            Customers in these flows take the "failed" branch. Check the worker logs for "Flow API
+            step failed" (with its reason) and the external systems the flows call.

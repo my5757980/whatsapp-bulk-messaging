@@ -7,47 +7,13 @@
 //   PERF_NUMBER_ID=<id> PERF_LONG_CHAT_ID=<id> npm run perf:inbox
 // Env: PERF_API_URL, PERF_ADMIN_EMAIL, PERF_ADMIN_PASSWORD, META_APP_SECRET, PERF_NUMBER_ID,
 //      PERF_LONG_CHAT_ID, PERF_STREAMS (default 20), PERF_SAMPLES (default 50).
-import { ApiClient, metaAppSecret, p95, perfEnv, postInboundTexts, report, run } from './client.js';
+import { ApiClient, metaAppSecret, openStream, p95, perfEnv, postInboundTexts, report, run } from './client.js';
 
 const STREAMS = Number(process.env.PERF_STREAMS ?? 20);
 const SAMPLES = Number(process.env.PERF_SAMPLES ?? 50);
 const LOAD_TRIES = 20;
 const LIMIT_MS = 2_000;
 const EVENT_TIMEOUT_MS = 10_000;
-
-/** One live event stream; calls `onText` with each new message's text and its arrival time. */
-async function openStream(url: string, cookie: string, onText: (text: string, at: number) => void): Promise<AbortController> {
-  const abort = new AbortController();
-  const res = await fetch(url, { headers: { cookie, accept: 'text/event-stream' }, signal: abort.signal });
-  if (!res.ok || !res.body) throw new Error(`Event stream -> ${res.status}`);
-  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
-  void (async () => {
-    let buffer = '';
-    try {
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) return;
-        buffer += value;
-        let end: number;
-        while ((end = buffer.indexOf('\n\n')) >= 0) {
-          const block = buffer.slice(0, end);
-          buffer = buffer.slice(end + 2);
-          if (!/^event: message\.created$/m.test(block)) continue;
-          const data = block
-            .split('\n')
-            .filter((line) => line.startsWith('data: '))
-            .map((line) => line.slice(6))
-            .join('\n');
-          const text = (JSON.parse(data) as { item?: { text?: string | null } }).item?.text;
-          if (text) onText(text, Date.now());
-        }
-      }
-    } catch {
-      // Aborted at the end of the run.
-    }
-  })();
-  return abort;
-}
 
 async function timed(task: () => Promise<unknown>): Promise<number> {
   const started = performance.now();

@@ -24,6 +24,10 @@ const SECRET_KEYS = new Set([
   'keys',
   'p256dh',
   'auth',
+  // Chatbot flow secrets (feature 003): stored values of API step header secrets.
+  'valueencrypted',
+  'value_encrypted',
+  'secretvalue',
 ]);
 
 const CONTENT_KEYS = new Set([
@@ -42,6 +46,9 @@ const CONTENT_KEYS = new Set([
   'renderedtext',
   'welcomecontent',
   'offhourscontent',
+  // Chatbot flows (feature 003): what customers answered, and reply fields an API step mapped.
+  'answers',
+  'mapped',
 ]);
 
 const PHONE_KEYS = new Set([

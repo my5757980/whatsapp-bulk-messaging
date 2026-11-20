@@ -6,12 +6,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { restoreNetwork, useNockLocalOnly } from '../support/fixtures.js';
 import { createTestContext, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
 
-// T167, T097: every operation's `x-permission` in the dashboard (001) and live chat (002) contracts
-// is enforced for each role (001 FR-007, 002 FR-041).
+// T167, T097, 003 T086: every operation's `x-permission` in the dashboard (001), live chat (002) and
+// flows (003) contracts is enforced for each role (001 FR-007, 002 FR-041, 003 FR-038).
 const SPECS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../specs');
 const CONTRACTS = [
   path.join(SPECS, '001-whatsapp-bulk-messaging/contracts/dashboard-api.openapi.yaml'),
   path.join(SPECS, '002-team-inbox/contracts/inbox-api.openapi.yaml'),
+  path.join(SPECS, '003-chatbot-flow-builder/contracts/flows-api.openapi.yaml'),
 ];
 /** The live event stream never ends, so a plain request would hang; inbox-realtime.int-spec.ts covers it. */
 const SKIP = new Set(['get /inbox/events']);
@@ -55,6 +56,8 @@ describe('Role permissions on every endpoint', () => {
     expect(operations.length).toBeGreaterThan(50);
     // Live chat operations are included (002 FR-041).
     expect(operations.some((op) => op.route === '/inbox/team-metrics')).toBe(true);
+    // Flow builder operations too (003 T086).
+    expect(operations.some((op) => op.route === '/flows/{id}/publish')).toBe(true);
   });
 
   it.each(ROLES)('%s gets 403 exactly where the role table says so', async (role) => {

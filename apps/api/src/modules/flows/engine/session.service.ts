@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { checkChatMedia, FlowGraphSchema, type AnswerContext, type FlowGraph, type StepOf } from '@wbm/shared';
 import { v7 as uuidv7 } from 'uuid';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { normalizePhone } from '../../../common/phone/phone.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QUEUES } from '../../../common/queue/queue.constants.js';
@@ -84,6 +85,7 @@ export class FlowSessionService {
     private readonly settings: SettingsService,
     private readonly liveChat: LiveChatSettingsService,
     private readonly routing: ChatRoutingService,
+    private readonly metrics: MetricsService,
   ) {}
 
   /** Starts a flow for a chat; refuses when a session is already running unless asked to replace it. */
@@ -374,6 +376,7 @@ export class FlowSessionService {
       switch (effect.kind) {
         case 'stepEntered': {
           if (row.isTest) break;
+          this.metrics.flowStepsTotal.inc({ type: flow.graph.steps.find((s) => s.id === effect.stepId)?.type ?? 'unknown' });
           const created = await tx.flowSessionStep.create({ data: { sessionId: row.id, flowId: row.flowId, flowVersionId: row.flowVersionId, stepId: effect.stepId, enteredAt: now }, select: { id: true } });
           openRows.set(effect.stepId, created.id);
           break;
@@ -433,6 +436,7 @@ export class FlowSessionService {
         data: { ...this.stateData(state, now), status: 'ENDED', result: ended.result, failureReason: ended.reason?.slice(0, 120) ?? null, endedAt: now },
       });
       await this.endJourney(tx, row, flow.name, ended.result);
+      if (!row.isTest) this.metrics.flowSessionsTotal.inc({ result: ended.result });
       if (jumpTo && ended.result === 'COMPLETED') {
         await this.createAndRun(
           tx,
@@ -475,6 +479,7 @@ export class FlowSessionService {
       where: { id: row.id },
       data: { status: 'ENDED', result, failureReason: reason?.slice(0, 120) ?? null, endedAt: now, wait: 'NONE', lastActivityAt: now },
     });
+    if (!row.isTest) this.metrics.flowSessionsTotal.inc({ result });
     const flow = await tx.flow.findUnique({ where: { id: row.flowId }, select: { name: true } });
     await this.endJourney(tx, row, flow?.name ?? '', result);
   }

@@ -29,7 +29,8 @@
     "perf:campaign": "tsx tools/perf/campaign-10k.ts",
     "perf:import": "tsx tools/perf/import-50k.ts",
     "perf:inbox-seed": "tsx tools/perf/inbox-seed.ts",
-    "perf:inbox": "tsx tools/perf/inbox-latency.ts"
+    "perf:inbox": "tsx tools/perf/inbox-latency.ts",
+    "perf:flows": "tsx tools/perf/flows-latency.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

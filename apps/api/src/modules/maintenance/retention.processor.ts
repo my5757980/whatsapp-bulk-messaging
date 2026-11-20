@@ -11,6 +11,7 @@ import { Prisma } from '../../generated/prisma/client.js';
 // - webhook events and uploaded CSV files (sources and error reports): 30 days
 // - live chat (002 FR-042): chat items, journey events and openings 12 months; old list previews are
 //   cleared, and customer media no chat item uses any more is deleted with its file
+// - chatbot flow sessions (003): ended sessions and their step records after 12 months.
 // Audit logs are never purged here (the spec keeps them at least 12 months).
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -19,7 +20,7 @@ const SHORT_LIVED_DAYS = 30;
 const UPLOADS_PREFIX = 'uploads/';
 const BATCH = 5_000;
 
-type PurgeTable = 'messages' | 'campaign_upload_rows' | 'webhook_events' | 'chat_messages' | 'conversation_events' | 'conversation_openings';
+type PurgeTable = 'messages' | 'campaign_upload_rows' | 'webhook_events' | 'chat_messages' | 'conversation_events' | 'conversation_openings' | 'flow_sessions';
 
 export interface LiveChatRetentionResult {
   chatItems: number;
@@ -33,6 +34,8 @@ export interface RetentionResult extends LiveChatRetentionResult {
   messages: number;
   webhookEvents: number;
   files: number;
+  /** Chatbot flow sessions (and their step records) that ended over 12 months ago (003). */
+  flowSessions: number;
 }
 
 export function monthsBefore(now: Date, months: number): Date {
@@ -52,7 +55,7 @@ export class RetentionService {
 
   /** Runs every purge; one failing step does not stop the others, but fails the job. */
   async run(now = new Date()): Promise<RetentionResult> {
-    const result: RetentionResult = { campaigns: 0, messages: 0, webhookEvents: 0, files: 0, chatItems: 0, chatEvents: 0, chatOpenings: 0, chatMedia: 0 };
+    const result: RetentionResult = { campaigns: 0, messages: 0, webhookEvents: 0, files: 0, chatItems: 0, chatEvents: 0, chatOpenings: 0, chatMedia: 0, flowSessions: 0 };
     const failures: string[] = [];
     const step = async (name: string, fn: () => Promise<void>) => {
       try {
@@ -72,6 +75,9 @@ export class RetentionService {
     });
     await step('live chat', async () => {
       Object.assign(result, await this.purgeLiveChat(now));
+    });
+    await step('flow sessions', async () => {
+      result.flowSessions = await this.purgeFlowSessions(now);
     });
     this.logger.log({ ...result }, 'Retention run finished');
     if (failures.length) throw new Error(`Retention partly failed: ${failures.join('; ')}`);
@@ -95,6 +101,12 @@ export class RetentionService {
     }
     messages += await this.deleteInBatches('messages', Prisma.sql`campaign_id IS NULL AND created_at < ${cutoff}`);
     return { campaigns: campaigns.length, messages };
+  }
+
+  /** Chatbot flow sessions that ended over 12 months ago; their step records go with them (003 T083). */
+  async purgeFlowSessions(now: Date): Promise<number> {
+    const cutoff = monthsBefore(now, CAMPAIGN_MONTHS);
+    return this.deleteInBatches('flow_sessions', Prisma.sql`status = 'ENDED' AND ended_at < ${cutoff}`);
   }
 
   /** Live chat content older than 12 months (002 FR-042, data-model §6). Chats themselves stay. */
