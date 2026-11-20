@@ -3,11 +3,14 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type KeyboardEvent } from 'react';
 import { Button } from '@/components/ui/button';
+import { Can } from '@/lib/permissions';
 import { toast } from '@/components/ui/toaster';
 import { api, ApiError } from '@/lib/api-client';
 import type { ChatItem, ConversationDetail } from '@/lib/inbox-types';
 import { queryKeys } from '@/lib/query';
+import { cn } from '@/lib/utils';
 import { MediaPicker } from './media-picker';
+import { NoteComposer } from './note-composer';
 import { SavedReplyPicker } from './saved-reply-picker';
 import { TemplateSender } from './template-sender';
 
@@ -29,11 +32,40 @@ function useTimeLeft(windowEndsAt: string | null): string | null {
 }
 
 /**
+ * The box under a chat: a reply to the customer, or an internal note for the team (T095). Notes
+ * work even when replies are locked (closed window, or a chat another member took).
+ */
+export function Composer(props: { chat: ConversationDetail; meId: string; onSent?: (item: ChatItem) => void }) {
+  const [mode, setMode] = useState<'reply' | 'note'>('reply');
+  return (
+    <div className="border-t">
+      <Can permission="inbox.reply">
+        <div className="flex gap-1 px-3 pt-2" role="tablist" aria-label="Write">
+          {(['reply', 'note'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={mode === m}
+              onClick={() => setMode(m)}
+              className={cn('rounded-md px-2 py-1 text-xs hover:bg-accent', mode === m && 'bg-accent font-medium')}
+            >
+              {m === 'reply' ? 'Reply' : 'Note'}
+            </button>
+          ))}
+        </div>
+      </Can>
+      {mode === 'note' ? <NoteComposer chat={props.chat} /> : <ReplyComposer {...props} />}
+    </div>
+  );
+}
+
+/**
  * Reply box (T036, T066): text up to 4096 characters (emoji from the system picker), saved
  * replies by typing "/", and files from the computer or the media library. The queued message
  * shows at once; ticks follow from live events. A failed send keeps the draft.
  */
-export function Composer({
+function ReplyComposer({
   chat,
   meId,
   onSent,
@@ -85,7 +117,7 @@ export function Composer({
   if (chat.inHistory) {
     return (
       <div
-        className="flex flex-wrap items-center justify-between gap-3 border-t bg-muted/40 p-4 text-sm text-muted-foreground"
+        className="flex flex-wrap items-center justify-between gap-3 bg-muted/40 p-4 text-sm text-muted-foreground"
         data-testid="window-closed"
       >
         <span>
@@ -98,7 +130,7 @@ export function Composer({
   }
   if (!chat.canReply) {
     return (
-      <div className="border-t bg-muted/40 p-4 text-sm text-muted-foreground">
+      <div className="bg-muted/40 p-4 text-sm text-muted-foreground">
         {chat.state === 'INTERVENED' && chat.intervenedBy
           ? `${chat.intervenedBy.name} has taken this chat.`
           : 'You cannot reply in this chat right now.'}
@@ -108,7 +140,7 @@ export function Composer({
 
   return (
     <form
-      className="grid gap-2 border-t p-3"
+      className="grid gap-2 p-3"
       onSubmit={(event) => {
         event.preventDefault();
         submit();

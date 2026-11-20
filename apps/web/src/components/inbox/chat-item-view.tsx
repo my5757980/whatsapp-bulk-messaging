@@ -133,15 +133,16 @@ export function ChatItemView({ item }: { item: ChatItem }) {
         className={cn(
           'max-w-[78%] rounded-lg px-3 py-2 shadow-sm',
           ours ? 'bg-emerald-50 dark:bg-emerald-950' : 'bg-card border',
-          item.kind === 'NOTE' && 'border-dashed border-amber-400 bg-amber-50 dark:bg-amber-950',
+          item.kind === 'NOTE' && 'border border-dashed border-amber-400 bg-amber-50 dark:bg-amber-950',
         )}
       >
         <Body item={item} />
         <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
+          {item.kind === 'NOTE' && <span className="font-medium text-amber-700 dark:text-amber-300">Internal note ·</span>}
           {item.sentBy && <span>{item.sentBy.name} ·</span>}
           {item.origin === 'AUTOMATIC' && <span>Automatic ·</span>}
           <span>{time(item.occurredAt)}</span>
-          {ours && <Ticks status={item.status} />}
+          {ours && item.kind !== 'NOTE' && <Ticks status={item.status} />}
         </div>
         {item.status === 'FAILED' && item.failureReason && <p className="mt-1 text-xs text-destructive">Not sent: {item.failureReason}</p>}
       </div>

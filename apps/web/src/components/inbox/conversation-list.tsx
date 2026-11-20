@@ -1,12 +1,14 @@
 'use client';
 
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { api } from '@/lib/api-client';
+import { Can } from '@/lib/permissions';
 import type { ConversationList, ConversationState } from '@/lib/inbox-types';
 import { queryKeys } from '@/lib/query';
 import { cn } from '@/lib/utils';
@@ -64,6 +66,11 @@ export function ConversationList({ selectedId, onSelect }: { selectedId: string 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="grid gap-2 border-b p-3">
+        <Can permission="inbox.metrics">
+          <Link href="/inbox/team" className="justify-self-end text-xs text-muted-foreground hover:text-foreground">
+            Team view →
+          </Link>
+        </Can>
         <div className="grid grid-cols-2 gap-1" role="tablist" aria-label="Chat lists">
           {TABS.map((t) => (
             <button
