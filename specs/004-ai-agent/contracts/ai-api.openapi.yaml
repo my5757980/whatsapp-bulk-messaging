@@ -292,6 +292,98 @@ paths:
         '429': { description: PREVIEW_RATE_LIMITED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '503': { description: AI_UNAVAILABLE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 
+  /ai-agents/{id}/secrets:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [agents]
+      summary: Store a secret header value for API skills (never returned)
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, value]
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1, maxLength: 60 }
+                value: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '201': { description: Stored, content: { application/json: { schema: { $ref: '#/components/schemas/AgentSecret' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /ai-agents/{id}/secrets/{secretId}:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { name: secretId, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [agents]
+      summary: Rename a secret or replace its value
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1, maxLength: 60 }
+                value: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/AgentSecret' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [agents]
+      summary: Delete a secret no draft or published version uses
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: SECRET_IN_USE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /ai-agents/{id}/skill-test:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [agents]
+      summary: Run an API skill once with sample inputs (same safety rules as at run time)
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [skill]
+              additionalProperties: false
+              properties:
+                skill: { type: object, description: an API skill from agent-config.md }
+                inputs: { type: object, additionalProperties: { type: string, maxLength: 200 } }
+                contactId: { type: string, format: uuid, description: fills contact variables from this contact }
+      responses:
+        '200':
+          description: The call outcome (also returned for failed calls)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, durationMs]
+                properties:
+                  ok: { type: boolean }
+                  status: { type: [integer, 'null'] }
+                  durationMs: { type: integer }
+                  body: { description: 'parsed JSON, or text cut to 2 KB' }
+                  mapped: { type: object, additionalProperties: true }
+                  error: { type: [string, 'null'], examples: [TIMEOUT, BLOCKED_ADDRESS, NOT_HTTPS, TOO_LARGE, NOT_JSON] }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
   /ai-agent-starters:
     get:
       tags: [agents]
@@ -674,13 +766,21 @@ components:
       allOf:
         - { $ref: '#/components/schemas/AgentSummary' }
         - type: object
-          required: [config, draftRevision, draftUpdatedAt, problems, starterKey]
+          required: [config, draftRevision, draftUpdatedAt, problems, starterKey, secrets]
           properties:
+            secrets: { type: array, items: { $ref: '#/components/schemas/AgentSecret' } }
             config: { $ref: '#/components/schemas/AgentConfig' }
             draftRevision: { type: integer }
             draftUpdatedAt: { type: [string, 'null'], format: date-time }
             problems: { type: array, items: { $ref: '#/components/schemas/Problem' } }
             starterKey: { type: [string, 'null'] }
+    AgentSecret:
+      type: object
+      required: [id, name, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        updatedAt: { type: string, format: date-time }
     Starter:
       type: object
       required: [key, name, description, suggestedAttributes]

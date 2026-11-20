@@ -48,7 +48,7 @@ knowledge, with the market leader's documented behaviour and our own design and 
   dependency.
 
 **Storage**:
-- PostgreSQL: 13 new tables, `settings` columns, 6 existing enums extended, a generated `tsvector` column
+- PostgreSQL: 14 new tables, `settings` columns, 6 existing enums extended, a generated `tsvector` column
   with a GIN index (data-model.md)
 - Redis: new BullMQ queues `ai` (turns, expiry, assistant) and `ai-knowledge` (file and website
   processing, weekly refresh)
@@ -112,7 +112,8 @@ Gates from `.specify/memory/constitution.md` (v1.0.0). Result: **PASS** before r
 - [x] **III. Security & Privacy**:
   - Session + CSRF on every endpoint; new least-privilege permissions `ai.manage`, `ai.usage`,
     `assistant.use`; the assistant acts with the member's own permissions.
-  - `ANTHROPIC_API_KEY` lives in the environment; API-skill secrets reuse the encrypted 003 vault.
+  - `ANTHROPIC_API_KEY` lives in the environment; API-skill secrets are stored per agent with the
+    001 cipher, like 003 flow secrets, and never returned, logged or sent to the AI service.
   - Website reading and API skills use the 003 SSRF-safe HTTPS client.
   - Phone numbers are never sent to the AI service; card, ID and IBAN numbers are masked first.
   - Audit entries for agent, knowledge, skill, number, limit and assistant changes (FR-050); contact
@@ -174,7 +175,7 @@ packages/shared/src/ai/
 packages/shared/src/flows/graph.ts, validate.ts   # + aiAgent step
 packages/shared/src/permissions.ts                # + ai.manage, ai.usage, assistant.use
 apps/api/
-├── prisma/migrations/20261127000000_ai_agent/    # 13 tables, settings columns, enums, tsvector + GIN
+├── prisma/migrations/20261127000000_ai_agent/    # 14 tables, settings columns, enums, tsvector + GIN
 ├── src/modules/ai/
 │   ├── agents/      agents.service.ts + agents.controller.ts (CRUD, draft, duplicate, numbers,
 │   │                test numbers), publish.service.ts, versions.service.ts, starters.controller.ts
@@ -236,7 +237,7 @@ Claude client), HTTP controllers in the API module, and the `ai` and `ai-knowled
 | US2 (P1) | Hand-over (asked, topics, unsure, repeat, reply cap) with summary notes; Open-only, member actions, keywords, opt-out requests, blocked contacts, window, flows first, no welcome message; fallback on failure and the `AI_FAILING` alert; AI banner in live chat | `ai-live-chat` and e2e `ai-us2` |
 | US3 (P2) | Preview (dry run), test numbers on the draft, versions and restore | `ai-testing` and e2e `ai-us3` |
 | US4 (P2) | Buttons, lists and media replies; memory with journey entries; sensitive-number guards | `ai-replies-memory` and e2e `ai-us4` |
-| US5 (P2) | API skills on the 003 safe client and vault; confirmation protocol for skills that change data | `ai-skills` and e2e `ai-us5` |
+| US5 (P2) | API skills on the 003 safe client; agent secrets and the skill test request; confirmation protocol for skills that change data | `ai-skills` and e2e `ai-us5` |
 | US6 (P2) | `aiAgent` flow step (schema, engine, editor), Start a flow skills, AI conversations across flows | `ai-flows` and e2e `ai-us6` |
 | US7 (P2) | Atomic monthly limit, alerts at 80% and 100%, usage page and AI settings | `ai-usage` and e2e `ai-us7` |
 | US8 (P3) | Starter agents, attribute creation offer, `REPLACE_ME_LEFT` check | `ai-starters`, unit tests on starters, e2e `ai-us8` |
@@ -251,7 +252,7 @@ Claude client), HTTP controllers in the API module, and the `ai` and `ai-knowled
 | `unpdf`, `mammoth`, `cheerio`, `robots-parser` | FR-011: knowledge from PDF and DOCX files and websites that respects robots rules | **Hand-written parsers:** PDF and DOCX formats are not practical to parse by hand; regular expressions over HTML break on real pages |
 | Queues `ai` and `ai-knowledge` | Model calls take seconds and must not block inbound handling (SC-001); PDF parsing is memory-heavy and must run one at a time | **Turns in the inbound worker:** stalls webhooks. **One shared queue:** a large PDF would delay customer replies |
 | Whole-knowledge and search modes | SC-002 answer quality for small knowledge; FR-011 sizes for large knowledge | **Search only:** misses answers a small cached prompt gets right. **Whole only:** large knowledge cannot fit |
-| 13 new tables and a generated `tsvector` | Agents and versions, knowledge and chunks, AI conversations and replies, unanswered questions, usage, and the assistant have separate lifecycles; full-text search needs the index | **JSON blobs on fewer tables:** no atomic limit counting, no search index, no erasure by contact |
+| 14 new tables and a generated `tsvector` | Agents, versions and secrets, knowledge and chunks, AI conversations and replies, unanswered questions, usage, and the assistant have separate lifecycles; full-text search needs the index | **JSON blobs on fewer tables:** no atomic limit counting, no search index, no erasure by contact |
 
 ## Architectural decisions to record
 

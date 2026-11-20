@@ -254,6 +254,9 @@ package versions before release.
   - A second `unanswered` report in the same AI conversation hands the chat over (the repeat rule
     of FR-023), and reaching the reply cap does too; both are enforced in code, not left to the
     model.
+  - API skills read their header secrets from `ai_agent_secrets` (001 cipher, as 003 flow secrets);
+    values are filled in by the platform after the model chose the call, so they never reach the AI
+    service.
   - Output checks: message length, button and list limits, media IDs from the shared list, flow
     IDs from the skills, attributes from the allowed list and of the right type. Anything else is
     dropped and logged.

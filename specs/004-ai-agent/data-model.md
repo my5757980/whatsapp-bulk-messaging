@@ -48,6 +48,21 @@ Unique `(agent_id, number)`.
 | assigned_by_id | uuid? FK users `SET NULL` | |
 | assigned_at | timestamptz | |
 
+### ai_agent_secrets
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| agent_id | uuid FK ai_agents `CASCADE` | |
+| name | varchar(60) | label shown in the editor |
+| value_encrypted | text | 001 `TokenCipher` (AES-256-GCM), as 003 `flow_secrets` |
+| created_by_id / updated_by_id | uuid? FK users `SET NULL` | |
+| created_at / updated_at | timestamptz | |
+
+API skill headers refer to them as `{secret:<id>}`. Responses show `{id, name, updatedAt}` only;
+the value is never returned, logged or sent to the AI service. Deleting one that a draft or
+published version uses is refused (`SECRET_IN_USE`). Duplicating an agent copies its secrets.
+
 ### ai_knowledge_sources
 
 | Column | Type | Notes |

@@ -74,7 +74,7 @@ Placeholders are filled by the platform, never by the model, with the place-awar
 | `{input:<key>}` | a value the agent collected for this skill (string, at most 200 characters) |
 | `{contact:name}`, `{contact:phone}` | the contact's name and phone (the phone never reaches the AI service, FR-048) |
 | `{attr:<key>}` | a contact attribute |
-| `{secret:<id>}` | a stored 003 flow secret, headers only |
+| `{secret:<id>}` | a stored secret of this agent (`ai_agent_secrets`, encrypted like 003 flow secrets), headers only |
 
 ## Rules checked when saving (schema) and publishing (server)
 
