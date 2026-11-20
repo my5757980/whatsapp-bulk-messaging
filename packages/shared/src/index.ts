@@ -5,6 +5,7 @@ export * from './status.js';
 export * from './template-rules.js';
 export * from './variables.js';
 export * from './chat-media-limits.js';
+export * from './ai/chunking.js';
 export * from './ai/config.js';
 export * from './ai/masking.js';
 export * from './ai/reply.js';
