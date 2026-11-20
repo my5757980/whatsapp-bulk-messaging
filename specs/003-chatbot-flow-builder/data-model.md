@@ -134,7 +134,7 @@ API responses show `{id, name, updatedAt}` only; the value is never returned.
 
 | Table | Change | Why |
 |---|---|---|
-| `chat_messages` | enum `ChatContentType` += `BUTTONS`, `LIST`; flow messages carry `payload.flow = {flowId, flowName, sessionId, stepId, test}` | interactive sends and the "automatic · flow name" label (FR-030) |
+| `chat_messages` | enum `ChatContentType` += `BUTTONS`, `LIST`; flow messages carry `payload.flow = {flowId, flowName, sessionId, stepId, test}`; the note check allows `origin = AUTOMATIC` notes (hand-over notes) | interactive sends, the "automatic · flow name" label (FR-030) and hand-over notes (FR-027) |
 | `conversation_events` | enum `JourneyEventType` += `FLOW_STARTED`, `FLOW_ENDED`; enum `JourneyActor` += `FLOW` | journey entries for flow starts/ends and for tag/attribute changes made by flows (FR-010, FR-011) |
 | `audit_logs` | new actions listed in research R15 | FR-039 |
 | permissions (shared) | `flows.manage` (ADMIN, MANAGER) | FR-038 |

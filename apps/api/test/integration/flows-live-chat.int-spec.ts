@@ -13,6 +13,7 @@ describe('Chatbot flows: live chat and hand-over (US3)', () => {
   let number: { id: string; phoneNumberId: string; wabaId: string };
   let manager: SignedInAgent;
   let agent: SignedInAgent;
+  let admin: SignedInAgent;
   let flowId: string;
   const suffix = randomUUID().replace(/-/g, '').slice(0, 6);
   const keyword = `help${suffix}`;
@@ -62,6 +63,7 @@ describe('Chatbot flows: live chat and hand-over (US3)', () => {
     number = await seedNumber(ctx);
     manager = await signIn(ctx, 'MANAGER');
     agent = await signIn(ctx, 'AGENT');
+    admin = await signIn(ctx, 'ADMIN');
     const created = await call(manager, 'post', '/flows', { name: `Help desk ${suffix}` });
     flowId = created.body.id;
     expect((await call(manager, 'put', `/flows/${flowId}/draft`, { graph, draftRevision: 0 })).status).toBe(200);
@@ -124,7 +126,7 @@ describe('Chatbot flows: live chat and hand-over (US3)', () => {
     expect((await automatic(stopped.chat.id)).filter((i) => (i.payload as { flow?: unknown }).flow)).toHaveLength(before);
 
     const human = await startFlow();
-    const [humanKeyword] = (await call(manager, 'get', '/live-chat/settings')).body.humanKeywords as string[];
+    const [humanKeyword] = (await call(admin, 'get', '/live-chat/settings')).body.humanKeywords as string[];
     await inbound(human.phone, text(humanKeyword!));
     expect(await ctx.prisma.flowSession.findUniqueOrThrow({ where: { id: human.session.id } })).toMatchObject({ status: 'ENDED', result: 'HANDED_OVER' });
     expect((await ctx.prisma.conversation.findUniqueOrThrow({ where: { id: human.chat.id } })).state).toBe('REQUESTING');
@@ -138,8 +140,9 @@ describe('Chatbot flows: live chat and hand-over (US3)', () => {
   });
 
   it('sends no welcome message when a flow answers a new contact', async () => {
-    const original = (await call(manager, 'get', '/live-chat/settings')).body;
-    const put = (body: unknown) => call(manager, 'put', '/live-chat/settings', body as object);
+    // Live chat settings belong to admins (002).
+    const original = (await call(admin, 'get', '/live-chat/settings')).body;
+    const put = (body: unknown) => call(admin, 'put', '/live-chat/settings', body as object);
     expect((await put({ ...original, welcomeEnabled: true, welcomeContent: { kind: 'TEXT', text: `Welcome ${suffix}!` } })).status).toBe(200);
     try {
       const { chat } = await startFlow();
