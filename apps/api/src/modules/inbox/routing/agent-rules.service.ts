@@ -1,7 +1,8 @@
 import { Body, Controller, Get, HttpStatus, Injectable, Param, ParseUUIDPipe, Put } from '@nestjs/common';
 import { z } from 'zod';
 import { Require } from '../../../common/auth/permissions.guard.js';
-import { CurrentUser, type RequestUser } from '../../../common/auth/request-user.js';
+import { ClientIp, CurrentUser, type RequestUser } from '../../../common/auth/request-user.js';
+import { AuditService } from '../../audit/audit.service.js';
 import { AppError } from '../../../common/errors/app-error.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { ZodValidationPipe } from '../../../common/validation/zod.pipe.js';
@@ -35,6 +36,7 @@ export class AgentRulesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly loader: AgentRulesLoader,
+    private readonly audit: AuditService,
   ) {}
 
   async list(userId: string): Promise<AgentRuleDto[]> {
@@ -50,7 +52,7 @@ export class AgentRulesService {
     }));
   }
 
-  async replace(userId: string, input: AgentRulesInput, actorId: string): Promise<AgentRuleDto[]> {
+  async replace(userId: string, input: AgentRulesInput, actorId: string, ip: string | null = null): Promise<AgentRuleDto[]> {
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
     if (!user) throw AppError.notFound('Member not found');
     if (user.role !== 'AGENT') throw new AppError(HttpStatus.UNPROCESSABLE_ENTITY, 'NOT_AN_AGENT', 'Only agents can have agent rules');
@@ -84,6 +86,7 @@ export class AgentRulesService {
       this.prisma.agentRule.createMany({ data: [...unique.values()].map((r) => ({ ...r, userId, createdById: actorId })) }),
     ]);
     this.loader.invalidate(userId);
+    await this.audit.record({ userId: actorId, ip }, 'agent_rules.updated', { type: 'user', id: userId }, { rules: unique.size });
     return this.list(userId);
   }
 }
@@ -101,7 +104,7 @@ export class AgentRulesController {
 
   @Put()
   @Require('livechat.settings')
-  replace(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(AgentRulesSchema)) body: AgentRulesInput, @CurrentUser() user: RequestUser) {
-    return this.rules.replace(id, body, user.id);
+  replace(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(AgentRulesSchema)) body: AgentRulesInput, @CurrentUser() user: RequestUser, @ClientIp() ip: string | null) {
+    return this.rules.replace(id, body, user.id, ip);
   }
 }

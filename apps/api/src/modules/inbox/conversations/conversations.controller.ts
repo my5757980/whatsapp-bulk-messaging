@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Res
 import { can } from '@wbm/shared';
 import type { Response } from 'express';
 import { Require } from '../../../common/auth/permissions.guard.js';
-import { CurrentUser, type RequestUser } from '../../../common/auth/request-user.js';
+import { ClientIp, CurrentUser, type RequestUser } from '../../../common/auth/request-user.js';
 import { DEFAULT_PHONE_FIELDS, maskPhoneFields } from '../../../common/interceptors/phone-mask.interceptor.js';
 import { ZodValidationPipe } from '../../../common/validation/zod.pipe.js';
 import { ChatItemsService, ItemsQuerySchema, type ItemsQuery } from '../messages/chat-items.service.js';
@@ -67,22 +67,22 @@ export class ConversationsController {
   @Post('conversations/:id/intervene')
   @HttpCode(200)
   @Require('inbox.reply')
-  intervene(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string) {
-    return this.conversations.intervene(viewer(user), id);
+  intervene(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @ClientIp() ip: string | null) {
+    return this.conversations.intervene(viewer(user), id, ip);
   }
 
   @Post('conversations/:id/resolve')
   @HttpCode(200)
   @Require('inbox.reply')
-  resolve(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string) {
-    return this.conversations.resolve(viewer(user), id);
+  resolve(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @ClientIp() ip: string | null) {
+    return this.conversations.resolve(viewer(user), id, ip);
   }
 
   @Post('conversations/:id/transfer')
   @HttpCode(200)
   @Require('inbox.reply')
-  transfer(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(TransferSchema)) body: TransferInput) {
-    return this.conversations.transfer({ ...viewer(user), name: user.name }, id, body);
+  transfer(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(TransferSchema)) body: TransferInput, @ClientIp() ip: string | null) {
+    return this.conversations.transfer({ ...viewer(user), name: user.name }, id, body, ip);
   }
 
   @Post('conversations/:id/messages')

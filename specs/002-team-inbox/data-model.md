@@ -179,6 +179,7 @@ enums in the Prisma schema. Only new and changed tables are shown. Unless noted,
 | `messages` | enum `MessageOrigin` += `INBOX`; add `sent_by_user_id uuid?` and `automatic boolean default false` | template sends from a chat, and automatic template messages (R12, R10) |
 | `media_assets` | enum `MediaPurpose` += `LIBRARY`, `INBOUND`; add `display_name varchar(240)?` and `uploaded_by_id uuid?` | media library (FR-032), inbound media (R4) |
 | `notifications` | enum `NotificationType` += `INBOX_REQUESTING`, `INBOX_TRANSFERRED`, `INBOX_MENTION` | in-app alerts beside push |
+| `audit_logs` | new actions: `inbox.intervened`, `inbox.transferred`, `inbox.resolved`, `contact.blocked`, `contact.unblocked`, `canned.created`, `canned.updated`, `canned.deleted`, `media.removed`, `livechat.settings_updated`, `agent_rules.updated`; metadata holds ids, names and changed setting names, never message content | FR-040 |
 
 ## 3. JSON shapes
 

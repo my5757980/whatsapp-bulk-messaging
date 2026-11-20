@@ -24,6 +24,18 @@ export const AUDIT_ACTIONS = [
   'api_key.revoked',
   'settings.updated',
   'rate_card.updated',
+  // Live chat (feature 002, FR-040). Message content is never copied into the metadata.
+  'inbox.intervened',
+  'inbox.transferred',
+  'inbox.resolved',
+  'contact.blocked',
+  'contact.unblocked',
+  'canned.created',
+  'canned.updated',
+  'canned.deleted',
+  'media.removed',
+  'livechat.settings_updated',
+  'agent_rules.updated',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

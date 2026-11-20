@@ -3,6 +3,7 @@ import { chatMediaKind } from '@wbm/shared';
 import { z } from 'zod';
 import { AppError, type ErrorDetail } from '../../../common/errors/app-error.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
+import { AuditService } from '../../audit/audit.service.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import { unmappedVariables, VariableMappingSchema } from '../../campaigns/variable-resolver.js';
 import { normalizeKeyword } from '../../webhooks/handlers/inbound.handler.js';
@@ -89,7 +90,10 @@ export interface LiveChatSettingsDto {
  */
 @Injectable()
 export class LiveChatSettingsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async get(): Promise<LiveChatSettingsDto> {
     const row = await this.prisma.liveChatSettings.findUnique({ where: { id: 1 } });
@@ -99,8 +103,8 @@ export class LiveChatSettingsService {
     return toDto(created);
   }
 
-  async update(input: LiveChatSettingsInput, actorId: string): Promise<LiveChatSettingsDto> {
-    await this.get();
+  async update(input: LiveChatSettingsInput, actorId: string, ip: string | null = null): Promise<LiveChatSettingsDto> {
+    const before = await this.get();
     const details = [
       ...(input.welcomeEnabled && input.welcomeContent ? await this.contentProblems('welcomeContent', input.welcomeContent) : []),
       ...(input.offHoursEnabled && input.offHoursContent ? await this.contentProblems('offHoursContent', input.offHoursContent) : []),
@@ -120,7 +124,11 @@ export class LiveChatSettingsService {
         updatedById: actorId,
       },
     });
-    return toDto(row);
+    const after = toDto(row);
+    // Only the names of the changed settings, never the message texts (FR-040).
+    const changed = (Object.keys(after) as Array<keyof LiveChatSettingsDto>).filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]));
+    if (changed.length) await this.audit.record({ userId: actorId, ip }, 'livechat.settings_updated', { type: 'live_chat_settings', id: '1' }, { changed });
+    return after;
   }
 
   /**

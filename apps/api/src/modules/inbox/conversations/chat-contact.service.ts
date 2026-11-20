@@ -1,7 +1,8 @@
 import { Body, Controller, Delete, Get, HttpCode, Injectable, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
 import { z } from 'zod';
 import { Require } from '../../../common/auth/permissions.guard.js';
-import { CurrentUser, type RequestUser } from '../../../common/auth/request-user.js';
+import { ClientIp, CurrentUser, type RequestUser } from '../../../common/auth/request-user.js';
+import { AuditService } from '../../audit/audit.service.js';
 import { AppError } from '../../../common/errors/app-error.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { ZodValidationPipe } from '../../../common/validation/zod.pipe.js';
@@ -36,6 +37,7 @@ export class ChatContactService {
     private readonly contacts: ContactsService,
     private readonly journey: JourneyService,
     private readonly publisher: InboxPublisher,
+    private readonly audit: AuditService,
   ) {}
 
   async profile(contactId: string) {
@@ -120,13 +122,14 @@ export class ChatContactService {
     return after;
   }
 
-  async setBlocked(user: RequestUser, contactId: string, blocked: boolean): Promise<void> {
+  async setBlocked(user: RequestUser, contactId: string, blocked: boolean, ip: string | null = null): Promise<void> {
     const contact = await this.prisma.contact.findUnique({ where: { id: contactId }, select: { blockedAt: true } });
     if (!contact) throw AppError.notFound('Contact not found');
     if ((contact.blockedAt !== null) === blocked) return;
     const chats = await this.prisma.conversation.findMany({ where: { contactId }, select: { id: true, state: true, intervenedById: true } });
     await this.prisma.contact.update({ where: { id: contactId }, data: blocked ? { blockedAt: new Date(), blockedById: user.id } : { blockedAt: null, blockedById: null } });
     await this.journey.recordForContact(contactId, { type: blocked ? 'BLOCKED' : 'UNBLOCKED', actorType: 'MEMBER', actorUserId: user.id });
+    await this.audit.record({ userId: user.id, ip }, blocked ? 'contact.blocked' : 'contact.unblocked', { type: 'contact', id: contactId });
     await this.publisher.contactUpdated(contactId);
     // Live lists drop or restore the chats (realtime-events.md rule 1).
     for (const chat of chats) await this.publisher.conversation(chat.id, { state: chat.state, intervenedById: chat.intervenedById, blocked: !blocked });
@@ -158,14 +161,14 @@ export class ChatContactController {
   @Post('contacts/:id/block')
   @HttpCode(204)
   @Require('inbox.reply')
-  async block(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.chatContacts.setBlocked(user, id, true);
+  async block(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @ClientIp() ip: string | null): Promise<void> {
+    await this.chatContacts.setBlocked(user, id, true, ip);
   }
 
   @Delete('contacts/:id/block')
   @HttpCode(204)
   @Require('inbox.reply')
-  async unblock(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.chatContacts.setBlocked(user, id, false);
+  async unblock(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @ClientIp() ip: string | null): Promise<void> {
+    await this.chatContacts.setBlocked(user, id, false, ip);
   }
 }

@@ -4,6 +4,7 @@ import type { Redis } from 'ioredis';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 import { AppError } from '../../../common/errors/app-error.js';
+import { AuditService } from '../../audit/audit.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QueueRegistry, REDIS_CLIENT } from '../../../common/queue/queue.module.js';
 import { Prisma } from '../../../generated/prisma/client.js';
@@ -81,10 +82,11 @@ export class ConversationsService {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly timeline: ChatTimelineService,
     private readonly routing: ChatRoutingService,
+    private readonly audit: AuditService,
   ) {}
 
   /** Hands a taken chat to another member who may see it (FR-022): the owner, or an admin or manager. */
-  async transfer(viewer: Viewer & { name: string }, id: string, input: TransferInput): Promise<ConversationSummaryDto> {
+  async transfer(viewer: Viewer & { name: string }, id: string, input: TransferInput, ip: string | null = null): Promise<ConversationSummaryDto> {
     const row = await this.loadVisible(viewer, id);
     const transition = transferTransition({ state: row.state, intervenedById: row.intervenedById }, { id: viewer.id, canMonitor: seesAll(viewer) }, input.userId);
     if (!transition.ok) {
@@ -111,6 +113,7 @@ export class ConversationsService {
       await tx.conversationEvent.create({
         data: { conversationId: id, type: 'TRANSFERRED', actorType: 'MEMBER', actorUserId: viewer.id, occurredAt: now, data: { fromUserId: row.intervenedById, toUserId: target.id } },
       });
+      await this.audit.record({ userId: viewer.id, ip }, 'inbox.transferred', { type: 'conversation', id }, { fromUserId: row.intervenedById, toUserId: target.id }, tx);
       return true;
     });
     if (!moved) throw AppError.conflict('The chat changed meanwhile; refresh and try again', 'CONFLICT');
@@ -327,14 +330,17 @@ export class ConversationsService {
   }
 
   /** Take chat (FR-019): one conditional UPDATE, so exactly one of several callers wins (R6). */
-  async intervene(viewer: Viewer, id: string): Promise<ConversationSummaryDto> {
+  async intervene(viewer: Viewer, id: string, ip: string | null = null): Promise<ConversationSummaryDto> {
     const row = await this.loadVisible(viewer, id);
-    await this.take(viewer, row);
+    await this.take(viewer, row, ip);
     return this.summaryFor(viewer, id);
   }
 
-  /** Takes the chat for the viewer; a no-op for the current owner, 409 ALREADY_TAKEN otherwise. */
-  async take(viewer: Viewer, row: ConversationRow): Promise<void> {
+  /**
+   * Takes the chat for the viewer; a no-op for the current owner, 409 ALREADY_TAKEN otherwise.
+   * Also used when a reply or template takes the chat on the way (no IP is known there).
+   */
+  async take(viewer: Viewer, row: ConversationRow, ip: string | null = null): Promise<void> {
     const now = new Date();
     const taken = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.conversation.updateMany({
@@ -343,6 +349,7 @@ export class ConversationsService {
       });
       if (!updated.count) return false;
       await tx.conversationEvent.create({ data: { conversationId: row.id, type: 'INTERVENED', actorType: 'MEMBER', actorUserId: viewer.id, occurredAt: now } });
+      await this.audit.record({ userId: viewer.id, ip }, 'inbox.intervened', { type: 'conversation', id: row.id }, {}, tx);
       const openingId = await latestOpeningId(tx, row.id);
       if (openingId) {
         await tx.conversationOpening.updateMany({ where: { id: openingId, intervenedAt: null }, data: { intervenedAt: now, intervenedById: viewer.id } });
@@ -359,7 +366,7 @@ export class ConversationsService {
   }
 
   /** Close chat (FR-023): the owner, an admin or a manager returns it to Active. */
-  async resolve(viewer: Viewer, id: string): Promise<ConversationSummaryDto> {
+  async resolve(viewer: Viewer, id: string, ip: string | null = null): Promise<ConversationSummaryDto> {
     const row = await this.loadVisible(viewer, id);
     const transition = resolveTransition({ state: row.state, intervenedById: row.intervenedById }, { id: viewer.id, canMonitor: seesAll(viewer) });
     if (!transition.ok) {
@@ -376,6 +383,7 @@ export class ConversationsService {
       });
       if (!updated.count) return false;
       await tx.conversationEvent.create({ data: { conversationId: id, type: 'RESOLVED', actorType: 'MEMBER', actorUserId: viewer.id, occurredAt: now } });
+      await this.audit.record({ userId: viewer.id, ip }, 'inbox.resolved', { type: 'conversation', id }, { ownerId: row.intervenedById }, tx);
       const openingId = await latestOpeningId(tx, id);
       if (openingId) await tx.conversationOpening.updateMany({ where: { id: openingId, resolvedAt: null }, data: { resolvedAt: now, resolvedById: viewer.id } });
       return true;

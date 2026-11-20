@@ -1,7 +1,8 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Injectable, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
 import { z } from 'zod';
 import { Require } from '../../../common/auth/permissions.guard.js';
-import { CurrentUser, type RequestUser } from '../../../common/auth/request-user.js';
+import { ClientIp, CurrentUser, type RequestUser } from '../../../common/auth/request-user.js';
+import { AuditService } from '../../audit/audit.service.js';
 import { AppError } from '../../../common/errors/app-error.js';
 import { isUniqueViolation } from '../../../common/prisma/prisma-errors.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
@@ -56,7 +57,10 @@ function toDto(row: Row) {
 /** Saved replies (T063, FR-030, FR-031): shared by the team, favourites per member. */
 @Injectable()
 export class CannedMessagesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
 
   async list(userId: string, q?: string) {
     const rows = await this.prisma.cannedMessage.findMany({
@@ -73,7 +77,7 @@ export class CannedMessagesService {
     return row;
   }
 
-  async create(input: CannedInput, actorId: string) {
+  async create(input: CannedInput, actorId: string, ip: string | null = null) {
     await this.assertMedia(input);
     try {
       const row = await this.prisma.$transaction(async (tx) => {
@@ -84,25 +88,30 @@ export class CannedMessagesService {
         }
         return tx.cannedMessage.create({ data: { ...this.data(input), createdById: actorId }, include: INCLUDE(actorId) });
       });
+      await this.audit.record({ userId: actorId, ip }, 'canned.created', { type: 'canned_message', id: row.id }, { name: row.name });
       return toDto(row);
     } catch (error) {
       throw this.nameTaken(error);
     }
   }
 
-  async update(id: string, input: CannedInput, actorId: string) {
+  async update(id: string, input: CannedInput, actorId: string, ip: string | null = null) {
     await this.get(id, actorId);
     await this.assertMedia(input);
     try {
-      return toDto(await this.prisma.cannedMessage.update({ where: { id }, data: this.data(input), include: INCLUDE(actorId) }));
+      const row = await this.prisma.cannedMessage.update({ where: { id }, data: this.data(input), include: INCLUDE(actorId) });
+      await this.audit.record({ userId: actorId, ip }, 'canned.updated', { type: 'canned_message', id }, { name: row.name });
+      return toDto(row);
     } catch (error) {
       throw this.nameTaken(error);
     }
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, actorId: string, ip: string | null = null): Promise<void> {
+    const existing = await this.prisma.cannedMessage.findUnique({ where: { id }, select: { name: true } });
     const { count } = await this.prisma.cannedMessage.deleteMany({ where: { id } });
     if (!count) throw AppError.notFound('Saved reply not found');
+    await this.audit.record({ userId: actorId, ip }, 'canned.deleted', { type: 'canned_message', id }, { name: existing?.name ?? null });
   }
 
   async setFavorite(id: string, userId: string, favorite: boolean): Promise<void> {
@@ -152,21 +161,21 @@ export class CannedMessagesController {
 
   @Post()
   @Require('canned.manage')
-  create(@CurrentUser() user: RequestUser, @Body(new ZodValidationPipe(CannedInputSchema)) body: CannedInput) {
-    return this.canned.create(body, user.id);
+  create(@CurrentUser() user: RequestUser, @Body(new ZodValidationPipe(CannedInputSchema)) body: CannedInput, @ClientIp() ip: string | null) {
+    return this.canned.create(body, user.id, ip);
   }
 
   @Patch(':id')
   @Require('canned.manage')
-  update(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(CannedInputSchema)) body: CannedInput) {
-    return this.canned.update(id, body, user.id);
+  update(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(CannedInputSchema)) body: CannedInput, @ClientIp() ip: string | null) {
+    return this.canned.update(id, body, user.id, ip);
   }
 
   @Delete(':id')
   @HttpCode(204)
   @Require('canned.manage')
-  async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.canned.remove(id);
+  async remove(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @ClientIp() ip: string | null): Promise<void> {
+    await this.canned.remove(id, user.id, ip);
   }
 
   @Put(':id/favorite')

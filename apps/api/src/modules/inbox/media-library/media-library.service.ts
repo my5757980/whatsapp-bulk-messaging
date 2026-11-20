@@ -4,7 +4,8 @@ import { chatMediaKind, checkChatMedia, CHAT_MEDIA_LIMITS, type ChatMediaKind } 
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 import { Require } from '../../../common/auth/permissions.guard.js';
-import { CurrentUser, type RequestUser } from '../../../common/auth/request-user.js';
+import { ClientIp, CurrentUser, type RequestUser } from '../../../common/auth/request-user.js';
+import { AuditService } from '../../audit/audit.service.js';
 import { AppError } from '../../../common/errors/app-error.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { StorageService } from '../../../common/storage/storage.service.js';
@@ -47,6 +48,7 @@ export class MediaLibraryService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly audit: AuditService,
   ) {}
 
   async list(query: MediaListQuery) {
@@ -97,10 +99,11 @@ export class MediaLibraryService {
     return asset;
   }
 
-  async remove(id: string): Promise<void> {
-    const asset = await this.prisma.mediaAsset.findUnique({ where: { id }, select: { purpose: true, removedAt: true, storageKey: true } });
+  async remove(id: string, actorId: string, ip: string | null = null): Promise<void> {
+    const asset = await this.prisma.mediaAsset.findUnique({ where: { id }, select: { purpose: true, removedAt: true, storageKey: true, mimeType: true, sizeBytes: true } });
     if (!asset || asset.purpose !== 'LIBRARY' || asset.removedAt) throw AppError.notFound('File not found');
     const inUse = (await this.prisma.chatMessage.count({ where: { mediaAssetId: id } })) + (await this.prisma.cannedMessage.count({ where: { mediaAssetId: id } }));
+    await this.audit.record({ userId: actorId, ip }, 'media.removed', { type: 'media_asset', id }, { mimeType: asset.mimeType, sizeBytes: asset.sizeBytes, keptForChats: inUse > 0 });
     if (inUse) {
       await this.prisma.mediaAsset.update({ where: { id }, data: { removedAt: new Date() } });
       return;
@@ -131,7 +134,7 @@ export class MediaLibraryController {
   @Delete(':id')
   @HttpCode(204)
   @Require('media.manage')
-  async remove(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.library.remove(id);
+  async remove(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @ClientIp() ip: string | null): Promise<void> {
+    await this.library.remove(id, user.id, ip);
   }
 }
