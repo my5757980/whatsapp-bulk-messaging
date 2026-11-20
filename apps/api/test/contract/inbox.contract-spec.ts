@@ -488,4 +488,16 @@ describe('Live chat API contract', () => {
     await check('delete', '/me/push-devices/{id}', await remove(device.body.id), 404);
     await check('get', '/push/vapid-public-key', await agentA.agent.get('/api/push/vapid-public-key'), 200);
   });
+
+  it('US8: notes, members for mentions and the team view', async () => {
+    const id = await newChat();
+    const addNote = (chatId: string, body: Record<string, unknown>) =>
+      admin.agent.post(`/api/inbox/conversations/${chatId}/notes`).set('X-CSRF-Token', admin.csrf).send(body);
+    await check('post', '/inbox/conversations/{id}/notes', await addNote(id, { text: 'Call back after 5', mentions: [agentA.userId] }), 201);
+    await check('post', '/inbox/conversations/{id}/notes', await addNote(randomUUID(), { text: 'Missing chat' }), 404);
+    await check('get', '/inbox/members', await admin.agent.get(`/api/inbox/members?conversationId=${id}`), 200);
+    for (const period of ['today', '7d', '30d']) {
+      await check('get', '/inbox/team-metrics', await admin.agent.get(`/api/inbox/team-metrics?period=${period}`), 200);
+    }
+  });
 });

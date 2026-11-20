@@ -260,3 +260,5 @@ fan-out. The SSE event ID is the stream entry ID. See [contracts/realtime-events
 - `canned_messages.name` is `citext`, unique ignoring case; length (80) is validated by the API.
 - `live_chat_settings` is created on first use (as 001 does for `settings`); a check constraint keeps `id = 1`.
 - Check constraints in the migration: an `INTERVENED` chat has an owner; `MESSAGE_REF` rows have a `message_id`; notes have origin `MEMBER`.
+- Team view (T094): a period starts at local midnight in the company time zone (`settings.default_timezone`), `days - 1` days ago. Each figure counts openings whose own event falls in the period: intervened by `intervened_at`, resolved by `resolved_at` (auto-resolve has no `resolved_by_id`, so it counts for nobody), first response by `first_human_reply_at`, resolution (`resolved_at - intervened_at`) by `resolved_at`.
+- Push alerts (T087): `push_devices.label` is never empty; without a label from the page it is derived from the User-Agent (for example "Chrome on Windows"). A browser registered again by another member moves to that member.

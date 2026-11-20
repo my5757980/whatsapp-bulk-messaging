@@ -52,6 +52,7 @@ export type OpenConversationInput = z.infer<typeof OpenConversationSchema>;
 
 export const TransferSchema = z.strictObject({ userId: z.uuid() });
 export type TransferInput = z.infer<typeof TransferSchema>;
+export const MembersQuerySchema = z.object({ conversationId: z.uuid().optional() });
 
 /** Unread totals are cached briefly per user and dropped when that user reads a chat (R8). */
 const UNREAD_CACHE_SECONDS = 10;
@@ -227,9 +228,13 @@ export class ConversationsService {
   }
 
   /** Active members a chat can be transferred to (agents cannot list the team in settings). */
-  async members() {
+  /** Active members who can reply; with a chat, only those who may see it now (mentions, US8). */
+  async members(viewer: Viewer, conversationId?: string) {
     const users = await this.prisma.user.findMany({ where: { status: 'ACTIVE' }, select: { id: true, name: true, role: true }, orderBy: { name: 'asc' } });
-    return users.filter((u) => can(u.role, 'inbox.reply'));
+    const repliers = users.filter((u) => can(u.role, 'inbox.reply'));
+    if (!conversationId) return repliers;
+    const visible = new Set((await this.routing.membersWhoMaySee(await this.loadVisible(viewer, conversationId))).map((m) => m.id));
+    return repliers.filter((u) => visible.has(u.id));
   }
 
   /** Numbers a member can start a chat from (agents cannot list numbers in settings). */

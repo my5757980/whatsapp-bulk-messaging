@@ -8,7 +8,9 @@ import { ChatTimelineService } from './messages/chat-timeline.service.js';
 import { JourneyService } from './journey/journey.service.js';
 import { AutoRepliesService } from './automation/auto-replies.service.js';
 import { ChatContactController, ChatContactService } from './conversations/chat-contact.service.js';
+import { NotesController, NotesService } from './messages/notes.service.js';
 import { SessionSendService } from './messages/session-send.service.js';
+import { TeamMetricsController, TeamMetricsService } from './metrics/team-metrics.service.js';
 import { TemplateSendService } from './messages/template-send.service.js';
 import { CannedMessagesController, CannedMessagesService } from './canned/canned-messages.service.js';
 import { MediaLibraryController, MediaLibraryService } from './media-library/media-library.service.js';
@@ -76,6 +78,8 @@ export class InboxDomainModule {}
     MediaLibraryService,
     ChatContactService,
     PushDevicesService,
+    NotesService,
+    TeamMetricsService,
   ],
   controllers: [
     InboxStreamController,
@@ -89,6 +93,8 @@ export class InboxDomainModule {}
     NotificationPrefsController,
     PushDevicesController,
     PushKeyController,
+    NotesController,
+    TeamMetricsController,
   ],
 })
 export class InboxApiModule {}

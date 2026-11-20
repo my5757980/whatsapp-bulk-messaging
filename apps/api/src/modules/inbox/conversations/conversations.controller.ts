@@ -11,6 +11,7 @@ import { SendTemplateSchema, TemplateSendService, type SendTemplateInput } from 
 import {
   ConversationListQuerySchema,
   ConversationsService,
+  MembersQuerySchema,
   OpenConversationSchema,
   TransferSchema,
   type ConversationListQuery,
@@ -107,8 +108,8 @@ export class ConversationsController {
 
   @Get('members')
   @Require('inbox.reply')
-  members() {
-    return this.conversations.members();
+  members(@CurrentUser() user: RequestUser, @Query(new ZodValidationPipe(MembersQuerySchema)) query: { conversationId?: string }) {
+    return this.conversations.members(user, query.conversationId);
   }
 
   @Get('numbers')

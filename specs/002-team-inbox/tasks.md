@@ -518,7 +518,7 @@
 
 ### Tests for User Story 7 (REQUIRED - Constitution Principle V) ⚠️
 
-- [ ] T083 [P] [US7] Integration test in apps/api/test/integration/inbox-notifications.int-spec.ts (web-push sender replaced by a fake):
+- [X] T083 [P] [US7] Integration test in apps/api/test/integration/inbox-notifications.int-spec.ts (web-push sender replaced by a fake):
   - preferences get/put
   - device registration; the 6th device → 422 DEVICE_LIMIT
   - pause and remove
@@ -526,8 +526,8 @@
   - payload phone masked for agents, preview at most 80 characters
   - a push-service 410 deletes the device
   - `GET /push/vapid-public-key` returns null when not configured
-- [ ] T084 [P] [US7] Add contract tests for /me/notification-preferences, /me/push-devices and /push/vapid-public-key to apps/api/test/contract/inbox.contract-spec.ts
-- [ ] T085 [P] [US7] Playwright e2e for the quickstart US7 row in apps/web/e2e/inbox-us7-alerts.spec.ts:
+- [X] T084 [P] [US7] Add contract tests for /me/notification-preferences, /me/push-devices and /push/vapid-public-key to apps/api/test/contract/inbox.contract-spec.ts
+- [X] T085 [P] [US7] Playwright e2e for the quickstart US7 row in apps/web/e2e/inbox-us7-alerts.spec.ts:
   - grant the notification permission in the browser context
   - the sound toggle persists
   - device registration appears in the list, and pause/remove work
@@ -535,16 +535,16 @@
 
 ### Implementation for User Story 7
 
-- [ ] T086 [US7] Implement the preferences and devices API in apps/api/src/modules/inbox/notifications/push-devices.controller.ts and notification-prefs.controller.ts:
+- [X] T086 [US7] Implement the preferences and devices API in apps/api/src/modules/inbox/notifications/push-devices.controller.ts and notification-prefs.controller.ts:
   - apps/api/src/modules/inbox/notifications/notification-prefs.controller.ts
   - apps/api/src/modules/inbox/notifications/push-devices.controller.ts (limit 5, unique endpoint)
   - `GET /push/vapid-public-key`
-- [ ] T087 [US7] Implement push sending in apps/api/src/modules/inbox/notifications/push.service.ts and inbox-notify.processor.ts:
+- [X] T087 [US7] Implement push sending in apps/api/src/modules/inbox/notifications/push.service.ts and inbox-notify.processor.ts:
   - `web-push` with VAPID from config, TTL 60
   - presence check (`wbm:presence:{userId}`), visibility check and masking
   - 404/410 → delete the device
   - triggered by an `inbox-notify` job from the inbound handler, REQUESTING, transfer and mentions
-- [ ] T088 [US7] Build the notifications UI in apps/web/public/sw.js and apps/web/src/app/(dashboard)/account/notifications/page.tsx:
+- [X] T088 [US7] Build the notifications UI in apps/web/public/sw.js and apps/web/src/app/(dashboard)/account/notifications/page.tsx:
   - apps/web/public/sw.js: show the notification; on click, focus or open `/inbox?c={id}`
   - apps/web/src/app/(dashboard)/account/notifications/page.tsx: sound toggle; "Turn on alerts for this browser" (service worker registration + `PushManager.subscribe` with the VAPID key); device list with pause/remove
   - sound playback on inbound events in apps/web/src/lib/inbox-events.ts
