@@ -26,10 +26,10 @@ its implementation. Meta is mocked (nock, mock-meta); API-step endpoints are moc
 
 **Purpose**: dependencies, permission, queue name and mock-meta support that every story needs.
 
-- [ ] T001 Add `@xyflow/react` pinned to `12.12.1` to apps/web/package.json, run `npm install`, and confirm `npm audit --audit-level=high` stays clean (research R13)
-- [ ] T002 [P] Add the permission `flows.manage` (ADMIN, MANAGER) to packages/shared/src/permissions.ts and extend packages/shared/src/permissions.test.ts (agents must not have it)
-- [ ] T003 [P] Add `FLOWS: 'flows'` to `QUEUES` in apps/api/src/common/queue/queue.constants.ts with a comment (timers and API steps, feature 003)
-- [ ] T004 [P] Extend mock-meta per contracts/meta-graph-flows.md §5: accept `type: interactive` (`button`, `list`) in tools/mock-meta/src/server.ts, validate the limits (400 with code 131009 when broken), and record them in `/mock/sent`; add `--button-id`, `--list-id` and `--context` to tools/mock-meta/src/inbound-cli.ts and tools/mock-meta/src/webhook-emitter.ts
+- [X] T001 Add `@xyflow/react` pinned to `12.12.1` to apps/web/package.json, run `npm install`, and confirm `npm audit --audit-level=high` stays clean (research R13)
+- [X] T002 [P] Add the permission `flows.manage` (ADMIN, MANAGER) to packages/shared/src/permissions.ts and extend packages/shared/src/permissions.test.ts (agents must not have it)
+- [X] T003 [P] Add `FLOWS: 'flows'` to `QUEUES` in apps/api/src/common/queue/queue.constants.ts with a comment (timers and API steps, feature 003)
+- [X] T004 [P] Extend mock-meta per contracts/meta-graph-flows.md §5: accept `type: interactive` (`button`, `list`) in tools/mock-meta/src/server.ts, validate the limits (400 with code 131009 when broken), and record them in `/mock/sent`; add `--button-id`, `--list-id` and `--context` to tools/mock-meta/src/inbound-cli.ts and tools/mock-meta/src/webhook-emitter.ts
 
 ---
 

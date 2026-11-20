@@ -24,9 +24,73 @@ interface SentMessage {
   template: string;
   /** template | text | image | video | audio | document */
   type: string;
-  /** Text body or media caption of a free-form message. */
+  /** Text body or media caption of a free-form message (body text for interactive messages). */
   text?: string;
+  /** Reply buttons or list rows of an interactive message, so tests can tap them (feature 003). */
+  options?: Array<{ id: string; title: string }>;
   at: string;
+}
+
+/** The interactive object of a buttons or list message (003 contracts/meta-graph-flows.md). */
+interface InteractiveBody {
+  type?: string;
+  header?: { type?: string; text?: string };
+  body?: { text?: string };
+  footer?: { text?: string };
+  action?: {
+    buttons?: Array<{ type?: string; reply?: { id?: string; title?: string } }>;
+    button?: string;
+    sections?: Array<{ title?: string; rows?: Array<{ id?: string; title?: string; description?: string }> }>;
+  };
+}
+
+const chars = (value: unknown): number => (typeof value === 'string' ? [...value].length : 0);
+const within = (value: unknown, min: number, max: number): boolean => typeof value === 'string' && chars(value) >= min && chars(value) <= max;
+
+/** Meta's limits for reply buttons and lists; returns the problem or undefined. */
+function interactiveProblem(interactive: InteractiveBody | undefined): string | undefined {
+  if (!interactive) return "Param interactive is required";
+  if (!within(interactive.body?.text, 1, 1024)) return "Param interactive['body']['text'] must have 1 to 1024 characters";
+  if (interactive.header !== undefined && !within(interactive.header.text, 1, 60)) return "Param interactive['header']['text'] must have 1 to 60 characters";
+  if (interactive.footer !== undefined && !within(interactive.footer.text, 1, 60)) return "Param interactive['footer']['text'] must have 1 to 60 characters";
+  if (interactive.type === 'button') {
+    const buttons = interactive.action?.buttons ?? [];
+    if (buttons.length < 1 || buttons.length > 3) return 'Interactive buttons need between 1 and 3 buttons';
+    for (const button of buttons) {
+      if (button.type !== 'reply') return "Button type must be 'reply'";
+      if (!within(button.reply?.id, 1, 256)) return 'Button id must have 1 to 256 characters';
+      if (!within(button.reply?.title, 1, 20)) return 'Button title must have 1 to 20 characters';
+    }
+    if (new Set(buttons.map((b) => b.reply?.id)).size !== buttons.length) return 'Button ids must be unique';
+    if (new Set(buttons.map((b) => b.reply?.title)).size !== buttons.length) return 'Button titles must be unique';
+    return undefined;
+  }
+  if (interactive.type === 'list') {
+    if (!within(interactive.action?.button, 1, 20)) return "Param interactive['action']['button'] must have 1 to 20 characters";
+    const sections = interactive.action?.sections ?? [];
+    if (sections.length < 1 || sections.length > 10) return 'A list needs between 1 and 10 sections';
+    const rows = sections.flatMap((section) => section.rows ?? []);
+    if (rows.length < 1 || rows.length > 10) return 'A list needs between 1 and 10 rows in total';
+    for (const section of sections) {
+      if (section.title !== undefined && !within(section.title, 1, 24)) return 'Section title must have 1 to 24 characters';
+      if (!section.rows?.length) return 'Each section needs at least one row';
+    }
+    for (const row of rows) {
+      if (!within(row.id, 1, 200)) return 'Row id must have 1 to 200 characters';
+      if (!within(row.title, 1, 24)) return 'Row title must have 1 to 24 characters';
+      if (row.description !== undefined && !within(row.description, 0, 72)) return 'Row description must have at most 72 characters';
+    }
+    if (new Set(rows.map((r) => r.id)).size !== rows.length) return 'Row ids must be unique';
+    return undefined;
+  }
+  return `Unsupported interactive type: ${interactive.type ?? '(none)'}`;
+}
+
+/** The buttons or rows of an interactive message, for /mock/sent. */
+function interactiveOptions(interactive: InteractiveBody | undefined): Array<{ id: string; title: string }> {
+  const buttons = (interactive?.action?.buttons ?? []).map((b) => ({ id: b.reply?.id ?? '', title: b.reply?.title ?? '' }));
+  const rows = (interactive?.action?.sections ?? []).flatMap((s) => s.rows ?? []).map((r) => ({ id: r.id ?? '', title: r.title ?? '' }));
+  return [...buttons, ...rows];
 }
 
 interface StoredMedia {
@@ -62,6 +126,7 @@ function outboundProblem(type: string | undefined, body: OutboundBody): string |
     if (typeof text !== 'string' || text.trim() === '') return "Param text['body'] is required";
     return text.length > 4096 ? "Param text['body'] must be at most 4096 characters" : undefined;
   }
+  if (type === 'interactive') return interactiveProblem(body.interactive as InteractiveBody | undefined);
   if (type && MEDIA_TYPES.includes(type)) {
     const object = body[type] as { id?: string; link?: string; caption?: string } | undefined;
     if (!object?.id && !object?.link) return `Param ${type}['id'] or ${type}['link'] is required`;
@@ -218,12 +283,23 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     if (!to) return graphError(res, 400, 100, 'Missing to');
     const type = body.type ?? (body.template ? 'template' : undefined);
     const problem = outboundProblem(type, body);
-    if (problem || !type) return graphError(res, 400, 100, problem ?? 'Missing type');
+    // Broken interactive limits answer 131009 ("Parameter value is not valid"), like Meta.
+    if (problem || !type) return graphError(res, 400, type === 'interactive' ? 131009 : 100, problem ?? 'Missing type');
 
     const wamid = `wamid.${nextId('M')}`;
     const templateName = type === 'template' ? (body.template?.name ?? '') : '';
     const caption = (body[type] as { caption?: string } | undefined)?.caption;
-    sent.push({ wamid, phoneNumberId: id, to, template: templateName, type, text: type === 'text' ? body.text?.body : caption, at: new Date().toISOString() });
+    const interactive = type === 'interactive' ? (body.interactive as InteractiveBody) : undefined;
+    sent.push({
+      wamid,
+      phoneNumberId: id,
+      to,
+      template: templateName,
+      type,
+      text: type === 'text' ? body.text?.body : interactive ? interactive.body?.text : caption,
+      ...(interactive ? { options: interactiveOptions(interactive) } : {}),
+      at: new Date().toISOString(),
+    });
 
     const wabaId = 'MOCK_WABA';
     const failWith = (code: number, title: string, message: string) =>

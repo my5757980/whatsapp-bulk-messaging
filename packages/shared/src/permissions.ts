@@ -30,6 +30,8 @@ export const ALL_PERMISSIONS = [
   'media.manage',
   'livechat.settings',
   'inbox.metrics',
+  // Feature 003 chatbot flows (spec FR-038, contracts/flows-api.openapi.yaml header)
+  'flows.manage',
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];
@@ -53,6 +55,7 @@ const MANAGER_PERMISSIONS: readonly Permission[] = [
   'canned.manage',
   'media.manage',
   'inbox.metrics',
+  'flows.manage',
 ];
 
 const AGENT_PERMISSIONS: readonly Permission[] = ['contacts.view', 'templates.view', 'campaigns.view', 'inbox.view', 'inbox.reply'];
