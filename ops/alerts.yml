@@ -80,6 +80,24 @@ groups:
             Meta status updates are not arriving. Check the webhook URL and verify token in the
             Meta app, the public endpoint's TLS certificate, and POST /api/webhooks/meta in the api logs.
 
+      - alert: WbmInboundMediaFailing
+        expr: |
+          (
+            sum(increase(wbm_inbound_media_failures_total[15m]))
+              /
+            sum(increase(wbm_inbox_messages_total{direction="in",kind=~"image|video|audio|document|sticker"}[15m]))
+          ) > 0.10
+          and on()
+          sum(increase(wbm_inbox_messages_total{direction="in",kind=~"image|video|audio|document|sticker"}[15m])) >= 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 10% of customer media could not be downloaded in the last 15 minutes
+          description: >-
+            Live chat shows "media unavailable" for these messages. Check the worker logs for
+            "Inbound media download failed", the number's access token, Meta reachability and storage (S3).
+
       - alert: WbmTargetDown
         expr: |
           up{job=~"wbm-api|wbm-worker"} == 0

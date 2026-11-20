@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { v7 as uuidv7 } from 'uuid';
 import { TokenCipher } from '../../../common/crypto/token-cipher.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { StorageService } from '../../../common/storage/storage.service.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import { MediaTooLargeError, MetaGraphClient } from '../../meta/meta-graph.client.js';
@@ -27,6 +28,7 @@ export class InboundMediaProcessor {
     private readonly cipher: TokenCipher,
     private readonly storage: StorageService,
     private readonly publisher: InboxPublisher,
+    private readonly metrics: MetricsService,
   ) {}
 
   async process(data: InboundMediaJobData, attempt: number): Promise<InboundMediaOutcome> {
@@ -67,6 +69,7 @@ export class InboundMediaProcessor {
       this.logger.warn({ err: (error as Error).message, chatMessageId: item.id, attempt }, 'Inbound media download failed');
       if (!tooLarge && attempt < INBOUND_MEDIA_ATTEMPTS) return 'retry';
       await this.prisma.chatMessage.updateMany({ where: { id: item.id, mediaState: 'PENDING' }, data: { mediaState: 'FAILED' } });
+      this.metrics.inboundMediaFailuresTotal.inc();
       await this.publisher.itemStatus(item.id);
       return 'failed';
     }

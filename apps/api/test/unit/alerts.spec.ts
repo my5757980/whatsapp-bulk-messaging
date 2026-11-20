@@ -34,6 +34,10 @@ describe('alert rules', () => {
     expect(rule('WbmNoWebhooksWhileRunning')).toMatch(/wbm_campaigns_running\[15m\][\s\S]*wbm_webhook_lag_seconds_count\[15m\]/);
   });
 
+  it('warn when live chat media downloads fail (002 T099)', () => {
+    expect(rule('WbmInboundMediaFailing')).toMatch(/wbm_inbound_media_failures_total\[15m\][\s\S]*wbm_inbox_messages_total[\s\S]*> 0\.10/);
+  });
+
   it('give every alert a severity and a summary', () => {
     const names = [...ALERTS.matchAll(/- alert: (\w+)/g)].map((m) => m[1]!);
     expect(names.length).toBeGreaterThanOrEqual(5);

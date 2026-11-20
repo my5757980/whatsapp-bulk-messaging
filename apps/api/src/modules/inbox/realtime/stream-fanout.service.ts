@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
 import type { Redis } from 'ioredis';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { REDIS_CLIENT } from '../../../common/queue/queue.module.js';
 import { SESSION_IDLE_MS } from '../../auth/auth.service.js';
 import { AgentRulesLoader } from '../conversations/agent-rules.loader.js';
@@ -84,6 +85,7 @@ export class StreamFanoutService implements OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly rules: AgentRulesLoader,
     @Inject(INBOX_STREAM_OPTIONS) private readonly options: InboxStreamOptions,
+    private readonly metrics: MetricsService,
   ) {}
 
   get connectionCount(): number {
@@ -100,6 +102,7 @@ export class StreamFanoutService implements OnModuleDestroy {
       closed: false,
     };
     this.connections.add(conn);
+    this.metrics.inboxSseConnections.set(this.connections.size);
     client.onClose(() => this.detach(conn));
     try {
       await this.ensureReader();
@@ -162,6 +165,9 @@ export class StreamFanoutService implements OnModuleDestroy {
         for (const [, entries] of result ?? []) {
           for (const [id, fields] of entries) {
             this.cursor = id;
+            // Stream IDs start with the publish time in milliseconds.
+            const publishedAt = Number(id.split('-')[0]);
+            if (Number.isFinite(publishedAt)) this.metrics.inboxEventLag.observe(Math.max(0, (Date.now() - publishedAt) / 1000));
             const envelope = decodeStreamEntry(fields);
             if (envelope) await this.dispatch(id, envelope);
           }
@@ -357,6 +363,7 @@ export class StreamFanoutService implements OnModuleDestroy {
     if (conn.closed) return;
     conn.closed = true;
     this.connections.delete(conn);
+    this.metrics.inboxSseConnections.set(this.connections.size);
     const stillHere = [...this.connections].some((other) => other.viewer.id === conn.viewer.id);
     // Other instances re-set the key within one ping if the user is connected there.
     if (!stillHere) void this.redis.del(presenceKey(conn.viewer.id)).catch(() => undefined);

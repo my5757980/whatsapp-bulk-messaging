@@ -142,6 +142,7 @@ export class SendProcessor {
     await this.prisma.message.updateMany({ where: { id: m.id, status: 'SENDING' }, data: { status: 'SENT', waMessageId, sentAt: now } });
     await this.event(m.id, 'SENT_ACCEPTED', `${m.id}:accepted`, { waMessageId }, now);
     this.metrics.messagesTotal.inc({ status: 'SENT', number: m.number.phoneNumberId });
+    if (m.origin === 'INBOX') this.metrics.inboxMessagesTotal.inc({ direction: 'out', kind: 'template' });
     await this.statuses.applyBuffered(waMessageId);
     // Show the template in the contact's live chat on this number (002 R2); never fails the send.
     await this.timeline.appendRef(m.id).catch((error: unknown) =>

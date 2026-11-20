@@ -2,6 +2,7 @@ import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { v7 as uuidv7 } from 'uuid';
 import { normalizePhone, waIdToE164 } from '../../../common/phone/phone.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import { SettingsService } from '../../settings/settings.service.js';
 import { normalizeKeyword } from '../../webhooks/handlers/inbound.handler.js';
@@ -50,6 +51,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly routing: ChatRoutingService,
     private readonly autoReplies: AutoRepliesService,
     private readonly notifier: InboxNotifier,
+    private readonly metrics: MetricsService,
   ) {}
 
   onModuleInit(): void {
@@ -152,6 +154,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
       return { conversationId: chat.id, created, previous, becameRequesting, newOpening };
     });
     if (!outcome) return;
+    this.metrics.inboxMessagesTotal.inc({ direction: 'in', kind: msg.contentType.toLowerCase() });
 
     if (msg.media) await this.queueMediaDownload(itemId, msg.media.metaMediaId);
     // Blocked contacts' messages are kept, without live events, alerts or automatic replies (FR-034).

@@ -52,6 +52,34 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  // ---- Live chat (feature 002, T099) ----
+
+  readonly inboxMessagesTotal = new Counter({
+    name: 'wbm_inbox_messages_total',
+    help: 'Live chat messages: customer messages received (in) and replies or chat templates sent (out), by content type',
+    labelNames: ['direction', 'kind'] as const,
+    registers: [this.registry],
+  });
+
+  readonly inboxEventLag = new Histogram({
+    name: 'wbm_inbox_event_lag_seconds',
+    help: 'Seconds between publishing a live chat event and the api instance reading it for its browsers',
+    buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10],
+    registers: [this.registry],
+  });
+
+  readonly inboxSseConnections = new Gauge({
+    name: 'wbm_inbox_sse_connections',
+    help: 'Open live chat event streams on this api instance',
+    registers: [this.registry],
+  });
+
+  readonly inboundMediaFailuresTotal = new Counter({
+    name: 'wbm_inbound_media_failures_total',
+    help: 'Customer media that could not be downloaded from Meta after all attempts',
+    registers: [this.registry],
+  });
+
   constructor() {
     collectDefaultMetrics({ register: this.registry });
   }

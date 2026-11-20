@@ -93,6 +93,7 @@ export class SessionSendProcessor implements OnModuleInit {
 
     await this.prisma.chatMessage.updateMany({ where: { id: item.id, status: 'SENDING' }, data: { status: 'SENT', waMessageId, sentAt: new Date() } });
     this.metrics.messagesTotal.inc({ status: 'SENT', number: number.phoneNumberId });
+    this.metrics.inboxMessagesTotal.inc({ direction: 'out', kind: item.contentType.toLowerCase() });
     await this.statuses.applyBuffered(waMessageId);
     await this.publisher.itemStatus(item.id);
     return { result: 'sent', waMessageId };
