@@ -49,6 +49,7 @@ const final = await client.beta.messages.toolRunner({
     { role: 'system', content: renderTurnContext(turn) },
   ],
   max_iterations: 4,
+  thread: false,                                    // full history each call; no message thread at the provider
 }, { signal: turnDeadline.signal });
 ```
 
@@ -113,8 +114,8 @@ Usage: `response.usage` of every call in the loop (`input_tokens`, `cache_read_i
 
 ## 6. The team assistant
 
-Same client; `client.beta.messages.toolRunner` with `stream: true` and `.finalMessage()`, effort
-`medium`, the same fallback, `max_tokens: 32000`, `max_iterations: 8`, and the tools of research
+Same client; `client.beta.messages.toolRunner` with `thread: false`, `stream: true` and `.finalMessage()`,
+effort `medium`, the same fallback, `max_tokens: 32000`, `max_iterations: 8`, and the tools of research
 R14. Each tool's input schema is strict; `draft_flow` takes the 003 flow graph JSON and is checked
 with `FlowGraphSchema` and the 003 publish rules before the draft is created. The final answer is
 plain text for the member (no structured output), with the drafts and pending actions returned

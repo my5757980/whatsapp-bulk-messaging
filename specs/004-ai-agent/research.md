@@ -37,7 +37,12 @@ package versions before release.
 - **Decision:** our worker runs each customer turn as a **bounded tool loop on the Messages API**,
   using the SDK's tool runner (`client.beta.messages.toolRunner`) with tools defined by
   `betaTool()` (raw JSON Schema generated from our zod schemas with `z.toJSONSchema`), at most 4
-  iterations and a 30-second deadline for the whole turn.
+  iterations and a 30-second deadline for the whole turn. The runner is created with **`thread: false`**:
+  in SDK 1.6.0 it otherwise runs over a message thread (the API keeps the conversation in memory
+  for up to an hour and later requests carry only new messages). With `thread: false` every request
+  carries the full history, so nothing is held at the provider between calls, zero data retention
+  stays possible (threads are not eligible), and nock and the fake model see whole conversations
+  (checked with a smoke test against mock-meta on 2026-11-20).
 - **Rationale:**
   - Every step must respect live chat state (a member may take the chat mid-turn), the per-chat
     lock, the 24-hour window and the monthly limit; those checks live in our database.

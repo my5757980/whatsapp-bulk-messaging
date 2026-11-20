@@ -30,12 +30,12 @@ with nock and mock-meta. No test calls the real model; answer quality is measure
 **Purpose**: dependencies, permissions, queue names, configuration and the fake model that every
 story needs.
 
-- [ ] T001 Add `@anthropic-ai/sdk` `1.6.0`, `unpdf` `2.1.0`, `mammoth` `1.13.0`, `cheerio` `1.2.0` and `robots-parser` `3.0.1` (exact versions) to apps/api/package.json, run `npm install`, and confirm `npm audit --audit-level=high` stays clean (research R1, R11)
-- [ ] T002 [P] Add the permissions `ai.manage` (ADMIN, MANAGER), `ai.usage` (ADMIN) and `assistant.use` (ADMIN, MANAGER) to packages/shared/src/permissions.ts and extend packages/shared/src/permissions.test.ts (agents have none of them)
-- [ ] T003 [P] Add `AI: 'ai'` (turns, expiry, assistant) and `AI_KNOWLEDGE: 'ai-knowledge'` (file and website processing) to `QUEUES` in apps/api/src/common/queue/queue.constants.ts with comments (feature 004)
-- [ ] T004 [P] Add `ANTHROPIC_API_KEY` (optional secret), `ANTHROPIC_BASE_URL` (optional URL) and `AI_MODEL` (default `claude-opus-5-5`) to the env schema in apps/api/src/common/config/config.ts and to .env.example with comments; set `ANTHROPIC_BASE_URL` to mock-meta for the e2e job in .github/workflows/ci.yml (contracts/claude-messages.md §1)
-- [ ] T005 [P] Add specs/004-ai-agent/contracts/ai-api.openapi.yaml to the `lint:contracts` script in package.json
-- [ ] T006 [P] Add the fake Claude endpoint to mock-meta per contracts/claude-messages.md §7: tools/mock-meta/src/ai.ts (rule matching, default answer from the knowledge in the request, `tool_use` responses, usage numbers) and routes in tools/mock-meta/src/server.ts (`POST /anthropic/v1/messages`, `POST /mock/ai/rules`, `GET /mock/ai/requests`, `DELETE /mock/ai/requests`)
+- [X] T001 Add `@anthropic-ai/sdk` `1.6.0`, `unpdf` `2.1.0`, `mammoth` `1.13.0`, `cheerio` `1.2.0` and `robots-parser` `3.0.1` (exact versions) to apps/api/package.json, run `npm install`, and confirm `npm audit --audit-level=high` stays clean (research R1, R11)
+- [X] T002 [P] Add the permissions `ai.manage` (ADMIN, MANAGER), `ai.usage` (ADMIN) and `assistant.use` (ADMIN, MANAGER) to packages/shared/src/permissions.ts and extend packages/shared/src/permissions.test.ts (agents have none of them)
+- [X] T003 [P] Add `AI: 'ai'` (turns, expiry, assistant) and `AI_KNOWLEDGE: 'ai-knowledge'` (file and website processing) to `QUEUES` in apps/api/src/common/queue/queue.constants.ts with comments (feature 004)
+- [X] T004 [P] Add `ANTHROPIC_API_KEY` (optional secret), `ANTHROPIC_BASE_URL` (optional URL) and `AI_MODEL` (default `claude-opus-5-5`) to the env schema in apps/api/src/common/config/config.ts and to .env.example with comments; set `ANTHROPIC_BASE_URL` to mock-meta for the e2e job in .github/workflows/ci.yml (contracts/claude-messages.md §1)
+- [X] T005 [P] Add specs/004-ai-agent/contracts/ai-api.openapi.yaml to the `lint:contracts` script in package.json
+- [X] T006 [P] Add the fake Claude endpoint to mock-meta per contracts/claude-messages.md §7: tools/mock-meta/src/ai.ts (rule matching, default answer from the knowledge in the request, `tool_use` responses, usage numbers) and routes in tools/mock-meta/src/server.ts (`POST /anthropic/v1/messages`, `POST /mock/ai/rules`, `GET /mock/ai/requests`, `DELETE /mock/ai/requests`)
 
 ---
 
