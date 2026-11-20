@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizePhrase, phraseMatches, pickKeywordTrigger, type KeywordCandidate } from './triggers.js';
+import { normalizePhrase, phraseMatches, pickKeywordTrigger, type KeywordCandidate, unsafePatternReason } from './triggers.js';
 
 // 003 T016: keyword normalisation and the matching order (FR-019, FR-020).
 const candidate = (over: Partial<KeywordCandidate>): KeywordCandidate => ({
@@ -53,5 +53,24 @@ describe('pickKeywordTrigger', () => {
   it('returns null when nothing matches', () => {
     expect(pickKeywordTrigger('hello', [candidate({})])).toBeNull();
     expect(pickKeywordTrigger(null, [candidate({})])).toBeNull();
+  });
+});
+
+// 003 T061: patterns that could freeze matching are refused (research R3).
+describe('unsafePatternReason', () => {
+  it('accepts ordinary patterns', () => {
+    for (const pattern of ['order\\s*#?(\\d{4,})', '^(hi|hello)\\b', '[a-z]+@[a-z]+\\.com', '(?:sofa|chair) price', 'a{2,3}(b|c)?']) {
+      expect(unsafePatternReason(pattern), pattern).toBeNull();
+    }
+  });
+
+  it('refuses repeated groups that hold a repeat, back-references, invalid and long patterns', () => {
+    for (const pattern of ['(a+)+', '(\\w*)*$', '((ab)+)+', '(x+){2,}', '(?:a+)+b', '([a-z]+\\s?)*']) {
+      expect(unsafePatternReason(pattern), pattern).toMatch(/repeat/i);
+    }
+    expect(unsafePatternReason('(a)\\1')).toMatch(/Back-references/);
+    expect(unsafePatternReason('([a-z')).toMatch(/not a valid/);
+    expect(unsafePatternReason('a'.repeat(201))).toMatch(/at most/);
+    expect(unsafePatternReason('  ')).toBe('Add the pattern');
   });
 });

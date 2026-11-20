@@ -26,12 +26,15 @@ export interface CustomerMessageContext {
   };
 }
 
+type MessageInput = { kind: 'message'; text: string | null; replyId: string | null; contentType: string };
+type Start = { flowId: string; versionId: string; triggerKey: string; answers?: Record<string, string> };
+
 /**
- * Routes a customer message to chatbot flows (003 research R5, T012, T025), in this order: opt-out
- * ends any session with no reply; "talk to a person" ends it (002 then moves the chat to Waiting
- * for agent); opt-in keywords are left to 001; a running session takes the message, unless a "can
- * interrupt" trigger replaces it (FR-022); an Open chat may start a flow from a trigger. Returns true
- * when a flow answered, so the 002 welcome and off-hours messages are skipped (FR-029).
+ * Routes a customer message to chatbot flows (003 research R5, T012, T025, T065), in this order:
+ * opt-out ends any session with no reply; "talk to a person" ends it (002 then moves the chat to
+ * Waiting for agent); opt-in keywords are left to 001; a running session takes the message, unless a
+ * "can interrupt" trigger replaces it (FR-022); an Open chat may start a flow from a trigger. Returns
+ * true when a flow answered, so the 002 welcome and off-hours messages are skipped (FR-029).
  */
 @Injectable()
 export class FlowRouter {
@@ -54,15 +57,15 @@ export class FlowRouter {
       }
       if (ctx.optInKeyword) return false;
 
-      const input = { kind: 'message' as const, text: ctx.message.text, replyId: ctx.message.replyId, contentType: ctx.message.contentType };
+      const input: MessageInput = { kind: 'message', text: ctx.message.text, replyId: ctx.message.replyId, contentType: ctx.message.contentType };
       const running = await this.sessions.runningSession(ctx.conversationId);
       if (running) {
         // Waiting for agent or Taken: only a session a member started keeps answering (FR-025).
         if (ctx.chatState !== 'ACTIVE' && running.startedBy !== 'MEMBER') return false;
         if (ctx.chatState === 'ACTIVE' && !ctx.message.replyId) {
-          const interrupt = await this.matcher.keyword(ctx.numberId, ctx.message.text, { interruptingOnly: true });
+          const interrupt = await this.matcher.match(ctx.numberId, ctx.message, { interruptingOnly: true });
           if (interrupt && interrupt.flowId !== running.flowId) {
-            const started = await this.sessions.start({ flowId: interrupt.flowId, versionId: interrupt.versionId, conversationId: ctx.conversationId, startedBy: 'TRIGGER', triggerKey: interrupt.triggerKey, replaceRunning: 'INTERRUPTED' });
+            const started = await this.sessions.start({ ...this.request(ctx, interrupt), replaceRunning: 'INTERRUPTED' });
             if (started.started) return true;
           }
         }
@@ -77,14 +80,43 @@ export class FlowRouter {
     }
   }
 
-  /** Keyword triggers (US1); patterns, template buttons and first-message rules arrive with US6. */
-  protected async startFromTriggers(ctx: CustomerMessageContext, input: { kind: 'message'; text: string | null; replyId: string | null; contentType: string }): Promise<boolean> {
-    const match = await this.matcher.keyword(ctx.numberId, ctx.message.text);
-    if (!match) return false;
-    const outcome = await this.sessions.start({ flowId: match.flowId, versionId: match.versionId, conversationId: ctx.conversationId, startedBy: 'TRIGGER', triggerKey: match.triggerKey });
+  /**
+   * First-message rules come first, for a contact's first inbound message only: they may set the
+   * first-message tag and start their flow. Then keyword, pattern and template-button triggers
+   * (FR-020, research R2).
+   */
+  protected async startFromTriggers(ctx: CustomerMessageContext, input: MessageInput): Promise<boolean> {
+    if (await this.matcher.isFirstInbound(ctx.contactId)) {
+      const rule = await this.matcher.firstMessageRule(ctx.numberId, ctx.message.text);
+      if (rule) {
+        if (rule.tagId) await this.sessions.setFirstMessageTag(ctx.contactId, rule.tagId, rule.flowId);
+        if (rule.startFlow) {
+          const answered = await this.startFlow(ctx, input, rule);
+          if (answered !== null) return answered;
+        }
+      }
+    }
+    const match = await this.matcher.match(ctx.numberId, ctx.message);
+    return match ? ((await this.startFlow(ctx, input, match)) ?? false) : false;
+  }
+
+  /** Starts a matched flow; null when the flow is gone (other triggers may still apply). */
+  private async startFlow(ctx: CustomerMessageContext, input: MessageInput, match: Start): Promise<boolean | null> {
+    const outcome = await this.sessions.start(this.request(ctx, match));
     if (outcome.started) return true;
     // Another message started a session a moment ago: this one is its input.
     if (outcome.reason === 'busy') return this.sessions.continueWith(ctx.conversationId, input);
-    return false;
+    return null;
+  }
+
+  private request(ctx: CustomerMessageContext, match: Start) {
+    return {
+      flowId: match.flowId,
+      versionId: match.versionId,
+      conversationId: ctx.conversationId,
+      startedBy: 'TRIGGER' as const,
+      triggerKey: match.triggerKey,
+      ...(match.answers ? { answers: match.answers } : {}),
+    };
   }
 }

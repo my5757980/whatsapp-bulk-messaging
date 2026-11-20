@@ -173,17 +173,17 @@ each case; a jump continues in "Main menu".
 
 ### Tests for User Story 5 (REQUIRED) ⚠️
 
-- [ ] T053 [P] [US5] Unit tests in apps/api/test/unit/flows/api-client.spec.ts: private, loopback, link-local, multicast and reserved IPv4/IPv6 addresses are refused; only HTTPS; redirects are not followed; timeout; replies over 100 KB and non-JSON replies fail; dotted path mapping (`order.status`, `items.0.name`)
-- [ ] T054 [P] [US5] Integration test apps/api/test/integration/flows-api-step.int-spec.ts with nock: variables and `{secret:<id>}` filled in the request; success maps fields into answers and the next message; timeout and 500 take the failed branch; secrets are stored encrypted, never returned and never logged; `POST /flows/{id}/api-test` returns status, body and mapped fields
-- [ ] T055 [P] [US5] Contract tests in apps/api/test/contract/flows.contract-spec.ts for `/flows/{id}/secrets` (POST, PUT, DELETE) and `/flows/{id}/api-test`
-- [ ] T056 [P] [US5] Playwright e2e apps/web/e2e/flows-us5-api-step.spec.ts: configure an API step with a secret header (shown masked after saving) and run **Test request** against `https://10.0.0.5`, which reports a blocked address
+- [X] T053 [P] [US5] Unit tests in apps/api/test/unit/flows/api-client.spec.ts: private, loopback, link-local, multicast and reserved IPv4/IPv6 addresses are refused; only HTTPS; redirects are not followed; timeout; replies over 100 KB and non-JSON replies fail; dotted path mapping (`order.status`, `items.0.name`)
+- [X] T054 [P] [US5] Integration test apps/api/test/integration/flows-api-step.int-spec.ts with nock: variables and `{secret:<id>}` filled in the request; success maps fields into answers and the next message; timeout and 500 take the failed branch; secrets are stored encrypted, never returned and never logged; `POST /flows/{id}/api-test` returns status, body and mapped fields
+- [X] T055 [P] [US5] Contract tests in apps/api/test/contract/flows.contract-spec.ts for `/flows/{id}/secrets` (POST, PUT, DELETE) and `/flows/{id}/api-test`
+- [X] T056 [P] [US5] Playwright e2e apps/web/e2e/flows-us5-api-step.spec.ts: configure an API step with a secret header (shown masked after saving) and run **Test request** against `https://10.0.0.5`, which reports a blocked address
 
 ### Implementation for User Story 5
 
-- [ ] T057 [US5] Implement apps/api/src/modules/flows/steps/api-client.ts (Node `fetch` with an undici `Agent` whose lookup refuses non-public addresses, HTTPS only, no redirects, timeout, 100 KB cap, JSON parsing and path mapping)
-- [ ] T058 [US5] Implement the API step: the engine pauses with `wait = API` and queues `flow-api {sessionId, waitToken}`; apps/api/src/modules/flows/steps/api-step.processor.ts renders the request (variables, secrets), calls, maps and resumes the session on `success` or `failed`
-- [ ] T059 [US5] Implement secrets and the test request in apps/api/src/modules/flows/definitions/secrets.service.ts and the controller (encrypt with 001 `TokenCipher`; names only in responses; delete refused when used with `SECRET_IN_USE`; audit `flow.secret_changed`) plus `POST /flows/{id}/api-test`
-- [ ] T060 [US5] Add the API step form (method, URL, headers with a secret picker, query, JSON body, timeout, mapping picked from the test result) and the secrets panel in apps/web/src/components/flows/steps/api-step-form.tsx and apps/web/src/components/flows/secrets-panel.tsx
+- [X] T057 [US5] Implement apps/api/src/modules/flows/steps/api-client.ts (Node `fetch` with an undici `Agent` whose lookup refuses non-public addresses, HTTPS only, no redirects, timeout, 100 KB cap, JSON parsing and path mapping)
+- [X] T058 [US5] Implement the API step: the engine pauses with `wait = API` and queues `flow-api {sessionId, waitToken}`; apps/api/src/modules/flows/steps/api-step.processor.ts renders the request (variables, secrets), calls, maps and resumes the session on `success` or `failed`
+- [X] T059 [US5] Implement secrets and the test request in apps/api/src/modules/flows/definitions/secrets.service.ts and the controller (encrypt with 001 `TokenCipher`; names only in responses; delete refused when used with `SECRET_IN_USE`; audit `flow.secret_changed`) plus `POST /flows/{id}/api-test`
+- [X] T060 [US5] Add the API step form (method, URL, headers with a secret picker, query, JSON body, timeout, mapping picked from the test result) and the secrets panel in apps/web/src/components/flows/steps/api-step-form.tsx and apps/web/src/components/flows/secrets-panel.tsx
 
 **Checkpoint**: US1–US5 work on their own.
 

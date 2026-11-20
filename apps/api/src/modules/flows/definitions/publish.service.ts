@@ -105,7 +105,30 @@ export class PublishService {
     }
     problems.push(...(await this.attributeProblems(graph)));
     problems.push(...(await this.jumpProblems(row, graph)));
+    problems.push(...(await this.templateProblems(graph)));
     return problems;
+  }
+
+  /** Template-button triggers need the template and one of its quick-reply buttons (FR-019, T065). */
+  private async templateProblems(graph: FlowGraph): Promise<Problem[]> {
+    const triggers = graph.triggers.flatMap((t) => (t.kind === 'TEMPLATE_BUTTON' && t.templateId && t.buttonText.trim() ? [{ id: t.id, templateId: t.templateId, buttonText: t.buttonText.trim() }] : []));
+    if (!triggers.length) return [];
+    const templates = await this.prisma.template.findMany({ where: { id: { in: [...new Set(triggers.map((t) => t.templateId))] } }, select: { id: true, name: true, status: true, components: true } });
+    const byId = new Map(templates.map((t) => [t.id, t]));
+    return triggers.flatMap((trigger): Problem[] => {
+      const template = byId.get(trigger.templateId);
+      if (!template || template.status === 'DELETED') {
+        return [{ code: 'MISSING_CONTENT', message: 'The template no longer exists', stepId: null, triggerId: trigger.id, field: 'templateId' }];
+      }
+      const components = (Array.isArray(template.components) ? template.components : []) as Array<{ type?: string; buttons?: Array<{ type?: string; text?: string }> }>;
+      const quickReplies = components
+        .filter((c) => (c.type ?? '').toUpperCase() === 'BUTTONS')
+        .flatMap((c) => c.buttons ?? [])
+        .filter((b) => (b.type ?? '').toUpperCase() === 'QUICK_REPLY')
+        .map((b) => normalizePhrase(b.text ?? ''));
+      if (quickReplies.includes(normalizePhrase(trigger.buttonText))) return [];
+      return [{ code: 'MISSING_CONTENT', message: `The template "${template.name}" has no quick-reply button "${trigger.buttonText}"`, stepId: null, triggerId: trigger.id, field: 'buttonText' }];
+    });
   }
 
   /**

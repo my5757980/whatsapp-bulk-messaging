@@ -1,6 +1,6 @@
 import { opNeedsValue, opsFor } from './conditions.js';
 import { branchesOf, type FlowGraph, type FlowStep, type FlowTrigger, type StepType } from './graph.js';
-import { isReservedKeyword } from './triggers.js';
+import { isReservedKeyword, unsafePatternReason } from './triggers.js';
 
 // Publish checks (003 FR-003, research R14, T021). Pure; the API adds checks that need the database
 // (other flows' keywords, attributes, templates, jump targets) and runs this first. The editor runs it
@@ -97,8 +97,11 @@ function triggerProblems(trigger: FlowTrigger, options: ValidateOptions): Proble
         ? [triggerProblem(trigger, 'RESERVED_KEYWORD', `These keywords are reserved for opt-out, opt-in or "talk to a person": ${reserved.map((p) => p.trim().toLowerCase()).join(', ')}`, 'phrases')]
         : [];
     }
-    case 'PATTERN':
-      return blank(trigger.pattern) ? [triggerProblem(trigger, 'MISSING_CONTENT', 'Add the pattern', 'pattern')] : [];
+    case 'PATTERN': {
+      if (blank(trigger.pattern)) return [triggerProblem(trigger, 'MISSING_CONTENT', 'Add the pattern', 'pattern')];
+      const unsafe = unsafePatternReason(trigger.pattern);
+      return unsafe ? [triggerProblem(trigger, 'UNSAFE_PATTERN', unsafe, 'pattern')] : [];
+    }
     case 'TEMPLATE_BUTTON':
       if (!trigger.templateId) return [triggerProblem(trigger, 'MISSING_CONTENT', 'Choose the template', 'templateId')];
       return blank(trigger.buttonText) ? [triggerProblem(trigger, 'MISSING_CONTENT', 'Choose the quick-reply button', 'buttonText')] : [];

@@ -214,6 +214,30 @@ export class FlowSessionService {
     };
   }
 
+  /**
+   * A first-message rule sets the contact's first-message tag (002 FR-033, 003 FR-019), with a journey
+   * entry by the flow on each of the contact's chats; a deleted tag or an unchanged one does nothing.
+   */
+  async setFirstMessageTag(contactId: string, tagId: string, flowId: string): Promise<void> {
+    const [contact, tag, flow] = await Promise.all([
+      this.prisma.contact.findUnique({ where: { id: contactId }, select: { firstMessageTagId: true, firstMessageTag: { select: { name: true } } } }),
+      this.prisma.tag.findUnique({ where: { id: tagId }, select: { id: true, name: true } }),
+      this.prisma.flow.findUnique({ where: { id: flowId }, select: { name: true } }),
+    ]);
+    if (!contact || !tag || contact.firstMessageTagId === tag.id) return;
+    await this.prisma.contact.update({ where: { id: contactId }, data: { firstMessageTagId: tag.id } });
+    const chats = await this.prisma.conversation.findMany({ where: { contactId }, select: { id: true } });
+    await this.prisma.conversationEvent.createMany({
+      data: chats.map((chat) => ({
+        conversationId: chat.id,
+        type: 'FIRST_MESSAGE_TAG_CHANGED' as const,
+        actorType: 'FLOW' as const,
+        data: { from: contact.firstMessageTag?.name ?? null, to: tag.name, flowId, flowName: flow?.name ?? '' },
+      })),
+    });
+    await this.publisher.contactUpdated(contactId);
+  }
+
   /** A member took, answered or sent a template in the chat: the flow stops (FR-026). */
   async stopForConversation(conversationId: string): Promise<boolean> {
     return this.endRunning(conversationId, 'STOPPED_BY_MEMBER');

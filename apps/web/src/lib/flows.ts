@@ -255,6 +255,25 @@ export function nextOptionKey(keys: string[], prefix = 'b'): string {
   for (let n = 1; ; n++) if (!used.has(`${prefix}${n}`)) return `${prefix}${n}`;
 }
 
+/** A new trigger of a kind with the first free id (keyword-1, pattern-1, button-1, first-1). */
+export function newTrigger(graph: FlowGraph, kind: FlowTrigger['kind']): FlowTrigger {
+  const prefix = { KEYWORD: 'keyword', PATTERN: 'pattern', TEMPLATE_BUTTON: 'button', FIRST_MESSAGE: 'first' }[kind];
+  const used = new Set(graph.triggers.map((t) => t.id));
+  let n = 1;
+  while (used.has(`${prefix}-${n}`)) n++;
+  const id = `${prefix}-${n}`;
+  switch (kind) {
+    case 'KEYWORD':
+      return { id, kind, match: 'CONTAINS', phrases: [], canInterrupt: false };
+    case 'PATTERN':
+      return { id, kind, pattern: '', canInterrupt: false };
+    case 'TEMPLATE_BUTTON':
+      return { id, kind, templateId: null, buttonText: '', canInterrupt: false };
+    case 'FIRST_MESSAGE':
+      return { id, kind, match: 'CONTAINS', phrases: [], tagId: null, startFlow: true };
+  }
+}
+
 export function newKeywordTrigger(graph: FlowGraph): FlowTrigger {
   const used = new Set(graph.triggers.map((t) => t.id));
   let n = 1;
