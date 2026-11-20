@@ -1,0 +1,878 @@
+openapi: 3.1.0
+info:
+  title: WhatsApp Platform - AI Agent API
+  version: 0.1.0
+  description: >
+    AI agent, knowledge, usage and team assistant endpoints used by the Next.js dashboard (feature
+    004-ai-agent). Same conventions as 001–003: httpOnly session cookie, an X-CSRF-Token header on
+    every mutating request, an x-permission on every operation, and the error shape {code, message,
+    details, requestId}. The agent configuration document is specified in agent-config.md;
+    responses carry it as `config`.
+
+    New permissions (added to packages/shared/permissions.ts):
+      ai.manage      ADMIN, MANAGER  - agents, knowledge, unanswered questions, preview, test numbers, numbers
+      ai.usage       ADMIN           - usage page, limits, prices, limit message
+      assistant.use  ADMIN, MANAGER  - the team assistant (it then acts with the member's own permissions)
+    The live chat operation reuses inbox.view (ADMIN, MANAGER, AGENT) and 002's visibility rules.
+servers:
+  - url: /api
+security:
+  - sessionCookie: []
+tags:
+  - name: agents
+  - name: knowledge
+  - name: unanswered
+  - name: usage
+  - name: assistant
+  - name: live-chat
+
+paths:
+  /ai-agents:
+    get:
+      tags: [agents]
+      summary: List agents (deleted agents excluded)
+      x-permission: ai.manage
+      responses:
+        '200':
+          description: Agents by name
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AgentSummary' } } } }
+    post:
+      tags: [agents]
+      summary: Create an agent, empty or from a starter
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1, maxLength: 80 }
+                starterKey: { type: string, maxLength: 40 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AgentDetail' } } } }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /ai-agents/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [agents]
+      summary: An agent with its draft configuration, published version, numbers and test numbers
+      x-permission: ai.manage
+      responses:
+        '200': { description: The agent, content: { application/json: { schema: { $ref: '#/components/schemas/AgentDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [agents]
+      summary: Rename an agent
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1, maxLength: 80 }
+      responses:
+        '200': { description: Renamed, content: { application/json: { schema: { $ref: '#/components/schemas/AgentDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      tags: [agents]
+      summary: Delete an agent that is not published (its history stays)
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: AGENT_PUBLISHED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /ai-agents/{id}/draft:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [agents]
+      summary: Save the draft configuration (optimistic, by draft revision)
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [config, draftRevision]
+              additionalProperties: false
+              properties:
+                config: { $ref: '#/components/schemas/AgentConfig' }
+                draftRevision: { type: integer, minimum: 0 }
+      responses:
+        '200':
+          description: Saved; problems that would block publishing are listed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [draftRevision, problems]
+                properties:
+                  draftRevision: { type: integer }
+                  problems: { type: array, items: { $ref: '#/components/schemas/Problem' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: DRAFT_CONFLICT, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /ai-agents/{id}/duplicate:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [agents]
+      summary: Copy an agent's draft and knowledge into a new unpublished agent
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1, maxLength: 80 }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AgentDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /ai-agents/{id}/publish:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [agents]
+      summary: Publish the draft as a new numbered version
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Published, content: { application/json: { schema: { $ref: '#/components/schemas/AgentDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422':
+          description: PUBLISH_BLOCKED, with every problem listed (FR-005)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Error' }
+                  - type: object
+                    properties:
+                      problems: { type: array, items: { $ref: '#/components/schemas/Problem' } }
+
+  /ai-agents/{id}/unpublish:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [agents]
+      summary: Stop the agent answering customers; active AI conversations end at their next message
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Unpublished, content: { application/json: { schema: { $ref: '#/components/schemas/AgentDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai-agents/{id}/versions:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [agents]
+      summary: Published versions, newest first
+      x-permission: ai.manage
+      responses:
+        '200':
+          description: Versions
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Version' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai-agents/{id}/versions/{versionId}/restore:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { name: versionId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [agents]
+      summary: Copy a published version into the draft
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Restored, content: { application/json: { schema: { $ref: '#/components/schemas/AgentDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai-agents/{id}/test-numbers:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [agents]
+      summary: Set the up to 3 phone numbers that meet the draft (FR-035)
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [testNumbers]
+              additionalProperties: false
+              properties:
+                testNumbers: { type: array, maxItems: 3, items: { type: string, maxLength: 20 } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/AgentDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /ai-agents/{id}/numbers:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [agents]
+      summary: Choose the WhatsApp numbers this agent answers on (one agent per number, FR-004)
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [numberIds]
+              additionalProperties: false
+              properties:
+                numberIds: { type: array, items: { type: string, format: uuid } }
+                replace: { type: boolean, default: false, description: take numbers away from the agents that have them }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/AgentDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NUMBER_HAS_AGENT (details name the numbers and agents), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /ai-agents/{id}/preview:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [agents]
+      summary: Run the draft on a sample conversation; nothing is sent or changed (FR-034)
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [messages]
+              additionalProperties: false
+              properties:
+                messages:
+                  type: array
+                  minItems: 1
+                  maxItems: 40
+                  items:
+                    type: object
+                    required: [from, text]
+                    additionalProperties: false
+                    properties:
+                      from: { type: string, enum: [customer, agent] }
+                      text: { type: string, minLength: 1, maxLength: 4096 }
+                contact:
+                  type: object
+                  additionalProperties: false
+                  properties:
+                    name: { type: string, maxLength: 120 }
+                    attributes: { type: object, additionalProperties: { type: [string, number, boolean, 'null'] } }
+                    tags: { type: array, items: { type: string } }
+      responses:
+        '200': { description: The agent's reply and what it would do, content: { application/json: { schema: { $ref: '#/components/schemas/PreviewResult' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { description: PREVIEW_RATE_LIMITED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '503': { description: AI_UNAVAILABLE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /ai-agent-starters:
+    get:
+      tags: [agents]
+      summary: Starter agents written by us (FR-040)
+      x-permission: ai.manage
+      responses:
+        '200':
+          description: Starters
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Starter' } } } }
+
+  /ai-agents/{id}/knowledge:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [knowledge]
+      summary: The agent's knowledge sources, with sizes and whether the agent uses whole-knowledge or search mode
+      x-permission: ai.manage
+      responses:
+        '200': { description: Sources, content: { application/json: { schema: { $ref: '#/components/schemas/KnowledgeList' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai-agents/{id}/knowledge/answers:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [knowledge]
+      summary: Add a written question and answer
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question, answer]
+              additionalProperties: false
+              properties:
+                question: { type: string, minLength: 1, maxLength: 300 }
+                answer: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '201': { description: Added, content: { application/json: { schema: { $ref: '#/components/schemas/KnowledgeSource' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { description: LIMIT_EXCEEDED or VALIDATION_FAILED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /ai-agents/{id}/knowledge/websites:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [knowledge]
+      summary: Add a website address; its public pages are read in the background
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              additionalProperties: false
+              properties:
+                url: { type: string, format: uri, maxLength: 2000 }
+                refreshWeekly: { type: boolean, default: false }
+      responses:
+        '202': { description: 'Accepted; processing', content: { application/json: { schema: { $ref: '#/components/schemas/KnowledgeSource' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { description: 'NOT_HTTPS, BLOCKED_ADDRESS or LIMIT_EXCEEDED', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /ai-agents/{id}/knowledge/files:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [knowledge]
+      summary: Upload a PDF or DOCX file (up to 20 MB); it is read in the background
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '202': { description: 'Accepted; processing', content: { application/json: { schema: { $ref: '#/components/schemas/KnowledgeSource' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: DUPLICATE_FILE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '413': { description: TOO_LARGE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '415': { description: UNSUPPORTED_TYPE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: LIMIT_EXCEEDED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /ai-agents/{id}/knowledge/{sourceId}:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { $ref: '#/components/parameters/SourceId' }
+    patch:
+      tags: [knowledge]
+      summary: Switch a source on or off, edit a written answer, or change weekly refresh
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                enabled: { type: boolean }
+                question: { type: string, minLength: 1, maxLength: 300 }
+                answer: { type: string, minLength: 1, maxLength: 2000 }
+                refreshWeekly: { type: boolean }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/KnowledgeSource' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [knowledge]
+      summary: Delete a source, its text and its stored file
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai-agents/{id}/knowledge/{sourceId}/refresh:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { $ref: '#/components/parameters/SourceId' }
+    post:
+      tags: [knowledge]
+      summary: Read a website or file again now (FR-012)
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '202': { description: 'Accepted; processing', content: { application/json: { schema: { $ref: '#/components/schemas/KnowledgeSource' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: ALREADY_PROCESSING or NOT_REFRESHABLE (written answers), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /ai-agents/{id}/unanswered:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [unanswered]
+      summary: Questions the agent could not answer (FR-015), most asked first
+      x-permission: ai.manage
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, resolved], default: open } }
+      responses:
+        '200':
+          description: Questions
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/UnansweredQuestion' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai-agents/{id}/unanswered/{questionId}/answer:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { $ref: '#/components/parameters/QuestionId' }
+    post:
+      tags: [unanswered]
+      summary: Add a written answer for the question and mark it resolved
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [answer]
+              additionalProperties: false
+              properties:
+                question: { type: string, minLength: 1, maxLength: 300, description: defaults to the question's text }
+                answer: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '201': { description: The new written answer, content: { application/json: { schema: { $ref: '#/components/schemas/KnowledgeSource' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { description: LIMIT_EXCEEDED or VALIDATION_FAILED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /ai-agents/{id}/unanswered/{questionId}/dismiss:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { $ref: '#/components/parameters/QuestionId' }
+    post:
+      tags: [unanswered]
+      summary: Mark a question resolved without adding an answer
+      x-permission: ai.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Dismissed }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /ai-usage:
+    get:
+      tags: [usage]
+      summary: AI replies, conversations and cost for a month, against the limits (FR-037)
+      x-permission: ai.usage
+      parameters:
+        - { name: month, in: query, schema: { type: string, pattern: '^\d{4}-\d{2}$' }, description: 'YYYY-MM in the company time zone; default the current month' }
+      responses:
+        '200': { description: Usage, content: { application/json: { schema: { $ref: '#/components/schemas/Usage' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /ai-settings:
+    get:
+      tags: [usage]
+      summary: Monthly limits, prices and the limit message
+      x-permission: ai.usage
+      responses:
+        '200': { description: Settings, content: { application/json: { schema: { $ref: '#/components/schemas/AiSettings' } } } }
+    put:
+      tags: [usage]
+      summary: Change monthly limits, prices or the limit message (FR-038, FR-039)
+      x-permission: ai.usage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AiSettings' } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/AiSettings' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /assistant/requests:
+    get:
+      tags: [assistant]
+      summary: The member's own recent assistant requests (latest 50)
+      x-permission: assistant.use
+      responses:
+        '200':
+          description: Requests, newest first
+          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AssistantRequest' } } } }
+    post:
+      tags: [assistant]
+      summary: Ask the assistant; it works in the background and creates drafts or action previews only
+      x-permission: assistant.use
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              additionalProperties: false
+              properties:
+                prompt: { type: string, minLength: 1, maxLength: 2000 }
+      responses:
+        '202': { description: Queued, content: { application/json: { schema: { $ref: '#/components/schemas/AssistantRequest' } } } }
+        '429': { description: LIMIT_REACHED (the monthly assistant limit), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /assistant/requests/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [assistant]
+      summary: One of the member's requests, with its answer, drafts and pending actions
+      x-permission: assistant.use
+      responses:
+        '200': { description: The request, content: { application/json: { schema: { $ref: '#/components/schemas/AssistantRequest' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /assistant/actions/{id}/confirm:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [assistant]
+      summary: Run a previewed action (send, schedule or delete) as the member (FR-044)
+      x-permission: assistant.use
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Done, content: { application/json: { schema: { $ref: '#/components/schemas/AssistantAction' } } } }
+        '403': { description: FORBIDDEN (the member no longer has the permission the action needs), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: ACTION_EXPIRED or ACTION_DECIDED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /assistant/actions/{id}/cancel:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [assistant]
+      summary: Cancel a previewed action
+      x-permission: assistant.use
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Cancelled, content: { application/json: { schema: { $ref: '#/components/schemas/AssistantAction' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: ACTION_DECIDED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /inbox/conversations/{id}/ai:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [live-chat]
+      summary: The chat's active AI conversation, for the "AI agent is answering" banner (null when none)
+      x-permission: inbox.view
+      responses:
+        '200':
+          description: State
+          content: { application/json: { schema: { $ref: '#/components/schemas/AiConversationState' } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: sid }
+    csrfHeader: { type: apiKey, in: header, name: X-CSRF-Token }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    SourceId: { name: sourceId, in: path, required: true, schema: { type: string, format: uuid } }
+    QuestionId: { name: questionId, in: path, required: true, schema: { type: string, format: uuid } }
+  responses:
+    NotFound:
+      description: Not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationFailed:
+      description: VALIDATION_FAILED, with field details
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [VALIDATION_FAILED, NAME_TAKEN, DRAFT_CONFLICT, AGENT_PUBLISHED, PUBLISH_BLOCKED, NUMBER_HAS_AGENT, LIMIT_EXCEEDED, DUPLICATE_FILE, NOT_HTTPS, PREVIEW_RATE_LIMITED, AI_UNAVAILABLE, LIMIT_REACHED, ACTION_EXPIRED, ACTION_DECIDED] }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: object, properties: { field: { type: string }, issue: { type: string } } }
+        requestId: { type: string }
+    Problem:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [NO_GOAL, NO_LANGUAGE, INTRO_MISSING, SKILL_WITHOUT_DESCRIPTION, NOT_HTTPS, UNKNOWN_SECRET, MEDIA_NOT_FOUND, UNKNOWN_ATTRIBUTE, ATTRIBUTE_TYPE, FLOW_NOT_PUBLISHED, REPLACE_ME_LEFT, DUPLICATE_SKILL_ID] }
+        message: { type: string }
+        field: { type: [string, 'null'] }
+    MemberRef:
+      type: [object, 'null']
+      properties: { id: { type: string, format: uuid }, name: { type: string } }
+    AgentConfig:
+      type: object
+      description: The agent configuration document (agent-config.md); validated by AgentConfigSchema
+      required: [version, displayName, goal, replyLanguages, skills]
+      properties:
+        version: { type: integer, const: 1 }
+        displayName: { type: string }
+        goal: { type: string }
+        replyLanguages: { type: array, items: { type: string } }
+        skills: { type: object }
+    VersionRef:
+      type: [object, 'null']
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: integer }
+        publishedAt: { type: string, format: date-time }
+        publishedBy: { $ref: '#/components/schemas/MemberRef' }
+    Version:
+      type: object
+      required: [id, number, publishedAt, publishedBy, isCurrent]
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: integer }
+        publishedAt: { type: string, format: date-time }
+        publishedBy: { $ref: '#/components/schemas/MemberRef' }
+        isCurrent: { type: boolean }
+    NumberRef:
+      type: object
+      required: [id, displayPhone]
+      properties:
+        id: { type: string, format: uuid }
+        displayPhone: { type: string }
+    AgentSummary:
+      type: object
+      required: [id, name, status, numbers, testNumbers, publishedVersion, hasUnpublishedChanges, last7Days]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [DRAFT, PUBLISHED, UNPUBLISHED] }
+        numbers: { type: array, items: { $ref: '#/components/schemas/NumberRef' } }
+        testNumbers: { type: array, items: { type: string } }
+        publishedVersion: { $ref: '#/components/schemas/VersionRef' }
+        hasUnpublishedChanges: { type: boolean }
+        last7Days:
+          type: object
+          required: [replies, handedOver]
+          properties: { replies: { type: integer }, handedOver: { type: integer } }
+    AgentDetail:
+      allOf:
+        - { $ref: '#/components/schemas/AgentSummary' }
+        - type: object
+          required: [config, draftRevision, draftUpdatedAt, problems, starterKey]
+          properties:
+            config: { $ref: '#/components/schemas/AgentConfig' }
+            draftRevision: { type: integer }
+            draftUpdatedAt: { type: [string, 'null'], format: date-time }
+            problems: { type: array, items: { $ref: '#/components/schemas/Problem' } }
+            starterKey: { type: [string, 'null'] }
+    Starter:
+      type: object
+      required: [key, name, description, suggestedAttributes]
+      properties:
+        key: { type: string, examples: [sales_enquiries, customer_support, booking_requests, lead_qualification] }
+        name: { type: string }
+        description: { type: string }
+        suggestedAttributes:
+          type: array
+          items:
+            type: object
+            required: [key, label, type, exists]
+            properties:
+              key: { type: string }
+              label: { type: string }
+              type: { type: string, enum: [TEXT, NUMBER, DATE, BOOLEAN] }
+              exists: { type: boolean }
+    KnowledgeSource:
+      type: object
+      required: [id, kind, title, enabled, status, errorCode, errorMessage, charCount, lastRefreshedAt, replaceMe]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [ANSWER, WEBSITE, FILE] }
+        title: { type: string }
+        enabled: { type: boolean }
+        status: { type: string, enum: [PROCESSING, READY, FAILED] }
+        errorCode: { type: [string, 'null'] }
+        errorMessage: { type: [string, 'null'] }
+        question: { type: [string, 'null'] }
+        answer: { type: [string, 'null'] }
+        url: { type: [string, 'null'] }
+        refreshWeekly: { type: boolean }
+        pagesRead: { type: [integer, 'null'] }
+        fileName: { type: [string, 'null'] }
+        sizeBytes: { type: [integer, 'null'] }
+        charCount: { type: integer }
+        lastRefreshedAt: { type: [string, 'null'], format: date-time }
+        replaceMe: { type: boolean }
+    KnowledgeList:
+      type: object
+      required: [sources, totalChars, mode, limits]
+      properties:
+        sources: { type: array, items: { $ref: '#/components/schemas/KnowledgeSource' } }
+        totalChars: { type: integer, description: 'enabled, ready sources only' }
+        mode: { type: string, enum: [WHOLE, SEARCH], description: 'WHOLE while totalChars <= 120000 (research R4)' }
+        limits:
+          type: object
+          properties: { answers: { type: integer }, websites: { type: integer }, files: { type: integer } }
+    PreviewResult:
+      type: object
+      required: [reply, sources, wouldDo, usage]
+      properties:
+        reply:
+          type: object
+          description: The validated reply (claude-messages.md section 4) as it would be sent, with the introduction added on a first reply
+          required: [message]
+          properties:
+            message: { type: string }
+            language: { type: [string, 'null'] }
+            buttons: { type: [array, 'null'], items: { type: string } }
+            list: { type: [object, 'null'] }
+            mediaId: { type: [string, 'null'] }
+        sources:
+          type: array
+          items:
+            type: object
+            required: [id, kind, title]
+            properties: { id: { type: string }, kind: { type: string }, title: { type: string } }
+        wouldDo:
+          type: array
+          description: effects shown, not done (hand-over, remember, start flow, opt-out, skill calls that change data)
+          items:
+            type: object
+            required: [kind, description]
+            properties:
+              kind: { type: string, enum: [HAND_OVER, REMEMBER, START_FLOW, OPT_OUT, CALL_SKILL, UNANSWERED] }
+              description: { type: string }
+        usage:
+          type: object
+          properties: { costUsd: { type: number }, durationMs: { type: integer } }
+    UnansweredQuestion:
+      type: object
+      required: [id, text, askCount, firstAskedAt, lastAskedAt, resolvedAt]
+      properties:
+        id: { type: string, format: uuid }
+        text: { type: string }
+        askCount: { type: integer }
+        firstAskedAt: { type: string, format: date-time }
+        lastAskedAt: { type: string, format: date-time }
+        resolvedAt: { type: [string, 'null'], format: date-time }
+    Usage:
+      type: object
+      required: [month, replies, replyLimit, testReplies, assistantRequests, assistantLimit, estimatedCostUsd, byAgent, byDay, conversations]
+      properties:
+        month: { type: string, examples: ['2026-11'] }
+        replies: { type: integer, description: 'AI replies this month, test replies included (they count towards the limit)' }
+        replyLimit: { type: integer }
+        testReplies: { type: integer }
+        previewTurns: { type: integer }
+        assistantRequests: { type: integer }
+        assistantLimit: { type: integer }
+        estimatedCostUsd: { type: number }
+        byAgent:
+          type: array
+          items:
+            type: object
+            required: [agentId, name, replies, testReplies, costUsd]
+            properties:
+              agentId: { type: string, format: uuid }
+              name: { type: string }
+              replies: { type: integer }
+              testReplies: { type: integer }
+              costUsd: { type: number }
+        byDay:
+          type: array
+          items:
+            type: object
+            required: [day, replies, costUsd]
+            properties:
+              day: { type: string, format: date }
+              replies: { type: integer }
+              costUsd: { type: number }
+        conversations:
+          type: object
+          description: AI conversations ended this month, grouped as in data-model.md section 3
+          required: [answered, handedOver, memberTook, limitReached, failed, other]
+          properties:
+            answered: { type: integer }
+            handedOver: { type: integer }
+            memberTook: { type: integer }
+            limitReached: { type: integer }
+            failed: { type: integer }
+            other: { type: integer }
+    AiSettings:
+      type: object
+      required: [replyLimit, assistantLimit, prices, limitMessage]
+      additionalProperties: false
+      properties:
+        replyLimit: { type: integer, minimum: 0, maximum: 1000000 }
+        assistantLimit: { type: integer, minimum: 0, maximum: 100000 }
+        prices:
+          type: object
+          required: [model, input, output, cacheRead, cacheWrite]
+          additionalProperties: false
+          description: USD per million tokens
+          properties:
+            model: { type: string, maxLength: 60 }
+            input: { type: number, minimum: 0 }
+            output: { type: number, minimum: 0 }
+            cacheRead: { type: number, minimum: 0 }
+            cacheWrite: { type: number, minimum: 0 }
+        limitMessage: { type: [string, 'null'], maxLength: 500 }
+    AssistantAction:
+      type: object
+      required: [id, kind, status, preview, expiresAt]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [SEND_CAMPAIGN, SCHEDULE_CAMPAIGN, DELETE_CONTACTS, DELETE_TAGS] }
+        status: { type: string, enum: [PENDING, CONFIRMED, CANCELLED, EXPIRED, FAILED] }
+        preview:
+          type: object
+          description: what will happen, for example the campaign, the recipient count and the estimated cost in USD
+        expiresAt: { type: string, format: date-time }
+        result: { type: [object, 'null'] }
+    AssistantRequest:
+      type: object
+      required: [id, prompt, status, reply, drafts, actions, createdAt, finishedAt, errorCode]
+      properties:
+        id: { type: string, format: uuid }
+        prompt: { type: string }
+        status: { type: string, enum: [QUEUED, RUNNING, DONE, FAILED] }
+        reply: { type: [string, 'null'] }
+        drafts:
+          type: array
+          items:
+            type: object
+            required: [kind, id, name]
+            properties:
+              kind: { type: string, enum: [TEMPLATE, FLOW, CAMPAIGN] }
+              id: { type: string, format: uuid }
+              name: { type: string }
+        actions: { type: array, items: { $ref: '#/components/schemas/AssistantAction' } }
+        createdAt: { type: string, format: date-time }
+        finishedAt: { type: [string, 'null'], format: date-time }
+        errorCode: { type: [string, 'null'] }
+    AiConversationState:
+      type: [object, 'null']
+      properties:
+        id: { type: string, format: uuid }
+        agentId: { type: string, format: uuid }
+        agentName: { type: string }
+        startedBy: { type: string, enum: [CUSTOMER, FLOW] }
+        test: { type: boolean }
+        replies: { type: integer }
+        startedAt: { type: string, format: date-time }

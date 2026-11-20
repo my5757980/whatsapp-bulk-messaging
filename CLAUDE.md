@@ -214,8 +214,10 @@ See `.specify/memory/constitution.md` for code quality, testing, performance, se
 - PostgreSQL 16+ (Neon in production, Docker locally) via Prisma migrations; Redis 7+ (noeviction, AOF) for queues and rate limits; S3-compatible object storage (MinIO locally) for uploads and media (001-whatsapp-bulk-messaging)
 - Same stack as 001, plus `web-push` (VAPID browser push), Server-Sent Events through the Next.js `/api` proxy fed by the Redis Stream `wbm:inbox:events`, and new Postgres tables for conversations and the chat timeline (002-team-inbox)
 - Same stack as 001 and 002, plus `@xyflow/react` 12.12.1 (flow canvas), a BullMQ `flows` queue for timers and API steps, and new Postgres tables for flows, versions, triggers, sessions and secrets (003-chatbot-flow-builder)
+- Same stack as 001–003, plus `@anthropic-ai/sdk` 1.6.0 (Claude Opus 5.5 through the Messages API), `unpdf`, `mammoth`, `cheerio` and `robots-parser` for knowledge, BullMQ queues `ai` and `ai-knowledge`, and Postgres full-text search over knowledge chunks (004-ai-agent)
 
 ## Recent Changes
+- 004-ai-agent: AI agent planned: Claude Opus 5.5 in a bounded tool loop in the worker, structured JSON replies applied by our service, Postgres full-text knowledge search (see specs/004-ai-agent/plan.md)
 - 003-chatbot-flow-builder: flow builder planned: versioned JSON graphs, a pure session interpreter in the worker, React Flow editor (see specs/003-chatbot-flow-builder/plan.md)
 - 002-team-inbox: live chat planned: SSE with Redis Stream replay, per-number priority send jobs, Web Push (see specs/002-team-inbox/plan.md)
 - 001-whatsapp-bulk-messaging: Added TypeScript 6.0 on Node.js 26 LTS + Next.js 16.4, NestJS 12.5, Prisma 7.10, BullMQ 6.7 (see specs/001-whatsapp-bulk-messaging/plan.md)
