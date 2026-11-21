@@ -3,7 +3,7 @@ import { DEFAULT_INTROS, looksSensitive, maskSensitive, type AgentConfig, type A
 import { v7 as uuidv7 } from 'uuid';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
-import type { Prisma } from '../../../generated/prisma/client.js';
+import { Prisma } from '../../../generated/prisma/client.js';
 import { ConsentService } from '../../contacts/consent.service.js';
 import { isLive } from '../../inbox/conversations/window.js';
 import { writeAttributes } from '../../inbox/journey/attribute-writer.js';
@@ -11,6 +11,7 @@ import { InboxPublisher } from '../../inbox/realtime/inbox-publisher.js';
 import { ChatRoutingService } from '../../inbox/routing/chat-routing.service.js';
 import { requestSendWorkerSync, sessionSendJob } from '../../sending/send-jobs.js';
 import type { KnowledgeItem } from '../claude/prompt.js';
+import type { PendingConfirmation, SkillCallRecord } from '../claude/skills.js';
 import { UnansweredRecorder } from '../knowledge/unanswered-recorder.js';
 import { AiUsageService, type UsageSettings } from '../usage/usage.service.js';
 import type { SelectedAgent } from './agent-selector.js';
@@ -46,6 +47,10 @@ export interface ApplyInput extends TurnBase {
   usage: TokenUsage;
   model: string;
   settings: UsageSettings;
+  /** API skill calls of the turn, without values (FR-030). */
+  skillCalls: SkillCallRecord[];
+  /** The confirmation to keep for the next turn (research R12). */
+  pendingConfirmation: PendingConfirmation | null;
 }
 
 export interface FailureInput extends TurnBase {
@@ -136,7 +141,7 @@ export class TurnApplier {
         const items = replyItems(message, input.reply, { aiConversationId: conversation.id, media, allowButtons: config.skills.buttons, allowLists: config.skills.lists });
         const itemIds: string[] = [];
         for (const [i, item] of items.entries()) {
-          itemIds.push(await this.writeReply(tx, input, conversation.id, item, { sources, ...(handOver ? { handOver: handOver.reason } : {}) }, new Date(now.getTime() + i)));
+          itemIds.push(await this.writeReply(tx, input, conversation.id, item, { sources, skills: input.skillCalls, ...(handOver ? { handOver: handOver.reason } : {}) }, new Date(now.getTime() + i)));
         }
         // The reply record points at the main item (the file, buttons or list after any lead-in text).
         const itemId = itemIds.at(-1)!;
@@ -154,7 +159,7 @@ export class TurnApplier {
             counted: true,
             language: input.reply.language,
             sources: sources as Prisma.InputJsonValue,
-            skills: [],
+            skills: input.skillCalls as unknown as Prisma.InputJsonValue,
             modelId: input.model,
             inputTokens: input.usage.inputTokens,
             cacheReadTokens: input.usage.cacheReadTokens,
@@ -177,7 +182,14 @@ export class TurnApplier {
         });
         await tx.aiConversation.update({
           where: { id: conversation.id },
-          data: { replies: { increment: 1 }, lastHandledAt: input.handledUntil, lastActivityAt: now, ...(input.agent.versionId ? { versionId: input.agent.versionId } : {}) },
+          data: {
+            replies: { increment: 1 },
+            lastHandledAt: input.handledUntil,
+            lastActivityAt: now,
+            // The call the customer was just asked to confirm, kept for their answer (research R12).
+            pendingConfirmation: input.pendingConfirmation ? (input.pendingConfirmation as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+            ...(input.agent.versionId ? { versionId: input.agent.versionId } : {}),
+          },
         });
         if (input.reply.unanswered) await this.unanswered.record(tx, input.agent.agentId, conversation.id, input.reply.unanswered);
 

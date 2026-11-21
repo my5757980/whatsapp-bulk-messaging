@@ -1,8 +1,11 @@
 import { Global, Module } from '@nestjs/common';
 import { InboxApiModule } from '../inbox/inbox.module.js';
+import { AgentSecretsController } from './agents/agent-secrets.controller.js';
+import { AgentSecretsService } from './agents/agent-secrets.service.js';
 import { AgentsController } from './agents/agents.controller.js';
 import { AgentsService } from './agents/agents.service.js';
 import { AgentPublishService } from './agents/publish.service.js';
+import { AgentSecretsVault } from './agents/secrets-vault.js';
 import { AgentVersionsController } from './agents/versions.controller.js';
 import { AgentVersionsService } from './agents/versions.service.js';
 import { ClaudeClient } from './claude/claude.client.js';
@@ -27,7 +30,7 @@ import { AiUsageService } from './usage/usage.service.js';
 // module (used by the 002 inbound handler in the worker and by live chat in the API), HTTP
 // controllers in AiApiModule, and the `ai` and `ai-knowledge` processors in WorkerFeaturesModule.
 
-const DOMAIN = [ClaudeClient, AiConversationsService, AgentSelector, AiAgentRouter, KnowledgeSearch, AiUsageService, UnansweredRecorder, TurnApplier, AiFailureMonitor, TurnService];
+const DOMAIN = [ClaudeClient, AgentSecretsVault, AiConversationsService, AgentSelector, AiAgentRouter, KnowledgeSearch, AiUsageService, UnansweredRecorder, TurnApplier, AiFailureMonitor, TurnService];
 
 /** AI services shared by the HTTP app and the worker. */
 @Global()
@@ -38,7 +41,7 @@ export class AiDomainModule {}
 @Module({
   // InboxApiModule gives the live chat controllers the 002 visibility rules (ConversationsService).
   imports: [AiDomainModule, InboxApiModule],
-  providers: [AgentsService, AgentPublishService, AgentVersionsService, KnowledgeService, UnansweredService, PreviewService],
-  controllers: [AgentsController, AgentVersionsController, KnowledgeController, UnansweredController, PreviewController, AiStateController],
+  providers: [AgentsService, AgentPublishService, AgentVersionsService, AgentSecretsService, KnowledgeService, UnansweredService, PreviewService],
+  controllers: [AgentsController, AgentVersionsController, AgentSecretsController, KnowledgeController, UnansweredController, PreviewController, AiStateController],
 })
 export class AiApiModule {}

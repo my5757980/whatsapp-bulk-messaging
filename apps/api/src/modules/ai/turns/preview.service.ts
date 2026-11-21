@@ -75,12 +75,14 @@ export class PreviewService {
         firstReply,
         handOverNow: false,
         couldNotAnswerBefore: false,
+        // Read-only skills run; skills that change data are only shown (FR-034).
+        skills: { mode: 'preview', contact: { name: input.contact?.name ?? null, phoneE164: null, attributes: input.contact?.attributes ?? {} }, pending: null },
       });
     } catch (error) {
       if (error instanceof ClaudeFailure) throw new AppError(HttpStatus.SERVICE_UNAVAILABLE, 'AI_UNAVAILABLE', 'The AI service did not answer. Try again in a moment.');
       throw error;
     }
-    const { reply, knownSources, usage, catalog } = result;
+    const { reply, knownSources, usage, catalog, skillWouldDo } = result;
     const durationMs = Date.now() - startedAt;
 
     const settings = await this.usage.settings();
@@ -89,7 +91,7 @@ export class PreviewService {
       this.usage.record(tx, { kind: 'PREVIEW', agentId, numberId: null, test: false, usage, costMicros, at: new Date(), timezone: settings.timezone, countsAgainstMonth: false }),
     );
 
-    const wouldDo: WouldDo[] = [];
+    const wouldDo: WouldDo[] = skillWouldDo.map((description) => ({ kind: 'CALL_SKILL' as const, description }));
     if (reply.optOut === 'clear') wouldDo.push({ kind: 'OPT_OUT', description: 'Would record that this customer does not want messages, and send nothing' });
     const handOver = handOverFor(reply, { whenUnsure: config.whenUnsure, unansweredBefore: 0, capReached: false });
     if (handOver) wouldDo.push({ kind: 'HAND_OVER', description: `Would hand the chat to your team: ${handOver.summary.trim() || handOverReason(handOver.reason)}` });

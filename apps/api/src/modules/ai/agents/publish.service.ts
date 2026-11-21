@@ -1,12 +1,26 @@
+import { isIP } from 'node:net';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { agentConfigProblems, type AgentConfig, type AgentProblem } from '@wbm/shared';
 import { AppError } from '../../../common/errors/app-error.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import { AuditService, type AuditActor } from '../../audit/audit.service.js';
+import { isBlockedAddress } from '../../flows/steps/api-client.js';
 import { AGENT_INCLUDE, parseConfig, toAgentDetail } from './agent-views.js';
 
 const SECRET_REFERENCE = /\{secret:([^}]+)\}/g;
+
+/** A skill address whose host is written as a private or local address (localhost, 10.x, 192.168.x, ::1 …). */
+export function isPrivateHost(url: string): boolean {
+  let host: string;
+  try {
+    host = new URL(url.trim().replace(/\{[^}]*\}/g, 'x')).hostname.replace(/^\[|\]$/g, '').toLowerCase();
+  } catch {
+    return false;
+  }
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  return isIP(host) !== 0 && isBlockedAddress(host);
+}
 
 /**
  * Publishing agents (T034, FR-002, FR-005): the shared checks plus the ones that need the database;
@@ -55,6 +69,8 @@ export class AgentPublishService {
 
     const secretIds = new Set((await this.prisma.aiAgentSecret.findMany({ where: { agentId }, select: { id: true } })).map((s) => s.id));
     config.skills.api.forEach((skill, i) => {
+      // Private and local addresses are refused here when written as such; names are checked again at call time.
+      if (isPrivateHost(skill.request.url)) add('BLOCKED_ADDRESS', 'This address is on a private network, which skills cannot reach.', `skills.api[${i}].request.url`);
       skill.request.headers.forEach((header, h) => {
         for (const match of header.value.matchAll(SECRET_REFERENCE)) {
           if (!secretIds.has(match[1]!)) add('UNKNOWN_SECRET', 'This header uses a secret that does not exist.', `skills.api[${i}].request.headers[${h}].value`);

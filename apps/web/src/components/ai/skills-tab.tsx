@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AI_LIMITS, type AgentConfig, type AgentProblem } from '@wbm/shared';
 import { useState } from 'react';
 import { MediaPicker, mediaLibraryKey, type MediaItem } from '@/components/inbox/media-picker';
+import { ApiSkills, type AgentSecret } from './api-skill-form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +14,9 @@ import { queryKeys } from '@/lib/query';
 import type { AttributeDefinition } from '@/lib/types';
 
 interface SkillsTabProps {
+  agentId: string;
+  /** The agent's stored secrets (names only), for API skill headers. */
+  secrets: AgentSecret[];
   config: AgentConfig;
   problems: AgentProblem[];
   onChange: (patch: Partial<AgentConfig>) => void;
@@ -37,9 +41,10 @@ function FieldProblems({ problems, prefix }: { problems: AgentProblem[]; prefix:
  * files from the media library it may send (each with when to send it), and contact attributes it
  * may fill from what the customer says (each with what it holds).
  */
-export function SkillsTab({ config, problems, onChange }: SkillsTabProps) {
+export function SkillsTab({ agentId, secrets: initialSecrets, config, problems, onChange }: SkillsTabProps) {
   const skills = config.skills;
   const setSkills = (patch: Partial<AgentConfig['skills']>) => onChange({ skills: { ...skills, ...patch } });
+  const [secrets, setSecrets] = useState<AgentSecret[]>(initialSecrets);
   const library = useQuery({ queryKey: mediaLibraryKey, queryFn: () => api<{ items: MediaItem[] }>('/media-library?pageSize=60') });
   const attributes = useQuery({ queryKey: queryKeys.attributes, queryFn: () => api<AttributeDefinition[]>('/attributes') });
   const [attributeKey, setAttributeKey] = useState('');
@@ -173,6 +178,8 @@ export function SkillsTab({ config, problems, onChange }: SkillsTabProps) {
           </div>
         )}
       </section>
+
+      <ApiSkills agentId={agentId} skills={skills.api} secrets={secrets} problems={problems} onChange={(api) => setSkills({ api })} onSecretsChange={setSecrets} />
     </div>
   );
 }

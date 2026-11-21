@@ -133,4 +133,23 @@ describe('AI agent API contract', () => {
     }
     await check('post', '/ai-agents/{id}/preview', await call('post', `/ai-agents/${randomUUID()}/preview`, { messages: [{ from: 'customer', text: 'Hi' }] }), 404);
   });
+
+  it('US5: agent secrets and the skill test request', async () => {
+    const created = (await call('post', '/ai-agents', { name: `Contract US5 ${randomUUID().slice(0, 6)}` })).body;
+    const secret = await call('post', `/ai-agents/${created.id}/secrets`, { name: 'Shop token', value: 'tok_contract' });
+    await check('post', '/ai-agents/{id}/secrets', secret, 201);
+    await check('post', '/ai-agents/{id}/secrets', await call('post', `/ai-agents/${created.id}/secrets`, { name: '', value: 'x' }), 422);
+    await check('put', '/ai-agents/{id}/secrets/{secretId}', await call('put', `/ai-agents/${created.id}/secrets/${secret.body.id}`, { value: 'tok_contract_2' }), 200);
+    await check('put', '/ai-agents/{id}/secrets/{secretId}', await call('put', `/ai-agents/${created.id}/secrets/${randomUUID()}`, { name: 'Other' }), 404);
+
+    // A loopback address is refused by the client before any connection, so no network is needed.
+    const skill = { id: 'probe', name: 'Probe', whenToUse: 'Never', inputs: [], changesData: false, request: { method: 'GET', url: 'https://127.0.0.1/probe', headers: [], query: [], body: null, timeoutSeconds: 2 }, map: [] };
+    await check('post', '/ai-agents/{id}/skill-test', await call('post', `/ai-agents/${created.id}/skill-test`, { skill }), 200);
+
+    const used = (await call('post', `/ai-agents/${created.id}/secrets`, { name: 'Used', value: 'v' })).body;
+    const withSecret = { ...skill, request: { ...skill.request, headers: [{ name: 'X-Key', value: `{secret:${used.id}}` }] } };
+    expect((await call('put', `/ai-agents/${created.id}/draft`, { config: { ...created.config, skills: { ...created.config.skills, api: [withSecret] } }, draftRevision: 0 })).status).toBe(200);
+    await check('delete', '/ai-agents/{id}/secrets/{secretId}', await call('delete', `/ai-agents/${created.id}/secrets/${used.id}`), 409);
+    await check('delete', '/ai-agents/{id}/secrets/{secretId}', await call('delete', `/ai-agents/${created.id}/secrets/${secret.body.id}`), 204);
+  });
 });

@@ -205,7 +205,7 @@ export function AgentEditor({ initial, onReload }: { initial: AgentDetail; onRel
             <KnowledgeTab agentId={initial.id} />
           </TabsContent>
           <TabsContent value="skills" className="pt-4">
-            <SkillsTab config={config} problems={problems} onChange={change} />
+            <SkillsTab agentId={initial.id} secrets={initial.secrets} config={config} problems={problems} onChange={change} />
           </TabsContent>
           <TabsContent value="unanswered" className="pt-4">
             <UnansweredTab agentId={initial.id} />

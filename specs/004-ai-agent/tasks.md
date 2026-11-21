@@ -194,16 +194,16 @@ person and no status.
 
 ### Tests for User Story 5 (REQUIRED) ⚠️
 
-- [ ] T070 [P] [US5] Unit tests for API skill tools in apps/api/test/unit/ai/skill-tools.spec.ts: one strict tool `skill_<id>` per skill from its inputs; only mapped fields go back to the model; a skill with `changesData` returns `confirmation_needed` and stores the pending call, runs on a later turn with the same inputs, asks again with other inputs, and is simulated in preview
-- [ ] T071 [P] [US5] Integration test apps/api/test/integration/ai-skills.int-spec.ts with nock: inputs are filled with place-aware encoding and the secret only in a header; the next Claude request holds only mapped fields; a timeout and a 500 give `ok: false` and no invented status; `http://` and private addresses are refused at publish; `ai_replies.skills` records the call without values; agent secrets are stored encrypted, returned by name only, audited without values and refused for deletion while used (409 `SECRET_IN_USE`); the skill test request uses the same client
-- [ ] T072 [P] [US5] Contract tests in apps/api/test/contract/ai.contract-spec.ts for `POST /ai-agents/{id}/secrets`, `PUT/DELETE /ai-agents/{id}/secrets/{secretId}` and `POST /ai-agents/{id}/skill-test`
-- [ ] T073 [P] [US5] Playwright e2e apps/web/e2e/ai-us5-api-skill.spec.ts: add a skill with a secret header (shown masked), run the test request, ask about an order through the fake model's tool-call rule
+- [X] T070 [P] [US5] Unit tests for API skill tools in apps/api/test/unit/ai/skill-tools.spec.ts: one strict tool `skill_<id>` per skill from its inputs; only mapped fields go back to the model; a skill with `changesData` returns `confirmation_needed` and stores the pending call, runs on a later turn with the same inputs, asks again with other inputs, and is simulated in preview
+- [X] T071 [P] [US5] Integration test apps/api/test/integration/ai-skills.int-spec.ts with nock: inputs are filled with place-aware encoding and the secret only in a header; the next Claude request holds only mapped fields; a timeout and a 500 give `ok: false` and no invented status; `http://` and private addresses are refused at publish; `ai_replies.skills` records the call without values; agent secrets are stored encrypted, returned by name only, audited without values and refused for deletion while used (409 `SECRET_IN_USE`); the skill test request uses the same client
+- [X] T072 [P] [US5] Contract tests in apps/api/test/contract/ai.contract-spec.ts for `POST /ai-agents/{id}/secrets`, `PUT/DELETE /ai-agents/{id}/secrets/{secretId}` and `POST /ai-agents/{id}/skill-test`
+- [X] T073 [P] [US5] Playwright e2e apps/web/e2e/ai-us5-api-skill.spec.ts: add a skill with a secret header (shown masked), run the test request, ask about an order through the fake model's tool-call rule
 
 ### Implementation for User Story 5
 
-- [ ] T074 [US5] Implement agent secrets in apps/api/src/modules/ai/agents/agent-secrets.service.ts and a controller (001 cipher, names only, `SECRET_IN_USE` across draft and versions; audit `ai.secret_changed`) and the skill test request in apps/api/src/modules/ai/agents/skill-test.controller.ts on the 003 client
-- [ ] T075 [US5] Implement API skill tools in apps/api/src/modules/ai/claude/tools.ts on the 003 request builder and client (apps/api/src/modules/flows/steps/api-request.ts, api-client.ts) with the confirmation protocol on `ai_conversations.pending_confirmation`, and add the API skill checks (`NOT_HTTPS`, `UNKNOWN_SECRET`, `SECRET_OUTSIDE_HEADER`, `UNKNOWN_INPUT`, `DUPLICATE_SKILL_ID`) to publish.service.ts
-- [ ] T076 [P] [US5] Add the API skill editor apps/web/src/components/ai/api-skill-form.tsx (inputs, request, headers with the secrets panel, mapping, "changes data", test request) to the Skills tab
+- [X] T074 [US5] Implement agent secrets in apps/api/src/modules/ai/agents/agent-secrets.service.ts and a controller (001 cipher, names only, `SECRET_IN_USE` across draft and versions; audit `ai.secret_changed`) and the skill test request in apps/api/src/modules/ai/agents/skill-test.controller.ts on the 003 client
+- [X] T075 [US5] Implement API skill tools in apps/api/src/modules/ai/claude/tools.ts on the 003 request builder and client (apps/api/src/modules/flows/steps/api-request.ts, api-client.ts) with the confirmation protocol on `ai_conversations.pending_confirmation`, and add the API skill checks (`NOT_HTTPS`, `UNKNOWN_SECRET`, `SECRET_OUTSIDE_HEADER`, `UNKNOWN_INPUT`, `DUPLICATE_SKILL_ID`) to publish.service.ts
+- [X] T076 [P] [US5] Add the API skill editor apps/web/src/components/ai/api-skill-form.tsx (inputs, request, headers with the secrets panel, mapping, "changes data", test request) to the Skills tab
 
 ---
 

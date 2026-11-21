@@ -6,6 +6,8 @@ import { isLive } from '../../inbox/conversations/window.js';
 import { LiveChatSettingsService } from '../../inbox/settings/live-chat-settings.service.js';
 import { ClaudeClient, ClaudeFailure } from '../claude/claude.client.js';
 import { buildPrompt, contactFacts, renderSource, type KnowledgeItem, type PromptCatalog } from '../claude/prompt.js';
+import { AgentSecretsVault } from '../agents/secrets-vault.js';
+import { skillSecretIds, skillSession, type PendingConfirmation, type SkillCallRecord, type SkillContact } from '../claude/skills.js';
 import { buildTools } from '../claude/tools.js';
 import { KnowledgeSearch } from '../knowledge/knowledge-search.js';
 import { AiUsageService } from '../usage/usage.service.js';
@@ -43,6 +45,23 @@ export interface ThinkInput {
   firstReply: boolean;
   handOverNow: boolean;
   couldNotAnswerBefore: boolean;
+  /** API skills: `live` for customer turns (with the confirmation protocol), `preview` for the preview chat. */
+  skills: { mode: 'live' | 'preview'; contact: SkillContact; pending: PendingConfirmation | null };
+}
+
+/** What one model run decided, before anything is applied. */
+export interface Thought {
+  reply: AgentReply;
+  knownSources: Map<string, KnowledgeItem>;
+  usage: TokenUsage;
+  model: string;
+  catalog: PromptCatalog;
+  /** API skill calls of the turn, without values. */
+  skillCalls: SkillCallRecord[];
+  /** The confirmation to keep for the next turn. */
+  pendingConfirmation: PendingConfirmation | null;
+  /** "Would call …" lines (preview only). */
+  skillWouldDo: string[];
 }
 
 interface ChatRow {
@@ -80,6 +99,7 @@ export class TurnService {
     private readonly usage: AiUsageService,
     private readonly applier: TurnApplier,
     private readonly failures: AiFailureMonitor,
+    private readonly secretsVault: AgentSecretsVault,
   ) {}
 
   async run(conversationId: string): Promise<TurnResult> {
@@ -124,10 +144,11 @@ export class TurnService {
     const base = { conversationId: chat.id, numberId: chat.numberId, contactId: chat.contact.id, agent, handledIds, firstMessageAt, startedAt };
 
     try {
-      const { reply, knownSources, usage, model } = await this.decide(chat, agent, customerText, { handOverNow: capNow, couldNotAnswerBefore: unansweredBefore > 0 });
+      const thought = await this.decide(chat, agent, customerText, { handOverNow: capNow, couldNotAnswerBefore: unansweredBefore > 0 });
+      const { reply, knownSources, usage, model, skillCalls, pendingConfirmation } = thought;
       const handOver = handOverFor(reply, { whenUnsure: agent.config.whenUnsure, unansweredBefore, capReached: capNow });
       const settings = await this.usage.settings();
-      const outcome = await this.applier.apply({ ...base, handledUntil, reply, handOver, customerText, knownSources, usage, model, settings });
+      const outcome = await this.applier.apply({ ...base, handledUntil, reply, handOver, customerText, knownSources, usage, model, settings, skillCalls, pendingConfirmation });
       return outcome.result;
     } catch (error) {
       if (!(error instanceof ClaudeFailure)) throw error;
@@ -138,18 +159,23 @@ export class TurnService {
     }
   }
 
-  /** A customer turn: the chat's contact and history from the database, then the model. */
-  private async decide(chat: ChatRow, agent: SelectedAgent, customerText: string, rules: { handOverNow: boolean; couldNotAnswerBefore: boolean }) {
+  /** A customer turn: the chat's contact, history and pending confirmation from the database, then the model. */
+  private async decide(chat: ChatRow, agent: SelectedAgent, customerText: string, rules: { handOverNow: boolean; couldNotAnswerBefore: boolean }): Promise<Thought> {
     const contact = chat.contact!;
-    const history = await this.history(chat.id, agent);
+    const attributes = (contact.attributes ?? {}) as Record<string, unknown>;
+    const [history, conversation] = await Promise.all([
+      this.history(chat.id, agent),
+      agent.aiConversationId ? this.prisma.aiConversation.findUnique({ where: { id: agent.aiConversationId }, select: { pendingConfirmation: true } }) : null,
+    ]);
     return this.think({
       agentId: agent.agentId,
       config: agent.config,
-      contact: { name: contact.name, attributes: (contact.attributes ?? {}) as Record<string, unknown>, tags: contact.tags.map((t) => t.tag.name) },
+      contact: { name: contact.name, attributes, tags: contact.tags.map((t) => t.tag.name) },
       history,
       customerText,
       firstReply: agent.replies === 0,
       ...rules,
+      skills: { mode: 'live', contact: { name: contact.name, phoneE164: contact.phoneE164, attributes }, pending: (conversation?.pendingConfirmation ?? null) as PendingConfirmation | null },
     });
   }
 
@@ -157,7 +183,7 @@ export class TurnService {
    * Builds the prompt, runs the model and returns the sanitised reply. Customer turns and the
    * preview (T060) share it; it changes nothing, so the caller decides what happens next.
    */
-  async think(input: ThinkInput): Promise<{ reply: AgentReply; knownSources: Map<string, KnowledgeItem>; usage: TokenUsage; model: string; catalog: PromptCatalog }> {
+  async think(input: ThinkInput): Promise<Thought> {
     const config = input.config;
     const agentId = input.agentId;
     const customerText = input.customerText;
@@ -186,12 +212,14 @@ export class TurnService {
         teamOpen: isWithinHours(live.workingHours, live.timezone, now),
         nextOpening: nextOpening(live.workingHours, live.timezone, now),
         firstReply: input.firstReply,
-        pendingConfirmation: null,
+        pendingConfirmation: input.skills.pending ? { skillName: input.skills.pending.skillName, inputs: input.skills.pending.inputs } : null,
         handOverNow: input.handOverNow,
         couldNotAnswerBefore: input.couldNotAnswerBefore,
       },
     });
 
+    const secrets = await this.secretsVault.values(agentId, [...new Set(config.skills.api.flatMap(skillSecretIds))]);
+    const session = skillSession(config.skills.api, { mode: input.skills.mode, contact: input.skills.contact, secrets, pending: input.skills.pending });
     let searches = 0;
     const tools = buildTools({
       searchKnowledge: async (query) => {
@@ -201,7 +229,7 @@ export class TurnService {
         for (const item of found.items) knownSources.set(item.id, item);
         return found.text;
       },
-      skills: [],
+      skills: session.tools,
     });
 
     const result = await this.claude.runTurn({
@@ -236,7 +264,16 @@ export class TurnService {
     if (dropped.length) this.logger.log({ agentId, dropped }, 'Parts of an AI reply were dropped');
     // Only an opt-out or a flow start may come without words (contracts/claude-messages.md §4).
     if (!reply.message && reply.optOut !== 'clear' && !reply.startFlow) throw new ClaudeFailure('INVALID_OUTPUT', 'The reply had no message');
-    return { reply, knownSources, usage: result.usage as TokenUsage, model: result.model, catalog };
+    return {
+      reply,
+      knownSources,
+      usage: result.usage as TokenUsage,
+      model: result.model,
+      catalog,
+      skillCalls: session.calls,
+      pendingConfirmation: session.pending(),
+      skillWouldDo: session.wouldDo,
+    };
   }
 
   private loadChat(conversationId: string): Promise<ChatRow | null> {
