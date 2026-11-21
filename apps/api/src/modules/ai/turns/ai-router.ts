@@ -5,6 +5,7 @@ import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import type { ChatContentType, ConversationState } from '../../../generated/prisma/client.js';
 import { aiTurnJob } from '../ai-jobs.js';
 import { AgentSelector } from './agent-selector.js';
+import { AiConversationsService } from './ai-conversations.service.js';
 
 /** What the 002 inbound handler knows about a stored customer message. */
 export interface AiInboundMessage {
@@ -36,10 +37,16 @@ export class AiAgentRouter {
     private readonly prisma: PrismaService,
     private readonly selector: AgentSelector,
     private readonly queues: QueueRegistry,
+    private readonly conversations: AiConversationsService,
   ) {}
 
   async onCustomerMessage(message: AiInboundMessage): Promise<boolean> {
-    if (message.optOutKeyword || message.humanKeyword || message.chatState !== 'ACTIVE') return false;
+    // The 001 consent rules recorded the opt-out; the agent stops in this chat (FR-027).
+    if (message.optOutKeyword) {
+      await this.conversations.endForConversation(message.conversationId, 'OPTED_OUT');
+      return false;
+    }
+    if (message.humanKeyword || message.chatState !== 'ACTIVE') return false;
     // A reaction is not a message to answer.
     if (message.contentType === 'REACTION') return false;
     const contact = await this.prisma.contact.findUnique({ where: { id: message.contactId }, select: { blockedAt: true, consentStatus: true } });

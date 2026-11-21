@@ -30,6 +30,10 @@ export interface TurnContext {
   nextOpening: string | null;
   firstReply: boolean;
   pendingConfirmation: { skillName: string; inputs: Record<string, string> } | null;
+  /** The reply cap is reached: this reply hands over (FR-023). */
+  handOverNow?: boolean;
+  /** The AI conversation already had a question the agent could not answer (the repeat rule). */
+  couldNotAnswerBefore?: boolean;
 }
 
 export interface PromptInput {
@@ -130,6 +134,8 @@ export function renderTurnContext(turn: TurnContext, retrieved: KnowledgeItem[])
     const inputs = Object.entries(turn.pendingConfirmation.inputs).map(([k, v]) => `${k} = ${v}`).join(', ');
     lines.push(`Pending confirmation: the customer was asked to confirm "${turn.pendingConfirmation.skillName}"${inputs ? ` with ${inputs}` : ''}.`);
   }
+  if (turn.handOverNow) lines.push('This conversation reached its reply limit: hand the chat over to a person in this reply.');
+  if (turn.couldNotAnswerBefore) lines.push('Earlier in this conversation you could not answer a question. If you cannot answer this one either, hand the chat over.');
   if (retrieved.length) lines.push(`<retrieved>\n${retrieved.map(renderSource).join('\n')}\n</retrieved>`);
   lines.push('</turn_context>');
   return lines.join('\n');

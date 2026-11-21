@@ -5,6 +5,7 @@ import { ScheduleReconcilerProcessor } from './modules/campaigns/schedule-reconc
 import { AiDomainModule } from './modules/ai/ai.module.js';
 import { KnowledgeQueueProcessor } from './modules/ai/knowledge/knowledge-queue.processor.js';
 import { KnowledgeProcessor } from './modules/ai/knowledge/knowledge.processor.js';
+import { AiExpiryProcessor } from './modules/ai/turns/expiry.processor.js';
 import { TurnProcessor } from './modules/ai/turns/turn.processor.js';
 import { AiQueueProcessor } from './modules/ai/turns/ai-queue.processor.js';
 import { DomainModule } from './modules/domain.module.js';
@@ -72,6 +73,7 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     KnowledgeQueueProcessor,
     KnowledgeProcessor,
     TurnProcessor,
+    AiExpiryProcessor,
     InboxNotifyProcessor,
     PushService,
     SessionSendProcessor,

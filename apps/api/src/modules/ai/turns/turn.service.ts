@@ -11,6 +11,8 @@ import { KnowledgeSearch } from '../knowledge/knowledge-search.js';
 import { AiUsageService } from '../usage/usage.service.js';
 import { AgentSelector, type SelectedAgent } from './agent-selector.js';
 import { TurnApplier } from './apply.js';
+import { capReached, handOverFor, ineligibility } from './decisions.js';
+import { AiFailureMonitor } from './failure-monitor.js';
 import { localStamp, nextOpening } from './hours.js';
 
 /** At most this many unanswered customer messages are read in one turn. */
@@ -29,7 +31,7 @@ const PLACEHOLDERS: Partial<Record<ChatContentType, string>> = {
   UNSUPPORTED: '[The customer sent a message type that cannot be shown]',
 };
 
-export type TurnResult = 'SENT' | 'NOTHING' | 'NOT_ELIGIBLE' | 'DROPPED' | 'NEWER' | 'FAILED';
+export type TurnResult = 'SENT' | 'OPTED_OUT' | 'NOTHING' | 'NOT_ELIGIBLE' | 'DROPPED' | 'NEWER' | 'FAILED';
 
 interface ChatRow {
   id: string;
@@ -48,9 +50,10 @@ export function customerTextOf(message: { contentType: ChatContentType; text: st
 }
 
 /**
- * One customer turn (research R5, T042): gather the messages no reply covered yet, build the prompt,
- * run the bounded tool loop, validate the reply and hand it to the applier. Failures are logged
- * here; the fallback message and hand-over arrive with US2.
+ * One customer turn (research R5, T042, T051, T054): check the chat may be answered (FR-016), gather
+ * the waiting messages, build the prompt, run the bounded tool loop, validate the reply, decide the
+ * hand-over (FR-023) and hand it all to the applier. A failure of the AI service sends the fallback
+ * message and hands over (FR-022).
  */
 @Injectable()
 export class TurnService {
@@ -64,14 +67,27 @@ export class TurnService {
     private readonly liveChat: LiveChatSettingsService,
     private readonly usage: AiUsageService,
     private readonly applier: TurnApplier,
+    private readonly failures: AiFailureMonitor,
   ) {}
 
   async run(conversationId: string): Promise<TurnResult> {
     const startedAt = new Date();
     const chat = await this.loadChat(conversationId);
-    if (!chat?.contact || !this.answerable(chat)) return 'NOT_ELIGIBLE';
-    const agent = await this.selector.select({ id: chat.id, numberId: chat.numberId }, chat.contact.phoneE164);
-    if (!agent) return 'NOT_ELIGIBLE';
+    if (!chat?.contact) return 'NOT_ELIGIBLE';
+    const flowRunning = (await this.prisma.flowSession.count({ where: { conversationId, status: 'RUNNING' } })) > 0;
+    const why = ineligibility({
+      state: chat.state,
+      blocked: chat.contact.blockedAt !== null,
+      optedOut: chat.contact.consentStatus === 'OPTED_OUT',
+      windowLive: isLive(chat.lastCustomerMessageAt),
+      flowRunning,
+    });
+    const agent = why ? null : await this.selector.select({ id: chat.id, numberId: chat.numberId }, chat.contact.phoneE164);
+    if (!agent) {
+      // Nobody from the AI answers now: what waited is left to the team, the flow or the 002 rules.
+      await this.prisma.chatMessage.updateMany({ where: { conversationId, aiPending: true }, data: { aiPending: false } });
+      return 'NOT_ELIGIBLE';
+    }
 
     // Every message the router flagged since the last reply. WhatsApp times have one-second precision,
     // so the flag, not a time cursor, says what is new; the newest few are answered together.
@@ -89,37 +105,29 @@ export class TurnService {
     }
     const handledUntil = fresh.at(-1)!.occurredAt;
     const firstMessageAt = pending[0]!.occurredAt;
+    const customerText = texts.join('\n');
+    // The repeat and reply-cap rules (FR-023) count within the active AI conversation.
+    const unansweredBefore = agent.aiConversationId ? await this.prisma.aiUnansweredAsk.count({ where: { aiConversationId: agent.aiConversationId } }) : 0;
+    const capNow = agent.aiConversationId !== null && capReached(agent.replies, agent.config.replyCap);
+    const base = { conversationId: chat.id, numberId: chat.numberId, contactId: chat.contact.id, agent, handledIds, firstMessageAt, startedAt };
 
     try {
-      const { reply, knownSources, usage, model } = await this.decide(chat, agent, texts.join('\n'));
+      const { reply, knownSources, usage, model } = await this.decide(chat, agent, customerText, { handOverNow: capNow, couldNotAnswerBefore: unansweredBefore > 0 });
+      const handOver = handOverFor(reply, { whenUnsure: agent.config.whenUnsure, unansweredBefore, capReached: capNow });
       const settings = await this.usage.settings();
-      const outcome = await this.applier.apply({
-        conversationId: chat.id,
-        numberId: chat.numberId,
-        contactId: chat.contact.id,
-        agent,
-        handledUntil,
-        handledIds,
-        firstMessageAt,
-        reply,
-        knownSources,
-        usage,
-        model,
-        startedAt,
-        settings,
-      });
+      const outcome = await this.applier.apply({ ...base, handledUntil, reply, handOver, customerText, knownSources, usage, model, settings });
       return outcome.result;
     } catch (error) {
-      if (error instanceof ClaudeFailure) {
-        this.logger.warn({ conversationId, agentId: agent.agentId, reason: error.reason, status: error.status, requestId: error.requestId }, 'AI turn failed');
-        return 'FAILED';
-      }
-      throw error;
+      if (!(error instanceof ClaudeFailure)) throw error;
+      this.logger.warn({ conversationId, agentId: agent.agentId, reason: error.reason, status: error.status, requestId: error.requestId }, 'AI turn failed');
+      const result = await this.applier.applyFailure({ ...base, model: this.claude.model });
+      await this.failures.check().catch((err: unknown) => this.logger.error({ err: (err as Error).message }, 'Could not check the AI failure rate'));
+      return result;
     }
   }
 
   /** Builds the prompt, runs the model and returns the sanitised reply. */
-  private async decide(chat: ChatRow, agent: SelectedAgent, customerText: string) {
+  private async decide(chat: ChatRow, agent: SelectedAgent, customerText: string, rules: { handOverNow: boolean; couldNotAnswerBefore: boolean }) {
     const config = agent.config;
     const contact = chat.contact!;
     const allowedAttributes = config.skills.memory.map((m) => m.key);
@@ -148,6 +156,8 @@ export class TurnService {
         nextOpening: nextOpening(live.workingHours, live.timezone, now),
         firstReply: agent.replies === 0,
         pendingConfirmation: null,
+        handOverNow: rules.handOverNow,
+        couldNotAnswerBefore: rules.couldNotAnswerBefore,
       },
     });
 
@@ -193,12 +203,9 @@ export class TurnService {
       sourceIds: new Set(knownSources.keys()),
     });
     if (dropped.length) this.logger.log({ agentId: agent.agentId, dropped }, 'Parts of an AI reply were dropped');
+    // Only an opt-out or a flow start may come without words (contracts/claude-messages.md §4).
+    if (!reply.message && reply.optOut !== 'clear' && !reply.startFlow) throw new ClaudeFailure('INVALID_OUTPUT', 'The reply had no message');
     return { reply, knownSources, usage: result.usage as TokenUsage, model: result.model };
-  }
-
-  private answerable(chat: ChatRow): boolean {
-    const contact = chat.contact!;
-    return chat.state === 'ACTIVE' && !contact.blockedAt && contact.consentStatus !== 'OPTED_OUT' && isLive(chat.lastCustomerMessageAt);
   }
 
   private loadChat(conversationId: string): Promise<ChatRow | null> {

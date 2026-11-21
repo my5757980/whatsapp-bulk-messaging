@@ -16,6 +16,8 @@ export const ConsentSource = {
   API: 'API',
   KEYWORD: 'KEYWORD',
   MANUAL: 'MANUAL',
+  // Feature 004: a customer asked the AI agent, in their own words, not to be messaged (FR-027).
+  AI_AGENT: 'AI_AGENT',
 } as const;
 export type ConsentSource = (typeof ConsentSource)[keyof typeof ConsentSource];
 
@@ -86,6 +88,9 @@ export const NotificationType = {
   INBOX_REQUESTING: 'INBOX_REQUESTING',
   INBOX_TRANSFERRED: 'INBOX_TRANSFERRED',
   INBOX_MENTION: 'INBOX_MENTION',
+  // Feature 004 AI agent
+  AI_USAGE: 'AI_USAGE',
+  AI_FAILING: 'AI_FAILING',
 } as const;
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
 

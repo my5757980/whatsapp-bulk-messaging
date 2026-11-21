@@ -9,10 +9,12 @@ import { KnowledgeService } from './knowledge/knowledge.service.js';
 import { UnansweredRecorder } from './knowledge/unanswered-recorder.js';
 import { UnansweredController } from './knowledge/unanswered.controller.js';
 import { UnansweredService } from './knowledge/unanswered.service.js';
+import { AiStateController } from './live-chat/ai-state.controller.js';
 import { AgentSelector } from './turns/agent-selector.js';
 import { AiAgentRouter } from './turns/ai-router.js';
 import { AiConversationsService } from './turns/ai-conversations.service.js';
 import { TurnApplier } from './turns/apply.js';
+import { AiFailureMonitor } from './turns/failure-monitor.js';
 import { TurnService } from './turns/turn.service.js';
 import { AiUsageService } from './usage/usage.service.js';
 
@@ -20,7 +22,7 @@ import { AiUsageService } from './usage/usage.service.js';
 // module (used by the 002 inbound handler in the worker and by live chat in the API), HTTP
 // controllers in AiApiModule, and the `ai` and `ai-knowledge` processors in WorkerFeaturesModule.
 
-const DOMAIN = [ClaudeClient, AiConversationsService, AgentSelector, AiAgentRouter, KnowledgeSearch, AiUsageService, UnansweredRecorder, TurnApplier, TurnService];
+const DOMAIN = [ClaudeClient, AiConversationsService, AgentSelector, AiAgentRouter, KnowledgeSearch, AiUsageService, UnansweredRecorder, TurnApplier, AiFailureMonitor, TurnService];
 
 /** AI services shared by the HTTP app and the worker. */
 @Global()
@@ -31,6 +33,6 @@ export class AiDomainModule {}
 @Module({
   imports: [AiDomainModule],
   providers: [AgentsService, AgentPublishService, KnowledgeService, UnansweredService],
-  controllers: [AgentsController, KnowledgeController, UnansweredController],
+  controllers: [AgentsController, KnowledgeController, UnansweredController, AiStateController],
 })
 export class AiApiModule {}

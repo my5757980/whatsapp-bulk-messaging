@@ -1,42 +1,71 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DEFAULT_INTROS, type AgentReply, type TokenUsage } from '@wbm/shared';
+import { DEFAULT_INTROS, maskSensitive, type AgentReply, type TokenUsage } from '@wbm/shared';
 import { v7 as uuidv7 } from 'uuid';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
+import { ConsentService } from '../../contacts/consent.service.js';
 import { isLive } from '../../inbox/conversations/window.js';
 import { InboxPublisher } from '../../inbox/realtime/inbox-publisher.js';
+import { ChatRoutingService } from '../../inbox/routing/chat-routing.service.js';
 import { requestSendWorkerSync, sessionSendJob } from '../../sending/send-jobs.js';
 import type { KnowledgeItem } from '../claude/prompt.js';
 import { UnansweredRecorder } from '../knowledge/unanswered-recorder.js';
 import { AiUsageService, type UsageSettings } from '../usage/usage.service.js';
 import type { SelectedAgent } from './agent-selector.js';
 import { aiConversationLock, AiConversationsService } from './ai-conversations.service.js';
+import { handOverNote, ineligibility, UNAVAILABLE_NOTE, type HandOver } from './decisions.js';
 
 type Tx = Prisma.TransactionClient;
 
-export interface ApplyInput {
+/** What every outcome of a turn needs. */
+export interface TurnBase {
   conversationId: string;
   numberId: string;
   contactId: string;
   agent: SelectedAgent;
-  /** Time of the newest customer message the reply covers. */
-  handledUntil: Date;
-  /** The waiting messages the turn read (research R5); the reply covers them. */
+  /** The waiting messages the turn read (research R5); the outcome covers them. */
   handledIds: string[];
   /** The first of them, where a new AI conversation starts (FR-019). */
   firstMessageAt: Date;
+  startedAt: Date;
+}
+
+export interface ApplyInput extends TurnBase {
+  /** Time of the newest customer message the reply covers. */
+  handledUntil: Date;
   reply: AgentReply;
+  /** The hand-over the reply leads to (decisions.ts), or null. */
+  handOver: HandOver | null;
+  /** The customer's words, kept (masked) with an AI opt-out (FR-027). */
+  customerText: string;
   /** Knowledge the turn saw, to name the sources the reply used. */
   knownSources: ReadonlyMap<string, KnowledgeItem>;
   usage: TokenUsage;
   model: string;
-  startedAt: Date;
   settings: UsageSettings;
 }
 
-/** SENT: queued for WhatsApp. DROPPED: the chat changed (member, window, block, opt-out). NEWER: a later message arrived; the follow-up turn answers everything. */
-export type ApplyOutcome = { result: 'SENT'; itemId: string; aiConversationId: string } | { result: 'DROPPED' | 'NEWER' };
+export interface FailureInput extends TurnBase {
+  model: string;
+}
+
+/**
+ * SENT: queued for WhatsApp (a hand-over reply too). OPTED_OUT: the customer asked not to be
+ * messaged; nothing was sent. DROPPED: the chat changed (member, window, block, opt-out, flow).
+ * NEWER: another message waits; the follow-up turn answers everything.
+ */
+export type ApplyOutcome =
+  | { result: 'SENT'; itemId: string; aiConversationId: string; handedOver: boolean }
+  | { result: 'OPTED_OUT' }
+  | { result: 'DROPPED' | 'NEWER' };
+
+/** Work for after the commit: the send and the live chat events. */
+interface AfterCommit {
+  itemId: string;
+  noteId: string | null;
+  requested: boolean;
+}
 
 /** The manager's introduction for the reply's language, with the display name (FR-010). */
 export function introFor(agent: SelectedAgent, language: string | null): string {
@@ -46,10 +75,12 @@ export function introFor(agent: SelectedAgent, language: string | null): string 
 }
 
 /**
- * Applies a validated reply (research R5 step 3, T042): under the chat's AI lock and a row lock on
- * the conversation it re-checks that the chat may still be answered (FR-016, FR-026), then writes
- * the chat item, the AI reply record, usage, the AI conversation and unanswered questions in one
- * transaction, and queues the send on the 002 chat path after commit.
+ * Applies a turn's outcome (research R5 step 3, T042, T051, T053, T054): under the chat's AI lock and
+ * a row lock on the conversation it re-checks that the chat may still be answered (FR-016, FR-026),
+ * then writes everything in one transaction: the chat item, the AI reply record, usage, the AI
+ * conversation and unanswered questions; for a hand-over also the move to Waiting for agent with the
+ * team's note (FR-024); an opt-out records consent and sends nothing (FR-027); a failure sends the
+ * fallback message and hands over (FR-022). The send and the 002 alerts follow the commit.
  */
 @Injectable()
 export class TurnApplier {
@@ -59,6 +90,8 @@ export class TurnApplier {
     private readonly prisma: PrismaService,
     private readonly queues: QueueRegistry,
     private readonly publisher: InboxPublisher,
+    private readonly routing: ChatRoutingService,
+    private readonly consent: ConsentService,
     private readonly conversations: AiConversationsService,
     private readonly usage: AiUsageService,
     private readonly unanswered: UnansweredRecorder,
@@ -67,74 +100,40 @@ export class TurnApplier {
   async apply(input: ApplyInput): Promise<ApplyOutcome> {
     const outcome = await this.prisma.$transaction(
       async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${aiConversationLock(input.conversationId)}::text))`;
-        const still = await this.stillAnswerable(tx, input);
-        // The follow-up turn answers these together with the newer message.
-        if (still === 'NEWER') return { result: 'NEWER' } as const;
-        if (still === 'DROPPED') {
+        const gate = await this.gate(tx, input);
+        if (gate !== 'OK') return { result: gate } as const;
+
+        if (input.reply.optOut === 'clear') {
+          const note = `Asked the AI agent not to be messaged: "${[...maskSensitive(input.customerText)].slice(0, 300).join('')}"`;
+          await this.consent.setStatus(input.contactId, 'OPTED_OUT', 'AI_AGENT', { note }, tx);
+          await this.conversations.endForConversation(input.conversationId, 'OPTED_OUT', tx);
+          await this.release(tx, input.handledIds);
+          return { result: 'OPTED_OUT' } as const;
+        }
+
+        const conversation = await this.conversationFor(tx, input);
+        if (!conversation) {
           await this.release(tx, input.handledIds);
           return { result: 'DROPPED' } as const;
         }
-
-        let aiConversationId = input.agent.aiConversationId;
-        let replies = input.agent.replies;
-        if (aiConversationId) {
-          const current = await tx.aiConversation.findUnique({ where: { id: aiConversationId }, select: { status: true, replies: true } });
-          if (current?.status !== 'ACTIVE') {
-            await this.release(tx, input.handledIds);
-            return { result: 'DROPPED' } as const;
-          }
-          replies = current.replies;
-        } else {
-          const started = await this.conversations.start(tx, {
-            conversationId: input.conversationId,
-            agentId: input.agent.agentId,
-            agentName: input.agent.agentName,
-            numberId: input.numberId,
-            contactId: input.contactId,
-            startedBy: 'CUSTOMER',
-            test: input.agent.test,
-            versionId: input.agent.versionId,
-            startedAt: input.firstMessageAt,
-          });
-          aiConversationId = started.id;
-          if (!started.created) replies = (await tx.aiConversation.findUnique({ where: { id: started.id }, select: { replies: true } }))?.replies ?? 0;
-        }
-
         const now = new Date();
-        const message = replies === 0 ? `${introFor(input.agent, input.reply.language)}\n\n${input.reply.message}`.trim() : input.reply.message;
+        const message = conversation.replies === 0 ? `${introFor(input.agent, input.reply.language)}\n\n${input.reply.message}`.trim() : input.reply.message;
         const sources = input.reply.usedSources
           .map((id) => input.knownSources.get(id))
           .filter((item): item is KnowledgeItem => item !== undefined)
           .map((item) => ({ id: item.id, kind: item.kind, title: item.title }));
-        const ai = {
-          agentId: input.agent.agentId,
-          agentName: input.agent.agentName,
-          versionId: input.agent.versionId,
-          aiConversationId,
-          sources,
-          skills: [],
-          test: input.agent.test,
-        };
-        const itemId = uuidv7();
-        await tx.chatMessage.create({
-          data: { id: itemId, conversationId: input.conversationId, kind: 'SESSION_OUT', origin: 'AUTOMATIC', contentType: 'TEXT', text: message, payload: { ai } as Prisma.InputJsonValue, status: 'QUEUED', occurredAt: now },
-        });
-        const preview = message.replace(/\s+/g, ' ').trim().slice(0, 120);
-        await tx.$executeRaw`
-          UPDATE conversations
-             SET last_activity_at = GREATEST(last_activity_at, ${now}), last_message_preview = ${preview}, updated_at = now()
-           WHERE id = ${input.conversationId}::uuid`;
+        const handOver = input.handOver;
+        const itemId = await this.writeReply(tx, input, conversation.id, message, { sources, ...(handOver ? { handOver: handOver.reason } : {}) }, now);
 
         const cost = this.usage.cost(input.usage, input.settings);
         await tx.aiReply.create({
           data: {
-            aiConversationId,
+            aiConversationId: conversation.id,
             chatMessageId: itemId,
             agentId: input.agent.agentId,
             versionId: input.agent.versionId,
             numberId: input.numberId,
-            kind: 'REPLY',
+            kind: handOver ? 'HANDOVER' : 'REPLY',
             test: input.agent.test,
             counted: true,
             language: input.reply.language,
@@ -161,27 +160,101 @@ export class TurnApplier {
           countsAgainstMonth: true,
         });
         await tx.aiConversation.update({
-          where: { id: aiConversationId },
+          where: { id: conversation.id },
           data: { replies: { increment: 1 }, lastHandledAt: input.handledUntil, lastActivityAt: now, ...(input.agent.versionId ? { versionId: input.agent.versionId } : {}) },
         });
+        if (input.reply.unanswered) await this.unanswered.record(tx, input.agent.agentId, conversation.id, input.reply.unanswered);
+
+        let after: AfterCommit = { itemId, noteId: null, requested: false };
+        if (handOver) {
+          // The agent stops in this chat until it is closed (FR-024).
+          await this.conversations.endForConversation(input.conversationId, 'HANDED_OVER', tx);
+          after = { itemId, ...(await this.handOverChat(tx, input, handOverNote(input.agent.agentName, handOver), { reason: handOver.reason, aiConversationId: conversation.id }, now)) };
+        }
         await this.release(tx, input.handledIds);
-        if (input.reply.unanswered) await this.unanswered.record(tx, input.agent.agentId, aiConversationId, input.reply.unanswered);
-        return { result: 'SENT', itemId, aiConversationId } as const;
+        return { result: 'SENT', itemId, aiConversationId: conversation.id, handedOver: handOver !== null, after } as const;
       },
       { timeout: 15_000 },
     );
 
-    if (outcome.result === 'SENT') await this.afterCommit(input, outcome.itemId);
+    if (outcome.result === 'SENT') {
+      await this.afterCommit(input, outcome.after);
+      return { result: 'SENT', itemId: outcome.itemId, aiConversationId: outcome.aiConversationId, handedOver: outcome.handedOver };
+    }
+    if (outcome.result === 'OPTED_OUT') {
+      await this.publisher.contactUpdated(input.contactId).catch(() => undefined);
+      await this.publisher.conversation(input.conversationId).catch(() => undefined);
+    }
     return outcome;
   }
 
-  /** The chat is still Open, the contact may be answered, the window is open, and no newer message waits. */
-  private async stillAnswerable(tx: Tx, input: ApplyInput): Promise<'OK' | 'DROPPED' | 'NEWER'> {
+  /**
+   * The AI service failed (FR-022): the version's fallback message (not counted), a hand-over with
+   * the note "AI agent unavailable", and the AI conversation ends FAILED.
+   */
+  async applyFailure(input: FailureInput): Promise<'FAILED' | 'DROPPED' | 'NEWER'> {
+    const outcome = await this.prisma.$transaction(
+      async (tx) => {
+        const gate = await this.gate(tx, input);
+        if (gate !== 'OK') return { result: gate } as const;
+        const conversation = await this.conversationFor(tx, input);
+        if (!conversation) {
+          await this.release(tx, input.handledIds);
+          return { result: 'DROPPED' } as const;
+        }
+        const now = new Date();
+        const fallback = input.agent.config.fallbackMessage;
+        const message = conversation.replies === 0 ? `${introFor(input.agent, null)}\n\n${fallback}` : fallback;
+        const itemId = await this.writeReply(tx, input, conversation.id, message, { sources: [], fallback: true }, now);
+        await tx.aiReply.create({
+          data: {
+            aiConversationId: conversation.id,
+            chatMessageId: itemId,
+            agentId: input.agent.agentId,
+            versionId: input.agent.versionId,
+            numberId: input.numberId,
+            kind: 'FALLBACK',
+            test: input.agent.test,
+            counted: false,
+            modelId: input.model,
+            durationMs: Math.max(0, now.getTime() - input.startedAt.getTime()),
+          },
+        });
+        await this.conversations.endForConversation(input.conversationId, 'FAILED', tx);
+        const moved = await this.handOverChat(tx, input, UNAVAILABLE_NOTE, { reason: 'unavailable', aiConversationId: conversation.id }, now);
+        await this.release(tx, input.handledIds);
+        return { result: 'FAILED', after: { itemId, ...moved } } as const;
+      },
+      { timeout: 15_000 },
+    );
+    if (outcome.result === 'FAILED') await this.afterCommit(input, outcome.after);
+    return outcome.result;
+  }
+
+  /** The chat's AI lock, then the re-checks; a dropped turn lets its messages go. */
+  private async gate(tx: Tx, input: TurnBase): Promise<'OK' | 'DROPPED' | 'NEWER'> {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${aiConversationLock(input.conversationId)}::text))`;
+    const still = await this.stillAnswerable(tx, input);
+    if (still === 'DROPPED') await this.release(tx, input.handledIds);
+    return still;
+  }
+
+  /** The chat is still Open, the contact may be answered, the window is open, no flow runs, and no other message waits. */
+  private async stillAnswerable(tx: Tx, input: TurnBase): Promise<'OK' | 'DROPPED' | 'NEWER'> {
     const [chat] = await tx.$queryRaw<Array<{ state: string; last_customer_message_at: Date | null }>>`
       SELECT state::text AS state, last_customer_message_at FROM conversations WHERE id = ${input.conversationId}::uuid FOR UPDATE`;
-    if (!chat || chat.state !== 'ACTIVE' || !isLive(chat.last_customer_message_at)) return 'DROPPED';
+    if (!chat) return 'DROPPED';
     const contact = await tx.contact.findUnique({ where: { id: input.contactId }, select: { blockedAt: true, consentStatus: true } });
-    if (!contact || contact.blockedAt || contact.consentStatus === 'OPTED_OUT') return 'DROPPED';
+    if (!contact) return 'DROPPED';
+    const flowRunning = (await tx.flowSession.count({ where: { conversationId: input.conversationId, status: 'RUNNING' } })) > 0;
+    const why = ineligibility({
+      state: chat.state,
+      blocked: contact.blockedAt !== null,
+      optedOut: contact.consentStatus === 'OPTED_OUT',
+      windowLive: isLive(chat.last_customer_message_at),
+      flowRunning,
+    });
+    if (why) return 'DROPPED';
     // A message flagged after the turn read its messages (research R5).
     const newer = await tx.chatMessage.count({
       where: { conversationId: input.conversationId, kind: 'INBOUND', origin: 'CUSTOMER', aiPending: true, id: { notIn: input.handledIds } },
@@ -189,20 +262,94 @@ export class TurnApplier {
     return newer > 0 ? 'NEWER' : 'OK';
   }
 
-  /** The reply covers these messages, or nobody from the AI will: they stop waiting for the agent. */
+  /** The active AI conversation the outcome belongs to, started now when there is none; null when it ended meanwhile. */
+  private async conversationFor(tx: Tx, input: TurnBase): Promise<{ id: string; replies: number } | null> {
+    if (input.agent.aiConversationId) {
+      const current = await tx.aiConversation.findUnique({ where: { id: input.agent.aiConversationId }, select: { status: true, replies: true } });
+      return current?.status === 'ACTIVE' ? { id: input.agent.aiConversationId, replies: current.replies } : null;
+    }
+    const started = await this.conversations.start(tx, {
+      conversationId: input.conversationId,
+      agentId: input.agent.agentId,
+      agentName: input.agent.agentName,
+      numberId: input.numberId,
+      contactId: input.contactId,
+      startedBy: 'CUSTOMER',
+      test: input.agent.test,
+      versionId: input.agent.versionId,
+      startedAt: input.firstMessageAt,
+    });
+    if (started.created) return { id: started.id, replies: 0 };
+    const row = await tx.aiConversation.findUnique({ where: { id: started.id }, select: { replies: true } });
+    return { id: started.id, replies: row?.replies ?? 0 };
+  }
+
+  /** The agent's message as a 002 chat item (origin AUTOMATIC, payload.ai) and the chat's preview. */
+  private async writeReply(tx: Tx, input: TurnBase, aiConversationId: string, message: string, extra: Record<string, unknown>, now: Date): Promise<string> {
+    const ai = {
+      agentId: input.agent.agentId,
+      agentName: input.agent.agentName,
+      versionId: input.agent.versionId,
+      aiConversationId,
+      skills: [],
+      test: input.agent.test,
+      ...extra,
+    };
+    const itemId = uuidv7();
+    await tx.chatMessage.create({
+      data: { id: itemId, conversationId: input.conversationId, kind: 'SESSION_OUT', origin: 'AUTOMATIC', contentType: 'TEXT', text: message, payload: { ai } as Prisma.InputJsonValue, status: 'QUEUED', occurredAt: now },
+    });
+    const preview = message.replace(/\s+/g, ' ').trim().slice(0, 120);
+    await tx.$executeRaw`
+      UPDATE conversations
+         SET last_activity_at = GREATEST(last_activity_at, ${now}), last_message_preview = ${preview}, updated_at = now()
+       WHERE id = ${input.conversationId}::uuid`;
+    return itemId;
+  }
+
+  /**
+   * The 002 hand-over (FR-024), as flows do it: an Open chat moves to Waiting for agent as if the
+   * customer asked (the alert follows the commit), and the team gets a note in the chat.
+   */
+  private async handOverChat(tx: Tx, input: TurnBase, note: string, ai: Record<string, unknown>, now: Date): Promise<{ noteId: string; requested: boolean }> {
+    const moved = await tx.conversation.updateMany({ where: { id: input.conversationId, state: 'ACTIVE' }, data: { state: 'REQUESTING', unresolvedRequests: { increment: 1 } } });
+    const who = { agentId: input.agent.agentId, agentName: input.agent.agentName, test: input.agent.test, ...ai };
+    if (moved.count) {
+      await tx.conversationEvent.create({ data: { conversationId: input.conversationId, type: 'REQUESTED', actorType: 'AI_AGENT', data: who as Prisma.InputJsonValue, occurredAt: now } });
+    }
+    const noteId = uuidv7();
+    await tx.chatMessage.create({
+      data: {
+        id: noteId,
+        conversationId: input.conversationId,
+        kind: 'NOTE',
+        origin: 'AUTOMATIC',
+        contentType: 'TEXT',
+        text: note,
+        payload: { mentions: [], ai: who } as Prisma.InputJsonValue,
+        // Just after the closing reply, so the timeline shows them in that order.
+        occurredAt: new Date(now.getTime() + 1),
+      },
+    });
+    return { noteId, requested: moved.count > 0 };
+  }
+
+  /** The outcome covers these messages, or nobody from the AI will: they stop waiting for the agent. */
   private async release(tx: Tx, ids: string[]): Promise<void> {
     if (ids.length) await tx.chatMessage.updateMany({ where: { id: { in: ids } }, data: { aiPending: false } });
   }
 
-  private async afterCommit(input: ApplyInput, itemId: string): Promise<void> {
+  private async afterCommit(input: TurnBase, after: AfterCommit): Promise<void> {
     try {
-      const job = sessionSendJob(itemId);
+      const job = sessionSendJob(after.itemId);
       await this.queues.sendQueue(input.numberId).add(job.name, job.data, job.opts);
       await requestSendWorkerSync(this.queues);
-      await this.publisher.itemCreated(itemId);
-      await this.publisher.conversation(input.conversationId);
+      await this.publisher.itemCreated(after.itemId);
+      if (after.noteId) await this.publisher.itemCreated(after.noteId);
+      await this.publisher.conversation(input.conversationId, after.requested ? { state: 'ACTIVE', intervenedById: null, blocked: false } : undefined);
+      if (after.requested) await this.routing.alertRequesting(input.conversationId);
     } catch (error) {
-      this.logger.error({ err: (error as Error).message, conversationId: input.conversationId, itemId }, 'Could not queue the AI reply after commit');
+      this.logger.error({ err: (error as Error).message, conversationId: input.conversationId, itemId: after.itemId }, 'Could not queue the AI reply after commit');
     }
   }
 }

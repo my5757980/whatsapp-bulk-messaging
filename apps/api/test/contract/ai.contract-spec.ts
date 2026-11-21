@@ -2,8 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { seedNumber, setDefaultCountry } from '../support/fixtures.js';
-import { createTestContext, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
+import { WebhooksProcessor } from '../../src/modules/webhooks/webhooks.processor.js';
+import { seedNumber, setDefaultCountry, uaePhone } from '../support/fixtures.js';
+import { createTestContext, postSignedWebhook, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
 import { expectMatchesContract } from './openapi-validator.js';
 
 // 004 contract tests (T030 and later stories): responses match contracts/ai-api.openapi.yaml.
@@ -73,5 +74,28 @@ describe('AI agent API contract', () => {
     await check('post', '/ai-agents/{id}/duplicate', copy, 201);
     await check('post', '/ai-agents/{id}/unpublish', await call('post', `/ai-agents/${id}/unpublish`), 200);
     await check('delete', '/ai-agents/{id}', await call('delete', `/ai-agents/${copy.body.id}`), 204);
+  });
+
+  it("US2: a chat's AI state for the live chat banner", async () => {
+    const number = await seedNumber(ctx);
+    const phone = uaePhone();
+    const from = phone.slice(1);
+    const payload = {
+      object: 'whatsapp_business_account',
+      entry: [{ id: 'WABA', changes: [{ field: 'messages', value: { messaging_product: 'whatsapp', metadata: { phone_number_id: number.phoneNumberId }, contacts: [{ wa_id: from }], messages: [{ from, id: `wamid.in.${randomUUID()}`, timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body: 'hello' } }] } }] }],
+    };
+    await ctx.app.get(WebhooksProcessor).process(await postSignedWebhook(ctx, payload));
+    const chat = await ctx.prisma.conversation.findFirstOrThrow({ where: { contact: { phoneE164: phone } } });
+
+    const none = await call('get', `/inbox/conversations/${chat.id}/ai`);
+    await check('get', '/inbox/conversations/{id}/ai', none, 200);
+    expect(none.body).toBeNull();
+
+    const agent = (await call('post', '/ai-agents', { name: `Contract state ${randomUUID().slice(0, 6)}` })).body;
+    await ctx.prisma.aiConversation.create({ data: { conversationId: chat.id, agentId: agent.id, numberId: number.id, contactId: chat.contactId, startedBy: 'CUSTOMER', test: false } });
+    const active = await call('get', `/inbox/conversations/${chat.id}/ai`);
+    await check('get', '/inbox/conversations/{id}/ai', active, 200);
+    expect(active.body).toMatchObject({ agentId: agent.id, agentName: agent.name, startedBy: 'CUSTOMER', replies: 0 });
+    await check('get', '/inbox/conversations/{id}/ai', await call('get', `/inbox/conversations/${randomUUID()}/ai`), 404);
   });
 });
