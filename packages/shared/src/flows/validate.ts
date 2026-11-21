@@ -20,6 +20,7 @@ export type ProblemCode =
   | 'UNSAFE_PATTERN'
   | 'LOOP_WITHOUT_WAIT'
   | 'JUMP_TARGET_NOT_PUBLISHED'
+  | 'AGENT_NOT_PUBLISHED'
   | 'NOT_HTTPS';
 
 export interface Problem {
@@ -79,6 +80,8 @@ function contentProblems(step: FlowStep): Problem[] {
       return /^https:\/\//i.test(step.url.trim()) ? [] : [stepProblem(step, 'NOT_HTTPS', 'The address must start with https://', 'url')];
     case 'jump':
       return step.flowId ? [] : missing('Choose the flow to continue in', 'flowId');
+    case 'aiAgent':
+      return step.agentId ? [] : missing('Choose the AI agent that takes over', 'agentId');
     case 'delay':
     case 'handover':
     case 'end':

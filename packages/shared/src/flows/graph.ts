@@ -40,6 +40,8 @@ export const FLOW_LIMITS = {
   tagsPerStep: 20,
   label: 60,
   handoverNote: 500,
+  /** Opening message of a Hand to AI agent step (004 FR-033); WhatsApp's caption limit. */
+  aiOpeningMessage: 1024,
   templateButtonText: 25,
   textMaxLength: 1000,
 } as const;
@@ -229,6 +231,13 @@ const ApiStep = z.strictObject({
 
 const JumpStep = z.strictObject({ ...common, type: z.literal('jump'), flowId: z.uuid().nullable().default(null) });
 const HandoverStep = z.strictObject({ ...common, type: z.literal('handover'), note: z.string().max(FLOW_LIMITS.handoverNote).optional() });
+/** Hand to AI agent (004 FR-033): ends the flow and lets the chosen agent answer the chat. */
+const AiAgentStep = z.strictObject({
+  ...common,
+  type: z.literal('aiAgent'),
+  agentId: z.uuid().nullable().default(null),
+  openingMessage: z.string().max(FLOW_LIMITS.aiOpeningMessage).optional(),
+});
 const EndStep = z.strictObject({ ...common, type: z.literal('end') });
 
 export const FlowStepSchema = z.discriminatedUnion('type', [
@@ -243,12 +252,13 @@ export const FlowStepSchema = z.discriminatedUnion('type', [
   ApiStep,
   JumpStep,
   HandoverStep,
+  AiAgentStep,
   EndStep,
 ]);
 export type FlowStep = z.infer<typeof FlowStepSchema>;
 export type StepType = FlowStep['type'];
 export type StepOf<T extends StepType> = Extract<FlowStep, { type: T }>;
-export const STEP_TYPES: readonly StepType[] = ['message', 'buttons', 'list', 'question', 'tags', 'attributes', 'condition', 'delay', 'api', 'jump', 'handover', 'end'];
+export const STEP_TYPES: readonly StepType[] = ['message', 'buttons', 'list', 'question', 'tags', 'attributes', 'condition', 'delay', 'api', 'jump', 'handover', 'aiAgent', 'end'];
 
 const phrases = z.array(z.string().max(FLOW_LIMITS.phraseLength)).max(FLOW_LIMITS.phrases).default([]);
 const match = z.enum(['EXACT', 'CONTAINS']).default('CONTAINS');
@@ -316,6 +326,7 @@ export function branchesOf(step: FlowStep): Branch[] {
       ];
     case 'jump':
     case 'handover':
+    case 'aiAgent':
     case 'end':
       return [];
   }

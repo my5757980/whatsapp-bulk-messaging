@@ -86,6 +86,20 @@ describe('FlowGraphSchema', () => {
     expect(result.success, JSON.stringify(result.error?.issues)).toBe(true);
   });
 
+  it('accepts a Hand to AI agent step, which has no next step (004 T077)', () => {
+    const agentId = '0190a000-0000-7000-8000-0000000000a1';
+    const ai = { id: 'ai', type: 'aiAgent', agentId, openingMessage: 'Our assistant will take it from here.' };
+    const result = parse(withStep(ai));
+    expect(result.success, JSON.stringify(result.error?.issues)).toBe(true);
+    const step = result.data!.steps.find((s) => s.id === 'ai')!;
+    expect(step).toMatchObject({ type: 'aiAgent', agentId, openingMessage: 'Our assistant will take it from here.' });
+    expect(branchesOf(step)).toEqual([]);
+    expect(parse(withStep({ id: 'ai', type: 'aiAgent' })).data?.steps.find((s) => s.id === 'ai')).toMatchObject({ agentId: null });
+    expect(parse(withStep({ ...ai, next: 'end' })).success).toBe(false);
+    expect(parse(withStep({ ...ai, openingMessage: 'x'.repeat(1025) })).success).toBe(false);
+    expect(parse(withStep({ ...ai, agentId: 'not-a-uuid' })).success).toBe(false);
+  });
+
   it('rejects unknown fields, bad ids and duplicate step ids', () => {
     expect(parse({ ...example(), extra: true }).success).toBe(false);
     expect(parse(withStep({ id: 'Bad Id', type: 'end' })).success).toBe(false);
