@@ -156,16 +156,18 @@ describe('AI agents: API skills (US5)', () => {
   });
 
   it('answers ok: false, never an invented status, on a timeout and a 500', async () => {
+    // A status only the slow reply carries, so finding it would mean the late reply leaked through.
+    const lateStatus = `in-transit-${suffix}`;
     for (const [label, mockShop] of [
-      ['timeout', () => nock(SHOP).get('/api/orders/555').delay(2_500).reply(200, { order: { status: 'late' } })],
-      ['500', () => nock(SHOP).get('/api/orders/555').reply(500, { error: 'down' })],
+      ['timeout', () => nock(SHOP).get('/api/orders/555').delay(2_500).reply(200, { order: { status: lateStatus } })],
+      ['500', () => nock(SHOP).get('/api/orders/555').reply(500, { order: { status: lateStatus } })],
     ] as const) {
       const chat = await inbound(uaePhone(), 'order 555 please');
       mockShop();
       const second = claudeWithTool({ order_number: '555' }, { message: 'I cannot check orders right now. I can connect you with our team.' });
       expect(await turn(chat.id), label).toBe('SENT');
-      expect(second(), label).toContain(label === 'timeout' ? 'timeout' : 'error_status');
-      expect(second(), label).not.toContain('late');
+      expect(second(), label).toContain(label === 'timeout' ? '\\"reason\\":\\"timeout\\"' : '\\"reason\\":\\"error_status\\"');
+      expect(second(), label).not.toContain(lateStatus);
       const record = await ctx.prisma.aiReply.findFirstOrThrow({ where: { chatMessageId: (await aiItem(chat.id)).id } });
       expect(record.skills, label).toEqual([{ skillId: 'order_status', name: 'Order status', outcome: 'FAILED' }]);
     }
