@@ -111,8 +111,19 @@ describe('AI agents: customer turns (US1)', () => {
 
     // The next reply has no introduction and the history now holds the first exchange.
     await inbound(phone, 'and to Ajman?');
-    nock(CLAUDE).post('/v1/messages').query(true).reply(200, reply({ message: 'I do not have the Ajman price yet. I can connect you with our team.', unanswered: 'Delivery price to Ajman' }));
+    let second = '';
+    nock(CLAUDE)
+      .post('/v1/messages')
+      .query(true)
+      .reply(async (req: Request) => {
+        second = await req.text();
+        return [200, reply({ message: 'I do not have the Ajman price yet. I can connect you with our team.', unanswered: 'Delivery price to Ajman' })];
+      });
     expect(await turn(chat.id)).toBe('SENT');
+    // The first exchange is history now, from the AI conversation's first customer message on.
+    expect(second).toContain('how much is shipping to sharjah?');
+    expect(second).toContain(`Hi, I'm ${agent.name}, a virtual assistant.`);
+    expect(second).toContain('and to Ajman?');
     const items = await aiItems(chat.id);
     expect(items).toHaveLength(2);
     expect(items[1]!.text).toBe('I do not have the Ajman price yet. I can connect you with our team.');
@@ -152,7 +163,9 @@ describe('AI agents: customer turns (US1)', () => {
     const admin = await signIn(ctx, 'ADMIN');
     const call = (method: 'get' | 'put', url: string, body?: object) => (method === 'get' ? admin.agent.get(`/api${url}`) : admin.agent.put(`/api${url}`).set('X-CSRF-Token', admin.csrf).send(body ?? {}));
     const original = (await call('get', '/live-chat/settings')).body;
-    expect((await call('put', '/live-chat/settings', { ...original, welcomeEnabled: true, welcomeContent: { kind: 'TEXT', text: `Welcome ${suffix}!` } })).status).toBe(200);
+    // Welcome messages go out only within working hours (002), so the test opens every hour of the week.
+    const always = Object.fromEntries(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [d, [['00:00', '23:59']]]));
+    expect((await call('put', '/live-chat/settings', { ...original, workingHours: always, welcomeEnabled: true, welcomeContent: { kind: 'TEXT', text: `Welcome ${suffix}!` } })).status).toBe(200);
     try {
       const chat = await inbound(uaePhone(), 'Hello there');
       expect((await aiItems(chat.id)).map((i) => i.text)).not.toContain(`Welcome ${suffix}!`);

@@ -143,7 +143,9 @@ describe('Chatbot flows: live chat and hand-over (US3)', () => {
     // Live chat settings belong to admins (002).
     const original = (await call(admin, 'get', '/live-chat/settings')).body;
     const put = (body: unknown) => call(admin, 'put', '/live-chat/settings', body as object);
-    expect((await put({ ...original, welcomeEnabled: true, welcomeContent: { kind: 'TEXT', text: `Welcome ${suffix}!` } })).status).toBe(200);
+    // Welcome messages go out only within working hours (002), so the test opens every hour of the week.
+    const always = Object.fromEntries(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((d) => [d, [['00:00', '23:59']]]));
+    expect((await put({ ...original, workingHours: always, welcomeEnabled: true, welcomeContent: { kind: 'TEXT', text: `Welcome ${suffix}!` } })).status).toBe(200);
     try {
       const { chat } = await startFlow();
       const items = await automatic(chat.id);

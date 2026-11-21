@@ -126,7 +126,7 @@ use `$queryRaw`.
 | pending_confirmation | jsonb? | `{skillId, inputs, askedAt}` for a skill that changes data |
 | unanswered_streak | jsonb? | the last question the agent could not answer (repeat rule, FR-023) |
 | summary | text? | hand-over summary |
-| started_at / last_activity_at / ended_at | timestamptz | |
+| started_at / last_activity_at / ended_at | timestamptz | started_at is the first customer message the first reply covered; history reaches back to it |
 
 Partial unique index: one `ACTIVE` row per `conversation_id`. Index `(status, last_activity_at)`
 for expiry.
@@ -234,6 +234,10 @@ rows are upserted in the apply transaction.
 - **JourneyActor** + `AI_AGENT`; **JourneyEventType** + `AI_STARTED`, `AI_ENDED` (journey entries
   when an agent starts and stops answering a chat, as flows have).
 - **FlowSessionResult** + `HANDED_TO_AI`; **FlowStartedBy** + `AI_AGENT`.
+- **chat_messages** + `ai_pending boolean not null default false` with a partial index on
+  `conversation_id` where it is true: the AI router flags each customer message it queues a turn for,
+  and the turn that answers or drops them clears the flag (research R5). WhatsApp times have
+  one-second precision and can arrive out of order, so turns never pick messages by time.
 - **chat_messages.payload** for AI replies (no schema change): `payload.ai = {agentId, agentName,
   versionId, aiConversationId, sources: [{id, kind, title}], skills: [{skillId, name, outcome}],
   test}`.

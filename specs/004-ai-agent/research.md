@@ -117,12 +117,12 @@ package versions before release.
      - **Pre-checks** under the conversation's advisory lock: chat *Open*; contact neither blocked
        nor opted out; 24-hour window open; monthly limit not reached (else hand over with the
        limit note, no model call); reply cap not reached (else hand over).
-     - Collects the customer messages after the AI conversation's last handled message.
+     - Collects the customer messages the router flagged `ai_pending` (newest 10 answered together).
      - **Calls the model** outside any transaction (R2), with the turn deadline.
      - **Validates** the reply (R3); masking and limits applied (R12).
      - **Re-checks** under the lock: still eligible (a member may have taken or answered the chat:
-       the reply is dropped, FR-026), and no newer customer message (the turn is queued again so
-       one reply answers everything, at most twice).
+       the reply is dropped, FR-026), and no other flagged customer message (the turn is queued
+       again so one reply answers everything, at most twice). Sending or dropping clears the flags.
      - **Applies** in one transaction: the chat item (origin `AUTOMATIC`, `payload.ai`) queued on
        the number's send queue (002 path, chat priority); remembered attributes with journey
        entries; hand-over; opt-out; flow start; usage counting with the atomic limit check; the AI

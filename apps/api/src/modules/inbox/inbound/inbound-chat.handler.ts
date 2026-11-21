@@ -185,6 +185,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     if (flowAnswered) return;
     // AI agents answer what flows left (004 research R5); a queued AI turn replaces welcome/off-hours (FR-021).
     const aiQueued = await this.aiAgents.onCustomerMessage({
+      messageId: itemId,
       conversationId: outcome.conversationId,
       numberId,
       contactId: contact.id,

@@ -873,6 +873,8 @@ model ChatMessage {
   deliveredAt    DateTime?       @map("delivered_at") @db.Timestamptz
   readAt         DateTime?       @map("read_at") @db.Timestamptz
   failedAt       DateTime?       @map("failed_at") @db.Timestamptz
+  /// Waiting for an AI agent's reply (004 research R5): the AI router sets it, the turn that answers clears it.
+  aiPending      Boolean         @default(false) @map("ai_pending")
   createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz
   aiReplies      AiReply[]

@@ -8,6 +8,8 @@ import { AgentSelector } from './agent-selector.js';
 
 /** What the 002 inbound handler knows about a stored customer message. */
 export interface AiInboundMessage {
+  /** The stored chat item, flagged as waiting for the agent's reply. */
+  messageId: string;
   conversationId: string;
   numberId: string;
   contactId: string;
@@ -45,12 +47,15 @@ export class AiAgentRouter {
     const agent = await this.selector.select({ id: message.conversationId, numberId: message.numberId }, message.senderPhone);
     if (!agent) return false;
     try {
+      // The turn answers every flagged message of the chat at once (research R5).
+      await this.prisma.chatMessage.update({ where: { id: message.messageId }, data: { aiPending: true } });
       const job = aiTurnJob(message.conversationId);
       await this.queues.get(QUEUES.AI).add(job.name, job.data, job.opts);
       return true;
     } catch (error) {
       // Without a queued turn the 002 automatic replies still answer.
       this.logger.error({ err: (error as Error).message, conversationId: message.conversationId }, 'Could not queue an AI turn');
+      await this.prisma.chatMessage.updateMany({ where: { id: message.messageId }, data: { aiPending: false } }).catch(() => undefined);
       return false;
     }
   }

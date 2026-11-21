@@ -73,22 +73,41 @@ export class TurnService {
     const agent = await this.selector.select({ id: chat.id, numberId: chat.numberId }, chat.contact.phoneE164);
     if (!agent) return 'NOT_ELIGIBLE';
 
-    const since = await this.unansweredSince(chat.id, agent);
-    const fresh = await this.prisma.chatMessage.findMany({
-      where: { conversationId: chat.id, kind: 'INBOUND', origin: 'CUSTOMER', occurredAt: { gt: since } },
-      orderBy: { occurredAt: 'desc' },
-      take: MAX_NEW_MESSAGES,
+    // Every message the router flagged since the last reply. WhatsApp times have one-second precision,
+    // so the flag, not a time cursor, says what is new; the newest few are answered together.
+    const pending = await this.prisma.chatMessage.findMany({
+      where: { conversationId: chat.id, kind: 'INBOUND', origin: 'CUSTOMER', aiPending: true },
+      orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
       select: { id: true, contentType: true, text: true, occurredAt: true },
     });
-    fresh.reverse();
+    const handledIds = pending.map((m) => m.id);
+    const fresh = pending.slice(-MAX_NEW_MESSAGES);
     const texts = fresh.map(customerTextOf).filter((t): t is string => t !== null);
-    if (!texts.length) return 'NOTHING';
+    if (!texts.length) {
+      if (handledIds.length) await this.prisma.chatMessage.updateMany({ where: { id: { in: handledIds } }, data: { aiPending: false } });
+      return 'NOTHING';
+    }
     const handledUntil = fresh.at(-1)!.occurredAt;
+    const firstMessageAt = pending[0]!.occurredAt;
 
     try {
-      const { reply, knownSources, usage, model } = await this.decide(chat, agent, texts.join('\n'), fresh[0]!.occurredAt);
+      const { reply, knownSources, usage, model } = await this.decide(chat, agent, texts.join('\n'));
       const settings = await this.usage.settings();
-      const outcome = await this.applier.apply({ conversationId: chat.id, numberId: chat.numberId, contactId: chat.contact.id, agent, handledUntil, reply, knownSources, usage, model, startedAt, settings });
+      const outcome = await this.applier.apply({
+        conversationId: chat.id,
+        numberId: chat.numberId,
+        contactId: chat.contact.id,
+        agent,
+        handledUntil,
+        handledIds,
+        firstMessageAt,
+        reply,
+        knownSources,
+        usage,
+        model,
+        startedAt,
+        settings,
+      });
       return outcome.result;
     } catch (error) {
       if (error instanceof ClaudeFailure) {
@@ -100,7 +119,7 @@ export class TurnService {
   }
 
   /** Builds the prompt, runs the model and returns the sanitised reply. */
-  private async decide(chat: ChatRow, agent: SelectedAgent, customerText: string, firstNewAt: Date) {
+  private async decide(chat: ChatRow, agent: SelectedAgent, customerText: string) {
     const config = agent.config;
     const contact = chat.contact!;
     const allowedAttributes = config.skills.memory.map((m) => m.key);
@@ -112,7 +131,7 @@ export class TurnService {
     const knownSources = new Map<string, KnowledgeItem>();
     for (const item of [...items, ...retrieved]) knownSources.set(item.id, item);
 
-    const [catalog, history, live] = await Promise.all([this.catalog(agent), this.history(chat.id, agent, firstNewAt), this.liveChat.get()]);
+    const [catalog, history, live] = await Promise.all([this.catalog(agent), this.history(chat.id, agent), this.liveChat.get()]);
     const now = new Date();
     const prompt = buildPrompt({
       config,
@@ -196,24 +215,17 @@ export class TurnService {
   }
 
   /** Customer messages after this point have no reply yet: the AI conversation's last handled one, or the last message anyone sent. */
-  private async unansweredSince(conversationId: string, agent: SelectedAgent): Promise<Date> {
-    if (agent.aiConversationId) {
-      const conversation = await this.prisma.aiConversation.findUnique({ where: { id: agent.aiConversationId }, select: { lastHandledAt: true, startedAt: true } });
-      if (conversation?.lastHandledAt) return conversation.lastHandledAt;
-      if (conversation) return new Date(conversation.startedAt.getTime() - 1);
-    }
-    const lastOut = await this.prisma.chatMessage.findFirst({ where: { conversationId, kind: { not: 'INBOUND' } }, orderBy: { occurredAt: 'desc' }, select: { occurredAt: true } });
-    return lastOut?.occurredAt ?? new Date(0);
-  }
-
-  /** Earlier customer messages and AI replies of the AI conversation (FR-019). */
-  private async history(conversationId: string, agent: SelectedAgent, before: Date): Promise<Array<{ from: 'customer' | 'agent'; text: string }>> {
+  /**
+   * Earlier customer messages and AI replies of the AI conversation (FR-019), from its first customer
+   * message on. Messages still waiting are this turn's and come after the history.
+   */
+  private async history(conversationId: string, agent: SelectedAgent): Promise<Array<{ from: 'customer' | 'agent'; text: string }>> {
     if (!agent.aiConversationId) return [];
     const conversation = await this.prisma.aiConversation.findUnique({ where: { id: agent.aiConversationId }, select: { startedAt: true } });
     if (!conversation) return [];
     const rows = await this.prisma.chatMessage.findMany({
-      where: { conversationId, occurredAt: { gte: new Date(conversation.startedAt.getTime() - 60_000), lt: before } },
-      orderBy: { occurredAt: 'desc' },
+      where: { conversationId, aiPending: false, occurredAt: { gte: conversation.startedAt } },
+      orderBy: [{ occurredAt: 'desc' }, { id: 'desc' }],
       take: AI_LIMITS.historyMessages * 2,
       select: { kind: true, origin: true, contentType: true, text: true, payload: true },
     });

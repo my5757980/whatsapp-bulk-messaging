@@ -22,6 +22,10 @@ export interface ApplyInput {
   agent: SelectedAgent;
   /** Time of the newest customer message the reply covers. */
   handledUntil: Date;
+  /** The waiting messages the turn read (research R5); the reply covers them. */
+  handledIds: string[];
+  /** The first of them, where a new AI conversation starts (FR-019). */
+  firstMessageAt: Date;
   reply: AgentReply;
   /** Knowledge the turn saw, to name the sources the reply used. */
   knownSources: ReadonlyMap<string, KnowledgeItem>;
@@ -65,13 +69,21 @@ export class TurnApplier {
       async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${aiConversationLock(input.conversationId)}::text))`;
         const still = await this.stillAnswerable(tx, input);
-        if (still !== 'OK') return { result: still } as const;
+        // The follow-up turn answers these together with the newer message.
+        if (still === 'NEWER') return { result: 'NEWER' } as const;
+        if (still === 'DROPPED') {
+          await this.release(tx, input.handledIds);
+          return { result: 'DROPPED' } as const;
+        }
 
         let aiConversationId = input.agent.aiConversationId;
         let replies = input.agent.replies;
         if (aiConversationId) {
           const current = await tx.aiConversation.findUnique({ where: { id: aiConversationId }, select: { status: true, replies: true } });
-          if (current?.status !== 'ACTIVE') return { result: 'DROPPED' } as const;
+          if (current?.status !== 'ACTIVE') {
+            await this.release(tx, input.handledIds);
+            return { result: 'DROPPED' } as const;
+          }
           replies = current.replies;
         } else {
           const started = await this.conversations.start(tx, {
@@ -83,6 +95,7 @@ export class TurnApplier {
             startedBy: 'CUSTOMER',
             test: input.agent.test,
             versionId: input.agent.versionId,
+            startedAt: input.firstMessageAt,
           });
           aiConversationId = started.id;
           if (!started.created) replies = (await tx.aiConversation.findUnique({ where: { id: started.id }, select: { replies: true } }))?.replies ?? 0;
@@ -151,6 +164,7 @@ export class TurnApplier {
           where: { id: aiConversationId },
           data: { replies: { increment: 1 }, lastHandledAt: input.handledUntil, lastActivityAt: now, ...(input.agent.versionId ? { versionId: input.agent.versionId } : {}) },
         });
+        await this.release(tx, input.handledIds);
         if (input.reply.unanswered) await this.unanswered.record(tx, input.agent.agentId, aiConversationId, input.reply.unanswered);
         return { result: 'SENT', itemId, aiConversationId } as const;
       },
@@ -168,8 +182,16 @@ export class TurnApplier {
     if (!chat || chat.state !== 'ACTIVE' || !isLive(chat.last_customer_message_at)) return 'DROPPED';
     const contact = await tx.contact.findUnique({ where: { id: input.contactId }, select: { blockedAt: true, consentStatus: true } });
     if (!contact || contact.blockedAt || contact.consentStatus === 'OPTED_OUT') return 'DROPPED';
-    const newer = await tx.chatMessage.count({ where: { conversationId: input.conversationId, kind: 'INBOUND', origin: 'CUSTOMER', occurredAt: { gt: input.handledUntil } } });
+    // A message flagged after the turn read its messages (research R5).
+    const newer = await tx.chatMessage.count({
+      where: { conversationId: input.conversationId, kind: 'INBOUND', origin: 'CUSTOMER', aiPending: true, id: { notIn: input.handledIds } },
+    });
     return newer > 0 ? 'NEWER' : 'OK';
+  }
+
+  /** The reply covers these messages, or nobody from the AI will: they stop waiting for the agent. */
+  private async release(tx: Tx, ids: string[]): Promise<void> {
+    if (ids.length) await tx.chatMessage.updateMany({ where: { id: { in: ids } }, data: { aiPending: false } });
   }
 
   private async afterCommit(input: ApplyInput, itemId: string): Promise<void> {

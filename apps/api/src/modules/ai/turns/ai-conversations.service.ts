@@ -19,6 +19,8 @@ export interface StartAiConversation {
   startedBy: AiStartedBy;
   test: boolean;
   versionId: string | null;
+  /** The first customer message it answers; history reaches back to it (FR-019). Defaults to now. */
+  startedAt?: Date;
 }
 
 /**
@@ -54,6 +56,7 @@ export class AiConversationsService {
         startedBy: input.startedBy,
         test: input.test,
         versionId: input.versionId,
+        ...(input.startedAt ? { startedAt: input.startedAt } : {}),
       },
       select: { id: true },
     });
@@ -72,6 +75,8 @@ export class AiConversationsService {
   async endForConversation(conversationId: string, result: AiConversationResult, tx?: Tx): Promise<boolean> {
     const work = async (db: Tx): Promise<boolean> => {
       await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${aiConversationLock(conversationId)}::text))`;
+      // Messages still waiting for the agent are left to the team, also before a first reply.
+      await db.chatMessage.updateMany({ where: { conversationId, aiPending: true }, data: { aiPending: false } });
       const row = await db.aiConversation.findFirst({
         where: { conversationId, status: 'ACTIVE' },
         select: { id: true, agentId: true, test: true, agent: { select: { name: true } } },

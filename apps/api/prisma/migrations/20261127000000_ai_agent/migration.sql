@@ -491,3 +491,9 @@ CREATE UNIQUE INDEX "ai_usage_daily_key" ON "ai_usage_daily" (
     COALESCE("number_id", '00000000-0000-0000-0000-000000000000'::uuid),
     "test"
 );
+
+-- Customer messages waiting for an AI reply (research R5). The AI router flags each message it queues
+-- a turn for; the turn that answers or drops them clears the flag. WhatsApp times have one-second
+-- precision and can arrive out of order, so turns never pick messages by a time cursor.
+ALTER TABLE "chat_messages" ADD COLUMN "ai_pending" BOOLEAN NOT NULL DEFAULT false;
+CREATE INDEX "chat_messages_ai_pending_idx" ON "chat_messages" ("conversation_id") WHERE "ai_pending";
