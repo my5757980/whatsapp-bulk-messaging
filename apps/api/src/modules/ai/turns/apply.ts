@@ -1,11 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DEFAULT_INTROS, maskSensitive, type AgentConfig, type AgentReply, type TokenUsage } from '@wbm/shared';
+import { DEFAULT_INTROS, looksSensitive, maskSensitive, type AgentConfig, type AgentReply, type TokenUsage } from '@wbm/shared';
 import { v7 as uuidv7 } from 'uuid';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import { ConsentService } from '../../contacts/consent.service.js';
 import { isLive } from '../../inbox/conversations/window.js';
+import { writeAttributes } from '../../inbox/journey/attribute-writer.js';
 import { InboxPublisher } from '../../inbox/realtime/inbox-publisher.js';
 import { ChatRoutingService } from '../../inbox/routing/chat-routing.service.js';
 import { requestSendWorkerSync, sessionSendJob } from '../../sending/send-jobs.js';
@@ -15,6 +16,7 @@ import { AiUsageService, type UsageSettings } from '../usage/usage.service.js';
 import type { SelectedAgent } from './agent-selector.js';
 import { aiConversationLock, AiConversationsService } from './ai-conversations.service.js';
 import { handOverNote, ineligibility, UNAVAILABLE_NOTE, type HandOver } from './decisions.js';
+import { replyItems, type ReplyItem } from './reply-message.js';
 
 type Tx = Prisma.TransactionClient;
 
@@ -60,12 +62,16 @@ export type ApplyOutcome =
   | { result: 'OPTED_OUT' }
   | { result: 'DROPPED' | 'NEWER' };
 
-/** Work for after the commit: the send and the live chat events. */
+/** Work for after the commit: the sends (in order) and the live chat events. */
 interface AfterCommit {
-  itemId: string;
+  itemIds: readonly string[];
   noteId: string | null;
   requested: boolean;
+  contactChanged: boolean;
 }
+
+/** Spacing between the items of one reply, so WhatsApp delivers them in order (as flows do). */
+const ITEM_SPACING_MS = 1500;
 
 /** The manager's introduction for the reply's language, with the display name (FR-010). */
 export function introFor(config: AgentConfig, language: string | null): string {
@@ -123,7 +129,17 @@ export class TurnApplier {
           .filter((item): item is KnowledgeItem => item !== undefined)
           .map((item) => ({ id: item.id, kind: item.kind, title: item.title }));
         const handOver = input.handOver;
-        const itemId = await this.writeReply(tx, input, conversation.id, message, { sources, ...(handOver ? { handOver: handOver.reason } : {}) }, now);
+        const config = input.agent.config;
+        const media = input.reply.mediaId
+          ? await tx.mediaAsset.findFirst({ where: { id: input.reply.mediaId, purpose: 'LIBRARY', removedAt: null }, select: { id: true, mimeType: true, sizeBytes: true, displayName: true } })
+          : null;
+        const items = replyItems(message, input.reply, { aiConversationId: conversation.id, media, allowButtons: config.skills.buttons, allowLists: config.skills.lists });
+        const itemIds: string[] = [];
+        for (const [i, item] of items.entries()) {
+          itemIds.push(await this.writeReply(tx, input, conversation.id, item, { sources, ...(handOver ? { handOver: handOver.reason } : {}) }, new Date(now.getTime() + i)));
+        }
+        // The reply record points at the main item (the file, buttons or list after any lead-in text).
+        const itemId = itemIds.at(-1)!;
 
         const cost = this.usage.cost(input.usage, input.settings);
         await tx.aiReply.create({
@@ -165,11 +181,17 @@ export class TurnApplier {
         });
         if (input.reply.unanswered) await this.unanswered.record(tx, input.agent.agentId, conversation.id, input.reply.unanswered);
 
-        let after: AfterCommit = { itemId, noteId: null, requested: false };
+        // Facts the customer stated, into the attributes the version allows (FR-029); values that look
+        // like card, bank or ID numbers are never saved.
+        const remembered = Object.fromEntries((input.reply.remember ?? []).filter((r) => !looksSensitive(r.value)).map((r) => [r.key, r.value]));
+        const changed = await writeAttributes(tx, input.contactId, remembered, { type: 'AI_AGENT', agentId: input.agent.agentId, agentName: input.agent.agentName });
+
+        let after: AfterCommit = { itemIds, noteId: null, requested: false, contactChanged: changed.length > 0 };
         if (handOver) {
           // The agent stops in this chat until it is closed (FR-024).
           await this.conversations.endForConversation(input.conversationId, 'HANDED_OVER', tx);
-          after = { itemId, ...(await this.handOverChat(tx, input, handOverNote(input.agent.agentName, handOver), { reason: handOver.reason, aiConversationId: conversation.id }, now)) };
+          const note = await this.handOverChat(tx, input, handOverNote(input.agent.agentName, handOver), { reason: handOver.reason, aiConversationId: conversation.id }, new Date(now.getTime() + items.length));
+          after = { ...after, ...note };
         }
         await this.release(tx, input.handledIds);
         return { result: 'SENT', itemId, aiConversationId: conversation.id, handedOver: handOver !== null, after } as const;
@@ -205,7 +227,7 @@ export class TurnApplier {
         const now = new Date();
         const fallback = input.agent.config.fallbackMessage;
         const message = conversation.replies === 0 ? `${introFor(input.agent.config, null)}\n\n${fallback}` : fallback;
-        const itemId = await this.writeReply(tx, input, conversation.id, message, { sources: [], fallback: true }, now);
+        const itemId = await this.writeReply(tx, input, conversation.id, { contentType: 'TEXT', text: message, mediaAssetId: null, payload: {} }, { sources: [], fallback: true }, now);
         await tx.aiReply.create({
           data: {
             aiConversationId: conversation.id,
@@ -221,9 +243,9 @@ export class TurnApplier {
           },
         });
         await this.conversations.endForConversation(input.conversationId, 'FAILED', tx);
-        const moved = await this.handOverChat(tx, input, UNAVAILABLE_NOTE, { reason: 'unavailable', aiConversationId: conversation.id }, now);
+        const moved = await this.handOverChat(tx, input, UNAVAILABLE_NOTE, { reason: 'unavailable', aiConversationId: conversation.id }, new Date(now.getTime() + 1));
         await this.release(tx, input.handledIds);
-        return { result: 'FAILED', after: { itemId, ...moved } } as const;
+        return { result: 'FAILED', after: { itemIds: [itemId], contactChanged: false, ...moved } } as const;
       },
       { timeout: 15_000 },
     );
@@ -284,8 +306,8 @@ export class TurnApplier {
     return { id: started.id, replies: row?.replies ?? 0 };
   }
 
-  /** The agent's message as a 002 chat item (origin AUTOMATIC, payload.ai) and the chat's preview. */
-  private async writeReply(tx: Tx, input: TurnBase, aiConversationId: string, message: string, extra: Record<string, unknown>, now: Date): Promise<string> {
+  /** One item of the agent's reply as a 002 chat item (origin AUTOMATIC, payload.ai) and the chat's preview. */
+  private async writeReply(tx: Tx, input: TurnBase, aiConversationId: string, item: ReplyItem, extra: Record<string, unknown>, now: Date): Promise<string> {
     const ai = {
       agentId: input.agent.agentId,
       agentName: input.agent.agentName,
@@ -297,9 +319,20 @@ export class TurnApplier {
     };
     const itemId = uuidv7();
     await tx.chatMessage.create({
-      data: { id: itemId, conversationId: input.conversationId, kind: 'SESSION_OUT', origin: 'AUTOMATIC', contentType: 'TEXT', text: message, payload: { ai } as Prisma.InputJsonValue, status: 'QUEUED', occurredAt: now },
+      data: {
+        id: itemId,
+        conversationId: input.conversationId,
+        kind: 'SESSION_OUT',
+        origin: 'AUTOMATIC',
+        contentType: item.contentType,
+        text: item.text,
+        mediaAssetId: item.mediaAssetId,
+        payload: { ...item.payload, ai } as Prisma.InputJsonValue,
+        status: 'QUEUED',
+        occurredAt: now,
+      },
     });
-    const preview = message.replace(/\s+/g, ' ').trim().slice(0, 120);
+    const preview = (item.text ?? (item.contentType === 'AUDIO' ? 'Audio' : item.contentType)).replace(/\s+/g, ' ').trim().slice(0, 120);
     await tx.$executeRaw`
       UPDATE conversations
          SET last_activity_at = GREATEST(last_activity_at, ${now}), last_message_preview = ${preview}, updated_at = now()
@@ -327,8 +360,8 @@ export class TurnApplier {
         contentType: 'TEXT',
         text: note,
         payload: { mentions: [], ai: who } as Prisma.InputJsonValue,
-        // Just after the closing reply, so the timeline shows them in that order.
-        occurredAt: new Date(now.getTime() + 1),
+        // Callers pass a time just after the closing reply, so the timeline shows them in that order.
+        occurredAt: now,
       },
     });
     return { noteId, requested: moved.count > 0 };
@@ -341,15 +374,19 @@ export class TurnApplier {
 
   private async afterCommit(input: TurnBase, after: AfterCommit): Promise<void> {
     try {
-      const job = sessionSendJob(after.itemId);
-      await this.queues.sendQueue(input.numberId).add(job.name, job.data, job.opts);
+      const queue = this.queues.sendQueue(input.numberId);
+      for (const [index, itemId] of after.itemIds.entries()) {
+        const job = sessionSendJob(itemId);
+        await queue.add(job.name, job.data, { ...job.opts, ...(index > 0 ? { delay: index * ITEM_SPACING_MS } : {}) });
+      }
       await requestSendWorkerSync(this.queues);
-      await this.publisher.itemCreated(after.itemId);
+      for (const itemId of after.itemIds) await this.publisher.itemCreated(itemId);
       if (after.noteId) await this.publisher.itemCreated(after.noteId);
       await this.publisher.conversation(input.conversationId, after.requested ? { state: 'ACTIVE', intervenedById: null, blocked: false } : undefined);
+      if (after.contactChanged) await this.publisher.contactUpdated(input.contactId);
       if (after.requested) await this.routing.alertRequesting(input.conversationId);
     } catch (error) {
-      this.logger.error({ err: (error as Error).message, conversationId: input.conversationId, itemId: after.itemId }, 'Could not queue the AI reply after commit');
+      this.logger.error({ err: (error as Error).message, conversationId: input.conversationId, itemIds: after.itemIds }, 'Could not queue the AI reply after commit');
     }
   }
 }

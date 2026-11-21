@@ -16,6 +16,7 @@ import { AgentStatusBadge } from './agent-status-badge';
 import { InstructionsTab } from './instructions-tab';
 import { KnowledgeTab } from './knowledge-tab';
 import { NumbersPanel } from './numbers-panel';
+import { SkillsTab } from './skills-tab';
 import { TestTab } from './test-tab';
 import { UnansweredTab } from './unanswered-tab';
 import { useAgentAutosave, type SaveStatus } from './use-agent-autosave';
@@ -30,7 +31,7 @@ const SAVE_LABEL: Record<SaveStatus, string> = {
   conflict: 'Reloading…',
 };
 
-type Tab = 'instructions' | 'knowledge' | 'unanswered' | 'test' | 'versions';
+type Tab = 'instructions' | 'knowledge' | 'skills' | 'unanswered' | 'test' | 'versions';
 
 type AgentMeta = Pick<AgentDetail, 'id' | 'name' | 'status' | 'publishedVersion' | 'numbers'>;
 const metaOf = (agent: AgentDetail): AgentMeta => ({
@@ -41,10 +42,10 @@ const metaOf = (agent: AgentDetail): AgentMeta => ({
   numbers: agent.numbers,
 });
 
-/** The tab that holds a problem's field; null while that part of the editor is still to come (skills). */
+/** The tab that holds a problem's field. */
 function tabOf(field: string | null): Tab | null {
   if (field === 'knowledge') return 'knowledge';
-  if (field?.startsWith('skills')) return null;
+  if (field?.startsWith('skills')) return 'skills';
   return 'instructions';
 }
 
@@ -192,6 +193,7 @@ export function AgentEditor({ initial, onReload }: { initial: AgentDetail; onRel
           <TabsList>
             <TabsTrigger value="instructions">Instructions</TabsTrigger>
             <TabsTrigger value="knowledge">Knowledge</TabsTrigger>
+            <TabsTrigger value="skills">Skills</TabsTrigger>
             <TabsTrigger value="unanswered">Unanswered</TabsTrigger>
             <TabsTrigger value="test">Test</TabsTrigger>
             <TabsTrigger value="versions">Versions</TabsTrigger>
@@ -201,6 +203,9 @@ export function AgentEditor({ initial, onReload }: { initial: AgentDetail; onRel
           </TabsContent>
           <TabsContent value="knowledge" className="pt-4">
             <KnowledgeTab agentId={initial.id} />
+          </TabsContent>
+          <TabsContent value="skills" className="pt-4">
+            <SkillsTab config={config} problems={problems} onChange={change} />
           </TabsContent>
           <TabsContent value="unanswered" className="pt-4">
             <UnansweredTab agentId={initial.id} />

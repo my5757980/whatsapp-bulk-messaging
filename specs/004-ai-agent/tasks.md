@@ -171,15 +171,15 @@ Al Ain" (city saved with a journey entry by the agent), later ask for the neares
 
 ### Tests for User Story 4 (REQUIRED) ⚠️
 
-- [ ] T064 [P] [US4] Unit tests for building the WhatsApp message from a reply in apps/api/test/unit/ai/reply-message.spec.ts: text; up to 3 buttons as a `BUTTONS` item with `ai:` reply ids; 4–10 options as a `LIST` item; media with the message as caption (at most 1,024 characters); disabled skills fall back to text
-- [ ] T065 [P] [US4] Integration test apps/api/test/integration/ai-replies-memory.int-spec.ts: a shared file is sent with a caption; buttons and lists are queued with their payload and a tap comes back to the agent as the customer's answer; `remember` sets an allowed attribute with a journey `ATTRIBUTE_CHANGED` entry (actor `AI_AGENT`, the agent's name); other attributes and values of the wrong type are not saved; a card number is masked in the Claude request (nock body) and never saved
-- [ ] T066 [P] [US4] Playwright e2e apps/web/e2e/ai-us4-rich-replies.spec.ts: share a media file and allow "city", ask for the file, state a city, check the profile panel and journey
+- [X] T064 [P] [US4] Unit tests for building the WhatsApp message from a reply in apps/api/test/unit/ai/reply-message.spec.ts: text; up to 3 buttons as a `BUTTONS` item with `ai:` reply ids; 4–10 options as a `LIST` item; media with the message as caption (at most 1,024 characters); disabled skills fall back to text
+- [X] T065 [P] [US4] Integration test apps/api/test/integration/ai-replies-memory.int-spec.ts: a shared file is sent with a caption; buttons and lists are queued with their payload and a tap comes back to the agent as the customer's answer; `remember` sets an allowed attribute with a journey `ATTRIBUTE_CHANGED` entry (actor `AI_AGENT`, the agent's name); other attributes and values of the wrong type are not saved; a card number is masked in the Claude request (nock body) and never saved
+- [X] T066 [P] [US4] Playwright e2e apps/web/e2e/ai-us4-rich-replies.spec.ts: share a media file and allow "city", ask for the file, state a city, check the profile panel and journey
 
 ### Implementation for User Story 4
 
-- [ ] T067 [US4] Build `BUTTONS`, `LIST` and media items from replies in apps/api/src/modules/ai/turns/apply.ts with the 003 interactive content types; agent reply ids use the `ai:<aiConversationId>:<n>` form so the flow router treats taps as ordinary messages and the agent receives the title
-- [ ] T068 [US4] Move the attribute writer out of `saveAttributes` in apps/api/src/modules/flows/engine/session.service.ts into apps/api/src/modules/inbox/journey/attribute-writer.ts (type checks, journey entries with actor `FLOW` or `AI_AGENT` and the name), keep flows on it, and save `remember` values through it from apps/api/src/modules/ai/turns/apply.ts with the `looksSensitive` refusal
-- [ ] T069 [P] [US4] Add the Skills tab apps/web/src/components/ai/skills-tab.tsx: buttons and lists switches, media picker from the media library with descriptions, fillable attributes with descriptions
+- [X] T067 [US4] Build `BUTTONS`, `LIST` and media items from replies in apps/api/src/modules/ai/turns/apply.ts with the 003 interactive content types; agent reply ids use the `ai:<aiConversationId>:<n>` form so the flow router treats taps as ordinary messages and the agent receives the title
+- [X] T068 [US4] Move the attribute writer out of `saveAttributes` in apps/api/src/modules/flows/engine/session.service.ts into apps/api/src/modules/inbox/journey/attribute-writer.ts (type checks, journey entries with actor `FLOW` or `AI_AGENT` and the name), keep flows on it, and save `remember` values through it from apps/api/src/modules/ai/turns/apply.ts with the `looksSensitive` refusal
+- [X] T069 [P] [US4] Add the Skills tab apps/web/src/components/ai/skills-tab.tsx: buttons and lists switches, media picker from the media library with descriptions, fillable attributes with descriptions
 
 ---
 
