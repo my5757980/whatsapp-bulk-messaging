@@ -126,10 +126,16 @@ describe('Chatbot flows: live chat and hand-over (US3)', () => {
     expect((await automatic(stopped.chat.id)).filter((i) => (i.payload as { flow?: unknown }).flow)).toHaveLength(before);
 
     const human = await startFlow();
-    const [humanKeyword] = (await call(admin, 'get', '/live-chat/settings')).body.humanKeywords as string[];
-    await inbound(human.phone, text(humanKeyword!));
-    expect(await ctx.prisma.flowSession.findUniqueOrThrow({ where: { id: human.session.id } })).toMatchObject({ status: 'ENDED', result: 'HANDED_OVER' });
-    expect((await ctx.prisma.conversation.findUniqueOrThrow({ where: { id: human.chat.id } })).state).toBe('REQUESTING');
+    // A keyword of its own: the default list is empty (002) and other files change it in any order.
+    const settings = (await call(admin, 'get', '/live-chat/settings')).body;
+    expect((await call(admin, 'put', '/live-chat/settings', { ...settings, humanKeywords: ['TALK TO SOMEONE'] })).status).toBe(200);
+    try {
+      await inbound(human.phone, text('Talk to someone'));
+      expect(await ctx.prisma.flowSession.findUniqueOrThrow({ where: { id: human.session.id } })).toMatchObject({ status: 'ENDED', result: 'HANDED_OVER' });
+      expect((await ctx.prisma.conversation.findUniqueOrThrow({ where: { id: human.chat.id } })).state).toBe('REQUESTING');
+    } finally {
+      await call(admin, 'put', '/live-chat/settings', settings);
+    }
 
     const blocked = await startFlow();
     expect((await call(manager, 'post', `/contacts/${blocked.chat.contactId}/block`)).status).toBe(204);

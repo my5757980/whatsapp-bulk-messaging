@@ -30,7 +30,8 @@ files:
 tests:
  - CI run 44867634903 on PR #5. The migration applied, and all integration tests passed except three.
  - Fixed: ai-turns second turn returned NOTHING; the NEWER check returned SENT; flows-live-chat welcome expected [Welcome] but got [].
- - API unit tests 369/369, eslint, tsc pass locally after the fix
+ - CI run 44869145343 failed in flows-live-chat "talk to a person": the session ended FAILED. That test depends on test order.
+ - API unit tests 369/369, eslint, tsc pass locally after the fixes
 ---
 
 ## Prompt
@@ -46,6 +47,7 @@ Opened draft PR #5 (004-ai-agent → main) so CI could run. The first CI run app
   - **History:** a new AI conversation's `startedAt` is now the first customer message it covers, so later turns' history includes the first exchange (it used to depend on a 60-second margin).
   - The column and its partial index were added to the unreleased 004 migration. The data model and research R5 are updated.
 - **flows-live-chat welcome (a 003 test):** it depended on the clock. Welcome messages go out only within working hours (Mon–Fri 09:00–18:00 UTC by default), and CI ran on a Saturday at 04:46 UTC. Both welcome tests now open every hour of the week while they run.
+- **Second CI run:** the 003 "talk to a person" test failed. The default  list is empty, and the test assumed another file had set one. Vitest runs larger files first when it has no cache, and the edits changed the file sizes, so the order changed. The test now sets its own keyword and restores the settings afterwards.
 - **ai-turns test 1:** now also checks that the second request carries the first exchange as history.
 
 ## Outcome
