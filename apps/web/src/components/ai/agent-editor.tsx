@@ -16,8 +16,10 @@ import { AgentStatusBadge } from './agent-status-badge';
 import { InstructionsTab } from './instructions-tab';
 import { KnowledgeTab } from './knowledge-tab';
 import { NumbersPanel } from './numbers-panel';
+import { TestTab } from './test-tab';
 import { UnansweredTab } from './unanswered-tab';
 import { useAgentAutosave, type SaveStatus } from './use-agent-autosave';
+import { VersionsTab } from './versions-tab';
 
 const SAVE_LABEL: Record<SaveStatus, string> = {
   saved: 'All changes saved',
@@ -28,7 +30,7 @@ const SAVE_LABEL: Record<SaveStatus, string> = {
   conflict: 'Reloading…',
 };
 
-type Tab = 'instructions' | 'knowledge' | 'unanswered';
+type Tab = 'instructions' | 'knowledge' | 'unanswered' | 'test' | 'versions';
 
 type AgentMeta = Pick<AgentDetail, 'id' | 'name' | 'status' | 'publishedVersion' | 'numbers'>;
 const metaOf = (agent: AgentDetail): AgentMeta => ({
@@ -88,6 +90,7 @@ export function AgentEditor({ initial, onReload }: { initial: AgentDetail; onRel
       setProblems([]);
       toast.success(agent.publishedVersion ? `Published version ${agent.publishedVersion.number}` : 'Published');
       refreshList();
+      void queryClient.invalidateQueries({ queryKey: aiKeys.versions(initial.id) });
     },
     onError: (error) => {
       if (error instanceof ApiError && error.code === 'PUBLISH_BLOCKED') {
@@ -190,6 +193,8 @@ export function AgentEditor({ initial, onReload }: { initial: AgentDetail; onRel
             <TabsTrigger value="instructions">Instructions</TabsTrigger>
             <TabsTrigger value="knowledge">Knowledge</TabsTrigger>
             <TabsTrigger value="unanswered">Unanswered</TabsTrigger>
+            <TabsTrigger value="test">Test</TabsTrigger>
+            <TabsTrigger value="versions">Versions</TabsTrigger>
           </TabsList>
           <TabsContent value="instructions" className="pt-4">
             <InstructionsTab config={config} problems={problems} onChange={change} />
@@ -199,6 +204,12 @@ export function AgentEditor({ initial, onReload }: { initial: AgentDetail; onRel
           </TabsContent>
           <TabsContent value="unanswered" className="pt-4">
             <UnansweredTab agentId={initial.id} />
+          </TabsContent>
+          <TabsContent value="test" className="pt-4">
+            <TestTab agentId={initial.id} testNumbers={initial.testNumbers} prepare={autosave.flush} />
+          </TabsContent>
+          <TabsContent value="versions" className="pt-4">
+            <VersionsTab agentId={initial.id} prepare={autosave.flush} onRestored={onReload} />
           </TabsContent>
         </Tabs>
         <aside className="grid content-start gap-4">

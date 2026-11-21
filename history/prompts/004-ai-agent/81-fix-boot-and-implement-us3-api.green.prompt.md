@@ -63,9 +63,14 @@ continue
   - integration `ai-testing`: preview, rate limit, test numbers versus published, versions and restore;
   - US3 contract cases.
 
+- **US3 web:**
+  - A Test tab: a preview chat with an optional customer name, sources, "would do" items and cost; the draft is saved first; and up to 3 test numbers.
+  - A Versions tab: versions with "Customers meet this one" on the published version, and restore with a confirm, which reloads the editor.
+- **e2e `ai-us3-testing`:** the preview answers with the draft and sends nothing; a test number gets the draft reply while another phone gets version 1's answer; restoring version 1 brings its goal back.
+
 ## Outcome
 
-- ✅ Impact: the US2 boot problem is fixed with a guard against repeats; US3 backend done (61 of 113 tasks).
+- ✅ Impact: the US2 boot problem is fixed with a guard against repeats; US3 done (63 of 113 tasks).
 - 🧪 Tests: unit, lint and typecheck pass locally; CI re-runs on push.
 - 📁 Files: listed above.
 - 🔁 Next prompts: US3 web (the Test and Versions tabs, T063) and e2e (T059); then US4.

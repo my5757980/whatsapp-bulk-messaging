@@ -150,14 +150,14 @@ phone gets the published agent; restoring version 1 brings its settings back int
 
 - [X] T057 [P] [US3] Integration test apps/api/test/integration/ai-testing.int-spec.ts: the preview returns the reply, sources and "would do" items without sending anything or changing contacts; preview usage is recorded as `PREVIEW` and not counted; the 21st preview in a minute gives 429; test numbers meet the draft (replies marked test, counted as test, left out of conversation results) and other numbers meet the published version; versions list; restore copies a version into the draft while customers keep the published version
 - [X] T058 [P] [US3] Contract tests in apps/api/test/contract/ai.contract-spec.ts for `POST /ai-agents/{id}/preview`, `GET /ai-agents/{id}/versions`, `POST /ai-agents/{id}/versions/{versionId}/restore` and `PUT /ai-agents/{id}/test-numbers`
-- [ ] T059 [P] [US3] Playwright e2e apps/web/e2e/ai-us3-testing.spec.ts: preview a question in the Test tab, add a test number and compare draft and published replies, restore version 1
+- [X] T059 [P] [US3] Playwright e2e apps/web/e2e/ai-us3-testing.spec.ts: preview a question in the Test tab, add a test number and compare draft and published replies, restore version 1
 
 ### Implementation for User Story 3
 
 - [X] T060 [US3] Implement apps/api/src/modules/ai/turns/preview.controller.ts and the dry-run mode of turn.service.ts (no apply; skills that change data simulated; "would do" list; 20 previews per member per minute)
 - [X] T061 [US3] Add test numbers: `PUT /ai-agents/{id}/test-numbers` in apps/api/src/modules/ai/agents/agents.service.ts (at most 3, E.164), draft selection for test senders in apps/api/src/modules/ai/turns/ai-router.ts, `test` on AI conversations, replies and usage in apps/api/src/modules/ai/turns/apply.ts; audit `ai.test_numbers_updated`
 - [X] T062 [US3] Implement apps/api/src/modules/ai/agents/versions.service.ts and versions.controller.ts (list, restore into the draft; audit `ai.agent_restored`)
-- [ ] T063 [P] [US3] Add the Test tab apps/web/src/components/ai/test-tab.tsx (preview chat with a sample contact, sources and "would do", test numbers) and the Versions tab apps/web/src/components/ai/versions-tab.tsx
+- [X] T063 [P] [US3] Add the Test tab apps/web/src/components/ai/test-tab.tsx (preview chat with a sample contact, sources and "would do", test numbers) and the Versions tab apps/web/src/components/ai/versions-tab.tsx
 
 ---
 

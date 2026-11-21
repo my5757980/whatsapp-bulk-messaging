@@ -68,7 +68,29 @@ export const aiKeys = {
   /** Both lists of an agent's unanswered questions. */
   unanswered: (id: string) => ['ai-agents', 'unanswered', id] as const,
   unansweredList: (id: string, status: 'open' | 'resolved') => ['ai-agents', 'unanswered', id, status] as const,
+  versions: (id: string) => ['ai-agents', 'versions', id] as const,
 };
+
+export interface AgentVersion {
+  id: string;
+  number: number;
+  publishedAt: string;
+  publishedBy: { id: string; name: string } | null;
+  isCurrent: boolean;
+}
+
+export interface PreviewMessage {
+  from: 'customer' | 'agent';
+  text: string;
+}
+
+/** What the draft would reply in the preview (FR-034); nothing is sent or changed. */
+export interface PreviewResult {
+  reply: { message: string; language: string | null; buttons: string[] | null; list: Record<string, unknown> | null; mediaId: string | null };
+  sources: Array<{ id: string; kind: string; title: string }>;
+  wouldDo: Array<{ kind: 'HAND_OVER' | 'REMEMBER' | 'START_FLOW' | 'OPT_OUT' | 'CALL_SKILL' | 'UNANSWERED'; description: string }>;
+  usage: { costUsd?: number; durationMs?: number };
+}
 
 /** Reply languages offered in the editor (BCP 47 primary tags). */
 export const LANGUAGES: Array<{ code: string; name: string }> = [
