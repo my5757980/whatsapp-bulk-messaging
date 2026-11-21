@@ -7,6 +7,7 @@ import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QUEUES } from '../../../common/queue/queue.constants.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
+import { aiConversationLock, AiConversationsService } from '../../ai/turns/ai-conversations.service.js';
 import { writeAttributes } from '../../inbox/journey/attribute-writer.js';
 import { isLive } from '../../inbox/conversations/window.js';
 import { InboxPublisher } from '../../inbox/realtime/inbox-publisher.js';
@@ -86,6 +87,7 @@ export class FlowSessionService {
     private readonly liveChat: LiveChatSettingsService,
     private readonly routing: ChatRoutingService,
     private readonly metrics: MetricsService,
+    private readonly aiConversations: AiConversationsService,
   ) {}
 
   /** Starts a flow for a chat; refuses when a session is already running unless asked to replace it. */
@@ -426,6 +428,9 @@ export class FlowSessionService {
           jumpTo = await this.jumpTarget(effect.flowId, row.isTest);
           if (!jumpTo) ended = { result: 'FAILED', reason: 'the flow to continue in is not published' };
           break;
+        case 'handToAi':
+          await this.handToAi(tx, row, effect.agentId, after);
+          break;
       }
     }
 
@@ -541,6 +546,35 @@ export class FlowSessionService {
       ),
     });
     after.contactChanged = contactId;
+  }
+
+  /**
+   * Hand to AI agent (004 FR-033): the chosen agent's AI conversation starts in this chat, started by
+   * the flow; from the customer's next message that agent answers, whichever agent the number has. A
+   * test run hands to the agent's draft. An agent that is deleted, or not published for a live run,
+   * gets nothing and the flow just ends.
+   */
+  private async handToAi(tx: Tx, row: SessionRow, agentId: string, after: AfterCommit): Promise<void> {
+    const agent = await tx.aiAgent.findFirst({ where: { id: agentId, deletedAt: null }, select: { id: true, name: true, status: true, publishedVersionId: true } });
+    if (!agent || (!row.isTest && (agent.status !== 'PUBLISHED' || !agent.publishedVersionId))) {
+      this.logger.warn({ sessionId: row.id, agentId }, 'The AI agent of a Hand to AI agent step is not available; the flow just ends');
+      return;
+    }
+    const chat = await tx.conversation.findUnique({ where: { id: row.conversationId }, select: { numberId: true, contactId: true } });
+    if (!chat) return;
+    // Same lock as AI turns, so an AI reply being applied cannot start a second AI conversation.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${aiConversationLock(row.conversationId)}::text))`;
+    await this.aiConversations.start(tx, {
+      conversationId: row.conversationId,
+      agentId: agent.id,
+      agentName: agent.name,
+      numberId: chat.numberId,
+      contactId: chat.contactId,
+      startedBy: 'FLOW',
+      test: row.isTest,
+      versionId: row.isTest ? null : agent.publishedVersionId,
+    });
+    after.touched = true;
   }
 
   /**

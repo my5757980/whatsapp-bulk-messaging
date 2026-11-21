@@ -14,7 +14,9 @@ export type FlowSessionResult =
   | 'FLOW_UNPUBLISHED'
   | 'EXPIRED'
   | 'BLOCKED'
-  | 'FAILED';
+  | 'FAILED'
+  /** A Hand to AI agent step passed the chat to an AI agent (004 FR-033). */
+  | 'HANDED_TO_AI';
 
 /** A message the flow sends (contracts/meta-graph-flows.md); ids of options carry the wait token. */
 export type FlowOutboundMessage =
@@ -42,4 +44,6 @@ export type FlowEffect =
   | { kind: 'schedule'; stepId: string; purpose: 'delay' | 'timeout'; delayMs: number }
   | { kind: 'callApi'; stepId: string }
   | { kind: 'jump'; stepId: string; flowId: string }
+  /** Start the agent's AI conversation in the chat (started by the flow, 004 FR-033). */
+  | { kind: 'handToAi'; stepId: string; agentId: string }
   | { kind: 'end'; result: FlowSessionResult; reason?: string };

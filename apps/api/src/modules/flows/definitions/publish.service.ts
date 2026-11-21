@@ -105,6 +105,7 @@ export class PublishService {
     }
     problems.push(...(await this.attributeProblems(graph)));
     problems.push(...(await this.jumpProblems(row, graph)));
+    problems.push(...(await this.agentProblems(graph)));
     problems.push(...(await this.templateProblems(graph)));
     return problems;
   }
@@ -180,6 +181,27 @@ export class PublishService {
       if (!type) return [{ code: 'UNKNOWN_ATTRIBUTE', message: `The contact attribute "${target.key}" does not exist`, stepId: target.stepId, triggerId: null, field: target.field }];
       const issue = target.issue(type);
       return issue ? [{ code: 'ATTRIBUTE_TYPE', message: issue, stepId: target.stepId, triggerId: null, field: target.field }] : [];
+    });
+  }
+
+  /** Hand to AI agent steps (004 FR-033): the agent must be published, or customers would meet nobody. */
+  private async agentProblems(graph: FlowGraph): Promise<Problem[]> {
+    const steps = graph.steps.flatMap((step) => (step.type === 'aiAgent' && step.agentId ? [{ stepId: step.id, agentId: step.agentId }] : []));
+    if (!steps.length) return [];
+    const agents = await this.prisma.aiAgent.findMany({ where: { id: { in: [...new Set(steps.map((s) => s.agentId))] } }, select: { id: true, name: true, status: true, deletedAt: true } });
+    const byId = new Map(agents.map((a) => [a.id, a]));
+    return steps.flatMap(({ stepId, agentId }) => {
+      const agent = byId.get(agentId);
+      if (agent && !agent.deletedAt && agent.status === 'PUBLISHED') return [];
+      return [
+        {
+          code: 'AGENT_NOT_PUBLISHED' as const,
+          message: agent && !agent.deletedAt ? `The AI agent "${agent.name}" is not published` : 'The AI agent no longer exists',
+          stepId,
+          triggerId: null,
+          field: 'agentId',
+        },
+      ];
     });
   }
 
