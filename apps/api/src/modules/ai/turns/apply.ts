@@ -5,6 +5,7 @@ import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import { Prisma } from '../../../generated/prisma/client.js';
 import { ConsentService } from '../../contacts/consent.service.js';
+import { FlowSessionService } from '../../flows/engine/session.service.js';
 import { isLive } from '../../inbox/conversations/window.js';
 import { writeAttributes } from '../../inbox/journey/attribute-writer.js';
 import { InboxPublisher } from '../../inbox/realtime/inbox-publisher.js';
@@ -63,7 +64,7 @@ export interface FailureInput extends TurnBase {
  * NEWER: another message waits; the follow-up turn answers everything.
  */
 export type ApplyOutcome =
-  | { result: 'SENT'; itemId: string; aiConversationId: string; handedOver: boolean }
+  | { result: 'SENT'; itemId: string | null; aiConversationId: string; handedOver: boolean }
   | { result: 'OPTED_OUT' }
   | { result: 'DROPPED' | 'NEWER' };
 
@@ -106,6 +107,7 @@ export class TurnApplier {
     private readonly conversations: AiConversationsService,
     private readonly usage: AiUsageService,
     private readonly unanswered: UnansweredRecorder,
+    private readonly flows: FlowSessionService,
   ) {}
 
   async apply(input: ApplyInput): Promise<ApplyOutcome> {
@@ -138,13 +140,18 @@ export class TurnApplier {
         const media = input.reply.mediaId
           ? await tx.mediaAsset.findFirst({ where: { id: input.reply.mediaId, purpose: 'LIBRARY', removedAt: null }, select: { id: true, mimeType: true, sizeBytes: true, displayName: true } })
           : null;
-        const items = replyItems(message, input.reply, { aiConversationId: conversation.id, media, allowButtons: config.skills.buttons, allowLists: config.skills.lists });
+        // A reply that only starts a flow has no words (FR-032); then nothing is sent and the
+        // introduction waits for the agent's first real message.
+        const items = input.reply.message.trim()
+          ? replyItems(message, input.reply, { aiConversationId: conversation.id, media, allowButtons: config.skills.buttons, allowLists: config.skills.lists })
+          : [];
         const itemIds: string[] = [];
         for (const [i, item] of items.entries()) {
           itemIds.push(await this.writeReply(tx, input, conversation.id, item, { sources, skills: input.skillCalls, ...(handOver ? { handOver: handOver.reason } : {}) }, new Date(now.getTime() + i)));
         }
         // The reply record points at the main item (the file, buttons or list after any lead-in text).
-        const itemId = itemIds.at(-1)!;
+        const itemId = itemIds.at(-1) ?? null;
+        const sent = itemIds.length > 0;
 
         const cost = this.usage.cost(input.usage, input.settings);
         await tx.aiReply.create({
@@ -156,7 +163,8 @@ export class TurnApplier {
             numberId: input.numberId,
             kind: handOver ? 'HANDOVER' : 'REPLY',
             test: input.agent.test,
-            counted: true,
+            // Only replies that reach the customer count (FR-036).
+            counted: sent,
             language: input.reply.language,
             sources: sources as Prisma.InputJsonValue,
             skills: input.skillCalls as unknown as Prisma.InputJsonValue,
@@ -178,12 +186,12 @@ export class TurnApplier {
           costMicros: cost,
           at: now,
           timezone: input.settings.timezone,
-          countsAgainstMonth: true,
+          countsAgainstMonth: sent,
         });
         await tx.aiConversation.update({
           where: { id: conversation.id },
           data: {
-            replies: { increment: 1 },
+            replies: { increment: sent ? 1 : 0 },
             lastHandledAt: input.handledUntil,
             lastActivityAt: now,
             // The call the customer was just asked to confirm, kept for their answer (research R12).
@@ -213,6 +221,9 @@ export class TurnApplier {
 
     if (outcome.result === 'SENT') {
       await this.afterCommit(input, outcome.after);
+      // A flow the agent starts answers first while it runs; the AI conversation stays active and the
+      // same agent continues after the flow ends (FR-032, research R9). A hand-over wins over it.
+      if (input.reply.startFlow && !outcome.handedOver) await this.startFlow(input, input.reply.startFlow);
       return { result: 'SENT', itemId: outcome.itemId, aiConversationId: outcome.aiConversationId, handedOver: outcome.handedOver };
     }
     if (outcome.result === 'OPTED_OUT') {
@@ -384,6 +395,24 @@ export class TurnApplier {
     if (ids.length) await tx.chatMessage.updateMany({ where: { id: { in: ids } }, data: { aiPending: false } });
   }
 
+  /** Starts the published flow the agent chose (startedBy AI_AGENT); a flow that is gone is logged and skipped. */
+  private async startFlow(input: ApplyInput, flowId: string): Promise<void> {
+    try {
+      const flow = await this.prisma.flow.findFirst({
+        where: { id: flowId, status: 'PUBLISHED', deletedAt: null, OR: [{ allNumbers: true }, { numbers: { some: { numberId: input.numberId } } }] },
+        select: { publishedVersionId: true },
+      });
+      if (!flow?.publishedVersionId) {
+        this.logger.warn({ conversationId: input.conversationId, flowId }, 'The flow the AI agent chose is not published for this number');
+        return;
+      }
+      const outcome = await this.flows.start({ flowId, versionId: flow.publishedVersionId, conversationId: input.conversationId, startedBy: 'AI_AGENT' });
+      if (!outcome.started) this.logger.warn({ conversationId: input.conversationId, flowId, reason: outcome.reason }, 'The flow the AI agent chose did not start');
+    } catch (error) {
+      this.logger.error({ err: (error as Error).message, conversationId: input.conversationId, flowId }, 'Could not start the flow the AI agent chose');
+    }
+  }
+
   private async afterCommit(input: TurnBase, after: AfterCommit): Promise<void> {
     try {
       const queue = this.queues.sendQueue(input.numberId);
@@ -391,7 +420,7 @@ export class TurnApplier {
         const job = sessionSendJob(itemId);
         await queue.add(job.name, job.data, { ...job.opts, ...(index > 0 ? { delay: index * ITEM_SPACING_MS } : {}) });
       }
-      await requestSendWorkerSync(this.queues);
+      if (after.itemIds.length) await requestSendWorkerSync(this.queues);
       for (const itemId of after.itemIds) await this.publisher.itemCreated(itemId);
       if (after.noteId) await this.publisher.itemCreated(after.noteId);
       await this.publisher.conversation(input.conversationId, after.requested ? { state: 'ACTIVE', intervenedById: null, blocked: false } : undefined);

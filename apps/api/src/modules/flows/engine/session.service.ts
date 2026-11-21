@@ -30,7 +30,8 @@ export interface StartRequest {
   /** null runs the flow's draft (test numbers, FR-034). */
   versionId: string | null;
   conversationId: string;
-  startedBy: 'TRIGGER' | 'MEMBER' | 'JUMP';
+  /** AI_AGENT: an AI agent's start-a-flow skill (004 FR-032). */
+  startedBy: 'TRIGGER' | 'MEMBER' | 'JUMP' | 'AI_AGENT';
   startedByUserId?: string | null;
   triggerKey?: string | null;
   isTest?: boolean;
