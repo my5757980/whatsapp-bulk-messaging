@@ -34,10 +34,12 @@ After the session restart:
 
 - **Git index:** `git status` reported "index file corrupt". The crash had zeroed `.git/index` at 12:22, after the US5 commit `bd96667` (12:16, already pushed).
   - The broken index was copied to `.git/index.corrupt-20261121132221` and rebuilt from HEAD with `git reset`, which leaves the working tree alone. `git fsck` is clean.
-- **Uncommitted fix found:** the only change since the US5 commit was an unfinished fix to the US5 integration test.
+- **Uncommitted fix found:** the only change since the US5 commit was a fix to the US5 integration test.
   - CI had failed because the test asserted that the second model request did not contain "late", a word that also occurs inside other words in the platform rules.
   - The fix gives the slow reply a unique status string and checks the exact JSON-escaped `reason`.
-  - It was verified, linted, type-checked, committed and pushed.
+- **The fix was already on GitHub:** a push of it was rejected because the remote had `da9a7dd` (12:22). The lost session had committed and pushed the same fix, but the crash kept the local branch at `bd96667`.
+  - Its test file matched the local one exactly.
+  - The branch was moved to the remote with `git reset --soft` (working tree untouched). Only this PHR was committed on top.
 
 ## Outcome
 
