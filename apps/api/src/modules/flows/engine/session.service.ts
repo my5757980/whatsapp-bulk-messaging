@@ -7,7 +7,7 @@ import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QUEUES } from '../../../common/queue/queue.constants.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
-import { validateAttributeValue, type AttributeValue } from '../../contacts/attribute-validator.js';
+import { writeAttributes } from '../../inbox/journey/attribute-writer.js';
 import { isLive } from '../../inbox/conversations/window.js';
 import { InboxPublisher } from '../../inbox/realtime/inbox-publisher.js';
 import { ChatRoutingService } from '../../inbox/routing/chat-routing.service.js';
@@ -172,7 +172,7 @@ export class FlowSessionService {
   }
 
   /** The chat's running session, if any (id, flow and how it started). */
-  async runningSession(conversationId: string): Promise<{ id: string; flowId: string; startedBy: 'TRIGGER' | 'MEMBER' | 'JUMP' } | null> {
+  async runningSession(conversationId: string): Promise<{ id: string; flowId: string; startedBy: 'TRIGGER' | 'MEMBER' | 'JUMP' | 'AI_AGENT' } | null> {
     return this.prisma.flowSession.findFirst({ where: { conversationId, status: 'RUNNING' }, select: { id: true, flowId: true, startedBy: true } });
   }
 
@@ -498,45 +498,8 @@ export class FlowSessionService {
    */
   private async saveAttributes(tx: Tx, row: SessionRow, flow: FlowMeta, values: Record<string, string | number | null>, after: AfterCommit): Promise<void> {
     if (!row.contactId) return;
-    const keys = Object.keys(values);
-    const [definitions, contact] = await Promise.all([
-      tx.attributeDefinition.findMany({ where: { key: { in: keys } }, select: { key: true, type: true } }),
-      tx.contact.findUnique({ where: { id: row.contactId }, select: { attributes: true } }),
-    ]);
-    if (!contact) return;
-    const typeOf = new Map(definitions.map((d) => [d.key, d.type]));
-    const attributes = { ...((contact.attributes ?? {}) as Record<string, unknown>) };
-    const changes: Array<{ key: string; from: unknown; to: AttributeValue | null }> = [];
-    for (const [key, raw] of Object.entries(values)) {
-      const type = typeOf.get(key);
-      const checked = type && raw !== null ? validateAttributeValue(type, raw) : null;
-      if (!type || (checked && !checked.ok)) {
-        this.logger.warn({ sessionId: row.id, attribute: key }, 'Flow answer does not fit the contact attribute; not saved');
-        continue;
-      }
-      const to = checked?.ok ? checked.value : null;
-      const from = attributes[key] ?? null;
-      if (JSON.stringify(from) === JSON.stringify(to)) continue;
-      if (to === null) delete attributes[key];
-      else attributes[key] = to;
-      changes.push({ key, from, to });
-    }
-    if (!changes.length) return;
-    await tx.contact.update({ where: { id: row.contactId }, data: { attributes: attributes as Prisma.InputJsonValue } });
-    const chats = await tx.conversation.findMany({ where: { contactId: row.contactId }, select: { id: true } });
-    const occurredAt = new Date();
-    await tx.conversationEvent.createMany({
-      data: changes.flatMap((change) =>
-        chats.map((chat) => ({
-          conversationId: chat.id,
-          type: 'ATTRIBUTE_CHANGED' as const,
-          actorType: 'FLOW' as const,
-          data: { key: change.key, from: change.from, to: change.to, flowId: flow.id, flowName: flow.name } as Prisma.InputJsonValue,
-          occurredAt,
-        })),
-      ),
-    });
-    after.contactChanged = row.contactId;
+    const changed = await writeAttributes(tx, row.contactId, values, { type: 'FLOW', flowId: flow.id, flowName: flow.name });
+    if (changed.length) after.contactChanged = row.contactId;
   }
 
   /** The published version a jump continues in (a test run continues in the draft); null when not available. */

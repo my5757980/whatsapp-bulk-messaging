@@ -32,6 +32,10 @@ export const ALL_PERMISSIONS = [
   'inbox.metrics',
   // Feature 003 chatbot flows (spec FR-038, contracts/flows-api.openapi.yaml header)
   'flows.manage',
+  // Feature 004 AI agent (spec FR-042, FR-049, contracts/ai-api.openapi.yaml header)
+  'ai.manage',
+  'ai.usage',
+  'assistant.use',
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];
@@ -56,6 +60,8 @@ const MANAGER_PERMISSIONS: readonly Permission[] = [
   'media.manage',
   'inbox.metrics',
   'flows.manage',
+  'ai.manage',
+  'assistant.use',
 ];
 
 const AGENT_PERMISSIONS: readonly Permission[] = ['contacts.view', 'templates.view', 'campaigns.view', 'inbox.view', 'inbox.reply'];

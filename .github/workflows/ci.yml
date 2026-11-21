@@ -51,6 +51,7 @@ jobs:
           echo "OPS_TOKEN=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
           echo "META_APP_SECRET=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
           echo "META_WEBHOOK_VERIFY_TOKEN=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+          echo "ANTHROPIC_API_KEY=test-$(openssl rand -hex 12)" >> "$GITHUB_ENV"
       - name: Create test database
         run: PGPASSWORD=wbm psql -h localhost -U wbm -d wbm -c 'CREATE DATABASE wbm_test;'
       - name: Start S3-compatible storage (MinIO via Chainguard image)
@@ -94,6 +95,8 @@ jobs:
       META_GRAPH_BASE_URL: http://localhost:4010
       META_GRAPH_API_VERSION: v27.0
       MOCK_WEBHOOK_TARGET: http://localhost:4000/api/webhooks/meta
+      # Feature 004: the e2e run talks to mock-meta's fake Claude endpoint, never the real model.
+      ANTHROPIC_BASE_URL: http://localhost:4010/anthropic
       APP_URL: http://localhost:3000
       COOKIE_SECURE: 'false'
       S3_ENDPOINT: http://localhost:9000
@@ -112,6 +115,7 @@ jobs:
           echo "OPS_TOKEN=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
           echo "META_APP_SECRET=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
           echo "META_WEBHOOK_VERIFY_TOKEN=$(openssl rand -hex 16)" >> "$GITHUB_ENV"
+          echo "ANTHROPIC_API_KEY=test-$(openssl rand -hex 12)" >> "$GITHUB_ENV"
       - run: npm ci
       - run: npm run build -w @wbm/shared
       - run: npm run db:generate -w @wbm/api

@@ -9,6 +9,7 @@ import { ZodValidationPipe } from '../../../common/validation/zod.pipe.js';
 import { ConversationsService } from '../../inbox/conversations/conversations.service.js';
 import type { Viewer } from '../../inbox/conversations/visibility.js';
 import { isLive } from '../../inbox/conversations/window.js';
+import { AiConversationsService } from '../../ai/turns/ai-conversations.service.js';
 import { FlowSessionService } from '../engine/session.service.js';
 
 const StartFlowSchema = z.strictObject({ flowId: z.uuid() });
@@ -28,6 +29,7 @@ export class FlowStartController {
     private readonly prisma: PrismaService,
     private readonly conversations: ConversationsService,
     private readonly sessions: FlowSessionService,
+    private readonly ai: AiConversationsService,
   ) {}
 
   /** Published flows that serve the chat's number. */
@@ -63,6 +65,8 @@ export class FlowStartController {
     if (!isLive(chat.lastCustomerMessageAt)) throw refuse('WINDOW_CLOSED', 'The 24-hour reply window has closed, so a flow cannot start');
     if (chat.state === 'INTERVENED' && chat.intervenedById !== user.id) throw refuse('CHAT_TAKEN_BY_OTHER', `${chat.intervenedBy?.name ?? 'Another member'} has taken this chat`);
 
+    // A member starting a flow stops the AI agent in the chat (004 FR-026).
+    await this.ai.endForConversation(chat.id, 'MEMBER_TOOK');
     const outcome = await this.sessions.start({
       flowId: flow.id,
       versionId: flow.publishedVersionId,

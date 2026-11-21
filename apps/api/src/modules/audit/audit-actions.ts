@@ -46,6 +46,24 @@ export const AUDIT_ACTIONS = [
   'flow.restored',
   'flow.test_numbers_updated',
   'flow.secret_changed',
+  // AI agent (feature 004, FR-050). Ids, names and counts only; never message text, knowledge or secret values.
+  'ai.agent_created',
+  'ai.agent_updated',
+  'ai.agent_duplicated',
+  'ai.agent_deleted',
+  'ai.agent_published',
+  'ai.agent_unpublished',
+  'ai.agent_restored',
+  'ai.knowledge_added',
+  'ai.knowledge_refreshed',
+  'ai.knowledge_switched',
+  'ai.knowledge_deleted',
+  'ai.skills_changed',
+  'ai.secret_changed',
+  'ai.test_numbers_updated',
+  'ai.number_agent_changed',
+  'ai.limits_changed',
+  'ai.assistant_action_confirmed',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

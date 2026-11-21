@@ -22,6 +22,10 @@ const table: Array<[string, Permission[], { ADMIN: boolean; MANAGER: boolean; AG
   ['team view', ['inbox.metrics'], { ADMIN: true, MANAGER: true, AGENT: false }],
   // Feature 003 chatbot flows (spec FR-038); agents start published flows with inbox.reply
   ['build, test, publish and analyse chatbot flows; API-step secrets', ['flows.manage'], { ADMIN: true, MANAGER: true, AGENT: false }],
+  // Feature 004 AI agent (spec FR-042, FR-049); the assistant then acts with the member's own permissions
+  ['build, test and publish AI agents; knowledge and unanswered questions', ['ai.manage'], { ADMIN: true, MANAGER: true, AGENT: false }],
+  ['AI usage page, monthly limits and prices', ['ai.usage'], { ADMIN: true, MANAGER: false, AGENT: false }],
+  ['use the team assistant', ['assistant.use'], { ADMIN: true, MANAGER: true, AGENT: false }],
 ];
 
 describe('permission matrix (spec.md role table)', () => {

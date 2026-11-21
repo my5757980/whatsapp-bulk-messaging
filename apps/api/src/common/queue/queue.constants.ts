@@ -9,6 +9,10 @@ export const QUEUES = {
   INBOX: 'inbox',
   /** Chatbot flows: delay and question timers, API steps, session expiry (feature 003). */
   FLOWS: 'flows',
+  /** AI agent: debounced customer turns, AI conversation expiry and team assistant requests (feature 004). */
+  AI: 'ai',
+  /** AI agent knowledge: reading files and websites, one job at a time (feature 004, research R11). */
+  AI_KNOWLEDGE: 'ai-knowledge',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];

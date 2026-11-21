@@ -11,6 +11,7 @@ import { STATE_LABEL, type ChatItemPage, type ConversationDetail, type Conversat
 import { queryKeys } from '@/lib/query';
 import { ChatItemView } from './chat-item-view';
 import { Composer } from './composer';
+import { AiAgentBanner } from './ai-banner';
 import { FlowSessionBanner, StartFlowButton } from './flow-start';
 import { TransferDialog } from './transfer-dialog';
 
@@ -128,6 +129,7 @@ export function ChatView({ id, meId, canMonitor }: { id: string; meId: string; c
       </div>
 
       <FlowSessionBanner chatId={chat.id} refreshKey={`${newestId ?? ''}:${chat.state}`} />
+      <AiAgentBanner chatId={chat.id} refreshKey={`${newestId ?? ''}:${chat.state}`} />
       <Composer chat={chat} meId={meId} />
     </section>
   );

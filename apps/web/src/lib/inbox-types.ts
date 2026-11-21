@@ -77,6 +77,17 @@ export type ChatContentType =
 
 export type ChatItemStatus = 'QUEUED' | 'SENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
 
+/** `payload.ai` of a message an AI agent sent (feature 004, specs/004-ai-agent/data-model.md §2). */
+export interface AiItemPayload {
+  agentId: string;
+  agentName: string;
+  versionId: string | null;
+  aiConversationId: string;
+  sources: Array<{ id: string; kind: string; title: string }>;
+  skills: Array<{ skillId: string; name: string; outcome: string }>;
+  test: boolean;
+}
+
 export interface ChatItem {
   id: string;
   kind: 'INBOUND' | 'SESSION_OUT' | 'MESSAGE_REF' | 'NOTE';

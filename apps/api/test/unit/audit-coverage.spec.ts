@@ -6,8 +6,8 @@ import { AUDIT_ACTIONS } from '../../src/modules/audit/audit-actions.js';
 
 // T175: every audited action of data-model.md §1 is recorded somewhere in the code base.
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
-/** Actions whose recording arrives with a later story (none since 003 US7). */
-const PENDING_US7 = new Set<string>();
+/** Actions whose recording arrives with a later 004 story (US3 versions and test numbers, US5 secrets, US7 limits, US9 assistant). */
+const PENDING = new Set<string>(['ai.limits_changed', 'ai.assistant_action_confirmed']);
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -64,10 +64,27 @@ describe('audit coverage', () => {
       'flow.restored',
       'flow.test_numbers_updated',
       'flow.secret_changed',
+      'ai.agent_created',
+      'ai.agent_updated',
+      'ai.agent_duplicated',
+      'ai.agent_deleted',
+      'ai.agent_published',
+      'ai.agent_unpublished',
+      'ai.agent_restored',
+      'ai.knowledge_added',
+      'ai.knowledge_refreshed',
+      'ai.knowledge_switched',
+      'ai.knowledge_deleted',
+      'ai.skills_changed',
+      'ai.secret_changed',
+      'ai.test_numbers_updated',
+      'ai.number_agent_changed',
+      'ai.limits_changed',
+      'ai.assistant_action_confirmed',
     ]);
   });
 
-  it.each(AUDIT_ACTIONS.filter((a) => !PENDING_US7.has(a)))('%s is recorded by the code', (action) => {
+  it.each(AUDIT_ACTIONS.filter((a) => !PENDING.has(a)))('%s is recorded by the code', (action) => {
     expect(code).toMatch(new RegExp(`['"\`]${action.replace('.', '\\.')}['"\`]`));
   });
 });

@@ -7,9 +7,10 @@ import { fileURLToPath } from 'node:url';
 /**
  * Contract-test helper (T015): validates an HTTP response body against the documented
  * OpenAPI 3.1 response schema in specs/001-whatsapp-bulk-messaging/contracts/, or for live chat
- * specs/002-team-inbox/contracts/, or for chatbot flows specs/003-chatbot-flow-builder/contracts/.
+ * specs/002-team-inbox/contracts/, for chatbot flows specs/003-chatbot-flow-builder/contracts/, or for
+ * the AI agent specs/004-ai-agent/contracts/.
  */
-export type ContractFile = 'dashboard-api.openapi.yaml' | 'public-api.openapi.yaml' | 'inbox-api.openapi.yaml' | 'flows-api.openapi.yaml';
+export type ContractFile = 'dashboard-api.openapi.yaml' | 'public-api.openapi.yaml' | 'inbox-api.openapi.yaml' | 'flows-api.openapi.yaml' | 'ai-api.openapi.yaml';
 
 interface MediaTypeObject {
   schema?: object;
@@ -30,6 +31,7 @@ const FEATURE_OF: Record<ContractFile, string> = {
   'public-api.openapi.yaml': '001-whatsapp-bulk-messaging',
   'inbox-api.openapi.yaml': '002-team-inbox',
   'flows-api.openapi.yaml': '003-chatbot-flow-builder',
+  'ai-api.openapi.yaml': '004-ai-agent',
 };
 const contractsDir = (file: ContractFile) => path.join(specsDir, FEATURE_OF[file], 'contracts');
 

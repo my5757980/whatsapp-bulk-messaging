@@ -11,6 +11,7 @@ import { ConversationsService } from '../conversations/conversations.service.js'
 import { ITEM_INCLUDE, toItemDto, type ChatItemDto } from '../conversations/conversation-views.js';
 import type { Viewer } from '../conversations/visibility.js';
 import { InboxPublisher } from '../realtime/inbox-publisher.js';
+import { AiConversationsService } from '../../ai/turns/ai-conversations.service.js';
 import { FlowSessionService } from '../../flows/engine/session.service.js';
 
 /** POST /inbox/conversations/{id}/template (contracts/inbox-api.openapi.yaml). */
@@ -34,6 +35,7 @@ export class TemplateSendService {
     private readonly publisher: InboxPublisher,
     private readonly queues: QueueRegistry,
     private readonly flows: FlowSessionService,
+    private readonly ai: AiConversationsService,
   ) {}
 
   async send(viewer: Viewer, conversationId: string, input: SendTemplateInput): Promise<ChatItemDto> {
@@ -62,8 +64,9 @@ export class TemplateSendService {
     }
     assertTemplateParams(template, input.params, Boolean(input.headerMediaAssetId), 'headerMediaAssetId');
     assertConsent(contact.consentStatus, template.category);
-    // A template from a member stops the flow answering the chat (003 FR-026).
+    // A template from a member stops the flow and the AI agent answering the chat (003/004 FR-026).
     await this.flows.stopForConversation(conversationId);
+    await this.ai.endForConversation(conversationId, 'MEMBER_TOOK');
 
     // Sending takes the chat, like a reply (FR-020).
     if (chat.state !== 'INTERVENED') await this.conversations.take(viewer, chat);
