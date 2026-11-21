@@ -169,6 +169,8 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     // A chat that starts waiting for an agent gets that alert instead of a new-message alert.
     if (outcome.becameRequesting) await this.routing.alertRequesting(outcome.conversationId);
     else await this.notifier.queue({ kind: 'message', conversationId: outcome.conversationId, itemId });
+    // An opt-out stops the AI agent at once; the flow router below ends flows and answers it (004 FR-027).
+    if (optOutKeyword) await this.aiAgents.onOptOut(outcome.conversationId);
     // Chatbot flows answer first (003 research R5); a flow answer replaces welcome/off-hours (FR-029).
     const flowAnswered = await this.flows.onCustomerMessage({
       conversationId: outcome.conversationId,

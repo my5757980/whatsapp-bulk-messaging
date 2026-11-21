@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import nock from 'nock';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { WebhooksProcessor } from '../../src/modules/webhooks/webhooks.processor.js';
 import { seedNumber, setDefaultCountry, uaePhone } from '../support/fixtures.js';
@@ -97,5 +98,39 @@ describe('AI agent API contract', () => {
     await check('get', '/inbox/conversations/{id}/ai', active, 200);
     expect(active.body).toMatchObject({ agentId: agent.id, agentName: agent.name, startedBy: 'CUSTOMER', replies: 0 });
     await check('get', '/inbox/conversations/{id}/ai', await call('get', `/inbox/conversations/${randomUUID()}/ai`), 404);
+  });
+
+  it('US3: preview, versions, restore and test numbers', async () => {
+    const created = (await call('post', '/ai-agents', { name: `Contract US3 ${randomUUID().slice(0, 6)}` })).body;
+    expect((await call('put', `/ai-agents/${created.id}/draft`, { config: { ...created.config, goal: 'Answer questions.' }, draftRevision: 0 })).status).toBe(200);
+    expect((await call('post', `/ai-agents/${created.id}/publish`)).status).toBe(200);
+
+    const versions = await call('get', `/ai-agents/${created.id}/versions`);
+    await check('get', '/ai-agents/{id}/versions', versions, 200);
+    await check('post', '/ai-agents/{id}/versions/{versionId}/restore', await call('post', `/ai-agents/${created.id}/versions/${versions.body[0].id}/restore`), 200);
+    await check('post', '/ai-agents/{id}/versions/{versionId}/restore', await call('post', `/ai-agents/${created.id}/versions/${randomUUID()}/restore`), 404);
+    await check('put', '/ai-agents/{id}/test-numbers', await call('put', `/ai-agents/${created.id}/test-numbers`, { testNumbers: ['+971501234567'] }), 200);
+    await check('put', '/ai-agents/{id}/test-numbers', await call('put', `/ai-agents/${created.id}/test-numbers`, { testNumbers: ['12'] }), 422);
+
+    const reply = { message: 'Hello! How can I help?', language: 'en', buttons: null, list: null, mediaId: null, usedSources: [], unanswered: null, handOver: null, remember: null, startFlow: null, optOut: null };
+    nock('https://api.anthropic.com')
+      .post('/v1/messages')
+      .query(true)
+      .reply(200, {
+        id: `msg_${randomUUID()}`,
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-opus-5-5',
+        content: [{ type: 'text', text: JSON.stringify(reply) }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 500, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+      });
+    try {
+      await check('post', '/ai-agents/{id}/preview', await call('post', `/ai-agents/${created.id}/preview`, { messages: [{ from: 'customer', text: 'Hi' }] }), 200);
+    } finally {
+      nock.cleanAll();
+    }
+    await check('post', '/ai-agents/{id}/preview', await call('post', `/ai-agents/${randomUUID()}/preview`, { messages: [{ from: 'customer', text: 'Hi' }] }), 404);
   });
 });

@@ -1,13 +1,15 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { AgentConfigSchema, defaultAgentConfig, type AgentConfig } from '@wbm/shared';
+import { AgentConfigSchema, AI_LIMITS, defaultAgentConfig, type AgentConfig } from '@wbm/shared';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 import { AppError } from '../../../common/errors/app-error.js';
+import { normalizePhone } from '../../../common/phone/phone.js';
 import { isUniqueViolation } from '../../../common/prisma/prisma-errors.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { StorageService } from '../../../common/storage/storage.service.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import { AuditService, type AuditActor } from '../../audit/audit.service.js';
+import { SettingsService } from '../../settings/settings.service.js';
 import { AGENT_INCLUDE, parseConfig, toAgentDetail, toAgentSummary, type AgentRow } from './agent-views.js';
 import { AgentPublishService } from './publish.service.js';
 
@@ -19,6 +21,8 @@ export const SaveAgentDraftSchema = z.strictObject({ config: AgentConfigSchema, 
 export type SaveAgentDraftInput = z.infer<typeof SaveAgentDraftSchema>;
 export const SetAgentNumbersSchema = z.strictObject({ numberIds: z.array(z.uuid()).max(50), replace: z.boolean().default(false) });
 export type SetAgentNumbersInput = z.infer<typeof SetAgentNumbersSchema>;
+export const SetTestNumbersSchema = z.strictObject({ testNumbers: z.array(z.string().trim().min(1).max(20)).max(AI_LIMITS.testNumbers) });
+export type SetTestNumbersInput = z.infer<typeof SetTestNumbersSchema>;
 
 type Stats = { replies: number; handedOver: number };
 
@@ -34,6 +38,7 @@ export class AgentsService {
     private readonly audit: AuditService,
     private readonly publishing: AgentPublishService,
     private readonly storage: StorageService,
+    private readonly settings: SettingsService,
   ) {}
 
   async list() {
@@ -150,6 +155,27 @@ export class AgentsService {
       await this.audit.record(actor, 'ai.skills_changed', { type: 'ai_agent', id }, { name: before.name, api: config.skills.api.length, flows: config.skills.flows.length, media: config.skills.media.length, memory: config.skills.memory.length });
     }
     return { draftRevision: input.draftRevision + 1, problems: await this.publishing.problems(id, config) };
+  }
+
+  /**
+   * The up to 3 phones that meet this agent's draft instead of its published version (FR-035, T061).
+   * Numbers are stored in E.164; national numbers use the company's default country.
+   */
+  async setTestNumbers(id: string, input: SetTestNumbersInput, actor: AuditActor) {
+    const agent = await this.prisma.aiAgent.findFirst({ where: { id, deletedAt: null }, select: { id: true } });
+    if (!agent) throw AppError.notFound('Agent not found');
+    const { defaultCountryCode } = await this.settings.get();
+    const numbers: string[] = [];
+    const problems: Array<{ field: string; issue: string }> = [];
+    for (const raw of input.testNumbers) {
+      const phone = normalizePhone(raw, defaultCountryCode);
+      if (!phone) problems.push({ field: 'testNumbers', issue: `"${raw}" is not a valid phone number` });
+      else if (!numbers.includes(phone.e164)) numbers.push(phone.e164);
+    }
+    if (problems.length) throw AppError.validation('Use full phone numbers, for example +971 50 123 4567', problems);
+    await this.prisma.aiAgent.update({ where: { id }, data: { testNumbers: numbers } });
+    await this.audit.record(actor, 'ai.test_numbers_updated', { type: 'ai_agent', id }, { count: numbers.length });
+    return this.get(id);
   }
 
   /** The numbers this agent answers on; a number another agent has needs `replace` (FR-004). */

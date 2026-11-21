@@ -3,6 +3,8 @@ import { InboxApiModule } from '../inbox/inbox.module.js';
 import { AgentsController } from './agents/agents.controller.js';
 import { AgentsService } from './agents/agents.service.js';
 import { AgentPublishService } from './agents/publish.service.js';
+import { AgentVersionsController } from './agents/versions.controller.js';
+import { AgentVersionsService } from './agents/versions.service.js';
 import { ClaudeClient } from './claude/claude.client.js';
 import { KnowledgeSearch } from './knowledge/knowledge-search.js';
 import { KnowledgeController } from './knowledge/knowledge.controller.js';
@@ -16,6 +18,8 @@ import { AiAgentRouter } from './turns/ai-router.js';
 import { AiConversationsService } from './turns/ai-conversations.service.js';
 import { TurnApplier } from './turns/apply.js';
 import { AiFailureMonitor } from './turns/failure-monitor.js';
+import { PreviewController } from './turns/preview.controller.js';
+import { PreviewService } from './turns/preview.service.js';
 import { TurnService } from './turns/turn.service.js';
 import { AiUsageService } from './usage/usage.service.js';
 
@@ -34,7 +38,7 @@ export class AiDomainModule {}
 @Module({
   // InboxApiModule gives the live chat controllers the 002 visibility rules (ConversationsService).
   imports: [AiDomainModule, InboxApiModule],
-  providers: [AgentsService, AgentPublishService, KnowledgeService, UnansweredService],
-  controllers: [AgentsController, KnowledgeController, UnansweredController, AiStateController],
+  providers: [AgentsService, AgentPublishService, AgentVersionsService, KnowledgeService, UnansweredService, PreviewService],
+  controllers: [AgentsController, AgentVersionsController, KnowledgeController, UnansweredController, PreviewController, AiStateController],
 })
 export class AiApiModule {}

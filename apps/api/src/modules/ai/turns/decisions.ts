@@ -71,6 +71,11 @@ const REASON_LABELS: Record<HandOverReason, string> = {
   other: 'The agent handed the chat over',
 };
 
+/** Why the agent handed over, in words for the team. */
+export function handOverReason(reason: HandOverReason): string {
+  return REASON_LABELS[reason];
+}
+
 /** The team's note in the chat: why the agent handed over, then the summary (FR-024). */
 export function handOverNote(agentName: string, handOver: HandOver): string {
   const summary = handOver.summary.trim();

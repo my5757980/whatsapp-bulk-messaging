@@ -40,13 +40,16 @@ export class AiAgentRouter {
     private readonly conversations: AiConversationsService,
   ) {}
 
+  /**
+   * An opt-out keyword (the 001 consent rules recorded it): the agent stops in this chat (FR-027).
+   * The inbound handler calls this before the flow router, which answers opt-outs itself.
+   */
+  async onOptOut(conversationId: string): Promise<void> {
+    await this.conversations.endForConversation(conversationId, 'OPTED_OUT');
+  }
+
   async onCustomerMessage(message: AiInboundMessage): Promise<boolean> {
-    // The 001 consent rules recorded the opt-out; the agent stops in this chat (FR-027).
-    if (message.optOutKeyword) {
-      await this.conversations.endForConversation(message.conversationId, 'OPTED_OUT');
-      return false;
-    }
-    if (message.humanKeyword || message.chatState !== 'ACTIVE') return false;
+    if (message.optOutKeyword || message.humanKeyword || message.chatState !== 'ACTIVE') return false;
     // A reaction is not a message to answer.
     if (message.contentType === 'REACTION') return false;
     const contact = await this.prisma.contact.findUnique({ where: { id: message.contactId }, select: { blockedAt: true, consentStatus: true } });

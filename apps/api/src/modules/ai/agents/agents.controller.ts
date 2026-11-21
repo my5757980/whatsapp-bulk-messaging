@@ -8,10 +8,12 @@ import {
   RenameAgentSchema,
   SaveAgentDraftSchema,
   SetAgentNumbersSchema,
+  SetTestNumbersSchema,
   type CreateAgentInput,
   type RenameAgentInput,
   type SaveAgentDraftInput,
   type SetAgentNumbersInput,
+  type SetTestNumbersInput,
 } from './agents.service.js';
 import { AgentPublishService } from './publish.service.js';
 
@@ -84,5 +86,11 @@ export class AgentsController {
   @Require('ai.manage')
   setNumbers(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(SetAgentNumbersSchema)) body: SetAgentNumbersInput, @ClientIp() ip: string | null) {
     return this.agents.setNumbers(id, body, { userId: user.id, ip });
+  }
+
+  @Put(':id/test-numbers')
+  @Require('ai.manage')
+  setTestNumbers(@CurrentUser() user: RequestUser, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(SetTestNumbersSchema)) body: SetTestNumbersInput, @ClientIp() ip: string | null) {
+    return this.agents.setTestNumbers(id, body, { userId: user.id, ip });
   }
 }
