@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { api } from '@/lib/api-client';
+import { flowKeys, type FlowSummary } from '@/lib/flows';
 import { queryKeys } from '@/lib/query';
 import type { AttributeDefinition } from '@/lib/types';
 
@@ -180,6 +181,82 @@ export function SkillsTab({ agentId, secrets: initialSecrets, config, problems, 
       </section>
 
       <ApiSkills agentId={agentId} skills={skills.api} secrets={secrets} problems={problems} onChange={(api) => setSkills({ api })} onSecretsChange={setSecrets} />
+
+      <FlowSkills config={config} problems={problems} onChange={(flows) => setSkills({ flows })} />
     </div>
+  );
+}
+
+/**
+ * Start a flow skills (004 T084, FR-032): published flows the agent may start, each with when to use
+ * it. The flow answers while it runs; the agent continues after it.
+ */
+function FlowSkills({ config, problems, onChange }: { config: AgentConfig; problems: AgentProblem[]; onChange: (flows: AgentConfig['skills']['flows']) => void }) {
+  const chosen = config.skills.flows;
+  const flows = useQuery({ queryKey: flowKeys.list, queryFn: () => api<FlowSummary[]>('/flows') });
+  const [flowId, setFlowId] = useState('');
+  const nameOf = (id: string) => flows.data?.find((f) => f.id === id)?.name ?? 'A deleted flow';
+  const offered = (flows.data ?? []).filter((f) => f.status === 'PUBLISHED' && !chosen.some((c) => c.flowId === f.id));
+
+  return (
+    <section className="grid gap-3" aria-labelledby="flow-skills-title">
+      <div>
+        <h2 id="flow-skills-title" className="text-base font-semibold">
+          Flows it may start
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          For things a chatbot flow does best, such as booking a visit. The flow answers while it runs, then the agent continues.
+        </p>
+      </div>
+      {chosen.length > 0 && (
+        <ul className="grid gap-3" data-testid="skill-flows">
+          {chosen.map((item, i) => (
+            <li key={item.flowId} className="grid gap-1 rounded-md border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium">{nameOf(item.flowId)}</span>
+                <Button size="sm" variant="ghost" onClick={() => onChange(chosen.filter((_, j) => j !== i))}>
+                  Remove
+                </Button>
+              </div>
+              <Label htmlFor={`skill-flow-${i}`}>When to start it</Label>
+              <Input
+                id={`skill-flow-${i}`}
+                value={item.whenToUse}
+                maxLength={AI_LIMITS.whenToUse}
+                placeholder="When the customer wants to book a showroom visit"
+                onChange={(e) => onChange(chosen.map((f, j) => (j === i ? { ...f, whenToUse: e.target.value } : f)))}
+              />
+              <FieldProblems problems={problems} prefix={`skills.flows[${i}]`} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {chosen.length < AI_LIMITS.flowSkills && (
+        <div className="flex items-end gap-2">
+          <div className="grid gap-1">
+            <Label htmlFor="skill-flow-new">Published flow</Label>
+            <NativeSelect id="skill-flow-new" className="w-64" value={flowId} onChange={(e) => setFlowId(e.target.value)}>
+              <option value="">Choose a flow…</option>
+              {offered.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={!flowId}
+            onClick={() => {
+              onChange([...chosen, { flowId, whenToUse: '' }]);
+              setFlowId('');
+            }}
+          >
+            Add flow
+          </Button>
+        </div>
+      )}
+    </section>
   );
 }
