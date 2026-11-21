@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { AGENT_REPLY_JSON_SCHEMA, AgentReplySchema, AI_LIMITS, isWithinHours, sanitiseReply, type AgentReply, type AttributeKind, type TokenUsage } from '@wbm/shared';
+import { AGENT_REPLY_JSON_SCHEMA, AgentReplySchema, AI_LIMITS, isWithinHours, sanitiseReply, type AgentConfig, type AgentReply, type AttributeKind, type TokenUsage } from '@wbm/shared';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { ChatContentType } from '../../../generated/prisma/client.js';
 import { isLive } from '../../inbox/conversations/window.js';
@@ -32,6 +32,18 @@ const PLACEHOLDERS: Partial<Record<ChatContentType, string>> = {
 };
 
 export type TurnResult = 'SENT' | 'OPTED_OUT' | 'NOTHING' | 'NOT_ELIGIBLE' | 'DROPPED' | 'NEWER' | 'FAILED';
+
+/** What the model needs for one reply, from a chat or from the preview. */
+export interface ThinkInput {
+  agentId: string;
+  config: AgentConfig;
+  contact: { name: string | null; attributes: Record<string, unknown>; tags: string[] };
+  history: Array<{ from: 'customer' | 'agent'; text: string }>;
+  customerText: string;
+  firstReply: boolean;
+  handOverNow: boolean;
+  couldNotAnswerBefore: boolean;
+}
 
 interface ChatRow {
   id: string;
@@ -126,38 +138,57 @@ export class TurnService {
     }
   }
 
-  /** Builds the prompt, runs the model and returns the sanitised reply. */
+  /** A customer turn: the chat's contact and history from the database, then the model. */
   private async decide(chat: ChatRow, agent: SelectedAgent, customerText: string, rules: { handOverNow: boolean; couldNotAnswerBefore: boolean }) {
-    const config = agent.config;
     const contact = chat.contact!;
+    const history = await this.history(chat.id, agent);
+    return this.think({
+      agentId: agent.agentId,
+      config: agent.config,
+      contact: { name: contact.name, attributes: (contact.attributes ?? {}) as Record<string, unknown>, tags: contact.tags.map((t) => t.tag.name) },
+      history,
+      customerText,
+      firstReply: agent.replies === 0,
+      ...rules,
+    });
+  }
+
+  /**
+   * Builds the prompt, runs the model and returns the sanitised reply. Customer turns and the
+   * preview (T060) share it; it changes nothing, so the caller decides what happens next.
+   */
+  async think(input: ThinkInput): Promise<{ reply: AgentReply; knownSources: Map<string, KnowledgeItem>; usage: TokenUsage; model: string; catalog: PromptCatalog }> {
+    const config = input.config;
+    const agentId = input.agentId;
+    const customerText = input.customerText;
     const allowedAttributes = config.skills.memory.map((m) => m.key);
 
-    const total = await this.search.totalChars(agent.agentId);
+    const total = await this.search.totalChars(agentId);
     const mode = total <= AI_LIMITS.wholeKnowledgeChars ? 'WHOLE' : 'SEARCH';
-    const items = await this.search.items(agent.agentId, mode === 'SEARCH');
-    const retrieved = mode === 'SEARCH' ? await this.search.retrieve(agent.agentId, customerText) : [];
+    const items = await this.search.items(agentId, mode === 'SEARCH');
+    const retrieved = mode === 'SEARCH' ? await this.search.retrieve(agentId, customerText) : [];
     const knownSources = new Map<string, KnowledgeItem>();
     for (const item of [...items, ...retrieved]) knownSources.set(item.id, item);
 
-    const [catalog, history, live] = await Promise.all([this.catalog(agent), this.history(chat.id, agent), this.liveChat.get()]);
+    const [catalog, live] = await Promise.all([this.catalog(config), this.liveChat.get()]);
     const now = new Date();
     const prompt = buildPrompt({
       config,
       catalog,
       knowledge: { mode, items },
       retrieved,
-      history,
+      history: input.history,
       customerText,
       turn: {
-        contact: contactFacts({ name: contact.name, attributes: (contact.attributes ?? {}) as Record<string, unknown>, tags: contact.tags.map((t) => t.tag.name) }, allowedAttributes),
+        contact: contactFacts(input.contact, allowedAttributes),
         localTime: localStamp(live.timezone, now),
         timeZone: live.timezone,
         teamOpen: isWithinHours(live.workingHours, live.timezone, now),
         nextOpening: nextOpening(live.workingHours, live.timezone, now),
-        firstReply: agent.replies === 0,
+        firstReply: input.firstReply,
         pendingConfirmation: null,
-        handOverNow: rules.handOverNow,
-        couldNotAnswerBefore: rules.couldNotAnswerBefore,
+        handOverNow: input.handOverNow,
+        couldNotAnswerBefore: input.couldNotAnswerBefore,
       },
     });
 
@@ -166,7 +197,7 @@ export class TurnService {
       searchKnowledge: async (query) => {
         searches += 1;
         if (searches > AI_LIMITS.searchCallsPerTurn) return '<results>\nThe search limit for this turn is reached; answer with what you have.\n</results>';
-        const found = await this.search.searchForTool(agent.agentId, query, renderSource);
+        const found = await this.search.searchForTool(agentId, query, renderSource);
         for (const item of found.items) knownSources.set(item.id, item);
         return found.text;
       },
@@ -202,10 +233,10 @@ export class TurnService {
       attributes,
       sourceIds: new Set(knownSources.keys()),
     });
-    if (dropped.length) this.logger.log({ agentId: agent.agentId, dropped }, 'Parts of an AI reply were dropped');
+    if (dropped.length) this.logger.log({ agentId, dropped }, 'Parts of an AI reply were dropped');
     // Only an opt-out or a flow start may come without words (contracts/claude-messages.md §4).
     if (!reply.message && reply.optOut !== 'clear' && !reply.startFlow) throw new ClaudeFailure('INVALID_OUTPUT', 'The reply had no message');
-    return { reply, knownSources, usage: result.usage as TokenUsage, model: result.model };
+    return { reply, knownSources, usage: result.usage as TokenUsage, model: result.model, catalog };
   }
 
   private loadChat(conversationId: string): Promise<ChatRow | null> {
@@ -249,8 +280,8 @@ export class TurnService {
   }
 
   /** Names for the shared files, flows and fillable attributes the version allows. */
-  private async catalog(agent: SelectedAgent): Promise<PromptCatalog> {
-    const skills = agent.config.skills;
+  private async catalog(config: AgentConfig): Promise<PromptCatalog> {
+    const skills = config.skills;
     const [media, flows, attributes] = await Promise.all([
       skills.media.length
         ? this.prisma.mediaAsset.findMany({ where: { id: { in: skills.media.map((m) => m.mediaId) }, purpose: 'LIBRARY', removedAt: null }, select: { id: true, displayName: true } })

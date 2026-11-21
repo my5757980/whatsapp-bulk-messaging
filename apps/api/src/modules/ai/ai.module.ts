@@ -1,4 +1,5 @@
 import { Global, Module } from '@nestjs/common';
+import { InboxApiModule } from '../inbox/inbox.module.js';
 import { AgentsController } from './agents/agents.controller.js';
 import { AgentsService } from './agents/agents.service.js';
 import { AgentPublishService } from './agents/publish.service.js';
@@ -31,7 +32,8 @@ export class AiDomainModule {}
 
 /** AI agent, knowledge, usage and assistant endpoints (HTTP app only). */
 @Module({
-  imports: [AiDomainModule],
+  // InboxApiModule gives the live chat controllers the 002 visibility rules (ConversationsService).
+  imports: [AiDomainModule, InboxApiModule],
   providers: [AgentsService, AgentPublishService, KnowledgeService, UnansweredService],
   controllers: [AgentsController, KnowledgeController, UnansweredController, AiStateController],
 })

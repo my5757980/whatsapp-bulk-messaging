@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { DEFAULT_INTROS, maskSensitive, type AgentReply, type TokenUsage } from '@wbm/shared';
+import { DEFAULT_INTROS, maskSensitive, type AgentConfig, type AgentReply, type TokenUsage } from '@wbm/shared';
 import { v7 as uuidv7 } from 'uuid';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
@@ -68,10 +68,10 @@ interface AfterCommit {
 }
 
 /** The manager's introduction for the reply's language, with the display name (FR-010). */
-export function introFor(agent: SelectedAgent, language: string | null): string {
-  const intro = agent.config.intro;
-  const text = (language ? intro[language] : undefined) ?? intro[agent.config.replyLanguages[0] ?? 'en'] ?? DEFAULT_INTROS.en!;
-  return text.split('{name}').join(agent.config.displayName);
+export function introFor(config: AgentConfig, language: string | null): string {
+  const intro = config.intro;
+  const text = (language ? intro[language] : undefined) ?? intro[config.replyLanguages[0] ?? 'en'] ?? DEFAULT_INTROS.en!;
+  return text.split('{name}').join(config.displayName);
 }
 
 /**
@@ -117,7 +117,7 @@ export class TurnApplier {
           return { result: 'DROPPED' } as const;
         }
         const now = new Date();
-        const message = conversation.replies === 0 ? `${introFor(input.agent, input.reply.language)}\n\n${input.reply.message}`.trim() : input.reply.message;
+        const message = conversation.replies === 0 ? `${introFor(input.agent.config, input.reply.language)}\n\n${input.reply.message}`.trim() : input.reply.message;
         const sources = input.reply.usedSources
           .map((id) => input.knownSources.get(id))
           .filter((item): item is KnowledgeItem => item !== undefined)
@@ -204,7 +204,7 @@ export class TurnApplier {
         }
         const now = new Date();
         const fallback = input.agent.config.fallbackMessage;
-        const message = conversation.replies === 0 ? `${introFor(input.agent, null)}\n\n${fallback}` : fallback;
+        const message = conversation.replies === 0 ? `${introFor(input.agent.config, null)}\n\n${fallback}` : fallback;
         const itemId = await this.writeReply(tx, input, conversation.id, message, { sources: [], fallback: true }, now);
         await tx.aiReply.create({
           data: {
