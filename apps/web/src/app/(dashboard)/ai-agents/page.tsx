@@ -12,11 +12,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { NativeSelect } from '@/components/ui/native-select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from '@/components/ui/toaster';
-import { aiKeys, type AgentDetail, type AgentSummary } from '@/lib/ai';
-import { api } from '@/lib/api-client';
+import { aiKeys, type AgentDetail, type AgentStarterSummary, type AgentSummary, type StarterAttributeOffer } from '@/lib/ai';
+import { api, ApiError } from '@/lib/api-client';
 import { errorMessage, toastError } from '@/lib/errors';
+import { queryKeys } from '@/lib/query';
 
 /** AI agents list (004 T044): status, numbers, the last 7 days, duplicate and delete. */
 export default function AiAgentsPage() {
@@ -132,17 +134,43 @@ function AgentsList() {
   );
 }
 
-/** A new agent with our defaults; starter agents arrive with US8. */
+/** A new agent, empty or from a starter written by us (T095, FR-040), with the offer to create missing attributes (FR-041). */
 function NewAgentDialog() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
+  const [starterKey, setStarterKey] = useState('');
+  const [created, setCreated] = useState<{ id: string; missing: StarterAttributeOffer[] } | null>(null);
+  const starters = useQuery({ queryKey: aiKeys.starters, queryFn: () => api<AgentStarterSummary[]>('/ai-agent-starters'), enabled: open });
+  const chosen = starters.data?.find((s) => s.key === starterKey);
+
   const create = useMutation({
-    mutationFn: () => api<AgentDetail>('/ai-agents', { method: 'POST', json: { name: name.trim() } }),
+    mutationFn: () => api<AgentDetail>('/ai-agents', { method: 'POST', json: { name: name.trim(), ...(starterKey ? { starterKey } : {}) } }),
     onSuccess: (agent) => {
       void queryClient.invalidateQueries({ queryKey: aiKeys.list });
-      router.push(`/ai-agents/${agent.id}`);
+      const missing = (chosen?.suggestedAttributes ?? []).filter((a) => !a.exists);
+      if (missing.length) setCreated({ id: agent.id, missing });
+      else router.push(`/ai-agents/${agent.id}`);
+    },
+    onError: toastError,
+  });
+  const createAttributes = useMutation({
+    mutationFn: async (missing: StarterAttributeOffer[]) => {
+      for (const a of missing) {
+        try {
+          await api('/attributes', { method: 'POST', json: { key: a.key, label: a.label, type: a.type } });
+        } catch (error) {
+          // Someone created it meanwhile: that is fine.
+          if (!(error instanceof ApiError && error.status === 409)) throw error;
+        }
+      }
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.attributes });
+      void queryClient.invalidateQueries({ queryKey: aiKeys.starters });
+      toast.success('Attributes created');
+      if (created) router.push(`/ai-agents/${created.id}`);
     },
     onError: toastError,
   });
@@ -152,26 +180,72 @@ function NewAgentDialog() {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setCreated(null);
+      }}
+    >
       <DialogTrigger asChild>
         <Button>New agent</Button>
       </DialogTrigger>
       <DialogContent>
-        <form onSubmit={submit} className="grid gap-4">
-          <DialogHeader>
-            <DialogTitle>New AI agent</DialogTitle>
-            <DialogDescription>Give it a name your team will recognise. You can change everything later.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-1">
-            <Label htmlFor="agent-name">Name</Label>
-            <Input id="agent-name" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="Sales assistant" autoFocus />
+        {created ? (
+          <div className="grid gap-4">
+            <DialogHeader>
+              <DialogTitle>Create the attributes this starter uses?</DialogTitle>
+              <DialogDescription>The agent remembers what customers tell it in these contact attributes, which do not exist yet. Publishing needs them.</DialogDescription>
+            </DialogHeader>
+            <ul className="grid gap-1 text-sm" data-testid="missing-attributes">
+              {created.missing.map((a) => (
+                <li key={a.key}>
+                  {a.label} <span className="text-muted-foreground">({a.key}, {a.type.toLowerCase()})</span>
+                </li>
+              ))}
+            </ul>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => router.push(`/ai-agents/${created.id}`)}>
+                Open without them
+              </Button>
+              <Button onClick={() => createAttributes.mutate(created.missing)} disabled={createAttributes.isPending}>
+                {createAttributes.isPending ? 'Creating…' : 'Create attributes and open'}
+              </Button>
+            </DialogFooter>
           </div>
-          <DialogFooter>
-            <Button type="submit" disabled={!name.trim() || create.isPending}>
-              {create.isPending ? 'Creating…' : 'Create agent'}
-            </Button>
-          </DialogFooter>
-        </form>
+        ) : (
+          <form onSubmit={submit} className="grid gap-4">
+            <DialogHeader>
+              <DialogTitle>New AI agent</DialogTitle>
+              <DialogDescription>Give it a name your team will recognise. You can change everything later.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-1">
+              <Label htmlFor="agent-name">Name</Label>
+              <Input id="agent-name" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} placeholder="Sales assistant" autoFocus />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="agent-starter">Start from</Label>
+              <NativeSelect id="agent-starter" value={starterKey} onChange={(e) => setStarterKey(e.target.value)}>
+                <option value="">An empty agent</option>
+                {starters.data?.map((s) => (
+                  <option key={s.key} value={s.key}>
+                    {s.name}
+                  </option>
+                ))}
+              </NativeSelect>
+              {chosen ? (
+                <p className="text-xs text-muted-foreground" data-testid="starter-description">
+                  {chosen.description} It comes with example answers marked “Replace me”: replace or remove them before publishing.
+                </p>
+              ) : null}
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={!name.trim() || create.isPending}>
+                {create.isPending ? 'Creating…' : 'Create agent'}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
       </DialogContent>
     </Dialog>
   );

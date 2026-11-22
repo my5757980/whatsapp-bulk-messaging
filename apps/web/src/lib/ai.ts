@@ -71,7 +71,24 @@ export const aiKeys = {
   versions: (id: string) => ['ai-agents', 'versions', id] as const,
   usage: (month: string) => ['ai-usage', month] as const,
   settings: ['ai-settings'] as const,
+  starters: ['ai-agent-starters'] as const,
 };
+
+/** An attribute a starter agent remembers answers in (FR-041). */
+export interface StarterAttributeOffer {
+  key: string;
+  label: string;
+  type: 'TEXT' | 'NUMBER' | 'DATE' | 'BOOLEAN';
+  exists: boolean;
+}
+
+/** A starter agent written by us (FR-040). */
+export interface AgentStarterSummary {
+  key: string;
+  name: string;
+  description: string;
+  suggestedAttributes: StarterAttributeOffer[];
+}
 
 /** The AI usage page for a month (FR-037). */
 export interface AiUsage {
