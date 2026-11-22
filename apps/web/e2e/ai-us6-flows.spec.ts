@@ -56,12 +56,13 @@ test('AI US6: a Hand to AI agent step passes the chat to an agent, which answers
   await page.getByLabel('Flow name').fill(`Welcome ${suffix}`);
   await page.getByRole('button', { name: 'Create flow', exact: true }).click();
   await expect(page).toHaveURL(/\/flows\/[0-9a-f-]{36}$/);
-  await page.getByRole('button', { name: 'Add Message step', exact: true }).click();
-  await page.getByLabel('Message', { exact: true }).fill(FIRST);
+  // The agent step first, then the message that leads to it (made the start), as the 003 specs do:
+  // a new step is selected, so no click on the canvas is needed.
   await page.getByRole('button', { name: 'Add Hand to AI agent step', exact: true }).click();
   await page.getByLabel('AI agent', { exact: true }).selectOption({ label: agentName });
   await page.getByLabel('Message before the agent takes over (optional)').fill(OPENING);
-  await page.getByTestId('flow-step').filter({ hasText: FIRST }).click();
+  await page.getByRole('button', { name: 'Add Message step', exact: true }).click();
+  await page.getByLabel('Message', { exact: true }).fill(FIRST);
   await page.getByLabel('Then go to').selectOption('ai-agent-1');
   await page.getByRole('button', { name: 'Make this the start', exact: true }).click();
   await page.getByRole('button', { name: 'Add keyword', exact: true }).click();
