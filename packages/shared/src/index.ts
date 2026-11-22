@@ -9,6 +9,7 @@ export * from './ai/chunking.js';
 export * from './ai/config.js';
 export * from './ai/masking.js';
 export * from './ai/reply.js';
+export * from './ai/starters/index.js';
 export * from './ai/usage.js';
 export * from './flows/answers.js';
 export * from './flows/conditions.js';
