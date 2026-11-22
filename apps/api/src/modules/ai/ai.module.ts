@@ -24,6 +24,8 @@ import { AiFailureMonitor } from './turns/failure-monitor.js';
 import { PreviewController } from './turns/preview.controller.js';
 import { PreviewService } from './turns/preview.service.js';
 import { TurnService } from './turns/turn.service.js';
+import { AiUsageReportService } from './usage/usage-report.service.js';
+import { AiSettingsController, AiUsageController } from './usage/usage.controller.js';
 import { AiUsageService } from './usage/usage.service.js';
 
 // AI agent wiring (feature 004, T018), following 002 and 003: shared services in a global domain
@@ -41,7 +43,17 @@ export class AiDomainModule {}
 @Module({
   // InboxApiModule gives the live chat controllers the 002 visibility rules (ConversationsService).
   imports: [AiDomainModule, InboxApiModule],
-  providers: [AgentsService, AgentPublishService, AgentVersionsService, AgentSecretsService, KnowledgeService, UnansweredService, PreviewService],
-  controllers: [AgentsController, AgentVersionsController, AgentSecretsController, KnowledgeController, UnansweredController, PreviewController, AiStateController],
+  providers: [AgentsService, AgentPublishService, AgentVersionsService, AgentSecretsService, KnowledgeService, UnansweredService, PreviewService, AiUsageReportService],
+  controllers: [
+    AgentsController,
+    AgentVersionsController,
+    AgentSecretsController,
+    KnowledgeController,
+    UnansweredController,
+    PreviewController,
+    AiStateController,
+    AiUsageController,
+    AiSettingsController,
+  ],
 })
 export class AiApiModule {}
