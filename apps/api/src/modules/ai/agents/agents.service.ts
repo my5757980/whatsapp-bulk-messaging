@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { AgentConfigSchema, AI_LIMITS, defaultAgentConfig, type AgentConfig } from '@wbm/shared';
+import { AGENT_STARTERS, AgentConfigSchema, agentStarterByKey, agentStarterConfig, AI_LIMITS, defaultAgentConfig, type AgentConfig } from '@wbm/shared';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 import { AppError } from '../../../common/errors/app-error.js';
@@ -10,6 +10,7 @@ import { StorageService } from '../../../common/storage/storage.service.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import { AuditService, type AuditActor } from '../../audit/audit.service.js';
 import { SettingsService } from '../../settings/settings.service.js';
+import { insertAnswer } from '../knowledge/answer-rows.js';
 import { AGENT_INCLUDE, parseConfig, toAgentDetail, toAgentSummary, type AgentRow } from './agent-views.js';
 import { AgentPublishService } from './publish.service.js';
 
@@ -60,14 +61,37 @@ export class AgentsService {
     return row;
   }
 
+  /** Our starter agents (FR-040), with which suggested attributes exist already (FR-041). */
+  async starters() {
+    const keys = [...new Set(AGENT_STARTERS.flatMap((s) => s.attributes.map((a) => a.key)))];
+    const existing = new Set((await this.prisma.attributeDefinition.findMany({ where: { key: { in: keys } }, select: { key: true } })).map((a) => a.key));
+    return AGENT_STARTERS.map((s) => ({
+      key: s.key,
+      name: s.name,
+      description: s.description,
+      suggestedAttributes: s.attributes.map((a) => ({ key: a.key, label: a.label, type: a.type, exists: existing.has(a.key) })),
+    }));
+  }
+
+  /** An agent with our defaults, or from a starter with its example answers marked "replace me" (FR-040). */
   async create(input: CreateAgentInput, actor: AuditActor) {
-    // Starter agents arrive with US8.
-    if (input.starterKey) throw AppError.validation('Unknown starter agent', [{ field: 'starterKey', issue: 'is not a starter agent' }]);
-    const config = defaultAgentConfig(input.name);
+    const starter = input.starterKey ? agentStarterByKey(input.starterKey) : undefined;
+    if (input.starterKey && !starter) throw AppError.validation('Unknown starter agent', [{ field: 'starterKey', issue: 'is not a starter agent' }]);
+    const config = starter ? agentStarterConfig(starter, input.name) : defaultAgentConfig(input.name);
     const row = await this.withName(() =>
-      this.prisma.aiAgent.create({ data: { name: input.name, draft: config as unknown as Prisma.InputJsonValue, createdById: actor.userId ?? null }, include: AGENT_INCLUDE }),
+      this.prisma.$transaction(async (tx) => {
+        const created = await tx.aiAgent.create({
+          data: { name: input.name, draft: config as unknown as Prisma.InputJsonValue, starterKey: starter?.key ?? null, createdById: actor.userId ?? null },
+        });
+        // A millisecond apart, so the knowledge lists them in the starter's order.
+        const at = Date.now();
+        for (const [i, example] of (starter?.exampleAnswers ?? []).entries()) {
+          await insertAnswer(tx, created.id, example, { replaceMe: true, createdById: actor.userId ?? null, createdAt: new Date(at + i) });
+        }
+        return tx.aiAgent.findUniqueOrThrow({ where: { id: created.id }, include: AGENT_INCLUDE });
+      }),
     );
-    await this.audit.record(actor, 'ai.agent_created', { type: 'ai_agent', id: row.id }, { name: row.name });
+    await this.audit.record(actor, 'ai.agent_created', { type: 'ai_agent', id: row.id }, { name: row.name, ...(starter ? { starter: starter.key } : {}) });
     return toAgentDetail(row, await this.publishing.problems(row.id, config));
   }
 

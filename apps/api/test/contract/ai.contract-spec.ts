@@ -153,6 +153,13 @@ describe('AI agent API contract', () => {
     await check('delete', '/ai-agents/{id}/secrets/{secretId}', await call('delete', `/ai-agents/${created.id}/secrets/${secret.body.id}`), 204);
   });
 
+  it('US8: starter agents', async () => {
+    await check('get', '/ai-agent-starters', await call('get', '/ai-agent-starters'), 200);
+    const suffix = randomUUID().slice(0, 6);
+    await check('post', '/ai-agents', await call('post', '/ai-agents', { name: `Support desk ${suffix}`, starterKey: 'customer_support' }), 201);
+    await check('post', '/ai-agents', await call('post', '/ai-agents', { name: `No starter ${suffix}`, starterKey: 'no_such_starter' }), 422);
+  });
+
   it('US7: usage and AI settings (admins)', async () => {
     const admin = await signIn(ctx, 'ADMIN');
     const asAdmin = (method: 'get' | 'put', url: string, body?: object) => {

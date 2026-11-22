@@ -5,6 +5,7 @@ import { AgentSecretsService } from './agents/agent-secrets.service.js';
 import { AgentsController } from './agents/agents.controller.js';
 import { AgentsService } from './agents/agents.service.js';
 import { AgentPublishService } from './agents/publish.service.js';
+import { AgentStartersController } from './agents/starters.controller.js';
 import { AgentSecretsVault } from './agents/secrets-vault.js';
 import { AgentVersionsController } from './agents/versions.controller.js';
 import { AgentVersionsService } from './agents/versions.service.js';
@@ -46,6 +47,7 @@ export class AiDomainModule {}
   providers: [AgentsService, AgentPublishService, AgentVersionsService, AgentSecretsService, KnowledgeService, UnansweredService, PreviewService, AiUsageReportService],
   controllers: [
     AgentsController,
+    AgentStartersController,
     AgentVersionsController,
     AgentSecretsController,
     KnowledgeController,

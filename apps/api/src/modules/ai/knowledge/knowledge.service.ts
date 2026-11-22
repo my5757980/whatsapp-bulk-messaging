@@ -13,6 +13,7 @@ import type { UploadedFileData } from '../../../common/validation/uploaded-file.
 import type { AiKnowledgeSource, Prisma } from '../../../generated/prisma/client.js';
 import { AuditService, type AuditActor } from '../../audit/audit.service.js';
 import { knowledgeProcessJob } from '../ai-jobs.js';
+import { insertAnswer } from './answer-rows.js';
 import { checkWebsiteAddress } from './crawler.js';
 import { KnowledgeError } from './extract/errors.js';
 
@@ -90,29 +91,10 @@ export class KnowledgeService {
     };
   }
 
-  async addAnswer(agentId: string, input: AddAnswerInput, actor: AuditActor, options: { replaceMe?: boolean } = {}) {
+  async addAnswer(agentId: string, input: AddAnswerInput, actor: AuditActor) {
     await this.agentOrThrow(agentId);
     await this.checkLimit(agentId, 'ANSWER', AI_LIMITS.answers);
-    const chunk = answerChunk(input.question, input.answer);
-    const row = await this.prisma.$transaction(async (tx) => {
-      const source = await tx.aiKnowledgeSource.create({
-        data: {
-          agentId,
-          kind: 'ANSWER',
-          title: input.question,
-          question: input.question,
-          answer: input.answer,
-          status: 'READY',
-          replaceMe: options.replaceMe ?? false,
-          charCount: [...chunk.text].length,
-          chunkCount: 1,
-          lastRefreshedAt: new Date(),
-          createdById: actor.userId ?? null,
-        },
-      });
-      await tx.aiKnowledgeChunk.create({ data: { sourceId: source.id, agentId, position: 0, title: input.question, text: chunk.text } });
-      return source;
-    });
+    const row = await this.prisma.$transaction((tx) => insertAnswer(tx, agentId, input, { replaceMe: false, createdById: actor.userId ?? null }));
     await this.audit.record(actor, 'ai.knowledge_added', { type: 'ai_agent', id: agentId }, { kind: 'ANSWER', sourceId: row.id });
     return toSourceDto(row);
   }
