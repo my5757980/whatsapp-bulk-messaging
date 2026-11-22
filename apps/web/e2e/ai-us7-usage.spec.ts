@@ -30,10 +30,12 @@ test('AI US7: the monthly limit stops the agent, hands the chat over and alerts 
     const all = (await (await page.request.get(`${MOCK_META}/mock/sent`)).json()) as { messages: Array<{ phoneNumberId: string; text?: string }> };
     return all.messages.filter((m) => m.phoneNumberId === phoneNumberId && (m.text ?? '').includes(text)).length;
   };
+  // The latest 50 notifications: compared by id, so older ones dropping out of the list do not matter.
   const limitAlerts = async () => {
-    const list = (await (await page.request.get('/api/notifications')).json()) as Array<{ type: string; title: string }>;
-    return list.filter((n) => n.type === 'AI_USAGE' && n.title === 'AI reply limit reached').length;
+    const list = (await (await page.request.get('/api/notifications')).json()) as Array<{ id: string; type: string; title: string }>;
+    return list.filter((n) => n.type === 'AI_USAGE' && n.title === 'AI reply limit reached').map((n) => n.id);
   };
+  const count = (n: number) => new Intl.NumberFormat('en-US').format(n);
 
   // The fake model answers from the knowledge.
   expect((await page.request.post(`${MOCK_META}/mock/ai/rules`, { data: [] })).ok()).toBe(true);
@@ -55,7 +57,7 @@ test('AI US7: the monthly limit stops the agent, hands the chat over and alerts 
 
   const original = await (await page.request.get('/api/ai-settings')).json();
   const used = ((await (await page.request.get('/api/ai-usage')).json()) as { replies: number }).replies;
-  const alertsBefore = await limitAlerts();
+  const alertsBefore = new Set(await limitAlerts());
   try {
     // Two replies left this month, with a message for the customer at the limit.
     await page.goto('/ai-usage');
@@ -66,7 +68,7 @@ test('AI US7: the monthly limit stops the agent, hands the chat over and alerts 
 
     inbound('what are your opening hours?');
     await diag.check(() => expect.poll(() => sent(HOURS), { timeout: 30_000 }).toBe(1));
-    inbound('and are you open on Sunday?');
+    inbound('what are your opening hours on Sunday?');
     await diag.check(() => expect.poll(() => sent(HOURS), { timeout: 30_000 }).toBe(2));
     inbound('one more question please');
     await diag.check(() => expect.poll(() => sent(limitMessage), { timeout: 30_000 }).toBe(1));
@@ -74,8 +76,7 @@ test('AI US7: the monthly limit stops the agent, hands the chat over and alerts 
 
     // The usage page shows the count against the limit.
     await page.reload();
-    await expect(page.getByTestId('usage-replies')).toContainText(`${used + 2}`);
-    await expect(page.getByTestId('usage-replies')).toContainText(`of ${used + 2}`);
+    await expect(page.getByTestId('usage-replies')).toHaveText(`${count(used + 2)} of ${count(used + 2)}`);
 
     // Live chat: the chat waits for a person with the limit note.
     await page.goto('/inbox');
@@ -86,7 +87,7 @@ test('AI US7: the monthly limit stops the agent, hands the chat over and alerts 
     await expect(page.getByTestId('timeline').getByTestId('chat-item').filter({ hasText: 'AI reply limit reached' })).toContainText('Internal note');
 
     // Admins were alerted at 100%.
-    await expect.poll(limitAlerts, { timeout: 15_000 }).toBeGreaterThan(alertsBefore);
+    await expect.poll(async () => (await limitAlerts()).some((id) => !alertsBefore.has(id)), { timeout: 15_000 }).toBe(true);
   } finally {
     await page.request.put('/api/ai-settings', { headers, data: original });
   }
