@@ -69,7 +69,32 @@ export const aiKeys = {
   unanswered: (id: string) => ['ai-agents', 'unanswered', id] as const,
   unansweredList: (id: string, status: 'open' | 'resolved') => ['ai-agents', 'unanswered', id, status] as const,
   versions: (id: string) => ['ai-agents', 'versions', id] as const,
+  usage: (month: string) => ['ai-usage', month] as const,
+  settings: ['ai-settings'] as const,
 };
+
+/** The AI usage page for a month (FR-037). */
+export interface AiUsage {
+  month: string;
+  replies: number;
+  replyLimit: number;
+  testReplies: number;
+  previewTurns: number;
+  assistantRequests: number;
+  assistantLimit: number;
+  estimatedCostUsd: number;
+  byAgent: Array<{ agentId: string; name: string; replies: number; testReplies: number; costUsd: number }>;
+  byDay: Array<{ day: string; replies: number; costUsd: number }>;
+  conversations: { answered: number; handedOver: number; memberTook: number; limitReached: number; failed: number; other: number };
+}
+
+/** Monthly limits, prices (USD per million tokens) and the limit message (FR-038, FR-039). */
+export interface AiSettings {
+  replyLimit: number;
+  assistantLimit: number;
+  prices: { model: string; input: number; output: number; cacheRead: number; cacheWrite: number };
+  limitMessage: string | null;
+}
 
 export interface AgentVersion {
   id: string;
