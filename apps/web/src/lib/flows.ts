@@ -133,7 +133,9 @@ export function answerNamesIn(graph: FlowGraph): string[] {
 
 export function nextStepId(graph: FlowGraph, type: StepType): string {
   const used = new Set(graph.steps.map((s) => s.id));
-  for (let n = 1; ; n++) if (!used.has(`${type}-${n}`)) return `${type}-${n}`;
+  // Step ids use lower-case letters only ("aiAgent" steps become "ai-agent-1").
+  const prefix = type.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+  for (let n = 1; ; n++) if (!used.has(`${prefix}-${n}`)) return `${prefix}-${n}`;
 }
 
 export function newStep(type: StepType, id: string, position: { x: number; y: number }): FlowStep {

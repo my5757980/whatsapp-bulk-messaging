@@ -217,17 +217,17 @@ Hand to AI agent step passes the chat to the agent; the agent starts "Book a vis
 
 ### Tests for User Story 6 (REQUIRED) ⚠️
 
-- [ ] T077 [P] [US6] Unit tests for the `aiAgent` step in packages/shared/src/flows/graph.test.ts and validate.test.ts (it needs `agentId`, has no next step, counts as an end for reachability)
-- [ ] T078 [P] [US6] Unit tests for the engine in apps/api/test/unit/flows/run-ai-step.spec.ts: an `aiAgent` step sends its opening message, emits a hand-to-AI effect and ends the session `HANDED_TO_AI`
-- [ ] T079 [P] [US6] Integration test apps/api/test/integration/ai-flows.int-spec.ts: a flow keyword wins over the agent; after the flow ends the agent answers; an `aiAgent` step hands the chat to an agent that is not the number's agent; `startFlow` starts a flow with `startedBy: AI_AGENT` and the same agent continues after it; publishing a flow whose agent is not published gives `AGENT_NOT_PUBLISHED`; an agent's flow skill on an unpublished flow gives `FLOW_NOT_PUBLISHED`
-- [ ] T080 [P] [US6] Playwright e2e apps/web/e2e/ai-us6-flows.spec.ts: add a Hand to AI agent step in the flow editor, run the flow and see the agent continue
+- [X] T077 [P] [US6] Unit tests for the `aiAgent` step in packages/shared/src/flows/graph.test.ts and validate.test.ts (it needs `agentId`, has no next step, counts as an end for reachability)
+- [X] T078 [P] [US6] Unit tests for the engine in apps/api/test/unit/flows/run-ai-step.spec.ts: an `aiAgent` step sends its opening message, emits a hand-to-AI effect and ends the session `HANDED_TO_AI`
+- [X] T079 [P] [US6] Integration test apps/api/test/integration/ai-flows.int-spec.ts: a flow keyword wins over the agent; after the flow ends the agent answers; an `aiAgent` step hands the chat to an agent that is not the number's agent; `startFlow` starts a flow with `startedBy: AI_AGENT` and the same agent continues after it; publishing a flow whose agent is not published gives `AGENT_NOT_PUBLISHED`; an agent's flow skill on an unpublished flow gives `FLOW_NOT_PUBLISHED`
+- [X] T080 [P] [US6] Playwright e2e apps/web/e2e/ai-us6-flows.spec.ts: add a Hand to AI agent step in the flow editor, run the flow and see the agent continue
 
 ### Implementation for User Story 6
 
-- [ ] T081 [US6] Add the `aiAgent` step to packages/shared/src/flows/graph.ts and its rules to packages/shared/src/flows/validate.ts
-- [ ] T082 [US6] Run the step in apps/api/src/modules/flows/engine/run.ts and apply it in apps/api/src/modules/flows/engine/session.service.ts (opening message, end `HANDED_TO_AI`, `AiConversationsService.start` with `startedBy: FLOW`); add `AGENT_NOT_PUBLISHED` to apps/api/src/modules/flows/definitions/publish.service.ts
-- [ ] T083 [US6] Apply `startFlow` in apps/api/src/modules/ai/turns/apply.ts through `FlowSessionService.start` with `startedBy: AI_AGENT`, keeping the AI conversation active across the flow (research R9)
-- [ ] T084 [P] [US6] Add the Hand to AI agent step to the flow editor (palette entry in apps/web/src/lib/flows.ts, form apps/web/src/components/flows/steps/ai-agent-form.tsx, node summary) and the flow skills list to apps/web/src/components/ai/skills-tab.tsx
+- [X] T081 [US6] Add the `aiAgent` step to packages/shared/src/flows/graph.ts and its rules to packages/shared/src/flows/validate.ts
+- [X] T082 [US6] Run the step in apps/api/src/modules/flows/engine/run.ts and apply it in apps/api/src/modules/flows/engine/session.service.ts (opening message, end `HANDED_TO_AI`, `AiConversationsService.start` with `startedBy: FLOW`); add `AGENT_NOT_PUBLISHED` to apps/api/src/modules/flows/definitions/publish.service.ts
+- [X] T083 [US6] Apply `startFlow` in apps/api/src/modules/ai/turns/apply.ts through `FlowSessionService.start` with `startedBy: AI_AGENT`, keeping the AI conversation active across the flow (research R9)
+- [X] T084 [P] [US6] Add the Hand to AI agent step to the flow editor (palette entry in apps/web/src/lib/flows.ts, form apps/web/src/components/flows/steps/ai-agent-form.tsx, node summary) and the flow skills list to apps/web/src/components/ai/skills-tab.tsx
 
 ---
 
