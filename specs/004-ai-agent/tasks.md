@@ -263,14 +263,14 @@ example answers, publish and run a conversation that fills them.
 
 ### Tests for User Story 8 (REQUIRED) ⚠️
 
-- [ ] T091 [P] [US8] Unit tests in packages/shared/src/ai/starters/starters.test.ts: each starter parses with `AgentConfigSchema`, has example answers marked "replace me", valid suggested attributes, and only our own text
-- [ ] T092 [P] [US8] Integration test apps/api/test/integration/ai-starters.int-spec.ts: `GET /ai-agent-starters` with `exists` flags; creating from a starter gives the draft and the "replace me" answers; publishing is refused with `REPLACE_ME_LEFT` until they are replaced
-- [ ] T093 [P] [US8] Playwright e2e apps/web/e2e/ai-us8-starters.spec.ts: create from "Lead qualification", create the offered attributes, replace the examples and publish
+- [X] T091 [P] [US8] Unit tests in packages/shared/src/ai/starters/starters.test.ts: each starter parses with `AgentConfigSchema`, has example answers marked "replace me", valid suggested attributes, and only our own text
+- [X] T092 [P] [US8] Integration test apps/api/test/integration/ai-starters.int-spec.ts: `GET /ai-agent-starters` with `exists` flags; creating from a starter gives the draft and the "replace me" answers; publishing is refused with `REPLACE_ME_LEFT` until they are replaced
+- [X] T093 [P] [US8] Playwright e2e apps/web/e2e/ai-us8-starters.spec.ts: create from "Lead qualification", create the offered attributes, replace the examples and publish
 
 ### Implementation for User Story 8
 
-- [ ] T094 [US8] Write the starters Sales enquiries, Customer support, Booking requests and Lead qualification in packages/shared/src/ai/starters/ (our own goals, tones, guardrails, example answers, suggested attributes and hand-over topics), serve them from apps/api/src/modules/ai/agents/starters.controller.ts, and create agents from them in agents.service.ts
-- [ ] T095 [P] [US8] Add the starter picker and the "create missing attributes" offer to the new-agent dialog in apps/web/src/app/(dashboard)/ai-agents/page.tsx
+- [X] T094 [US8] Write the starters Sales enquiries, Customer support, Booking requests and Lead qualification in packages/shared/src/ai/starters/ (our own goals, tones, guardrails, example answers, suggested attributes and hand-over topics), serve them from apps/api/src/modules/ai/agents/starters.controller.ts, and create agents from them in agents.service.ts
+- [X] T095 [P] [US8] Add the starter picker and the "create missing attributes" offer to the new-agent dialog in apps/web/src/app/(dashboard)/ai-agents/page.tsx
 
 ---
 
