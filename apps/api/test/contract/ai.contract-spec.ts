@@ -152,4 +152,20 @@ describe('AI agent API contract', () => {
     await check('delete', '/ai-agents/{id}/secrets/{secretId}', await call('delete', `/ai-agents/${created.id}/secrets/${used.id}`), 409);
     await check('delete', '/ai-agents/{id}/secrets/{secretId}', await call('delete', `/ai-agents/${created.id}/secrets/${secret.body.id}`), 204);
   });
+
+  it('US7: usage and AI settings (admins)', async () => {
+    const admin = await signIn(ctx, 'ADMIN');
+    const asAdmin = (method: 'get' | 'put', url: string, body?: object) => {
+      const req = admin.agent[method](`/api${url}`);
+      return method === 'get' ? req : req.set('X-CSRF-Token', admin.csrf).send(body ?? {});
+    };
+    await check('get', '/ai-usage', await asAdmin('get', '/ai-usage'), 200);
+    await check('get', '/ai-usage', await asAdmin('get', '/ai-usage?month=2026-01'), 200);
+    await check('get', '/ai-usage', await asAdmin('get', '/ai-usage?month=2026-1'), 422);
+    const settings = await asAdmin('get', '/ai-settings');
+    await check('get', '/ai-settings', settings, 200);
+    await check('put', '/ai-settings', await asAdmin('put', '/ai-settings', { ...settings.body, limitMessage: 'Our team will reply soon.' }), 200);
+    await check('put', '/ai-settings', await asAdmin('put', '/ai-settings', { ...settings.body, replyLimit: -1 }), 422);
+    expect((await asAdmin('put', '/ai-settings', settings.body)).status).toBe(200);
+  });
 });
