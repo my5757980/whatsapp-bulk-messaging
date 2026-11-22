@@ -242,15 +242,15 @@ the agent.
 
 ### Tests for User Story 7 (REQUIRED) ⚠️
 
-- [ ] T085 [P] [US7] Integration test apps/api/test/integration/ai-usage.int-spec.ts: replies 1–5 counted and the 6th handed over with the limit note and the admin's limit message without a model call; two concurrent turns at limit − 1 send exactly one reply; `AI_USAGE` alerts at 80% and 100% once per month; raising the limit resumes; the month restarts on the 1st in the company time zone; test replies count and are shown apart; fallback and limit messages are not counted; `GET /ai-usage` totals, per agent, per day, conversation outcomes and cost match the records
-- [ ] T086 [P] [US7] Contract tests in apps/api/test/contract/ai.contract-spec.ts for `GET /ai-usage` and `GET/PUT /ai-settings`
-- [ ] T087 [P] [US7] Playwright e2e apps/web/e2e/ai-us7-usage.spec.ts: set a limit of 2 in AI usage, send three questions, see the counts, the limit note in live chat, and the alert
+- [X] T085 [P] [US7] Integration test apps/api/test/integration/ai-usage.int-spec.ts: replies 1–5 counted and the 6th handed over with the limit note and the admin's limit message without a model call; two concurrent turns at limit − 1 send exactly one reply; `AI_USAGE` alerts at 80% and 100% once per month; raising the limit resumes; the month restarts on the 1st in the company time zone; test replies count and are shown apart; fallback and limit messages are not counted; `GET /ai-usage` totals, per agent, per day, conversation outcomes and cost match the records
+- [X] T086 [P] [US7] Contract tests in apps/api/test/contract/ai.contract-spec.ts for `GET /ai-usage` and `GET/PUT /ai-settings`
+- [X] T087 [P] [US7] Playwright e2e apps/web/e2e/ai-us7-usage.spec.ts: set a limit of 2 in AI usage, send three questions, see the counts, the limit note in live chat, and the alert
 
 ### Implementation for User Story 7
 
-- [ ] T088 [US7] Implement apps/api/src/modules/ai/usage/usage.service.ts: the pre-check before the model call, the atomic month increment inside the apply transaction (`UPDATE … WHERE replies < limit`), the limit hand-over (kind `LIMIT`, AI conversation `LIMIT_REACHED`), alert levels with `AI_USAGE` notifications to admins, month and day keys in `settings.defaultTimezone`
-- [ ] T089 [US7] Implement apps/api/src/modules/ai/usage/usage.controller.ts and ai-settings.controller.ts (`ai.usage`; audit `ai.limits_changed`)
-- [ ] T090 [P] [US7] Add the usage page apps/web/src/app/(dashboard)/ai-usage/page.tsx (month picker, replies against the limit, test replies, cost, per agent and per day tables, conversation outcomes, limits, prices and limit message) and its navigation link for `ai.usage`
+- [X] T088 [US7] Implement apps/api/src/modules/ai/usage/usage.service.ts: the pre-check before the model call, the atomic month increment inside the apply transaction (`UPDATE … WHERE replies < limit`), the limit hand-over (kind `LIMIT`, AI conversation `LIMIT_REACHED`), alert levels with `AI_USAGE` notifications to admins, month and day keys in `settings.defaultTimezone`
+- [X] T089 [US7] Implement apps/api/src/modules/ai/usage/usage.controller.ts and ai-settings.controller.ts (`ai.usage`; audit `ai.limits_changed`)
+- [X] T090 [P] [US7] Add the usage page apps/web/src/app/(dashboard)/ai-usage/page.tsx (month picker, replies against the limit, test replies, cost, per agent and per day tables, conversation outcomes, limits, prices and limit message) and its navigation link for `ai.usage`
 
 ---
 
