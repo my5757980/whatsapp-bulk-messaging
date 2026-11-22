@@ -33,7 +33,7 @@ const PLACEHOLDERS: Partial<Record<ChatContentType, string>> = {
   UNSUPPORTED: '[The customer sent a message type that cannot be shown]',
 };
 
-export type TurnResult = 'SENT' | 'OPTED_OUT' | 'NOTHING' | 'NOT_ELIGIBLE' | 'DROPPED' | 'NEWER' | 'FAILED';
+export type TurnResult = 'SENT' | 'LIMITED' | 'OPTED_OUT' | 'NOTHING' | 'NOT_ELIGIBLE' | 'DROPPED' | 'NEWER' | 'FAILED';
 
 /** What the model needs for one reply, from a chat or from the preview. */
 export interface ThinkInput {
@@ -142,6 +142,9 @@ export class TurnService {
     const unansweredBefore = agent.aiConversationId ? await this.prisma.aiUnansweredAsk.count({ where: { aiConversationId: agent.aiConversationId } }) : 0;
     const capNow = agent.aiConversationId !== null && capReached(agent.replies, agent.config.replyCap);
     const base = { conversationId: chat.id, numberId: chat.numberId, contactId: chat.contact.id, agent, handledIds, firstMessageAt, startedAt };
+    // At the monthly limit no model call is paid for: the message goes to the team (FR-039).
+    const limitSettings = await this.usage.settings();
+    if (await this.usage.replyLimitReached(limitSettings)) return this.applier.applyLimit(base, limitSettings);
 
     try {
       const thought = await this.decide(chat, agent, customerText, { handOverNow: capNow, couldNotAnswerBefore: unansweredBefore > 0 });

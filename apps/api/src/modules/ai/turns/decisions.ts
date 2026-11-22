@@ -84,3 +84,6 @@ export function handOverNote(agentName: string, handOver: HandOver): string {
 
 /** The team's note when the AI service failed (FR-022). */
 export const UNAVAILABLE_NOTE = 'AI agent unavailable: the fallback message was sent and the chat waits for a person.';
+
+/** The team's note when the monthly AI reply limit is reached (FR-039). */
+export const LIMIT_NOTE = 'AI reply limit reached: this message waits for a person. An admin can raise the limit in AI usage.';

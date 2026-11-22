@@ -17,7 +17,7 @@ import { UnansweredRecorder } from '../knowledge/unanswered-recorder.js';
 import { AiUsageService, type UsageSettings } from '../usage/usage.service.js';
 import type { SelectedAgent } from './agent-selector.js';
 import { aiConversationLock, AiConversationsService } from './ai-conversations.service.js';
-import { handOverNote, ineligibility, UNAVAILABLE_NOTE, type HandOver } from './decisions.js';
+import { handOverNote, ineligibility, LIMIT_NOTE, UNAVAILABLE_NOTE, type HandOver } from './decisions.js';
 import { replyItems, type ReplyItem } from './reply-message.js';
 
 type Tx = Prisma.TransactionClient;
@@ -65,6 +65,8 @@ export interface FailureInput extends TurnBase {
  */
 export type ApplyOutcome =
   | { result: 'SENT'; itemId: string | null; aiConversationId: string; handedOver: boolean }
+  /** The monthly reply limit is reached: the chat went to the team with the limit note (FR-039). */
+  | { result: 'LIMITED' }
   | { result: 'OPTED_OUT' }
   | { result: 'DROPPED' | 'NEWER' };
 
@@ -145,6 +147,14 @@ export class TurnApplier {
         const items = input.reply.message.trim()
           ? replyItems(message, input.reply, { aiConversationId: conversation.id, media, allowButtons: config.skills.buttons, allowLists: config.skills.lists })
           : [];
+        const cost = this.usage.cost(input.usage, input.settings);
+        // The month's limit is claimed atomically here, so concurrent turns cannot pass it (FR-039).
+        const claim = items.length ? await this.usage.claimReply(tx, input.settings, now) : null;
+        if (items.length && !claim) {
+          const limited = await this.limitHandOver(tx, input, conversation, now, { settings: input.settings, usage: input.usage, model: input.model, cost });
+          await this.release(tx, input.handledIds);
+          return { result: 'LIMITED', after: limited } as const;
+        }
         const itemIds: string[] = [];
         for (const [i, item] of items.entries()) {
           itemIds.push(await this.writeReply(tx, input, conversation.id, item, { sources, skills: input.skillCalls, ...(handOver ? { handOver: handOver.reason } : {}) }, new Date(now.getTime() + i)));
@@ -153,7 +163,6 @@ export class TurnApplier {
         const itemId = itemIds.at(-1) ?? null;
         const sent = itemIds.length > 0;
 
-        const cost = this.usage.cost(input.usage, input.settings);
         await tx.aiReply.create({
           data: {
             aiConversationId: conversation.id,
@@ -186,7 +195,9 @@ export class TurnApplier {
           costMicros: cost,
           at: now,
           timezone: input.settings.timezone,
-          countsAgainstMonth: sent,
+          // The month was claimed above.
+          countsAgainstMonth: false,
+          counted: sent,
         });
         await tx.aiConversation.update({
           where: { id: conversation.id },
@@ -214,13 +225,18 @@ export class TurnApplier {
           after = { ...after, ...note };
         }
         await this.release(tx, input.handledIds);
-        return { result: 'SENT', itemId, aiConversationId: conversation.id, handedOver: handOver !== null, after } as const;
+        return { result: 'SENT', itemId, aiConversationId: conversation.id, handedOver: handOver !== null, after, alert: claim?.alert ?? 0, replies: claim?.replies ?? 0 } as const;
       },
       { timeout: 15_000 },
     );
 
+    if (outcome.result === 'LIMITED') {
+      await this.afterCommit(input, outcome.after);
+      return { result: 'LIMITED' };
+    }
     if (outcome.result === 'SENT') {
       await this.afterCommit(input, outcome.after);
+      if (outcome.alert) await this.usage.alertAdmins(outcome.alert, outcome.replies, input.settings).catch((error: unknown) => this.logger.error({ err: (error as Error).message }, 'Could not send the AI usage alert'));
       // A flow the agent starts answers first while it runs; the AI conversation stays active and the
       // same agent continues after the flow ends (FR-032, research R9). A hand-over wins over it.
       if (input.reply.startFlow && !outcome.handedOver) await this.startFlow(input, input.reply.startFlow);
@@ -274,6 +290,84 @@ export class TurnApplier {
     );
     if (outcome.result === 'FAILED') await this.afterCommit(input, outcome.after);
     return outcome.result;
+  }
+
+  /**
+   * The monthly reply limit was reached before the model was asked (FR-039, research R10): the
+   * admin's limit message (if any), a hand-over with the limit note, and the AI conversation ends
+   * LIMIT_REACHED. Nothing is counted.
+   */
+  async applyLimit(input: TurnBase, settings: UsageSettings): Promise<'LIMITED' | 'DROPPED' | 'NEWER'> {
+    const outcome = await this.prisma.$transaction(
+      async (tx) => {
+        const gate = await this.gate(tx, input);
+        if (gate !== 'OK') return { result: gate } as const;
+        const conversation = await this.conversationFor(tx, input);
+        if (!conversation) {
+          await this.release(tx, input.handledIds);
+          return { result: 'DROPPED' } as const;
+        }
+        const after = await this.limitHandOver(tx, input, conversation, new Date(), { settings });
+        await this.release(tx, input.handledIds);
+        return { result: 'LIMITED', after } as const;
+      },
+      { timeout: 15_000 },
+    );
+    if (outcome.result === 'LIMITED') await this.afterCommit(input, outcome.after);
+    return outcome.result;
+  }
+
+  /** The limit hand-over in the caller's transaction; a model run that came too late is kept for its cost only. */
+  private async limitHandOver(
+    tx: Tx,
+    input: TurnBase,
+    conversation: { id: string; replies: number },
+    now: Date,
+    spent: { settings: UsageSettings; usage?: TokenUsage; model?: string; cost?: number },
+  ): Promise<AfterCommit> {
+    const settings = spent.settings;
+    const text = settings.limitMessage?.trim();
+    const itemIds: string[] = [];
+    if (text) {
+      const message = conversation.replies === 0 ? `${introFor(input.agent.config, null)}\n\n${text}` : text;
+      itemIds.push(await this.writeReply(tx, input, conversation.id, { contentType: 'TEXT', text: message, mediaAssetId: null, payload: {} }, { sources: [], limit: true }, now));
+    }
+    await tx.aiReply.create({
+      data: {
+        aiConversationId: conversation.id,
+        chatMessageId: itemIds[0] ?? null,
+        agentId: input.agent.agentId,
+        versionId: input.agent.versionId,
+        numberId: input.numberId,
+        kind: 'LIMIT',
+        test: input.agent.test,
+        counted: false,
+        modelId: spent.model ?? '',
+        inputTokens: spent.usage?.inputTokens ?? 0,
+        cacheReadTokens: spent.usage?.cacheReadTokens ?? 0,
+        cacheWriteTokens: spent.usage?.cacheWriteTokens ?? 0,
+        outputTokens: spent.usage?.outputTokens ?? 0,
+        costMicros: BigInt(spent.cost ?? 0),
+        durationMs: Math.max(0, now.getTime() - input.startedAt.getTime()),
+      },
+    });
+    if (spent.usage && spent.cost !== undefined) {
+      await this.usage.record(tx, {
+        kind: 'REPLY',
+        agentId: input.agent.agentId,
+        numberId: input.numberId,
+        test: input.agent.test,
+        usage: spent.usage,
+        costMicros: spent.cost,
+        at: now,
+        timezone: settings.timezone,
+        countsAgainstMonth: false,
+        counted: false,
+      });
+    }
+    await this.conversations.endForConversation(input.conversationId, 'LIMIT_REACHED', tx);
+    const note = await this.handOverChat(tx, input, LIMIT_NOTE, { reason: 'limit', aiConversationId: conversation.id }, new Date(now.getTime() + itemIds.length));
+    return { itemIds, contactChanged: false, ...note };
   }
 
   /** The chat's AI lock, then the re-checks; a dropped turn lets its messages go. */
