@@ -6,8 +6,8 @@ import { AUDIT_ACTIONS } from '../../src/modules/audit/audit-actions.js';
 
 // T175: every audited action of data-model.md §1 is recorded somewhere in the code base.
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
-/** Actions whose recording arrives with a later 004 story (US3 versions and test numbers, US5 secrets, US7 limits, US9 assistant). */
-const PENDING = new Set<string>(['ai.assistant_action_confirmed']);
+/** Actions listed before the code that records them exists; every 004 action is recorded now (T107). */
+const PENDING = new Set<string>([]);
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
