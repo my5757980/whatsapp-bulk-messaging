@@ -57,8 +57,12 @@ test('US5: report, export and retarget', async ({ page }) => {
   expect(download.ok()).toBe(true);
   expect((await download.text()).trim().split('\n')).toHaveLength(11);
 
-  // Retarget "Read" (every delivered recipient read the message in mock-meta) creates a draft.
-  await page.getByRole('button', { name: 'Read', exact: true }).click();
+  // Retarget "Read" (every delivered recipient read the message in mock-meta) creates a draft. Since
+  // feature 005 the group sizes are shown first (FR-011).
+  await page.getByRole('button', { name: 'Retarget…' }).click();
+  await expect(page.getByTestId('retarget-count-READ')).not.toHaveText('0');
+  await page.getByTestId('retarget-READ').getByRole('radio').check();
+  await page.getByRole('button', { name: 'Create draft' }).click();
   await expect(page).toHaveURL(/\/campaigns\/new\?id=.+&step=2/);
   await expect(page.getByTestId('retarget-audience')).toBeVisible();
 });

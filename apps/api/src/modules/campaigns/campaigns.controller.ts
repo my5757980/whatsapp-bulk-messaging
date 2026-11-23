@@ -122,6 +122,13 @@ export class CampaignsController {
     return this.retargets.retarget(id, body, user.id);
   }
 
+  /** Group sizes before a retarget draft is made (feature 005, FR-011). */
+  @Get(':id/retarget-groups')
+  @Require('campaigns.view')
+  retargetGroups(@Param('id', ParseUUIDPipe) id: string) {
+    return this.retargets.groups(id);
+  }
+
   @Post(':id/unschedule')
   @Require('campaigns.launch')
   @HttpCode(200)

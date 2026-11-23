@@ -1,19 +1,20 @@
 'use client';
 
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useState } from 'react';
 import { ClickResults } from '@/components/campaigns/click-results';
+import { RetargetDialog } from '@/components/campaigns/retarget-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { toast } from '@/components/ui/toaster';
 import { api } from '@/lib/api-client';
-import { errorMessage, toastError } from '@/lib/errors';
+import { errorMessage } from '@/lib/errors';
 import { formatNumber, totalRecipients } from '@/lib/format';
 import { Can } from '@/lib/permissions';
 import { queryKeys } from '@/lib/query';
-import type { Campaign, CampaignDetail, StatusTotals } from '@/lib/types';
+import type { CampaignDetail, StatusTotals } from '@/lib/types';
 
 interface CampaignReport {
   campaignId: string;
@@ -25,30 +26,15 @@ interface CampaignReport {
   costIsEstimate: true;
 }
 
-const RETARGET: Array<{ status: 'FAILED' | 'NOT_READ' | 'READ' | 'DELIVERED'; label: string }> = [
-  { status: 'FAILED', label: 'Failed' },
-  { status: 'NOT_READ', label: 'Not read' },
-  { status: 'READ', label: 'Read' },
-  { status: 'DELIVERED', label: 'Delivered' },
-];
-
 const percent = (v: number) => `${(v * 100).toFixed(1)}%`;
 const usd = (v: number) => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 4 }).format(v);
 
 /** Campaign report (T164): stat cards, rates, failure reasons, cost estimate, export and retarget. */
 export default function CampaignReportPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const campaign = useQuery({ queryKey: queryKeys.campaign(id), queryFn: () => api<CampaignDetail>(`/campaigns/${id}`) });
   const report = useQuery({ queryKey: ['campaign', id, 'report'], queryFn: () => api<CampaignReport>(`/campaigns/${id}/report`) });
-  const retarget = useMutation({
-    mutationFn: (status: string) => api<Campaign>(`/campaigns/${id}/retarget`, { method: 'POST', json: { status } }),
-    onSuccess: (draft) => {
-      toast.success('Retarget draft created');
-      router.push(`/campaigns/new?id=${draft.id}&step=2`);
-    },
-    onError: toastError,
-  });
+  const [retargetOpen, setRetargetOpen] = useState(false);
 
   if (report.isLoading || campaign.isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (report.error || !report.data) return <p className="text-sm text-destructive">{errorMessage(report.error)}</p>;
@@ -158,16 +144,18 @@ export default function CampaignReportPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Retarget</CardTitle>
-            <CardDescription>Create a new draft for recipients with a given result. Contacts who opted out are left out automatically.</CardDescription>
+            <CardDescription>
+              Create a new draft for the people with a given result: clicked, replied, read, failed and more. You see how many first; contacts who
+              opted out are left out automatically.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            {RETARGET.map((o) => (
-              <Button key={o.status} variant="outline" disabled={retarget.isPending} onClick={() => retarget.mutate(o.status)}>
-                {o.label}
-              </Button>
-            ))}
+          <CardContent>
+            <Button variant="outline" onClick={() => setRetargetOpen(true)}>
+              Retarget…
+            </Button>
           </CardContent>
         </Card>
+        <RetargetDialog campaignId={id} open={retargetOpen} onOpenChange={setRetargetOpen} />
       </Can>
     </div>
   );

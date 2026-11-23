@@ -5,7 +5,7 @@ import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { Prisma, type Campaign, type ImportJob, type Template } from '../../generated/prisma/client.js';
 import { AudienceQueryBuilder, type AudienceContact, type AudienceFilter, type FilterAudience } from '../contacts/audience-query.builder.js';
 import { TrackedLinkCodes } from '../growth/links/link-codes.js';
-import { RETARGET_STATUSES } from './retarget.service.js';
+import { retargetCondition, type RetargetGroup } from './retarget.service.js';
 import { resolveVariables, type VariableMapping } from './variable-resolver.js';
 
 // Recipient evaluation shared by the estimate (T095) and the launch snapshot (T096). Consent is
@@ -54,13 +54,13 @@ export class AudienceSnapshotService {
     } else this.filterAudience(campaign);
   }
 
-  /** Contacts of the source campaign whose message has one of the statuses (RETARGET). */
+  /** Contacts of the source campaign whose message is in the retarget group (RETARGET; 005 adds groups). */
   private async *retargetContacts(
     campaign: Pick<Campaign, 'sourceCampaignId' | 'retargetStatus'>,
     db: Db,
   ): AsyncGenerator<Array<AudienceContact & { row_data: unknown }>> {
-    const statuses = RETARGET_STATUSES[campaign.retargetStatus as keyof typeof RETARGET_STATUSES] ?? [];
-    const statusList = Prisma.join(statuses.map((s) => Prisma.sql`${s}::"MessageStatus"`));
+    if (!campaign.retargetStatus) return;
+    const inGroup = retargetCondition(campaign.retargetStatus as RetargetGroup);
     let cursor: string | null = null;
     for (;;) {
       const after: Prisma.Sql = cursor ? Prisma.sql`AND c.id > ${cursor}::uuid` : Prisma.empty;
@@ -69,7 +69,7 @@ export class AudienceSnapshotService {
           FROM messages m
           JOIN contacts c ON c.id = m.contact_id
           LEFT JOIN campaign_upload_rows r ON r.campaign_id = m.campaign_id AND r.phone_e164 = c.phone_e164
-         WHERE m.campaign_id = ${campaign.sourceCampaignId}::uuid AND m.status IN (${statusList}) ${after}
+         WHERE m.campaign_id = ${campaign.sourceCampaignId}::uuid AND ${inGroup} ${after}
          ORDER BY c.id
          LIMIT ${BATCH}`;
       if (!rows.length) return;

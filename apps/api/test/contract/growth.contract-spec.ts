@@ -85,4 +85,40 @@ describe('Campaign growth API contract', () => {
     await check('get', '/campaigns/{id}/clicks/export', await call('get', `/campaigns/${id}/clicks/export`), 200);
     await check('get', '/campaigns/{id}/clicks/export', await call('get', `/campaigns/${randomUUID()}/clicks/export`), 404);
   });
+
+  it('US2: retarget groups and drafts', async () => {
+    const template = await seedTemplate(ctx, wabaId);
+    const contact = await seedContact(ctx, uaePhone());
+    const source = await ctx.prisma.campaign.create({
+      data: {
+        name: `Contract retarget ${randomUUID().slice(0, 6)}`,
+        numberId,
+        templateId: template.id,
+        state: 'COMPLETED',
+        audienceType: 'ALL_OPTED_IN',
+        variableMapping: { 'BODY.1': { source: 'field', key: 'name' } },
+        createdById: manager.userId,
+        launchedAt: new Date(),
+        messages: {
+          create: {
+            origin: 'CAMPAIGN',
+            contactId: contact.id,
+            phoneE164: contact.phoneE164,
+            recipientCountry: 'AE',
+            numberId,
+            templateId: template.id,
+            status: 'DELIVERED',
+            deliveredAt: new Date(),
+          },
+        },
+      },
+    });
+    await check('get', '/campaigns/{id}/retarget-groups', await call('get', `/campaigns/${source.id}/retarget-groups`), 200);
+    await check('get', '/campaigns/{id}/retarget-groups', await call('get', `/campaigns/${randomUUID()}/retarget-groups`), 404);
+    await check('post', '/campaigns/{id}/retarget', await call('post', `/campaigns/${source.id}/retarget`, { status: 'NOT_CLICKED' }), 201);
+    await check('post', '/campaigns/{id}/retarget', await call('post', `/campaigns/${source.id}/retarget`, { status: 'SOMETHING' }), 422);
+    await check('post', '/campaigns/{id}/retarget', await call('post', `/campaigns/${randomUUID()}/retarget`, { status: 'CLICKED' }), 404);
+    const draft = await call('post', '/campaigns', { name: `Contract draft ${randomUUID().slice(0, 6)}`, numberId, templateId: template.id, audienceType: 'ALL_OPTED_IN' });
+    await check('post', '/campaigns/{id}/retarget', await call('post', `/campaigns/${draft.body.id}/retarget`, { status: 'CLICKED' }), 409);
+  });
 });
