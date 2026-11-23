@@ -168,7 +168,7 @@ function Editor() {
         <Link href="/templates" className="text-sm text-muted-foreground hover:underline">
           ← Templates
         </Link>
-        <h1 className="text-2xl font-semibold">{fromId ? 'Duplicate template' : 'New template'}</h1>
+        <h1 className="text-2xl font-semibold">{fromId ? (params.get('draft') ? 'Review template draft' : 'Duplicate template') : 'New template'}</h1>
         <p className="text-sm text-muted-foreground">Meta reviews every template, usually within minutes. Variables need sample values.</p>
       </div>
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">

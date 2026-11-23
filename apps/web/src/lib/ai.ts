@@ -72,7 +72,38 @@ export const aiKeys = {
   usage: (month: string) => ['ai-usage', month] as const,
   settings: ['ai-settings'] as const,
   starters: ['ai-agent-starters'] as const,
+  assistant: ['assistant', 'requests'] as const,
 };
+
+/** A draft the team assistant made (FR-043): it opens in its editor for review. */
+export interface AssistantDraftLink {
+  kind: 'TEMPLATE' | 'FLOW' | 'CAMPAIGN';
+  id: string;
+  name: string;
+}
+
+/** Something that sends, schedules or deletes, waiting for the member's confirmation (FR-044). */
+export interface AssistantActionView {
+  id: string;
+  kind: 'SEND_CAMPAIGN' | 'SCHEDULE_CAMPAIGN' | 'DELETE_CONTACTS' | 'DELETE_TAGS';
+  status: 'PENDING' | 'CONFIRMED' | 'CANCELLED' | 'EXPIRED' | 'FAILED';
+  preview: Record<string, unknown>;
+  expiresAt: string;
+  result: Record<string, unknown> | null;
+}
+
+/** One request to the team assistant and its answer. */
+export interface AssistantRequestView {
+  id: string;
+  prompt: string;
+  status: 'QUEUED' | 'RUNNING' | 'DONE' | 'FAILED';
+  reply: string | null;
+  drafts: AssistantDraftLink[];
+  actions: AssistantActionView[];
+  createdAt: string;
+  finishedAt: string | null;
+  errorCode: string | null;
+}
 
 /** An attribute a starter agent remembers answers in (FR-041). */
 export interface StarterAttributeOffer {

@@ -5,7 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { AssistantRunner } from '../../src/modules/ai/assistant/assistant.runner.js';
 import { ReportsService } from '../../src/modules/reports/reports.service.js';
 import { CLAUDE, claudeStream, toolResultsOf } from '../support/claude-stream.js';
-import { restoreNetwork, seedContact, seedNumber, seedTemplate, setDefaultCountry, uaePhone, useNockLocalOnly } from '../support/fixtures.js';
+import { META_BASE, META_VERSION, restoreNetwork, seedContact, seedNumber, seedTemplate, setDefaultCountry, uaePhone, useNockLocalOnly } from '../support/fixtures.js';
 import { createTestContext, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
 
 // 004 T097: US9 - the team assistant drafts, previews and confirms (FR-042–FR-046, research R14).
@@ -115,9 +115,17 @@ describe('AI agents: team assistant (US9)', () => {
 
     // Counted once, apart from AI replies; the draft opens in the template editor for review.
     expect(await assistantRequests()).toBe(before + 1);
+    // It opens under its own name, so submitting it from the editor replaces the draft.
     const prefill = await call(manager, 'post', `/templates/${row.id}/duplicate`);
     expect(prefill.status).toBeLessThan(300);
-    expect(JSON.stringify(prefill.body)).toContain('Shop now');
+    expect(prefill.body.name).toBe(`weekend_sale_${suffix}`);
+    expect(JSON.stringify(prefill.body.buttons)).toContain('Shop now');
+    const meta = nock(META_BASE).post(`/${META_VERSION}/${row.wabaId}/message_templates`).reply(200, { id: `mt-${suffix}`, status: 'PENDING', category: 'MARKETING' });
+    const submitted = await call(manager, 'post', '/templates', prefill.body);
+    expect(submitted.status, JSON.stringify(submitted.body)).toBe(201);
+    expect(meta.isDone()).toBe(true);
+    expect(submitted.body.id).toBe(row.id);
+    expect(await ctx.prisma.template.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({ status: 'PENDING', metaTemplateId: `mt-${suffix}` });
   });
 
   it('drafts a flow that stays unpublished and passes the 003 publish checks', async () => {

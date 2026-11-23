@@ -87,7 +87,8 @@ export function templateToDraft(t: Template): TemplateDraft & { wabaId: string }
   const headerFormat = upper(header?.format) || 'TEXT';
   return {
     wabaId: t.wabaId,
-    name: `${t.name}_copy`.slice(0, 512),
+    // A local draft (004 US9) is opened for review under its own name, so submitting it replaces the draft.
+    name: t.status === 'DRAFT' && !t.metaTemplateId ? t.name : `${t.name}_copy`.slice(0, 512),
     language: t.language,
     category: t.category,
     header: header

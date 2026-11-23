@@ -5,6 +5,7 @@ import type { Permission } from '@wbm/shared';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { AssistantButton } from '@/components/ai/assistant-panel';
 import { NotificationsBell } from '@/components/layout/notifications-bell';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api-client';
@@ -91,6 +92,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               Alerts
             </Link>
           )}
+          {permissions.has('assistant.use') && <AssistantButton />}
           <NotificationsBell />
           <span className="text-muted-foreground">
             {me.data.name} · {me.data.role.toLowerCase()}
