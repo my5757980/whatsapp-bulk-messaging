@@ -59,10 +59,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [baseUrl, buttonUrl]
+                required: [enabled, baseUrl, buttonUrl]
                 properties:
-                  baseUrl: { type: string, examples: ['https://go.company.example'] }
-                  buttonUrl: { type: string, description: 'The URL button address to use in a template', examples: ['https://go.company.example/{{1}}'] }
+                  enabled: { type: boolean, description: 'False when PUBLIC_LINK_BASE_URL is not set; links cannot be tracked then' }
+                  baseUrl: { type: [string, 'null'], examples: ['https://go.company.example'] }
+                  buttonUrl: { type: [string, 'null'], description: 'The URL button address to use in a template', examples: ['https://go.company.example/{{1}}'] }
 
   /campaigns/{id}/tracked-links:
     parameters: [{ $ref: '#/components/parameters/Id' }]

@@ -3,9 +3,11 @@ import type { QuietHours } from '@wbm/shared';
 // Campaign growth types and query keys (feature 005, T014; contracts/growth-api.openapi.yaml).
 
 export interface TrackedLinkConfig {
-  baseUrl: string;
+  /** False when the company's tracked-link address is not set up; links cannot be tracked then. */
+  enabled: boolean;
+  baseUrl: string | null;
   /** The URL button address a template needs, for example https://go.company.example/l/{{1}}. */
-  buttonUrl: string;
+  buttonUrl: string | null;
 }
 
 export interface TrackedLinkTarget {
