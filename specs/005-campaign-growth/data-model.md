@@ -81,8 +81,8 @@ Unique `(campaign_id, round)`.
 | number_id | uuid FK whatsapp_numbers `RESTRICT` | |
 | status | enum `DripStatus` (`DRAFT`, `ACTIVE`, `PAUSED`, `ARCHIVED`) | |
 | paused_reason | varchar(40)? | `TEMPLATE_UNAVAILABLE`, `NUMBER_DISCONNECTED`, or null when a member paused it |
-| quiet_from / quiet_to | time? | both null means no quiet hours; may cross midnight |
-| quiet_days | smallint[] | ISO weekdays the quiet hours apply to; default every day |
+| quiet_from / quiet_to | varchar(5)? | `HH:MM` in the company time zone (the 002 working-hours format); both null means no quiet hours; may cross midnight |
+| quiet_days | int[] | ISO weekdays the quiet hours apply to; default every day |
 | leave_on_reply | boolean, default true | |
 | leave_on_click | boolean, default false | |
 | stop_tag_ids | uuid[] | |

@@ -121,12 +121,20 @@ enum RetargetStatus {
   NOT_READ
   READ
   DELIVERED
+  // Feature 005 (research R6)
+  CLICKED
+  NOT_CLICKED
+  REPLIED
+  NOT_REPLIED
+  HELD_BACK
 }
 
 enum MessageOrigin {
   CAMPAIGN
   API
   INBOX
+  /// A drip step (feature 005).
+  DRIP
 }
 
 enum MessageStatus {
@@ -247,6 +255,10 @@ enum JourneyEventType {
   FLOW_ENDED
   AI_STARTED
   AI_ENDED
+  // Feature 005 (research R10)
+  DRIP_JOINED
+  DRIP_LEFT
+  LINK_CLICKED
 }
 
 enum JourneyActor {
@@ -325,6 +337,8 @@ model User {
   aiUnansweredResolved      AiUnansweredQuestion[]  @relation("AiUnansweredResolvedBy")
   assistantRequests         AssistantRequest[]      @relation("AssistantRequestUser")
   assistantActions          AssistantAction[]       @relation("AssistantActionUser")
+  dripsCreated              Drip[]                  @relation("DripCreatedBy")
+  dripEnrolmentsAdded       DripEnrolment[]         @relation("DripEnrolmentJoinedBy")
 
   @@map("users")
 }
@@ -425,6 +439,7 @@ model WhatsAppNumber {
   flowSessions    FlowSession[]
   aiAgentNumber   AiAgentNumber?
   aiConversations AiConversation[]
+  drips           Drip[]
 
   @@map("whatsapp_numbers")
 }
@@ -458,6 +473,9 @@ model Contact {
   conversations   Conversation[]
   flowSessions    FlowSession[]
   aiConversations AiConversation[]
+  trackedLinks    TrackedLink[]
+  linkClicks      LinkClick[]
+  dripEnrolments  DripEnrolment[]
 
   @@index([consentStatus])
   @@index([attributes], type: Gin)
@@ -476,6 +494,7 @@ model Tag {
   agentRules            AgentRule[]
   firstMessageContacts  Contact[]     @relation("ContactFirstMessageTag")
   flowFirstMessageRules FlowTrigger[] @relation("FlowTriggerFirstMessageTag")
+  dripTriggers          DripTrigger[]
 
   @@map("tags")
 }
@@ -581,6 +600,7 @@ model Template {
   campaigns    Campaign[]
   messages     Message[]
   flowTriggers FlowTrigger[]
+  dripSteps    DripStep[]
 
   @@unique([wabaId, name, language])
   @@index([status])
@@ -608,6 +628,7 @@ model MediaAsset {
   campaigns      Campaign[]      @relation("CampaignHeaderMedia")
   chatMessages   ChatMessage[]
   cannedMessages CannedMessage[]
+  dripSteps      DripStep[]      @relation("DripStepHeaderMedia")
 
   @@index([purpose, createdAt(sort: Desc)])
   @@map("media_assets")
@@ -641,14 +662,20 @@ model Campaign {
   cancelledAt            DateTime?       @map("cancelled_at") @db.Timestamptz
   totals                 Json            @default("{}")
   estimatedCostUsdMicros BigInt          @default(0) @map("estimated_cost_usd_micros")
+  /// Retry plan (005 FR-012): 0–3 rounds with delays in minutes, summing to at most 1,440.
+  retryRounds            Int             @default(0) @map("retry_rounds") @db.SmallInt
+  retryDelaysMin         Int[]           @default([]) @map("retry_delays_min")
   createdById            String          @map("created_by_id") @db.Uuid
   createdBy              User            @relation(fields: [createdById], references: [id])
   createdAt              DateTime        @default(now()) @map("created_at") @db.Timestamptz
   updatedAt              DateTime        @updatedAt @map("updated_at") @db.Timestamptz
 
-  messages   Message[]
-  uploadRows CampaignUploadRow[]
-  importJobs ImportJob[]
+  messages           Message[]
+  uploadRows         CampaignUploadRow[]
+  importJobs         ImportJob[]
+  trackedLinkTargets TrackedLinkTarget[]
+  retryRuns          CampaignRetryRound[]
+  dripTriggers       DripTrigger[]
 
   @@index([state])
   @@map("campaigns")
@@ -690,18 +717,29 @@ model Message {
   sentBy           User?          @relation("MessageSentBy", fields: [sentByUserId], references: [id], onDelete: SetNull)
   /// Sent by a welcome or off-hours rule (002 R10).
   automatic        Boolean        @default(false)
+  /// The last retry round that re-sent this message (005 FR-013); 0 for the first pass.
+  retryRound       Int            @default(0) @map("retry_round") @db.SmallInt
+  /// Drip step messages (origin DRIP, feature 005); they have no campaign.
+  dripEnrolmentId  String?        @map("drip_enrolment_id") @db.Uuid
+  dripEnrolment    DripEnrolment? @relation(fields: [dripEnrolmentId], references: [id], onDelete: SetNull)
+  dripStepId       String?        @map("drip_step_id") @db.Uuid
+  dripStep         DripStep?      @relation(fields: [dripStepId], references: [id], onDelete: SetNull)
   createdAt        DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt        DateTime       @updatedAt @map("updated_at") @db.Timestamptz
 
   events             MessageEvent[]
   idempotencyRecords IdempotencyRecord[]
   chatItem           ChatMessage?
+  trackedLinks       TrackedLink[]
+  dripStepSends      DripStepSend[]
 
   /// At most one message per recipient per campaign (FR-022). NULLs are distinct in Postgres,
   /// so API messages (no campaign) and anonymised rows (no contact) never collide.
   @@unique([campaignId, contactId])
   @@index([campaignId, status])
   @@index([apiKeyId, createdAt])
+  @@index([dripStepId])
+  @@index([dripEnrolmentId])
   @@map("messages")
 }
 
@@ -1677,4 +1715,310 @@ model AssistantAction {
   @@index([requestId])
   @@index([userId, status])
   @@map("assistant_actions")
+}
+
+// ---------- Campaign growth (feature 005: specs/005-campaign-growth/data-model.md, T005) ----------
+
+enum ClickDevice {
+  MOBILE
+  DESKTOP
+  OTHER
+}
+
+enum RetryRoundStatus {
+  SCHEDULED
+  RUNNING
+  DONE
+  CANCELLED
+  SKIPPED
+}
+
+enum DripStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+enum DripTriggerKind {
+  TAG_ADDED
+  OPTED_IN
+  IMPORTED
+  API_CREATED
+  LINK_CLICKED
+}
+
+enum DripJoinVia {
+  TAG_ADDED
+  OPTED_IN
+  IMPORTED
+  API_CREATED
+  LINK_CLICKED
+  MANUAL
+}
+
+enum EnrolmentStatus {
+  ACTIVE
+  FINISHED
+  LEFT
+}
+
+enum DripLeftReason {
+  REPLIED
+  OPTED_OUT
+  BLOCKED
+  DELETED
+  STOP_TAG
+  CLICKED
+  REMOVED
+  INVALID_NUMBER
+  ARCHIVED
+}
+
+enum StepOutcome {
+  QUEUED
+  SKIPPED
+}
+
+/// One tracked button or link variable of a campaign or a drip step (FR-001, FR-006, FR-007).
+/// Exactly one owner (check constraint in the migration).
+model TrackedLinkTarget {
+  id              String    @id @default(uuid(7)) @db.Uuid
+  campaignId      String?   @map("campaign_id") @db.Uuid
+  campaign        Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  dripStepId      String?   @map("drip_step_id") @db.Uuid
+  dripStep        DripStep? @relation(fields: [dripStepId], references: [id], onDelete: Cascade)
+  /// 001 variable key, for example BUTTON.0.1 or BODY.2.
+  variableKey     String    @map("variable_key") @db.VarChar(20)
+  destination     String    @db.VarChar(2000)
+  /// Adds utm_source=whatsapp, utm_medium=message and utm_campaign=<name> (FR-007).
+  addCampaignTags Boolean   @default(false) @map("add_campaign_tags")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  links TrackedLink[]
+
+  @@unique([campaignId, variableKey])
+  @@unique([dripStepId, variableKey])
+  @@map("tracked_link_targets")
+}
+
+/// One recipient's short link (FR-002). Codes are random and never reused.
+model TrackedLink {
+  id        String            @id @default(uuid(7)) @db.Uuid
+  code      String            @unique @db.Char(10)
+  targetId  String            @map("target_id") @db.Uuid
+  target    TrackedLinkTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+  /// Purged with the message (FR-039).
+  messageId String            @map("message_id") @db.Uuid
+  message   Message           @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  /// Null after contact deletion.
+  contactId String?           @map("contact_id") @db.Uuid
+  contact   Contact?          @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  createdAt DateTime          @default(now()) @map("created_at") @db.Timestamptz
+
+  clicks LinkClick[]
+
+  @@unique([messageId, targetId])
+  @@index([targetId])
+  @@index([contactId])
+  @@map("tracked_links")
+}
+
+/// One real click (FR-003, FR-004). Previews and robots are only counted in metrics, and no IP
+/// address is stored.
+model LinkClick {
+  id            String      @id @default(uuid(7)) @db.Uuid
+  trackedLinkId String      @map("tracked_link_id") @db.Uuid
+  trackedLink   TrackedLink @relation(fields: [trackedLinkId], references: [id], onDelete: Cascade)
+  /// Copied from the link for grouping.
+  targetId      String      @map("target_id") @db.Uuid
+  /// Copied; null for drips.
+  campaignId    String?     @map("campaign_id") @db.Uuid
+  /// Copied; null for campaigns.
+  dripStepId    String?     @map("drip_step_id") @db.Uuid
+  contactId     String?     @map("contact_id") @db.Uuid
+  contact       Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  device        ClickDevice
+  clickedAt     DateTime    @default(now()) @map("clicked_at") @db.Timestamptz
+
+  @@index([campaignId, contactId])
+  @@index([dripStepId, contactId])
+  @@index([targetId])
+  @@index([contactId])
+  @@index([clickedAt])
+  @@map("link_clicks")
+}
+
+/// A round that re-sends a campaign's failed messages (FR-012 – FR-017).
+model CampaignRetryRound {
+  id         String           @id @default(uuid(7)) @db.Uuid
+  campaignId String           @map("campaign_id") @db.Uuid
+  campaign   Campaign         @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  /// 1–3.
+  round      Int              @db.SmallInt
+  status     RetryRoundStatus @default(SCHEDULED)
+  dueAt      DateTime         @map("due_at") @db.Timestamptz
+  startedAt  DateTime?        @map("started_at") @db.Timestamptz
+  finishedAt DateTime?        @map("finished_at") @db.Timestamptz
+  /// Messages put into the round.
+  recipients Int              @default(0)
+  /// Of those, the ones that ended SENT, DELIVERED or READ.
+  recovered  Int              @default(0)
+  /// Why the round was skipped or cancelled.
+  note       String?          @db.VarChar(200)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([campaignId, round])
+  @@index([status, dueAt])
+  @@map("campaign_retry_rounds")
+}
+
+/// A drip campaign (FR-018 – FR-031). Names are unique among drips that are not archived, ignoring
+/// case (citext and a partial unique index in the migration).
+model Drip {
+  id           String         @id @default(uuid(7)) @db.Uuid
+  name         String         @db.Citext
+  numberId     String         @map("number_id") @db.Uuid
+  number       WhatsAppNumber @relation(fields: [numberId], references: [id], onDelete: Restrict)
+  status       DripStatus     @default(DRAFT)
+  /// TEMPLATE_UNAVAILABLE or NUMBER_DISCONNECTED when the drip paused itself; null when a member
+  /// paused it.
+  pausedReason String?        @map("paused_reason") @db.VarChar(40)
+  /// "HH:MM" in the company time zone; both null means no quiet hours. The window may cross
+  /// midnight.
+  quietFrom    String?        @map("quiet_from") @db.VarChar(5)
+  quietTo      String?        @map("quiet_to") @db.VarChar(5)
+  /// ISO weekdays (1 = Monday) the quiet hours apply to.
+  quietDays    Int[]          @default([1, 2, 3, 4, 5, 6, 7]) @map("quiet_days")
+  leaveOnReply Boolean        @default(true) @map("leave_on_reply")
+  leaveOnClick Boolean        @default(false) @map("leave_on_click")
+  stopTagIds   String[]       @default([]) @map("stop_tag_ids") @db.Uuid
+  allowRejoin  Boolean        @default(false) @map("allow_rejoin")
+  activatedAt  DateTime?      @map("activated_at") @db.Timestamptz
+  pausedAt     DateTime?      @map("paused_at") @db.Timestamptz
+  archivedAt   DateTime?      @map("archived_at") @db.Timestamptz
+  createdById  String?        @map("created_by_id") @db.Uuid
+  createdBy    User?          @relation("DripCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  steps      DripStep[]
+  triggers   DripTrigger[]
+  enrolments DripEnrolment[]
+
+  @@index([status])
+  @@map("drips")
+}
+
+/// One step of a drip: a template sent after a wait (FR-019, FR-020).
+model DripStep {
+  id                 String      @id @default(uuid(7)) @db.Uuid
+  dripId             String      @map("drip_id") @db.Uuid
+  drip               Drip        @relation(fields: [dripId], references: [id], onDelete: Cascade)
+  /// 1–10, unique per drip among live steps (partial unique index in the migration).
+  position           Int         @db.SmallInt
+  templateId         String      @map("template_id") @db.Uuid
+  template           Template    @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  /// 001 VariableMapping.
+  variableMapping    Json        @default("{}") @map("variable_mapping")
+  headerMediaAssetId String?     @map("header_media_asset_id") @db.Uuid
+  headerMediaAsset   MediaAsset? @relation("DripStepHeaderMedia", fields: [headerMediaAssetId], references: [id], onDelete: SetNull)
+  /// 0 only at position 1; otherwise 10 – 43,200 minutes (30 days).
+  waitMinutes        Int         @map("wait_minutes")
+  /// Soft delete: results keep their history and waiting contacts move on.
+  deletedAt          DateTime?   @map("deleted_at") @db.Timestamptz
+  createdAt          DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt          DateTime    @updatedAt @map("updated_at") @db.Timestamptz
+
+  trackedLinkTargets TrackedLinkTarget[]
+  sends              DripStepSend[]
+  messages           Message[]
+
+  @@index([dripId])
+  @@map("drip_steps")
+}
+
+/// A starting event that enrols contacts in a drip (FR-023).
+model DripTrigger {
+  id         String          @id @default(uuid(7)) @db.Uuid
+  dripId     String          @map("drip_id") @db.Uuid
+  drip       Drip            @relation(fields: [dripId], references: [id], onDelete: Cascade)
+  kind       DripTriggerKind
+  /// TAG_ADDED only.
+  tagId      String?         @map("tag_id") @db.Uuid
+  tag        Tag?            @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  /// LINK_CLICKED only; null means any campaign.
+  campaignId String?         @map("campaign_id") @db.Uuid
+  campaign   Campaign?       @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@index([dripId])
+  @@index([kind])
+  @@map("drip_triggers")
+}
+
+/// A contact's place in a drip (FR-025 – FR-028). One active enrolment per drip and contact
+/// (partial unique index in the migration).
+model DripEnrolment {
+  id              String          @id @default(uuid(7)) @db.Uuid
+  dripId          String          @map("drip_id") @db.Uuid
+  drip            Drip            @relation(fields: [dripId], references: [id], onDelete: Cascade)
+  /// Null after contact deletion.
+  contactId       String?         @map("contact_id") @db.Uuid
+  contact         Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  status          EnrolmentStatus @default(ACTIVE)
+  joinedVia       DripJoinVia     @map("joined_via")
+  /// The member who enrolled the contact by hand.
+  joinedById      String?         @map("joined_by_id") @db.Uuid
+  joinedBy        User?           @relation("DripEnrolmentJoinedBy", fields: [joinedById], references: [id], onDelete: SetNull)
+  /// The next step to send.
+  currentPosition Int             @default(1) @map("current_position") @db.SmallInt
+  /// Null when finished or left.
+  nextDueAt       DateTime?       @map("next_due_at") @db.Timestamptz
+  leftReason      DripLeftReason? @map("left_reason")
+  joinedAt        DateTime        @default(now()) @map("joined_at") @db.Timestamptz
+  /// When the contact finished or left.
+  endedAt         DateTime?       @map("ended_at") @db.Timestamptz
+
+  sends    DripStepSend[]
+  messages Message[]
+
+  @@index([status, nextDueAt])
+  @@index([contactId, status])
+  @@index([dripId, status])
+  @@map("drip_enrolments")
+}
+
+/// What happened at a step for one enrolment (FR-030). The message's own status tells the rest.
+model DripStepSend {
+  id          String        @id @default(uuid(7)) @db.Uuid
+  enrolmentId String        @map("enrolment_id") @db.Uuid
+  enrolment   DripEnrolment @relation(fields: [enrolmentId], references: [id], onDelete: Cascade)
+  stepId      String        @map("step_id") @db.Uuid
+  step        DripStep      @relation(fields: [stepId], references: [id], onDelete: Cascade)
+  outcome     StepOutcome
+  /// NO_OPT_IN, TEMPLATE_UNAVAILABLE, ...
+  skipReason  String?       @map("skip_reason") @db.VarChar(40)
+  messageId   String?       @map("message_id") @db.Uuid
+  message     Message?      @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([enrolmentId, stepId])
+  @@index([stepId])
+  @@index([messageId])
+  @@map("drip_step_sends")
+}
+
+/// Outbox of starting events, written in the transaction that caused them (research R8). Rows are
+/// deleted once consumed.
+model DripEvent {
+  id         BigInt          @id @default(autoincrement())
+  kind       DripTriggerKind
+  contactId  String          @map("contact_id") @db.Uuid
+  tagId      String?         @map("tag_id") @db.Uuid
+  campaignId String?         @map("campaign_id") @db.Uuid
+  occurredAt DateTime        @default(now()) @map("occurred_at") @db.Timestamptz
+
+  @@index([occurredAt])
+  @@map("drip_events")
 }

@@ -13,6 +13,8 @@ export const QUEUES = {
   AI: 'ai',
   /** AI agent knowledge: reading files and websites, one job at a time (feature 004, research R11). */
   AI_KNOWLEDGE: 'ai-knowledge',
+  /** Drip campaigns: the 30-second tick that enrols from starting events and sends due steps (feature 005, research R7). */
+  DRIPS: 'drips',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];

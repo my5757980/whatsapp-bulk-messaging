@@ -31,9 +31,9 @@ its implementation.
 **Purpose**: configuration, the queue name, the fake Meta failures and the contract lint that every
 story needs.
 
-- [ ] T001 Add `PUBLIC_LINK_BASE_URL` (a URL; `https://` required when `NODE_ENV=production`) to the env schema in apps/api/src/common/config/config.ts and to .env.example with a comment (research R1). Set `http://localhost:4000/l` for the e2e job in .github/workflows/ci.yml
-- [ ] T002 [P] Add `DRIPS: 'drips'` (the drip tick and starting events) to `QUEUES` in apps/api/src/common/queue/queue.constants.ts with a comment (feature 005)
-- [ ] T003 [P] Add failures by recipient number ending to tools/mock-meta/src/server.ts, next to the existing `…0000` rule: `…1016` fails the first send with 131016 and delivers later sends, and `…1049` fails with 131049 (tasks Tests note)
+- [X] T001 Add `PUBLIC_LINK_BASE_URL` (a URL; `https://` required when `NODE_ENV=production`) to the env schema in apps/api/src/common/config/config.ts and to .env.example with a comment (research R1). Set `http://localhost:4000/l` for the e2e job in .github/workflows/ci.yml
+- [X] T002 [P] Add `DRIPS: 'drips'` (the drip tick and starting events) to `QUEUES` in apps/api/src/common/queue/queue.constants.ts with a comment (feature 005)
+- [X] T003 [P] Add failures by recipient number ending to tools/mock-meta/src/server.ts, next to the existing `…0000` rule: `…1016` fails the first send with 131016 and delivers later sends, and `…1049` fails with 131049 (tasks Tests note)
 - [X] T004 [P] Add specs/005-campaign-growth/contracts/growth-api.openapi.yaml to the `lint:contracts` script in package.json
 
 ---
@@ -45,7 +45,7 @@ stories use.
 
 **⚠️ CRITICAL**: no user story work can begin until this phase is complete.
 
-- [ ] T005 Write the Prisma models and the migration apps/api/prisma/migrations/20261128000000_campaign_growth/migration.sql per data-model.md:
+- [X] T005 Write the Prisma models and the migration apps/api/prisma/migrations/20261128000000_campaign_growth/migration.sql per data-model.md:
   - the 10 tables
   - `campaigns.retry_rounds` and `retry_delays_min`; `messages.retry_round`, `drip_enrolment_id` and `drip_step_id`
   - the new enums `ClickDevice`, `RetryRoundStatus`, `DripStatus`, `DripTriggerKind`, `DripJoinVia`, `EnrolmentStatus`, `DripLeftReason` and `StepOutcome`
@@ -117,7 +117,7 @@ contact twice) and a WhatsApp preview, the results show 2 clickers, 3 clicks and
   - insert `tracked_links` rows in the snapshot batches, retrying on a code collision
   - put the code (URL button variable) or the full short link (text variable) into the message's resolved parameters
   - creating a code twice for a message must not change it
-- [ ] T021 [US1] Implement apps/api/src/modules/growth/links/link-redirect.controller.ts (`GET /l/:code` at the api's root, not through the web's `/api` proxy; `@Public()` from apps/api/src/common/auth/public.decorator.ts so there is no session or CSRF; rate-limited per client by a salted IP hash with a short Redis time to live) and apps/api/src/modules/growth/links/click-recorder.ts:
+- [ ] T021 [US1] Implement apps/api/src/modules/growth/links/link-redirect.controller.ts (`GET /l/:code` outside the global `api` prefix: add it to the prefix's `exclude` list in apps/api/src/app.setup.ts next to `metrics`; `@Public()` from apps/api/src/common/auth/public.decorator.ts so there is no session or CSRF; rate-limited per client by a salted IP hash with a short Redis time to live) and apps/api/src/modules/growth/links/click-recorder.ts:
   - detection with `packages/shared` bots.ts
   - insert `link_clicks` with the copied campaign or step, the contact and the device kind
   - the `LINK_CLICKED` journey entry through apps/api/src/modules/inbox/journey/journey.service.ts

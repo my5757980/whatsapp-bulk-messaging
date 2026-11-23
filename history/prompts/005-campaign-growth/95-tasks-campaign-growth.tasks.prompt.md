@@ -59,7 +59,7 @@ haaaaaa
   - e2e tests `growth-us1` to `growth-us6`
 - **Contract change:** added `GET /tracked-links/config` (`templates.view`), so the template editor can make a Tracked link button with the configured address.
 - **Checks against the code:**
-  - every existing file the tasks name exists; the api has no global prefix, so `/l/:code` is a root route marked `@Public()`
+  - every existing file the tasks name exists. The global `api` prefix is set in app.setup.ts (not main.ts), so `/l/:code` goes on its exclude list and is marked `@Public()` (corrected during implementation)
   - README must tell the reverse proxy to send `/{code}` to `/l/{code}` when the base address has no `/l` path
 - **MVP:** Setup, Foundational and US1 (tracked links and click results).
 
@@ -69,12 +69,12 @@ haaaaaa
 - 🧪 Tests: planned per story (unit, integration, contract, e2e); the contract lint passes.
 - 📁 Files: specs/005-campaign-growth/tasks.md, contracts/growth-api.openapi.yaml.
 - 🔁 Next prompts: /sp.implement for 005, starting with Phase 1 and 2, then US1.
-- 🧠 Reflection: checking every named file against the repository caught a wrong assumption (an `/api` prefix in main.ts) before it reached implementation.
+- 🧠 Reflection: checking every named file against the repository is worth it; the prefix check itself first looked in the wrong file (main.ts instead of app.setup.ts) and was corrected when implementation began.
 
 ## Evaluation notes (flywheel)
 
 - Failure modes observed:
-  - the plan assumed a global `/api` prefix in the api
+  - the task named main.ts for the api prefix; it lives in app.setup.ts
   - the template editor had no way to learn the tracked-link address (a missing endpoint)
 - Graders run and results (PASS/FAIL): path existence check PASS; format and numbering check PASS; redocly PASS.
 - Prompt variant (if applicable): null
