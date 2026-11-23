@@ -19,6 +19,7 @@ import { FLOW_API_JOB, FLOW_TIMER_JOB, flowApiJobId, flowTimerJobId, todayIn, ty
 import type { FlowOutboundMessage, FlowSessionResult } from './effects.js';
 import { renderFlowText } from './render.js';
 import { newSessionState, run, type FlowFacts, type FlowInput, type RunResult, type SessionState } from './run.js';
+import { DripEvents } from '../../growth/drips/drip-events.js';
 
 type Tx = Prisma.TransactionClient;
 
@@ -89,6 +90,7 @@ export class FlowSessionService {
     private readonly routing: ChatRoutingService,
     private readonly metrics: MetricsService,
     private readonly aiConversations: AiConversationsService,
+    private readonly dripEvents: DripEvents,
   ) {}
 
   /** Starts a flow for a chat; refuses when a session is already running unless asked to replace it. */
@@ -533,7 +535,11 @@ export class FlowSessionService {
     const added = [...new Set(add)].filter((id) => nameOf.has(id) && !has.has(id));
     const removed = [...new Set(remove)].filter((id) => nameOf.has(id) && has.has(id));
     if (!added.length && !removed.length) return;
-    if (added.length) await tx.contactTag.createMany({ data: added.map((tagId) => ({ contactId, tagId })), skipDuplicates: true });
+    if (added.length) {
+      await tx.contactTag.createMany({ data: added.map((tagId) => ({ contactId, tagId })), skipDuplicates: true });
+      // Tags added by a flow can start drips and apply their stop tags (feature 005, FR-024, FR-028).
+      await this.dripEvents.recordTagsAdded(tx, contactId, added);
+    }
     if (removed.length) await tx.contactTag.deleteMany({ where: { contactId, tagId: { in: removed } } });
     const chats = await tx.conversation.findMany({ where: { contactId }, select: { id: true } });
     const occurredAt = new Date();

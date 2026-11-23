@@ -9,6 +9,7 @@ import { Prisma, type Contact } from '../../generated/prisma/client.js';
 import { SettingsService } from '../settings/settings.service.js';
 import { validateAttributeValue, type AttributeType, type AttributeValue } from './attribute-validator.js';
 import { AudienceFilterSchema, AudienceQueryBuilder } from './audience-query.builder.js';
+import { DripEvents } from '../growth/drips/drip-events.js';
 import { ConsentService } from './consent.service.js';
 import { normaliseTag } from './tags.controller.js';
 
@@ -90,6 +91,7 @@ export class ContactsService {
     private readonly settings: SettingsService,
     private readonly consent: ConsentService,
     private readonly audience: AudienceQueryBuilder,
+    private readonly dripEvents: DripEvents,
   ) {}
 
   private async attributeTypes(): Promise<Map<string, AttributeType>> {
@@ -140,7 +142,10 @@ export class ContactsService {
     }
     const tags = wanted.length ? await tx.tag.findMany({ where: { name: { in: wanted } }, select: { id: true } }) : [];
     await tx.contactTag.deleteMany({ where: { contactId, tagId: { notIn: tags.map((t) => t.id) } } });
-    if (tags.length) await tx.contactTag.createMany({ data: tags.map((t) => ({ contactId, tagId: t.id })), skipDuplicates: true });
+    if (!tags.length) return;
+    const added = await tx.contactTag.createManyAndReturn({ data: tags.map((t) => ({ contactId, tagId: t.id })), skipDuplicates: true, select: { tagId: true } });
+    // Tags newly added can start drips and apply their stop tags (feature 005, FR-024, FR-028).
+    await this.dripEvents.recordTagsAdded(tx, contactId, added.map((a) => a.tagId));
   }
 
   async get(id: string) {
@@ -205,6 +210,7 @@ export class ContactsService {
           await tx.consentEvent.create({
             data: { contactId: contact.id, status, source: 'MANUAL', note: input.consentSourceNote ?? null, actorUserId, createdAt: now },
           });
+          if (status === 'OPTED_IN') await this.dripEvents.recordOptIns(tx, [contact.id]);
         }
         if (input.tags?.length) await this.setTags(tx, contact.id, input.tags);
         return contact.id;
@@ -259,8 +265,12 @@ export class ContactsService {
       const name = normaliseTag(input.tag ?? '');
       if (input.action === 'ADD_TAG') {
         const tag = await this.prisma.tag.upsert({ where: { name }, create: { name }, update: {} });
-        const { count } = await this.prisma.contactTag.createMany({ data: ids.map((contactId) => ({ contactId, tagId: tag.id })), skipDuplicates: true });
-        return { updated: count };
+        const added = await this.prisma.$transaction(async (tx) => {
+          const links = await tx.contactTag.createManyAndReturn({ data: ids.map((contactId) => ({ contactId, tagId: tag.id })), skipDuplicates: true, select: { contactId: true, tagId: true } });
+          await this.dripEvents.recordTagAddedToMany(tx, links);
+          return links.length;
+        });
+        return { updated: added };
       }
       const tag = await this.prisma.tag.findUnique({ where: { name } });
       if (!tag) return { updated: 0 };

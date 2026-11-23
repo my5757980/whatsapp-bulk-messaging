@@ -15,6 +15,7 @@ import { ConsentService } from '../contacts/consent.service.js';
 import { normaliseTag } from '../contacts/tags.controller.js';
 import { SettingsService } from '../settings/settings.service.js';
 import type { ImportJobData, StoredImportMapping } from './imports.service.js';
+import { DripEvents } from '../growth/drips/drip-events.js';
 
 const BATCH_SIZE = 1000;
 
@@ -49,6 +50,7 @@ export class ImportProcessor implements OnModuleInit {
     private readonly storage: StorageService,
     private readonly settings: SettingsService,
     private readonly consent: ConsentService,
+    private readonly dripEvents: DripEvents,
   ) {}
 
   onModuleInit(): void {
@@ -189,6 +191,8 @@ export class ImportProcessor implements OnModuleInit {
           (saved.inserted ? createdOptIns : existingOptIns).push({ contactId: saved.id, note: row.optInNote });
         }
         await this.consent.recordImportOptIns(tx, createdOptIns, existingOptIns, actorUserId, now);
+        // Contacts new from this import can start drips (feature 005, FR-024).
+        await this.dripEvents.recordCreated(tx, 'IMPORTED', upserted.filter((u) => u.inserted).map((u) => u.id));
 
         const tagNames = [...new Set(rows.flatMap((r) => r.tags))];
         if (tagNames.length) {
@@ -198,7 +202,10 @@ export class ImportProcessor implements OnModuleInit {
             const contactId = byPhone.get(r.phoneE164)?.id;
             return contactId ? r.tags.map((name) => ({ contactId, tagId: tagIds.get(name) as string })) : [];
           });
-          if (links.length) await tx.contactTag.createMany({ data: links, skipDuplicates: true });
+          if (links.length) {
+            const added = await tx.contactTag.createManyAndReturn({ data: links, skipDuplicates: true, select: { contactId: true, tagId: true } });
+            await this.dripEvents.recordTagAddedToMany(tx, added);
+          }
         }
 
         const created = upserted.filter((u) => u.inserted).length;

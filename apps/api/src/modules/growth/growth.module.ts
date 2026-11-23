@@ -13,6 +13,7 @@ import { LinkRedirectService } from './links/link-redirect.service.js';
 import { LinkResolver } from './links/link-resolver.js';
 import { TrackedLinksController } from './links/tracked-links.controller.js';
 import { TrackedLinksService } from './links/tracked-links.service.js';
+import { DripEvents } from './drips/drip-events.js';
 import { DripLeaving } from './drips/drip-leaving.js';
 import { DripsController } from './drips/drips.controller.js';
 import { DripsService } from './drips/drips.service.js';
@@ -30,7 +31,7 @@ import { RetryRoundsService } from './retries/retry-rounds.service.js';
 // Retry rounds are finished and scheduled by the campaign progress worker and cancelled with their
 // campaign, so they are shared too, and so are the drip leaving rules, which run inside the
 // transactions of replies, opt-outs, blocks, deletions and status webhooks.
-const DOMAIN = [TrackedLinksService, TrackedLinkCodes, RetryRoundsService, DripLeaving];
+const DOMAIN = [TrackedLinksService, TrackedLinkCodes, RetryRoundsService, DripLeaving, DripEvents];
 
 /** Campaign growth services shared by the HTTP app and the worker. */
 @Global()

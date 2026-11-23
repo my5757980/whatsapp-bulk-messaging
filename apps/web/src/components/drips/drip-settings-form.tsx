@@ -8,11 +8,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api-client';
 import { errorMessage } from '@/lib/errors';
-import { growthKeys, type DripDetail } from '@/lib/growth';
+import { growthKeys, type DripDetail, type DripTrigger, type DripTriggerKind } from '@/lib/growth';
 import { queryKeys } from '@/lib/query';
-import type { Tag } from '@/lib/types';
+import type { Campaign, Tag } from '@/lib/types';
+import { NativeSelect } from '@/components/ui/native-select';
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+/** Starting events (feature 005 US5, FR-024), in our own words. */
+const TRIGGER_KINDS: Array<{ kind: DripTriggerKind; label: string }> = [
+  { kind: 'TAG_ADDED', label: 'A tag is added' },
+  { kind: 'OPTED_IN', label: 'They opt in' },
+  { kind: 'IMPORTED', label: 'An import adds them' },
+  { kind: 'API_CREATED', label: 'The API adds them' },
+  { kind: 'LINK_CLICKED', label: 'They open a campaign link' },
+];
 
 /**
  * Quiet hours, leaving rules and joining again (feature 005 US4, FR-021, FR-026, FR-028). Opting out,
@@ -28,13 +38,24 @@ export function DripSettingsForm({ drip, editable }: { drip: DripDetail; editabl
   const [leaveOnClick, setLeaveOnClick] = useState(drip.leaveOnClick);
   const [allowRejoin, setAllowRejoin] = useState(drip.allowRejoin);
   const [stopTagIds, setStopTagIds] = useState<string[]>(drip.stopTagIds);
+  const [triggers, setTriggers] = useState<DripTrigger[]>(drip.triggers);
+  const campaigns = useQuery({ queryKey: ['campaigns', 'for-triggers'], queryFn: () => api<{ items: Campaign[] }>('/campaigns?pageSize=100') });
+  const setTrigger = (i: number, patch: Partial<DripTrigger>) => setTriggers((all) => all.map((t, j) => (j === i ? { ...t, ...patch } : t)));
+  const triggersReady = triggers.every((t) => t.kind !== 'TAG_ADDED' || Boolean(t.tagId));
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
   const save = useMutation({
     mutationFn: () =>
       api<DripDetail>(`/drips/${drip.id}`, {
         method: 'PATCH',
-        json: { quietHours: quietOn ? quiet : null, leaveOnReply, leaveOnClick, allowRejoin, stopTagIds },
+        json: {
+          quietHours: quietOn ? quiet : null,
+          leaveOnReply,
+          leaveOnClick,
+          allowRejoin,
+          stopTagIds,
+          triggers: triggers.map((t) => ({ kind: t.kind, tagId: t.kind === 'TAG_ADDED' ? (t.tagId ?? null) : null, campaignId: t.kind === 'LINK_CLICKED' ? (t.campaignId ?? null) : null })),
+        },
       }),
     onSuccess: async () => {
       setMessage({ ok: true, text: 'Settings saved' });
@@ -45,6 +66,70 @@ export function DripSettingsForm({ drip, editable }: { drip: DripDetail; editabl
 
   return (
     <div className="grid gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Starting events</CardTitle>
+          <CardDescription>
+            Contacts join by themselves when one of these happens while the drip is active. You can also enrol contacts by hand.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-sm">
+          {triggers.map((t, i) => (
+            <div key={i} className="grid items-end gap-3 rounded-md border p-3 sm:grid-cols-[1fr_1fr_auto]" data-testid={`trigger-${i + 1}`}>
+              <div className="grid gap-1.5">
+                <Label htmlFor={`trigger-${i}-kind`}>Starts when</Label>
+                <NativeSelect id={`trigger-${i}-kind`} value={t.kind} disabled={!editable} onChange={(e) => setTrigger(i, { kind: e.target.value as DripTriggerKind, tagId: null, campaignId: null })}>
+                  {TRIGGER_KINDS.map((k) => (
+                    <option key={k.kind} value={k.kind}>
+                      {k.label}
+                    </option>
+                  ))}
+                </NativeSelect>
+              </div>
+              {t.kind === 'TAG_ADDED' ? (
+                <div className="grid gap-1.5">
+                  <Label htmlFor={`trigger-${i}-tag`}>Tag</Label>
+                  <NativeSelect id={`trigger-${i}-tag`} value={t.tagId ?? ''} disabled={!editable} onChange={(e) => setTrigger(i, { tagId: e.target.value || null })}>
+                    <option value="">Choose a tag…</option>
+                    {(tags.data ?? []).map((tag) => (
+                      <option key={tag.id} value={tag.id}>
+                        {tag.name}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </div>
+              ) : t.kind === 'LINK_CLICKED' ? (
+                <div className="grid gap-1.5">
+                  <Label htmlFor={`trigger-${i}-campaign`}>Campaign</Label>
+                  <NativeSelect id={`trigger-${i}-campaign`} value={t.campaignId ?? ''} disabled={!editable} onChange={(e) => setTrigger(i, { campaignId: e.target.value || null })}>
+                    <option value="">Any campaign</option>
+                    {(campaigns.data?.items ?? []).map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </div>
+              ) : (
+                <div />
+              )}
+              {editable ? (
+                <Button variant="ghost" size="sm" onClick={() => setTriggers((all) => all.filter((_, j) => j !== i))}>
+                  Remove
+                </Button>
+              ) : null}
+            </div>
+          ))}
+          {!triggers.length ? <p className="text-muted-foreground">No starting events: contacts join only when enrolled by hand.</p> : null}
+          {editable ? (
+            <div>
+              <Button variant="outline" size="sm" disabled={triggers.length >= 10} onClick={() => setTriggers((all) => [...all, { kind: 'TAG_ADDED', tagId: null, campaignId: null }])}>
+                Add starting event
+              </Button>
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Quiet hours</CardTitle>
@@ -122,7 +207,7 @@ export function DripSettingsForm({ drip, editable }: { drip: DripDetail; editabl
       </Card>
       {editable ? (
         <div className="flex items-center gap-2">
-          <Button disabled={save.isPending || (quietOn && (!quiet.days.length || quiet.from === quiet.to))} onClick={() => save.mutate()}>
+          <Button disabled={save.isPending || !triggersReady || (quietOn && (!quiet.days.length || quiet.from === quiet.to))} onClick={() => save.mutate()}>
             Save settings
           </Button>
           {message ? (

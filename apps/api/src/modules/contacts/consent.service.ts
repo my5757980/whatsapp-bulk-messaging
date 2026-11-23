@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { ConsentSource, ConsentStatus } from '@wbm/shared';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
+import { DripEvents } from '../growth/drips/drip-events.js';
 import { DripLeaving } from '../growth/drips/drip-leaving.js';
 
 // Consent changes (FR-012-FR-014, T092). Every status change and its consent_events row are
@@ -30,6 +31,7 @@ export class ConsentService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly drips: DripLeaving,
+    private readonly dripEvents: DripEvents,
   ) {}
 
   async setStatus(
@@ -58,6 +60,8 @@ export class ConsentService {
       });
       // An opt-out ends every drip of the contact at once (feature 005, FR-028).
       if (status === 'OPTED_OUT') await this.drips.onEvent(contactId, { kind: 'OPTED_OUT' }, tx);
+      // An opt-in can start drips (feature 005, FR-024).
+      if (status === 'OPTED_IN') await this.dripEvents.recordOptIns(tx, [contactId]);
       return 'changed';
     });
   }
@@ -92,6 +96,7 @@ export class ConsentService {
       createdAt: now,
     }));
     if (events.length) await tx.consentEvent.createMany({ data: events });
+    await this.dripEvents.recordOptIns(tx, events.map((e) => e.contactId));
   }
 
   /**
@@ -148,6 +153,7 @@ export class ConsentService {
           createdAt: now,
         }));
         if (events.length) await tx.consentEvent.createMany({ data: events });
+        await this.dripEvents.recordOptIns(tx, events.map((e) => e.contactId));
 
         const named = rows.filter((r) => r.name && byPhone.has(r.phoneE164) && !byPhone.get(r.phoneE164)?.name);
         for (const row of named) {

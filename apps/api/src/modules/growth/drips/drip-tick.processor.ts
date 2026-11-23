@@ -12,6 +12,7 @@ import { sendJobId } from '../../sending/dispatch-planner.js';
 import { MAX_SEND_ATTEMPTS } from '../../sending/send-outcome.js';
 import { HEADER_MEDIA_ASSET_PARAM } from '../../sending/template-send-rules.js';
 import { TrackedLinkCodes } from '../links/link-codes.js';
+import { DripEvents } from './drip-events.js';
 import { quietHoursOf } from './drip-views.js';
 
 // The drip tick (feature 005 US4, research R7): every 30 seconds, for each active drip outside its
@@ -33,6 +34,7 @@ type DripWithSteps = Prisma.DripGetPayload<{
 }>;
 
 export interface DripTickSummary {
+  enrolled: number;
   sent: number;
   skipped: number;
   finished: number;
@@ -57,6 +59,7 @@ export class DripTickProcessor implements OnModuleInit, OnApplicationBootstrap {
     private readonly prisma: PrismaService,
     private readonly codes: TrackedLinkCodes,
     private readonly notifications: NotificationsService,
+    private readonly events: DripEvents,
   ) {}
 
   onModuleInit(): void {
@@ -70,7 +73,9 @@ export class DripTickProcessor implements OnModuleInit, OnApplicationBootstrap {
   }
 
   async tick(): Promise<DripTickSummary> {
-    const summary: DripTickSummary = { sent: 0, skipped: 0, finished: 0, left: 0, paused: 0 };
+    const summary: DripTickSummary = { enrolled: 0, sent: 0, skipped: 0, finished: 0, left: 0, paused: 0 };
+    // Starting events first, so a contact who just joined can get a step due right away (US5).
+    summary.enrolled = await this.events.consume();
     const settings = await this.prisma.settings.findUnique({ where: { id: 1 }, select: { defaultTimezone: true } });
     const timezone = settings?.defaultTimezone ?? 'UTC';
     const drips = await this.prisma.drip.findMany({
