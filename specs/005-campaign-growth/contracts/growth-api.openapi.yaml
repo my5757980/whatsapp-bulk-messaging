@@ -47,6 +47,23 @@ paths:
         '404': { description: Unknown or expired link (an HTML page; nobody is sent onward) }
         '429': { description: Too many requests from this client }
 
+  /tracked-links/config:
+    get:
+      tags: [tracked-links]
+      summary: The tracked-link address, so the template editor can make a Tracked link button
+      x-permission: templates.view
+      responses:
+        '200':
+          description: Settings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [baseUrl, buttonUrl]
+                properties:
+                  baseUrl: { type: string, examples: ['https://go.company.example'] }
+                  buttonUrl: { type: string, description: 'The URL button address to use in a template', examples: ['https://go.company.example/{{1}}'] }
+
   /campaigns/{id}/tracked-links:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     get:
