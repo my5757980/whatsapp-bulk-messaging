@@ -3,17 +3,32 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api-client';
 
-interface JourneyEntry {
+export interface JourneyEntry {
   type: string;
   at: string;
   actor: { type: 'MEMBER' | 'CUSTOMER' | 'SYSTEM' | 'CAMPAIGN' | 'FLOW' | 'AI_AGENT'; name: string | null };
   data: Record<string, unknown>;
 }
 
+/** Why an AI conversation ended (004 data-model §3), in our own words. */
+const AI_ENDINGS: Record<string, string> = {
+  HANDED_OVER: 'handed the chat to the team',
+  MEMBER_TOOK: 'a member took the chat',
+  CLOSED: 'the chat was closed',
+  EXPIRED: 'no customer message for 24 hours',
+  LIMIT_REACHED: 'the monthly AI reply limit was reached',
+  FAILED: 'the AI service failed',
+  OPTED_OUT: 'the customer opted out',
+  BLOCKED: 'the customer was blocked',
+};
+
 /** Our own wording for journey entries (constitution Principle II). */
-function describe(entry: JourneyEntry): string {
+export function describeJourneyEntry(entry: JourneyEntry): string {
   const d = entry.data;
-  const by = entry.actor.name ? ` by ${entry.actor.name}` : '';
+  // Changes the AI agent made say so, with the agent's name (004 T110).
+  const by = entry.actor.name ? (entry.actor.type === 'AI_AGENT' ? ` by AI agent "${entry.actor.name}"` : ` by ${entry.actor.name}`) : '';
+  const agent = String(d.agentName ?? entry.actor.name ?? '');
+  const test = d.test ? ' (test)' : '';
   switch (entry.type) {
     case 'REQUESTED':
       return 'Asked to talk to a person';
@@ -47,6 +62,10 @@ function describe(entry: JourneyEntry): string {
       return `Chatbot flow "${String(d.flowName ?? '')}" started${d.test ? ' (test)' : ''}`;
     case 'FLOW_ENDED':
       return `Chatbot flow "${String(d.flowName ?? '')}" ended: ${String(d.result ?? '').toLowerCase().replace(/_/g, ' ')}`;
+    case 'AI_STARTED':
+      return `AI agent "${agent}" started answering${d.startedBy === 'FLOW' ? ' (handed over by a flow)' : ''}${test}`;
+    case 'AI_ENDED':
+      return `AI agent "${agent}" stopped: ${AI_ENDINGS[String(d.result)] ?? String(d.result ?? '').toLowerCase().replace(/_/g, ' ')}${test}`;
     default:
       return entry.type;
   }
@@ -62,7 +81,7 @@ export function JourneyList({ conversationId }: { conversationId: string }) {
         {journey.data?.length === 0 && <li className="text-xs text-muted-foreground">Nothing yet.</li>}
         {journey.data?.map((entry, i) => (
           <li key={`${entry.type}-${entry.at}-${i}`} className="text-xs">
-            <span className="block">{describe(entry)}</span>
+            <span className="block">{describeJourneyEntry(entry)}</span>
             <span className="text-muted-foreground">{new Date(entry.at).toLocaleString()}</span>
           </li>
         ))}

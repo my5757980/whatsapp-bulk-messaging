@@ -94,5 +94,5 @@ test('AI US4: the agent sends a shared file and remembers the customer city', as
   await row.click();
   const profile = page.getByRole('complementary', { name: 'Contact' });
   await expect(profile).toContainText('city: Al Ain');
-  await diag.check(() => expect(profile.getByTestId('journey')).toContainText(`city changed to Al Ain by ${agentName}`, { timeout: 15_000 }));
+  await diag.check(() => expect(profile.getByTestId('journey')).toContainText(`city changed to Al Ain by AI agent "${agentName}"`, { timeout: 15_000 }));
 });
