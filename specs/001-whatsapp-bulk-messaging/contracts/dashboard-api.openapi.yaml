@@ -930,7 +930,7 @@ paths:
               type: object
               required: [status]
               properties:
-                status: { type: string, enum: [FAILED, NOT_READ, READ, DELIVERED] }
+                status: { type: string, enum: [FAILED, NOT_READ, READ, DELIVERED, CLICKED, NOT_CLICKED, REPLIED, NOT_REPLIED, HELD_BACK], description: "Feature 005 adds CLICKED, NOT_CLICKED, REPLIED, NOT_REPLIED and HELD_BACK" }
       responses:
         '201':
           description: New draft (opted-out contacts excluded)
@@ -1374,7 +1374,7 @@ components:
             timezone: { type: string }
             pausedReason: { type: [string, 'null'] }
             sourceCampaignId: { type: [string, 'null'], format: uuid }
-            retargetStatus: { type: [string, 'null'], enum: [FAILED, NOT_READ, READ, DELIVERED, null] }
+            retargetStatus: { type: [string, 'null'], enum: [FAILED, NOT_READ, READ, DELIVERED, CLICKED, NOT_CLICKED, REPLIED, NOT_REPLIED, HELD_BACK, null] }
             launchedAt: { type: [string, 'null'], format: date-time }
             completedAt: { type: [string, 'null'], format: date-time }
             totals: { $ref: '#/components/schemas/StatusTotals' }

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { RetryPlanForm } from '@/components/campaigns/retry-plan-form';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -118,6 +119,7 @@ export function ReviewStep({ campaign, onBack, onLaunched }: { campaign: Campaig
           </div>
         ))}
       </div>
+      <RetryPlanForm campaignId={campaign.id} />
       <Card>
         <CardHeader>
           <CardTitle className="text-base">When to send</CardTitle>

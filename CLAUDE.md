@@ -215,7 +215,7 @@ See `.specify/memory/constitution.md` for code quality, testing, performance, se
 - Same stack as 001, plus `web-push` (VAPID browser push), Server-Sent Events through the Next.js `/api` proxy fed by the Redis Stream `wbm:inbox:events`, and new Postgres tables for conversations and the chat timeline (002-team-inbox)
 - Same stack as 001 and 002, plus `@xyflow/react` 12.12.1 (flow canvas), a BullMQ `flows` queue for timers and API steps, and new Postgres tables for flows, versions, triggers, sessions and secrets (003-chatbot-flow-builder)
 - Same stack as 001–003, plus `@anthropic-ai/sdk` 1.6.0 (Claude Opus 5.5 through the Messages API), `unpdf`, `mammoth`, `cheerio` and `robots-parser` for knowledge, BullMQ queues `ai` and `ai-knowledge`, and Postgres full-text search over knowledge chunks (004-ai-agent)
-- Same stack as 001–004 with no new dependency: per-recipient tracked links served by the api at `/l/:code` on `PUBLIC_LINK_BASE_URL`, a BullMQ `drips` queue for the 30-second drip tick, retry rounds on `campaign-dispatch`, and new Postgres tables for links, clicks, retry rounds and drips (005-campaign-growth)
+- Same stack as 001–004 with no new dependency: per-recipient tracked links served by the api at `/l/:code` on `PUBLIC_LINK_BASE_URL`, a BullMQ `drips` queue for the 30-second drip tick, retry rounds as `campaign-retry-round` jobs on the `maintenance` queue, and new Postgres tables for links, clicks, retry rounds and drips (005-campaign-growth)
 
 ## Recent Changes
 - 005-campaign-growth: campaign growth planned: tracked links and clicks, retarget by clicked and replied, retry rounds within 24 hours (131049 held back), drips run from due times in Postgres with an outbox for starting events (see specs/005-campaign-growth/plan.md)

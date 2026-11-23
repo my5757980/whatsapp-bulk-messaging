@@ -83,14 +83,14 @@ contact twice) and a WhatsApp preview, the results show 2 clickers, 3 clicks and
 
 ### Tests for User Story 1 (REQUIRED) ⚠️
 
-- [ ] T015 [P] [US1] Unit tests apps/api/test/unit/growth/link-redirect.spec.ts for the redirect controller and click recorder:
+- [X] T015 [P] [US1] Unit tests apps/api/test/unit/growth/link-redirect.spec.ts for the redirect controller and click recorder:
   - a `302` with `Location`, `Cache-Control: no-store` and `Referrer-Policy: no-referrer`
   - a preview is redirected and not recorded
   - an unknown code gets the `404` page without redirecting
   - campaign tags are added when switched on
   - the per-client rate limit returns `429`
   - no IP is stored
-- [ ] T016 [P] [US1] Integration test apps/api/test/integration/growth-clicks.int-spec.ts:
+- [X] T016 [P] [US1] Integration test apps/api/test/integration/growth-clicks.int-spec.ts:
   - `GET /tracked-links/config`
   - `trackable` lists a URL button on the tracking prefix and a link body variable, and refuses a button elsewhere (`LINK_NOT_TRACKABLE`)
   - `PUT` tracked links on a draft, then `409 CAMPAIGN_NOT_EDITABLE` after launch
@@ -99,8 +99,8 @@ contact twice) and a WhatsApp preview, the results show 2 clickers, 3 clicks and
   - summary (clickers, clicks, rate over delivered, per link), the Clicked view with first, last and count (phones masked for agents) and the CSV export
   - a `LINK_CLICKED` journey entry, and the first click on the message's timeline item
   - a destination change mid-campaign sends new clicks to the new address and is audited
-- [ ] T017 [P] [US1] Contract cases in apps/api/test/contract/growth.contract-spec.ts for `GET /tracked-links/config`, `GET/PUT /campaigns/{id}/tracked-links`, `PATCH /tracked-link-targets/{id}`, `GET /campaigns/{id}/clicks/summary`, `GET /campaigns/{id}/clicks` and `GET /campaigns/{id}/clicks/export`
-- [ ] T018 [P] [US1] Playwright e2e apps/web/e2e/growth-us1-clicks.spec.ts:
+- [X] T017 [P] [US1] Contract cases in apps/api/test/contract/growth.contract-spec.ts for `GET /tracked-links/config`, `GET/PUT /campaigns/{id}/tracked-links`, `PATCH /tracked-link-targets/{id}`, `GET /campaigns/{id}/clicks/summary`, `GET /campaigns/{id}/clicks` and `GET /campaigns/{id}/clicks/export`
+- [X] T018 [P] [US1] Playwright e2e apps/web/e2e/growth-us1-clicks.spec.ts:
   - create a template with **Tracked link button**; mock-meta approves it on sync
   - create a campaign to 3 contacts with the tracked button to `https://shop.example/sale` and send it
   - open two contacts' links as a phone (one twice) and one as WhatsApp, using codes from mock-meta's sent log
@@ -108,24 +108,24 @@ contact twice) and a WhatsApp preview, the results show 2 clickers, 3 clicks and
 
 ### Implementation for User Story 1
 
-- [ ] T019 [US1] Implement apps/api/src/modules/growth/links/tracked-links.service.ts and tracked-links.controller.ts:
+- [X] T019 [US1] Implement apps/api/src/modules/growth/links/tracked-links.service.ts and tracked-links.controller.ts:
   - the config endpoint
   - `trackable` analysis from the template's components (URL buttons with the `${PUBLIC_LINK_BASE_URL}/{{1}}` address, text variables)
   - `GET/PUT` targets for draft or scheduled campaigns (`campaigns.manage`)
   - `PATCH /tracked-link-targets/:id` with audit `tracked_link.destination_changed`
-- [ ] T020 [US1] Give each recipient a code when messages are created at launch, in apps/api/src/modules/campaigns/launch.service.ts (`snapshotAndRun`) and apps/api/src/modules/campaigns/variable-resolver.ts:
+- [X] T020 [US1] Give each recipient a code when messages are created at launch, in apps/api/src/modules/campaigns/launch.service.ts (`snapshotAndRun`) and apps/api/src/modules/campaigns/variable-resolver.ts:
   - insert `tracked_links` rows in the snapshot batches, retrying on a code collision
   - put the code (URL button variable) or the full short link (text variable) into the message's resolved parameters
   - creating a code twice for a message must not change it
-- [ ] T021 [US1] Implement apps/api/src/modules/growth/links/link-redirect.controller.ts (`GET /l/:code` outside the global `api` prefix: add it to the prefix's `exclude` list in apps/api/src/app.setup.ts next to `metrics`; `@Public()` from apps/api/src/common/auth/public.decorator.ts so there is no session or CSRF; rate-limited per client by a salted IP hash with a short Redis time to live) and apps/api/src/modules/growth/links/click-recorder.ts:
+- [X] T021 [US1] Implement apps/api/src/modules/growth/links/link-redirect.controller.ts (`GET /l/:code` outside the global `api` prefix: add it to the prefix's `exclude` list in apps/api/src/app.setup.ts next to `metrics`; `@Public()` from apps/api/src/common/auth/public.decorator.ts so there is no session or CSRF; rate-limited per client by a salted IP hash with a short Redis time to live) and apps/api/src/modules/growth/links/click-recorder.ts:
   - detection with `packages/shared` bots.ts
   - insert `link_clicks` with the copied campaign or step, the contact and the device kind
   - the `LINK_CLICKED` journey entry through apps/api/src/modules/inbox/journey/journey.service.ts
-- [ ] T022 [US1] Implement apps/api/src/modules/growth/links/clicks.service.ts and clicks.controller.ts: summary, the Clicked view paged with phones masked by role as in 001, and the streamed CSV export (`data.export`)
-- [ ] T023 [US1] Show the first click on template message items: add `firstClickAt` to message references in apps/api/src/modules/inbox/messages/chat-timeline.service.ts and the item DTO, and a "Link opened" note in apps/web/src/components/inbox/chat-item-view.tsx
-- [ ] T024 [P] [US1] Add **Tracked link button** to the URL button form of apps/web/src/app/(dashboard)/templates/new/page.tsx: it fills the address from `GET /tracked-links/config` and an example code, with help text on why it is needed
-- [ ] T025 [P] [US1] Add tracked links to the campaign editor in apps/web/src/app/(dashboard)/campaigns/new/ (per trackable variable: destination, campaign tags, the reason when not trackable). Add the Clicked results (cards, per-link table, Clicked view, export, edit destination) to apps/web/src/app/(dashboard)/campaigns/[id]/report/page.tsx
-- [ ] T026 [P] [US1] Add `LINK_CLICKED` wording to apps/web/src/components/inbox/journey-list.tsx with cases in apps/web/tests/journey-list.test.ts
+- [X] T022 [US1] Implement apps/api/src/modules/growth/links/clicks.service.ts and clicks.controller.ts: summary, the Clicked view paged with phones masked by role as in 001, and the streamed CSV export (`data.export`)
+- [X] T023 [US1] Show the first click on template message items: add `firstClickAt` to message references in apps/api/src/modules/inbox/messages/chat-timeline.service.ts and the item DTO, and a "Link opened" note in apps/web/src/components/inbox/chat-item-view.tsx
+- [X] T024 [P] [US1] Add **Tracked link button** to the URL button form of apps/web/src/app/(dashboard)/templates/new/page.tsx: it fills the address from `GET /tracked-links/config` and an example code, with help text on why it is needed
+- [X] T025 [P] [US1] Add tracked links to the campaign editor in apps/web/src/app/(dashboard)/campaigns/new/ (per trackable variable: destination, campaign tags, the reason when not trackable). Add the Clicked results (cards, per-link table, Clicked view, export, edit destination) to apps/web/src/app/(dashboard)/campaigns/[id]/report/page.tsx
+- [X] T026 [P] [US1] Add `LINK_CLICKED` wording to apps/web/src/components/inbox/journey-list.tsx with cases in apps/web/tests/journey-list.test.ts
 
 **Checkpoint**: US1 works on its own: tracked campaigns show real clicks per person.
 
@@ -199,7 +199,7 @@ recovered; 131026 is never retried; 131049 is held back; nobody gets the message
   - cancel one round or all; hold while paused and cancel on cancel, from apps/api/src/modules/campaigns/campaign-control.service.ts
   - the skip notes
 - [ ] T039 [US3] Implement apps/api/src/modules/growth/retries/retry-round.processor.ts:
-  - the `campaign-retry-round` job on `campaign-dispatch`, plus the one-minute sweep in apps/api/src/modules/campaigns/schedule-reconciler.processor.ts
+  - the `campaign-retry-round` job on the `maintenance` queue, plus the sweep (every 30 seconds) in apps/api/src/modules/campaigns/schedule-reconciler.processor.ts
   - running a round:
     - reset the round's `FAILED` retryable messages to `PENDING` with `retry_round`
     - hand them to the 001 dispatcher (apps/api/src/modules/campaigns/dispatch-scheduler.ts)

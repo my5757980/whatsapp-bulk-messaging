@@ -3,6 +3,7 @@ import type { Job } from 'bullmq';
 import { ProcessorRegistry } from '../../common/queue/processor.registry.js';
 import { QUEUES } from '../../common/queue/queue.constants.js';
 import { QueueRegistry } from '../../common/queue/queue.module.js';
+import { RetryRoundsService } from '../growth/retries/retry-rounds.service.js';
 import { ScheduleService, type StartJobData } from './schedule.service.js';
 
 const EVERY_MS = 30_000;
@@ -18,6 +19,7 @@ export class ScheduleReconcilerProcessor implements OnModuleInit, OnApplicationB
     private readonly registry: ProcessorRegistry,
     private readonly queues: QueueRegistry,
     private readonly schedules: ScheduleService,
+    private readonly retryRounds: RetryRoundsService,
   ) {}
 
   onModuleInit(): void {
@@ -33,7 +35,10 @@ export class ScheduleReconcilerProcessor implements OnModuleInit, OnApplicationB
       .upsertJobScheduler('schedule-reconciler', { every: EVERY_MS }, { name: 'schedule-reconciler', opts: { removeOnComplete: true, removeOnFail: 50 } });
   }
 
-  reconcile(): Promise<number> {
-    return this.schedules.startDue();
+  /** Starts due scheduled campaigns, then due retry rounds whose job was lost (feature 005). */
+  async reconcile(): Promise<number> {
+    const started = await this.schedules.startDue();
+    await this.retryRounds.sweep();
+    return started;
   }
 }

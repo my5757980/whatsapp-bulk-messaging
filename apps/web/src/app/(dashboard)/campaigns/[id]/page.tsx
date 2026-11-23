@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { CampaignControls, PausedBanner } from '@/components/campaigns/campaign-controls';
+import { RetryRoundsPanel } from '@/components/campaigns/retry-rounds-panel';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -146,6 +147,8 @@ export default function CampaignDetailPage() {
           </Can>
         </div>
       ) : null}
+
+      {c.state !== 'SCHEDULED' ? <RetryRoundsPanel campaignId={c.id} state={c.state} /> : null}
 
       <Card>
         <CardContent className="grid gap-4 p-5">

@@ -40,6 +40,30 @@ export function classifyMetaError(code: number | undefined, httpStatus?: number)
   return httpStatus !== undefined && httpStatus >= 500 ? 'TRANSIENT' : 'PERMANENT';
 }
 
+/**
+ * Failure reason of a send whose outcome is unknown (the request may have reached Meta). Such
+ * messages are never sent again, so nobody gets a message twice (001 SC-004).
+ */
+export const AMBIGUOUS_FAILURE_REASON = 'unknown_outcome_not_retried';
+
+/** Codes a campaign retry round may send again (feature 005, research R4): the TRANSIENT class. */
+export const RETRYABLE_CODES: ReadonlySet<number> = TRANSIENT;
+
+/** Meta's per-person marketing limit: wait at least 24 hours, so it is held back instead (FR-014). */
+export const HELD_BACK_CODE = 131049;
+
+export type RetryClass = 'RETRY' | 'HELD_BACK' | 'NEVER';
+
+/**
+ * Whether a failed campaign message may go into a retry round (feature 005, FR-014). Failures without
+ * a Meta code (an HTTP 5xx, or Meta not reached) may be retried, except an unknown outcome.
+ */
+export function retryClassOf(failureCode: number | null | undefined, failureReason: string | null | undefined): RetryClass {
+  if (failureCode === HELD_BACK_CODE) return 'HELD_BACK';
+  if (failureCode === null || failureCode === undefined) return failureReason === AMBIGUOUS_FAILURE_REASON ? 'NEVER' : 'RETRY';
+  return RETRYABLE_CODES.has(failureCode) ? 'RETRY' : 'NEVER';
+}
+
 /** Readable failure reason shown on recipient rows and reports. */
 export function describeMetaError(code: number | undefined, fallback?: string): string {
   if (code !== undefined && REASONS[code]) return REASONS[code];

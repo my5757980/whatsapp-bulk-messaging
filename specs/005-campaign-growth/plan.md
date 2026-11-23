@@ -21,7 +21,7 @@ wording:
   host). It answers 302 with the click recorded unless the request is a preview or a robot. Codes
   are 10 random characters; a tracked button's template address is
   `${PUBLIC_LINK_BASE_URL}/{{1}}` (R1–R3).
-- **Retries:** a plan on the campaign; round rows and delayed jobs on `campaign-dispatch`, with a
+- **Retries:** a plan on the campaign; round rows and delayed jobs on the `maintenance` queue, with a
   reconciler sweep. A round re-sends only `FAILED` messages whose last failure is in the 001
   `TRANSIENT` class (R4, R5).
 - **Retarget:** new `RetargetStatus` values in 001's snapshot at launch (R6).
@@ -46,7 +46,7 @@ wording:
   `drip_step_sends`, `drip_events`). Columns are added to `campaigns` and `messages`, and four
   enums are extended (data-model.md).
 - Redis: a new BullMQ queue `drips` (tick and events); the job `campaign-retry-round` on
-  `campaign-dispatch`; a short-lived rate-limit key per client for `/l/:code`.
+  `maintenance`; a short-lived rate-limit key per client for `/l/:code`.
 
 **Testing**:
 - Vitest unit tests for pure logic:
@@ -171,7 +171,7 @@ apps/api/
 │   │               link-redirect.controller.ts (GET /l/:code), click-recorder.ts,
 │   │               clicks.service.ts + controller (summary, Clicked view, export)
 │   ├── retries/    retry-plan.service.ts + controller, retry-rounds.service.ts,
-│   │               retry-round.processor.ts (campaign-dispatch job + sweep)
+│   │               retry-round.processor.ts (maintenance job + sweep)
 │   ├── drips/      drips.service.ts + controller (CRUD, steps, triggers, lifecycle),
 │   │               enrolments.service.ts (manual, events, leaving), drip-tick.processor.ts,
 │   │               drip-events.ts (outbox writer used by the hooks), drip-results.service.ts

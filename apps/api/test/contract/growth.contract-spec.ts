@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { CampaignProgressProcessor } from '../../src/modules/campaigns/campaign-progress.processor.js';
 import { seedContact, seedNumber, seedTemplate, setDefaultCountry, uaePhone } from '../support/fixtures.js';
 import { createTestContext, signIn, uniq, type SignedInAgent, type TestContext } from '../support/test-context.js';
 import { expectMatchesContract } from './openapi-validator.js';
@@ -120,5 +121,40 @@ describe('Campaign growth API contract', () => {
     await check('post', '/campaigns/{id}/retarget', await call('post', `/campaigns/${randomUUID()}/retarget`, { status: 'CLICKED' }), 404);
     const draft = await call('post', '/campaigns', { name: `Contract draft ${randomUUID().slice(0, 6)}`, numberId, templateId: template.id, audienceType: 'ALL_OPTED_IN' });
     await check('post', '/campaigns/{id}/retarget', await call('post', `/campaigns/${draft.body.id}/retarget`, { status: 'CLICKED' }), 409);
+  });
+
+  it('US3: retry plans and rounds', async () => {
+    const template = await seedTemplate(ctx, wabaId);
+    const draft = await call('post', '/campaigns', { name: `Contract retries ${randomUUID().slice(0, 6)}`, numberId, templateId: template.id, audienceType: 'ALL_OPTED_IN' });
+    const id = draft.body.id as string;
+    await check('get', '/campaigns/{id}/retry-plan', await call('get', `/campaigns/${id}/retry-plan`), 200);
+    await check('get', '/campaigns/{id}/retry-plan', await call('get', `/campaigns/${randomUUID()}/retry-plan`), 404);
+    await check('put', '/campaigns/{id}/retry-plan', await call('put', `/campaigns/${id}/retry-plan`, { rounds: 2, delaysMinutes: [30, 60] }), 200);
+    await check('put', '/campaigns/{id}/retry-plan', await call('put', `/campaigns/${id}/retry-plan`, { rounds: 3, delaysMinutes: [720, 720, 720] }), 422);
+    await check('put', '/campaigns/{id}/retry-plan', await call('put', `/campaigns/${randomUUID()}/retry-plan`, { rounds: 1, delaysMinutes: [30] }), 404);
+
+    // The first pass is over with one failure that may pass: round 1 is scheduled.
+    const contact = await seedContact(ctx, uaePhone());
+    await ctx.prisma.campaign.update({
+      where: { id },
+      data: {
+        state: 'RUNNING',
+        launchedAt: new Date(),
+        messages: {
+          create: { origin: 'CAMPAIGN', contactId: contact.id, phoneE164: contact.phoneE164, recipientCountry: 'AE', numberId, templateId: template.id, status: 'FAILED', failureCode: 131016, failedAt: new Date() },
+        },
+      },
+    });
+    await check('put', '/campaigns/{id}/retry-plan', await call('put', `/campaigns/${id}/retry-plan`, { rounds: 1, delaysMinutes: [30] }), 409);
+    await ctx.app.get(CampaignProgressProcessor).refresh();
+
+    await check('get', '/campaigns/{id}/retry-rounds', await call('get', `/campaigns/${id}/retry-rounds`), 200);
+    await check('get', '/campaigns/{id}/retry-rounds', await call('get', `/campaigns/${randomUUID()}/retry-rounds`), 404);
+    await check('get', '/retry-rounds', await call('get', '/retry-rounds'), 200);
+    await check('post', '/campaigns/{id}/retry-rounds/{round}/cancel', await call('post', `/campaigns/${id}/retry-rounds/1/cancel`), 200);
+    await check('post', '/campaigns/{id}/retry-rounds/{round}/cancel', await call('post', `/campaigns/${id}/retry-rounds/1/cancel`), 409);
+    await check('post', '/campaigns/{id}/retry-rounds/{round}/cancel', await call('post', `/campaigns/${randomUUID()}/retry-rounds/1/cancel`), 404);
+    await check('post', '/campaigns/{id}/retry-rounds/cancel', await call('post', `/campaigns/${id}/retry-rounds/cancel`), 200);
+    await check('post', '/campaigns/{id}/retry-rounds/cancel', await call('post', `/campaigns/${randomUUID()}/retry-rounds/cancel`), 404);
   });
 });

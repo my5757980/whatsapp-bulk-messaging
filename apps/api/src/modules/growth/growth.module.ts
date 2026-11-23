@@ -13,6 +13,9 @@ import { LinkRedirectService } from './links/link-redirect.service.js';
 import { LinkResolver } from './links/link-resolver.js';
 import { TrackedLinksController } from './links/tracked-links.controller.js';
 import { TrackedLinksService } from './links/tracked-links.service.js';
+import { RetriesController } from './retries/retries.controller.js';
+import { RetryPlanService } from './retries/retry-plan.service.js';
+import { RetryRoundsService } from './retries/retry-rounds.service.js';
 
 // Campaign growth wiring (feature 005, T013), following 002-004: services shared by the HTTP app and
 // the worker in a global domain module (campaign launch needs the tracked links in both; later the
@@ -20,7 +23,9 @@ import { TrackedLinksService } from './links/tracked-links.service.js';
 // public API and live chat code), HTTP controllers in GrowthApiModule, and the `drips` tick and the
 // retry-round processor in WorkerFeaturesModule. Each story adds its providers here.
 
-const DOMAIN = [TrackedLinksService, TrackedLinkCodes];
+// Retry rounds are finished and scheduled by the campaign progress worker and cancelled with their
+// campaign, so they are shared too.
+const DOMAIN = [TrackedLinksService, TrackedLinkCodes, RetryRoundsService];
 
 /** Campaign growth services shared by the HTTP app and the worker. */
 @Global()
@@ -35,12 +40,13 @@ export class GrowthDomainModule {}
     ClickRecorder,
     LinkRedirectService,
     ClicksService,
+    RetryPlanService,
     {
       provide: LinkRateLimiter,
       inject: [REDIS_CLIENT, APP_CONFIG],
       useFactory: (redis: Redis, config: AppConfig) => new LinkRateLimiter(redis, config.TOKEN_ENCRYPTION_KEY),
     },
   ],
-  controllers: [LinkRedirectController, TrackedLinksController, ClicksController],
+  controllers: [LinkRedirectController, TrackedLinksController, ClicksController, RetriesController],
 })
 export class GrowthApiModule {}

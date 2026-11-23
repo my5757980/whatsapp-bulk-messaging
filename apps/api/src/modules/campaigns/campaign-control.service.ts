@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AppError } from '../../common/errors/app-error.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { AuditService, type AuditActor } from '../audit/audit.service.js';
+import { RetryRoundsService } from '../growth/retries/retry-rounds.service.js';
 import { CampaignsService } from './campaigns.service.js';
 import { DispatchScheduler } from './dispatch-scheduler.js';
 import { ScheduleService } from './schedule.service.js';
@@ -17,6 +18,7 @@ export class CampaignControlService {
     private readonly dispatch: DispatchScheduler,
     private readonly audit: AuditService,
     private readonly schedules: ScheduleService,
+    private readonly retryRounds: RetryRoundsService,
   ) {}
 
   async pause(id: string, actor: AuditActor) {
@@ -61,6 +63,8 @@ export class CampaignControlService {
       data: { status: 'CANCELLED' },
     });
     if (before.state === 'SCHEDULED') await this.schedules.removeStartJob(id, before.scheduledAt);
+    // Cancelling a campaign cancels its retry rounds (feature 005, FR-016).
+    await this.retryRounds.onCampaignCancelled(id);
     await this.audit.record(actor, 'campaign.cancelled', { type: 'campaign', id }, { messagesCancelled: cancelled });
     return this.campaigns.get(id);
   }

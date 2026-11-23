@@ -5,6 +5,8 @@ import { ProcessorRegistry } from '../../common/queue/processor.registry.js';
 import { QUEUES } from '../../common/queue/queue.constants.js';
 import { QueueRegistry } from '../../common/queue/queue.module.js';
 import type { Prisma } from '../../generated/prisma/client.js';
+import { RetryRoundsService } from '../growth/retries/retry-rounds.service.js';
+import { AMBIGUOUS_FAILURE_REASON } from '../meta/meta-error-classifier.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { sendJobId } from '../sending/dispatch-planner.js';
 import { CampaignsService } from './campaigns.service.js';
@@ -35,6 +37,7 @@ export class CampaignProgressProcessor implements OnModuleInit, OnApplicationBoo
     private readonly notifications: NotificationsService,
     private readonly scheduler: DispatchScheduler,
     private readonly metrics: MetricsService,
+    private readonly retryRounds: RetryRoundsService,
   ) {}
 
   onModuleInit(): void {
@@ -70,6 +73,8 @@ export class CampaignProgressProcessor implements OnModuleInit, OnApplicationBoo
         await this.prisma.campaign.update({ where: { id: campaign.id }, data: { totals: totals as unknown as Prisma.InputJsonValue } });
       }
       if (campaign.state === 'RUNNING' && totals.pending + totals.queued === 0) {
+        // A campaign with retries waits for its next round instead of completing (feature 005).
+        if (await this.retryRounds.holdsCompletion(campaign.id)) continue;
         const { count } = await this.prisma.campaign.updateMany({
           where: { id: campaign.id, state: 'RUNNING' },
           data: { state: 'COMPLETED', completedAt: new Date() },
@@ -93,7 +98,7 @@ export class CampaignProgressProcessor implements OnModuleInit, OnApplicationBoo
     const now = Date.now();
     const unknown = await this.prisma.message.updateMany({
       where: { campaignId, status: 'SENDING', updatedAt: { lt: new Date(now - STALE_SENDING_MS) } },
-      data: { status: 'FAILED', failureReason: 'unknown_outcome_not_retried', failedAt: new Date() },
+      data: { status: 'FAILED', failureReason: AMBIGUOUS_FAILURE_REASON, failedAt: new Date() },
     });
     const stale = await this.prisma.message.findMany({
       where: { campaignId, status: 'QUEUED', queuedAt: { lt: new Date(now - STALE_QUEUED_MS) } },
