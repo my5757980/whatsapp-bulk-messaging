@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { alertLevelFor, costMicros, dayKey, DEFAULT_AI_PRICES, monthKey, type AiPrices, type TokenUsage } from '@wbm/shared';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import { NotificationsService } from '../../notifications/notifications.service.js';
@@ -45,6 +46,7 @@ export class AiUsageService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly metrics: MetricsService,
   ) {}
 
   /** The month's AI replies have reached the limit: no model call is made for a new turn. */
@@ -148,6 +150,15 @@ export class AiUsageService {
                     cache_write_tokens = ai_usage_daily.cache_write_tokens + EXCLUDED.cache_write_tokens,
                     output_tokens = ai_usage_daily.output_tokens + EXCLUDED.output_tokens,
                     cost_micros = ai_usage_daily.cost_micros + EXCLUDED.cost_micros`;
+    // Every use of the AI service is recorded here, so the token and reply metrics are too (T104).
+    const tokens: Array<['input' | 'cache_read' | 'cache_write' | 'output', number]> = [
+      ['input', input.usage.inputTokens],
+      ['cache_read', input.usage.cacheReadTokens],
+      ['cache_write', input.usage.cacheWriteTokens],
+      ['output', input.usage.outputTokens],
+    ];
+    for (const [kind, value] of tokens) if (value > 0) this.metrics.aiTokensTotal.inc({ kind }, value);
+    if (input.kind === 'REPLY' && count === 1) this.metrics.aiRepliesTotal.inc({ test: String(input.test) });
     if (!input.countsAgainstMonth || input.kind !== 'ASSISTANT') return;
     const month = monthKey(input.at, input.timezone);
     await tx.$executeRaw`

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { AGENT_REPLY_JSON_SCHEMA, AgentReplySchema, AI_LIMITS, isWithinHours, sanitiseReply, type AgentConfig, type AgentReply, type AttributeKind, type TokenUsage } from '@wbm/shared';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { ChatContentType } from '../../../generated/prisma/client.js';
 import { isLive } from '../../inbox/conversations/window.js';
@@ -34,6 +35,9 @@ const PLACEHOLDERS: Partial<Record<ChatContentType, string>> = {
 };
 
 export type TurnResult = 'SENT' | 'LIMITED' | 'OPTED_OUT' | 'NOTHING' | 'NOT_ELIGIBLE' | 'DROPPED' | 'NEWER' | 'FAILED';
+
+/** Results of turns that called the model (the WbmAiFailing alert divides by these). */
+const MODEL_CALLED: ReadonlySet<TurnResult> = new Set(['SENT', 'FAILED', 'OPTED_OUT', 'DROPPED', 'NEWER']);
 
 /** What the model needs for one reply, from a chat or from the preview. */
 export interface ThinkInput {
@@ -100,9 +104,19 @@ export class TurnService {
     private readonly applier: TurnApplier,
     private readonly failures: AiFailureMonitor,
     private readonly secretsVault: AgentSecretsVault,
+    private readonly metrics: MetricsService,
   ) {}
 
+  /** One turn, counted by result; the time is measured for turns that called the model (T104). */
   async run(conversationId: string): Promise<TurnResult> {
+    const started = performance.now();
+    const result = await this.turn(conversationId);
+    this.metrics.aiTurnsTotal.inc({ result: result.toLowerCase() });
+    if (MODEL_CALLED.has(result)) this.metrics.aiTurnDuration.observe((performance.now() - started) / 1000);
+    return result;
+  }
+
+  private async turn(conversationId: string): Promise<TurnResult> {
     const startedAt = new Date();
     const chat = await this.loadChat(conversationId);
     if (!chat?.contact) return 'NOT_ELIGIBLE';

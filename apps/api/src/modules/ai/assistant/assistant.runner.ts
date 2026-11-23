@@ -1,4 +1,5 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import { ASSISTANT_REQUEST_JOB, type AssistantRequestJobData } from '../ai-jobs.js';
@@ -26,6 +27,7 @@ export class AssistantRunner {
     private readonly tools: AssistantTools,
     private readonly context: AssistantContext,
     private readonly usage: AiUsageService,
+    private readonly metrics: MetricsService,
   ) {}
 
   async run(requestId: string): Promise<void> {
@@ -38,10 +40,12 @@ export class AssistantRunner {
 
     if (request.user.status !== 'ACTIVE') {
       await finish({ status: 'FAILED', errorCode: 'REFUSED', reply: 'This member can no longer use the assistant.' });
+      this.metrics.aiAssistantRequestsTotal.inc({ outcome: 'refused' });
       return;
     }
     if (!this.claude.configured) {
       await finish({ status: 'FAILED', errorCode: 'AI_UNAVAILABLE' });
+      this.metrics.aiAssistantRequestsTotal.inc({ outcome: 'failed' });
       return;
     }
 
@@ -96,11 +100,13 @@ export class AssistantRunner {
           countsAgainstMonth: true,
         });
       });
+      this.metrics.aiAssistantRequestsTotal.inc({ outcome: refusedOnly ? 'refused' : 'done' });
     } catch (error) {
       // Drafts and previews made before the failure stay, listed on the request.
       const reason = error instanceof ClaudeFailure ? error.reason : 'UNAVAILABLE';
       this.logger.warn({ requestId, reason, err: (error as Error).message }, 'Assistant request failed');
       await finish({ status: 'FAILED', errorCode: 'AI_UNAVAILABLE' });
+      this.metrics.aiAssistantRequestsTotal.inc({ outcome: 'failed' });
     }
   }
 }

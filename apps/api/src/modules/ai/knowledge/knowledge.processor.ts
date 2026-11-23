@@ -1,5 +1,6 @@
 import { Injectable, Logger, type OnApplicationBootstrap, type OnModuleInit } from '@nestjs/common';
 import { chunkBlocks, type Chunk } from '@wbm/shared';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QUEUES } from '../../../common/queue/queue.constants.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
@@ -34,6 +35,7 @@ export class KnowledgeProcessor implements OnModuleInit, OnApplicationBootstrap 
     private readonly queues: QueueRegistry,
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
+    private readonly metrics: MetricsService,
   ) {}
 
   onModuleInit(): void {
@@ -83,6 +85,7 @@ export class KnowledgeProcessor implements OnModuleInit, OnApplicationBootstrap 
           },
         });
       });
+      this.metrics.aiKnowledgeJobsTotal.inc({ kind: source.kind.toLowerCase(), outcome: 'ready' });
       return 'READY';
     } catch (error) {
       const known = error instanceof KnowledgeError ? error : null;
@@ -91,6 +94,7 @@ export class KnowledgeProcessor implements OnModuleInit, OnApplicationBootstrap 
       await this.prisma.aiKnowledgeSource
         .update({ where: { id: sourceId }, data: { status: 'FAILED', errorCode: code, errorMessage: known?.message ?? KNOWLEDGE_ERROR_MESSAGES[code] } })
         .catch(() => undefined);
+      this.metrics.aiKnowledgeJobsTotal.inc({ kind: source.kind.toLowerCase(), outcome: 'failed' });
       return 'FAILED';
     }
   }

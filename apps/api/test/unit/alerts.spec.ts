@@ -42,6 +42,10 @@ describe('alert rules', () => {
     expect(rule('WbmFlowApiFailing')).toMatch(/wbm_flow_api_calls_total\{outcome!="success"\}\[15m\][\s\S]*> 0\.20[\s\S]*>= 20/);
   });
 
+  it('warn when AI turns fail (004 T104): over 20% of the turns that called the model, at least 10, in 15 minutes', () => {
+    expect(rule('WbmAiFailing')).toMatch(/wbm_ai_turns_total\{result="failed"\}\[15m\][\s\S]*wbm_ai_turns_total\{result=~"[^"]*failed[^"]*"\}\[15m\][\s\S]*> 0\.20[\s\S]*>= 10/);
+  });
+
   it('give every alert a severity and a summary', () => {
     const names = [...ALERTS.matchAll(/- alert: (\w+)/g)].map((m) => m[1]!);
     expect(names.length).toBeGreaterThanOrEqual(5);
