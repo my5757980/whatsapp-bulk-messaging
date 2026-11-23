@@ -76,7 +76,7 @@ campaign it came from.
 **Acceptance Scenarios**:
 
 1. **Given** a campaign's results, **When** the member chooses a group, **Then** they see the number of contacts in it before anything is created.
-2. **Given** the member confirms, **When** the draft is created, **Then** its audience is exactly the group at that moment, minus contacts who have since opted out or been deleted, and it shows which campaign and group it came from.
+2. **Given** the member confirms, **When** the draft is created and later launched, **Then** its audience is exactly the group as it stands at launch (as 001 retargeting works), minus contacts who have since opted out or been deleted, and it shows which campaign and group it came from.
 3. **Given** the Replied group, **When** it is built, **Then** it holds the contacts who wrote to the campaign's number within 3 days after their campaign message was delivered.
 4. **Given** a group with no contacts, **When** the member looks at it, **Then** retargeting that group is not offered.
 
@@ -90,9 +90,11 @@ hours of the campaign's start. After the normal sending and its automatic short 
 that failed for a reason that may pass are sent again in each round. Members see the scheduled
 rounds, can cancel them, and see how many messages each round recovered.
 
-**Why this priority**: Temporary problems (a busy WhatsApp service, sending limits, the per-person
-limit on marketing messages) otherwise lose recipients for good; retrying later recovers some of
-them without a new campaign.
+**Why this priority**: Temporary problems (a busy WhatsApp service, sending-speed limits, too many
+messages to one person in a short time) otherwise lose recipients for good; retrying later
+recovers some of them without a new campaign. Messages held back by Meta's per-person limit on
+marketing messages are not retried within the 24 hours, because Meta asks to wait at least 24
+hours; the results list them apart so they can be retargeted later.
 
 **Independent Test**: Launch a campaign of 20 recipients with retries set to 2 rounds after 1 and 3
 hours, where 5 messages fail with a temporary error and 2 with an invalid number. The scheduled
@@ -202,8 +204,9 @@ contacts listed under each.
   rounds are cancelled; a round that would start after the 24-hour limit is dropped with a note.
 - **Retry after a template or number problem:** the template is paused or disabled, or the number is
   disconnected, when a round is due → the round does not send, and the reason is shown.
-- **Retry and the per-person marketing limit:** a retried marketing message can fail again for the
-  same reason → it stays failed after the last round, with the reason shown.
+- **The per-person marketing limit:** Meta holds back a marketing message because the person
+  already got many → it is not put into a retry round (Meta asks to wait at least 24 hours); the
+  results show these recipients as their own group for a retarget the next day.
 - **Retarget an old campaign:** a campaign whose messages were removed by the 12-month retention can
   no longer be retargeted, and the option says why.
 - **Two starting events at once:** a contact is tagged and opts in at the same moment → they join
@@ -263,9 +266,9 @@ contacts listed under each.
   campaign for any of these groups: Clicked, Not clicked (delivered with no click), Replied, Not
   replied (delivered with no reply), Read, Not read, Delivered and Failed. This extends 001's
   retargeting (FR-031 there).
-- **FR-011**: The group size MUST be shown before the draft is created, and the draft MUST hold
-  exactly that group at that moment, minus opted-out and deleted contacts. It MUST name the source
-  campaign and group.
+- **FR-011**: The group size MUST be shown before the draft is created. The draft's audience MUST be
+  exactly that group as it stands when the campaign launches (as 001 retargeting works), minus
+  opted-out and deleted contacts. It MUST name the source campaign and group.
 - **FR-012**: Replied MUST mean a message from the contact on the campaign's number within 3 days
   after their campaign message was delivered.
 
@@ -275,9 +278,12 @@ contacts listed under each.
   to 3 rounds. Each round's delay is chosen from 30 minutes, 1, 2, 4, 8 or 12 hours after the
   previous attempt. The last round MUST start within 24 hours of the campaign's start.
 - **FR-014**: Only messages that failed for a reason that may pass MUST go into a round: a
-  temporary WhatsApp service error, a sending-speed or messaging limit, or the per-person limit on
-  marketing messages. Invalid numbers, numbers not on WhatsApp, opted-out contacts, template
-  problems and account problems MUST NOT be retried.
+  temporary WhatsApp service error, a sending-speed limit, or too many messages to one person in a
+  short time. Invalid numbers, numbers not on WhatsApp, opted-out contacts, template problems and
+  account problems MUST NOT be retried. Messages held back by Meta's per-person limit on marketing
+  messages MUST NOT be retried within the 24 hours (Meta asks to wait at least 24 hours, and early
+  retries fail again); the results MUST show them as their own group, which can be retargeted the
+  next day.
 - **FR-015**: A round MUST check consent again, skip contacts who opted out meanwhile, and never
   send to a recipient whose message already succeeded. Nobody may receive the same campaign
   message twice (001 SC-004).
@@ -431,8 +437,10 @@ contacts listed under each.
   a variable part to be trackable.
 - "Replied" uses a 3-day window after delivery, and the Not clicked and Not replied groups count
   delivered messages only. These are defaults confirmed during planning.
-- The list of failures that may pass is built from Meta's current error reference during planning.
-  It includes temporary service errors, sending-speed limits and the per-person marketing limit.
+- The list of failures that may pass is built from Meta's current error reference during planning:
+  temporary service errors, sending-speed limits and too many messages to one person in a short
+  time. Meta's per-person marketing limit needs a wait of at least 24 hours, so it is shown for a
+  later retarget instead.
 - The retry delays (30 minutes to 12 hours), the 24-hour limit, 10 steps per drip, waits of 10
   minutes to 30 days, and 20 active drips with up to 100,000 contacts in each are starting values
   confirmed during planning.
