@@ -285,17 +285,17 @@ raise the AI limit is refused.
 
 ### Tests for User Story 9 (REQUIRED) ⚠️
 
-- [ ] T096 [P] [US9] Unit tests for the assistant tools in apps/api/test/unit/ai/assistant-tools.spec.ts: each tool checks the member's permission; `draft_flow` validates with the 003 graph schema and publish rules; propose tools create `PENDING` actions with previews; no tool sends, spends or deletes
-- [ ] T097 [P] [US9] Integration test apps/api/test/integration/ai-assistant.int-spec.ts with nock for Claude tool calls: a template draft is not submitted to Meta; a flow draft is unpublished and valid; a campaign draft is not scheduled; a send proposal shows recipients and cost and runs only on confirm, as the member, with an audit entry; cancel; an action older than 30 minutes gives 409 `ACTION_EXPIRED`; a manager asking to change the AI limit is refused; the monthly assistant limit gives 429 `LIMIT_REACHED`; report figures equal the reports service
-- [ ] T098 [P] [US9] Contract tests in apps/api/test/contract/ai.contract-spec.ts for `GET/POST /assistant/requests`, `GET /assistant/requests/{id}`, `POST /assistant/actions/{id}/confirm` and `POST /assistant/actions/{id}/cancel`
-- [ ] T099 [P] [US9] Playwright e2e apps/web/e2e/ai-us9-assistant.spec.ts: ask for a template draft (fake model tool call), open it, ask for a campaign send, confirm the preview
+- [X] T096 [P] [US9] Unit tests for the assistant tools in apps/api/test/unit/ai/assistant-tools.spec.ts: each tool checks the member's permission; `draft_flow` validates with the 003 graph schema and publish rules; propose tools create `PENDING` actions with previews; no tool sends, spends or deletes
+- [X] T097 [P] [US9] Integration test apps/api/test/integration/ai-assistant.int-spec.ts with nock for Claude tool calls: a template draft is not submitted to Meta; a flow draft is unpublished and valid; a campaign draft is not scheduled; a send proposal shows recipients and cost and runs only on confirm, as the member, with an audit entry; cancel; an action older than 30 minutes gives 409 `ACTION_EXPIRED`; a manager asking to change the AI limit is refused; the monthly assistant limit gives 429 `LIMIT_REACHED`; report figures equal the reports service
+- [X] T098 [P] [US9] Contract tests in apps/api/test/contract/ai.contract-spec.ts for `GET/POST /assistant/requests`, `GET /assistant/requests/{id}`, `POST /assistant/actions/{id}/confirm` and `POST /assistant/actions/{id}/cancel`
+- [X] T099 [P] [US9] Playwright e2e apps/web/e2e/ai-us9-assistant.spec.ts: ask for a template draft (fake model tool call), open it, ask for a campaign send, confirm the preview
 
 ### Implementation for User Story 9
 
-- [ ] T100 [US9] Implement apps/api/src/modules/ai/assistant/assistant.service.ts and assistant.controller.ts (create and queue, list own, get own) and apps/api/src/modules/ai/assistant/assistant.processor.ts (streamed Claude call with effort `medium`, usage kind `ASSISTANT`, the assistant limit)
-- [ ] T101 [US9] Implement apps/api/src/modules/ai/assistant/assistant-tools.ts (`draft_template`, `draft_flow`, `draft_campaign`, `report_summary`, `propose_campaign_send`, `propose_delete`) acting as the member through the existing templates, flows, campaigns and reports services
-- [ ] T102 [US9] Implement apps/api/src/modules/ai/assistant/assistant-actions.service.ts (confirm: owner, expiry and permission re-checked, run through the existing services with the member as actor, audit `ai.assistant_action_confirmed`; cancel)
-- [ ] T103 [P] [US9] Add the assistant panel apps/web/src/components/ai/assistant-panel.tsx (header button for `assistant.use`, request history with polling, draft links, action previews with Confirm and Cancel)
+- [X] T100 [US9] Implement apps/api/src/modules/ai/assistant/assistant.service.ts and assistant.controller.ts (create and queue, list own, get own) and apps/api/src/modules/ai/assistant/assistant.processor.ts (streamed Claude call with effort `medium`, usage kind `ASSISTANT`, the assistant limit)
+- [X] T101 [US9] Implement apps/api/src/modules/ai/assistant/assistant-tools.ts (`draft_template`, `draft_flow`, `draft_campaign`, `report_summary`, `propose_campaign_send`, `propose_delete`) acting as the member through the existing templates, flows, campaigns and reports services
+- [X] T102 [US9] Implement apps/api/src/modules/ai/assistant/assistant-actions.service.ts (confirm: owner, expiry and permission re-checked, run through the existing services with the member as actor, audit `ai.assistant_action_confirmed`; cancel)
+- [X] T103 [P] [US9] Add the assistant panel apps/web/src/components/ai/assistant-panel.tsx (header button for `assistant.use`, request history with polling, draft links, action previews with Confirm and Cancel)
 
 ---
 
