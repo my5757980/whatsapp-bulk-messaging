@@ -4,6 +4,7 @@ import nock from 'nock';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { AppConfig } from '../../../src/common/config/config.js';
 import { ClaudeClient, ClaudeFailure, type TurnRequest } from '../../../src/modules/ai/claude/claude.client.js';
+import { streamEvents } from '../../support/claude-stream.js';
 
 // T016: the only outbound AI call (specs/004-ai-agent/contracts/claude-messages.md §1–§2, §5).
 const BASE = 'https://api.anthropic.com';
@@ -167,5 +168,48 @@ describe('ClaudeClient.runTurn', () => {
     const unconfigured = new ClaudeClient({ AI_MODEL: 'claude-opus-5-5' } as AppConfig);
     expect(unconfigured.configured).toBe(false);
     await expect(unconfigured.runTurn(request())).rejects.toMatchObject({ reason: 'AUTH' });
+  });
+
+  it('streams each turn when asked (the team assistant), still running tools and summing usage', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const keep = (body: Record<string, unknown>) => {
+      bodies.push(body);
+      return true;
+    };
+    const sse = { 'content-type': 'text/event-stream' };
+    nock(BASE)
+      .post('/v1/messages', keep)
+      .query(true)
+      .reply(200, streamEvents([{ type: 'tool_use', name: 'draft_template', input: { name: 'weekend_sale' } }], { input: 100, output: 20 }), sse);
+    nock(BASE)
+      .post('/v1/messages', keep)
+      .query(true)
+      .reply(200, streamEvents([{ type: 'text', text: 'Drafted the template.' }], { input: 150, output: 30 }), sse);
+    let ran: unknown = null;
+    const result = await client.runTurn(
+      request({
+        schema: undefined,
+        effort: 'medium',
+        stream: true,
+        maxTokens: 32_000,
+        tools: [
+          {
+            name: 'draft_template',
+            description: 'Saves a template draft',
+            inputSchema: { type: 'object', additionalProperties: false, required: ['name'], properties: { name: { type: 'string' } } },
+            run: async (input) => {
+              ran = input;
+              return 'saved';
+            },
+          },
+        ],
+      }),
+    );
+    expect(ran).toEqual({ name: 'weekend_sale' });
+    expect(result.text).toBe('Drafted the template.');
+    expect(result.usage).toMatchObject({ inputTokens: 250, outputTokens: 50 });
+    expect(bodies.map((b) => b.stream)).toEqual([true, true]);
+    expect(bodies[0]).toMatchObject({ max_tokens: 32000, output_config: { effort: 'medium' } });
+    expect(JSON.stringify(bodies[1]?.messages)).toContain('saved');
   });
 });
