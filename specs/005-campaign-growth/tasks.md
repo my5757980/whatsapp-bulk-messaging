@@ -140,20 +140,20 @@ launch its audience is the clickers minus anyone who opted out.
 
 ### Tests for User Story 2 (REQUIRED) ⚠️
 
-- [ ] T027 [P] [US2] Integration test apps/api/test/integration/growth-retarget.int-spec.ts:
+- [X] T027 [P] [US2] Integration test apps/api/test/integration/growth-retarget.int-spec.ts:
   - `GET /campaigns/{id}/retarget-groups` counts all nine groups, with `available: false` for empty ones
   - retargeting `CLICKED`, `NOT_CLICKED`, `REPLIED`, `NOT_REPLIED` and `HELD_BACK` creates drafts whose launch snapshot equals the group minus opted-out and deleted contacts
   - a reply within 72 hours of delivery counts and one after does not
   - the 001 groups are unchanged
   - a campaign with purged messages gives `409`
-- [ ] T028 [P] [US2] Contract cases in apps/api/test/contract/growth.contract-spec.ts for `GET /campaigns/{id}/retarget-groups` and `POST /campaigns/{id}/retarget` with each new status
-- [ ] T029 [P] [US2] Playwright e2e apps/web/e2e/growth-us2-retarget.spec.ts: from the US1-style campaign open **Retarget**, see the sizes, choose **Clicked**, launch the draft, and confirm the recipients are the clickers (mock-meta sent log)
+- [X] T028 [P] [US2] Contract cases in apps/api/test/contract/growth.contract-spec.ts for `GET /campaigns/{id}/retarget-groups` and `POST /campaigns/{id}/retarget` with each new status
+- [X] T029 [P] [US2] Playwright e2e apps/web/e2e/growth-us2-retarget.spec.ts: from the US1-style campaign open **Retarget**, see the sizes, choose **Clicked**, launch the draft, and confirm the recipients are the clickers (mock-meta sent log)
 
 ### Implementation for User Story 2
 
-- [ ] T030 [US2] Extend `RetargetSchema` and the group labels in apps/api/src/modules/campaigns/retarget.service.ts, and the snapshot SQL for the new groups in apps/api/src/modules/campaigns/audience-snapshot.service.ts (research R6)
-- [ ] T031 [US2] Add `GET /campaigns/:id/retarget-groups` (`campaigns.view`) to apps/api/src/modules/campaigns/campaigns.controller.ts with the counting queries in retarget.service.ts
-- [ ] T032 [P] [US2] Add the retarget dialog with group sizes (unavailable groups disabled with the reason) as apps/web/src/components/campaigns/retarget-dialog.tsx, opened from apps/web/src/app/(dashboard)/campaigns/[id]/report/page.tsx
+- [X] T030 [US2] Extend `RetargetSchema` and the group labels in apps/api/src/modules/campaigns/retarget.service.ts, and the snapshot SQL for the new groups in apps/api/src/modules/campaigns/audience-snapshot.service.ts (research R6)
+- [X] T031 [US2] Add `GET /campaigns/:id/retarget-groups` (`campaigns.view`) to apps/api/src/modules/campaigns/campaigns.controller.ts with the counting queries in retarget.service.ts
+- [X] T032 [P] [US2] Add the retarget dialog with group sizes (unavailable groups disabled with the reason) as apps/web/src/components/campaigns/retarget-dialog.tsx, opened from apps/web/src/app/(dashboard)/campaigns/[id]/report/page.tsx
 
 **Checkpoint**: US1 + US2 are the P1 release.
 
@@ -169,8 +169,8 @@ recovered; 131026 is never retried; 131049 is held back; nobody gets the message
 
 ### Tests for User Story 3 (REQUIRED) ⚠️
 
-- [ ] T033 [P] [US3] Unit test apps/api/test/unit/growth/retryable.spec.ts: every `TRANSIENT` code of apps/api/src/modules/meta/meta-error-classifier.ts and an HTTP 5xx without a code are retryable. 131049 is `HELD_BACK`. 131026, 131048, 131050, 132xxx and `BLOCKING` codes are never retried
-- [ ] T034 [P] [US3] Integration test apps/api/test/integration/growth-retries.int-spec.ts:
+- [X] T033 [P] [US3] Unit test apps/api/test/unit/growth/retryable.spec.ts: every `TRANSIENT` code of apps/api/src/modules/meta/meta-error-classifier.ts and an HTTP 5xx without a code are retryable. 131049 is `HELD_BACK`. 131026, 131048, 131050, 132xxx and `BLOCKING` codes are never retried
+- [X] T034 [P] [US3] Integration test apps/api/test/integration/growth-retries.int-spec.ts:
   - **plan:** validation and audit; editable only while draft or scheduled
   - **scheduling:** once the first pass is final, round 1 is scheduled with the retryable failures only
   - **running a round** (the processor invoked directly, Meta with nock):
@@ -183,8 +183,8 @@ recovered; 131026 is never retried; 131049 is held back; nobody gets the message
     - rounds are skipped when the template is paused, the number is disconnected, or the round is past 24 hours
   - **jobs:** the reconciler sweep starts a due round whose job was lost
   - **views:** `GET /retry-rounds` across campaigns; one round or all rounds can be cancelled, with audit
-- [ ] T035 [P] [US3] Contract cases in apps/api/test/contract/growth.contract-spec.ts for `GET/PUT /campaigns/{id}/retry-plan`, `GET /campaigns/{id}/retry-rounds`, both cancel endpoints and `GET /retry-rounds`
-- [ ] T036 [P] [US3] Playwright e2e apps/web/e2e/growth-us3-retries.spec.ts:
+- [X] T035 [P] [US3] Contract cases in apps/api/test/contract/growth.contract-spec.ts for `GET/PUT /campaigns/{id}/retry-plan`, `GET /campaigns/{id}/retry-rounds`, both cancel endpoints and `GET /retry-rounds`
+- [X] T036 [P] [US3] Playwright e2e apps/web/e2e/growth-us3-retries.spec.ts:
   - set 2 rounds on a draft whose contacts end in `1016`, `0000` and `1049`, then launch it
   - **Scheduled retries** shows round 1 with only the `1016` recipients
   - the `1049` one is under **Held back**
@@ -192,20 +192,20 @@ recovered; 131026 is never retried; 131049 is held back; nobody gets the message
 
 ### Implementation for User Story 3
 
-- [ ] T037 [US3] Implement apps/api/src/modules/growth/retries/retry-plan.service.ts and retry-plan.controller.ts (the campaign columns, `campaign.retry_plan_changed` audit), and the retryable classification next to apps/api/src/modules/meta/meta-error-classifier.ts
-- [ ] T038 [US3] Implement apps/api/src/modules/growth/retries/retry-rounds.service.ts:
+- [X] T037 [US3] Implement apps/api/src/modules/growth/retries/retry-plan.service.ts and retry-plan.controller.ts (the campaign columns, `campaign.retry_plan_changed` audit), and the retryable classification next to apps/api/src/modules/meta/meta-error-classifier.ts
+- [X] T038 [US3] Implement apps/api/src/modules/growth/retries/retry-rounds.service.ts:
   - schedule round 1 when the first pass is final, from apps/api/src/modules/campaigns/campaign-progress.processor.ts
   - the next round after each finish
   - cancel one round or all; hold while paused and cancel on cancel, from apps/api/src/modules/campaigns/campaign-control.service.ts
   - the skip notes
-- [ ] T039 [US3] Implement apps/api/src/modules/growth/retries/retry-round.processor.ts:
+- [X] T039 [US3] Implement apps/api/src/modules/growth/retries/retry-round.processor.ts:
   - the `campaign-retry-round` job on the `maintenance` queue, plus the sweep (every 30 seconds) in apps/api/src/modules/campaigns/schedule-reconciler.processor.ts
   - running a round:
     - reset the round's `FAILED` retryable messages to `PENDING` with `retry_round`
     - hand them to the 001 dispatcher (apps/api/src/modules/campaigns/dispatch-scheduler.ts)
     - record the recipients
   - fill in `recovered` when the round's messages are final
-- [ ] T040 [P] [US3] Add to the web:
+- [X] T040 [P] [US3] Add to the web:
   - the retry plan form to the campaign editor's review step in apps/web/src/app/(dashboard)/campaigns/new/
   - the scheduled retries panel and the Held back group to apps/web/src/app/(dashboard)/campaigns/[id]/report/page.tsx
   - the cross-campaign list apps/web/src/app/(dashboard)/campaigns/retries/page.tsx
