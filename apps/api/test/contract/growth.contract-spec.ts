@@ -201,4 +201,19 @@ describe('Campaign growth API contract', () => {
     await check('delete', '/drips/{id}', await call('delete', `/drips/${draft.body.id}`), 204);
     await check('delete', '/drips/{id}', await call('delete', `/drips/${randomUUID()}`), 404);
   });
+
+  it('US6: drip results, the contacts behind a count and the export', async () => {
+    const template = await seedTemplate(ctx, wabaId);
+    const created = await call('post', '/drips', { name: `Contract results ${randomUUID().slice(0, 6)}`, numberId });
+    const id = created.body.id as string;
+    const steps = await call('put', `/drips/${id}/steps`, { steps: [{ templateId: template.id, variableMapping: { 'BODY.1': { source: 'field', key: 'name' } }, waitMinutes: 0 }] });
+    const stepId = (steps.body.stepList as Array<{ id: string }>)[0]!.id;
+
+    await check('get', '/drips/{id}/results', await call('get', `/drips/${id}/results`), 200);
+    await check('get', '/drips/{id}/results', await call('get', `/drips/${randomUUID()}/results`), 404);
+    await check('get', '/drips/{id}/results/contacts', await call('get', `/drips/${id}/results/contacts?stepId=${stepId}&metric=SENT&page=1&pageSize=20`), 200);
+    await check('get', '/drips/{id}/results/contacts', await call('get', `/drips/${randomUUID()}/results/contacts?stepId=${stepId}&metric=SENT`), 404);
+    await check('get', '/drips/{id}/results/export', await call('get', `/drips/${id}/results/export?stepId=${stepId}&metric=SKIPPED`), 200);
+    await check('get', '/drips/{id}/results/export', await call('get', `/drips/${randomUUID()}/results/export?stepId=${stepId}&metric=SENT`), 404);
+  });
 });

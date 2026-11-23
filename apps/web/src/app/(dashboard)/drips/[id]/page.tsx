@@ -5,6 +5,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { DripEnrolments } from '@/components/drips/drip-enrolments';
+import { DripResultsView } from '@/components/drips/drip-results';
 import { DripSettingsForm } from '@/components/drips/drip-settings-form';
 import { DripStepsEditor } from '@/components/drips/drip-steps-editor';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -130,12 +131,16 @@ function DripEditor() {
           <TabsTrigger value="steps">Steps</TabsTrigger>
           <TabsTrigger value="settings">Settings</TabsTrigger>
           <TabsTrigger value="contacts">Contacts</TabsTrigger>
+          <TabsTrigger value="results">Results</TabsTrigger>
         </TabsList>
         <TabsContent value="steps">
           <DripStepsEditor drip={d} wabaId={wabaId} editable={editable} />
         </TabsContent>
         <TabsContent value="settings">
           <DripSettingsForm drip={d} editable={editable} />
+        </TabsContent>
+        <TabsContent value="results">
+          <DripResultsView dripId={d.id} />
         </TabsContent>
         <TabsContent value="contacts">
           <DripEnrolments dripId={d.id} active={d.status === 'ACTIVE'} enrolling={enrolling} onEnrollingChange={setEnrolling} />

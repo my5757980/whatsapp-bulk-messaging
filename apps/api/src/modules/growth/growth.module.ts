@@ -15,6 +15,7 @@ import { TrackedLinksController } from './links/tracked-links.controller.js';
 import { TrackedLinksService } from './links/tracked-links.service.js';
 import { DripEvents } from './drips/drip-events.js';
 import { DripLeaving } from './drips/drip-leaving.js';
+import { DripResultsService } from './drips/drip-results.service.js';
 import { DripsController } from './drips/drips.controller.js';
 import { DripsService } from './drips/drips.service.js';
 import { EnrolmentsService } from './drips/enrolments.service.js';
@@ -49,6 +50,7 @@ export class GrowthDomainModule {}
     RetryPlanService,
     DripsService,
     EnrolmentsService,
+    DripResultsService,
     {
       provide: LinkRateLimiter,
       inject: [REDIS_CLIENT, APP_CONFIG],
