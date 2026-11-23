@@ -103,6 +103,50 @@ describe('Contact deletion', () => {
     expect(await ctx.prisma.flowSession.findUniqueOrThrow({ where: { id: session.id } })).toMatchObject({ contactId: null, answers: {} });
   });
 
+  it("erases the contact's AI records but keeps reply counts and sources (004 FR-051)", async () => {
+    const number = await seedNumber(ctx);
+    const [contact, other] = await Promise.all([seedContact(ctx, uaePhone()), seedContact(ctx, uaePhone())]);
+    const chat = await ctx.prisma.conversation.create({ data: { contactId: contact.id, numberId: number.id } });
+    const otherChat = await ctx.prisma.conversation.create({ data: { contactId: other.id, numberId: number.id } });
+    const agent = await ctx.prisma.aiAgent.create({ data: { name: `Erasure agent ${randomUUID().slice(0, 6)}`, draft: {} } });
+    const conversation = await ctx.prisma.aiConversation.create({
+      data: {
+        conversationId: chat.id,
+        agentId: agent.id,
+        contactId: contact.id,
+        numberId: number.id,
+        startedBy: 'CUSTOMER',
+        summary: 'Sara asked to cancel order 10234',
+        pendingConfirmation: { skillId: 'cancel_order', input: { order_number: '10234' } },
+        unansweredStreak: { count: 1 },
+      },
+    });
+    const reply = await ctx.prisma.aiReply.create({
+      data: { aiConversationId: conversation.id, agentId: agent.id, kind: 'REPLY', modelId: 'claude-opus-5-5', counted: true, sources: [{ id: 'k1', kind: 'ANSWER', title: 'Refunds' }] },
+    });
+    const otherConversation = await ctx.prisma.aiConversation.create({ data: { conversationId: otherChat.id, agentId: agent.id, contactId: other.id, numberId: number.id, startedBy: 'CUSTOMER' } });
+    const shared = await ctx.prisma.aiUnansweredQuestion.create({ data: { agentId: agent.id, text: 'Do you ship to Oman?', normalized: `ship oman ${randomUUID()}`, askCount: 2 } });
+    const onlyTheirs = await ctx.prisma.aiUnansweredQuestion.create({ data: { agentId: agent.id, text: 'Where is order 10234 for Sara?', normalized: `order sara ${randomUUID()}`, askCount: 1 } });
+    await ctx.prisma.aiUnansweredAsk.createMany({
+      data: [
+        { questionId: shared.id, aiConversationId: conversation.id },
+        { questionId: shared.id, aiConversationId: otherConversation.id },
+        { questionId: onlyTheirs.id, aiConversationId: conversation.id },
+      ],
+    });
+
+    expect((await admin.agent.delete(`/api/contacts/${contact.id}`).set('x-csrf-token', admin.csrf)).status).toBe(204);
+    expect(await ctx.prisma.aiConversation.findUniqueOrThrow({ where: { id: conversation.id } })).toMatchObject({ contactId: null, summary: null, pendingConfirmation: null, unansweredStreak: null });
+    expect(await ctx.prisma.aiReply.findUniqueOrThrow({ where: { id: reply.id } })).toMatchObject({ counted: true, sources: [{ id: 'k1', kind: 'ANSWER', title: 'Refunds' }] });
+    // Their unanswered asks go; a question only they asked goes too, and shared counts follow.
+    expect(await ctx.prisma.aiUnansweredAsk.count({ where: { aiConversationId: conversation.id } })).toBe(0);
+    expect(await ctx.prisma.aiUnansweredQuestion.findUniqueOrThrow({ where: { id: shared.id } })).toMatchObject({ askCount: 1 });
+    expect(await ctx.prisma.aiUnansweredQuestion.findUnique({ where: { id: onlyTheirs.id } })).toBeNull();
+    // Another customer's AI records are untouched.
+    expect(await ctx.prisma.aiConversation.findUniqueOrThrow({ where: { id: otherConversation.id } })).toMatchObject({ contactId: other.id });
+    expect(await ctx.prisma.aiUnansweredAsk.count({ where: { aiConversationId: otherConversation.id } })).toBe(1);
+  });
+
   it('is admin-only and returns 404 for unknown contacts', async () => {
     const contact = await seedContact(ctx, uaePhone());
     const manager = await signIn(ctx, 'MANAGER');

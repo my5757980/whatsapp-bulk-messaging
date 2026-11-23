@@ -12,6 +12,9 @@ import { Prisma } from '../../generated/prisma/client.js';
 // - live chat (002 FR-042): chat items, journey events and openings 12 months; old list previews are
 //   cleared, and customer media no chat item uses any more is deleted with its file
 // - chatbot flow sessions (003): ended sessions and their step records after 12 months.
+// - AI agent (004 FR-051): AI conversations that ended over 12 months ago with their replies and
+//   unanswered asks, older asks and replies, questions nobody asked for 12 months, and assistant
+//   requests with their actions. Usage rows are anonymous and kept.
 // Audit logs are never purged here (the spec keeps them at least 12 months).
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -20,7 +23,26 @@ const SHORT_LIVED_DAYS = 30;
 const UPLOADS_PREFIX = 'uploads/';
 const BATCH = 5_000;
 
-type PurgeTable = 'messages' | 'campaign_upload_rows' | 'webhook_events' | 'chat_messages' | 'conversation_events' | 'conversation_openings' | 'flow_sessions';
+type PurgeTable =
+  | 'messages'
+  | 'campaign_upload_rows'
+  | 'webhook_events'
+  | 'chat_messages'
+  | 'conversation_events'
+  | 'conversation_openings'
+  | 'flow_sessions'
+  | 'ai_conversations'
+  | 'ai_replies'
+  | 'ai_unanswered_asks'
+  | 'assistant_requests';
+
+/** AI records removed by one run (004). */
+export interface AiRetentionResult {
+  aiConversations: number;
+  aiReplies: number;
+  aiAsks: number;
+  assistantRequests: number;
+}
 
 export interface LiveChatRetentionResult {
   chatItems: number;
@@ -29,7 +51,7 @@ export interface LiveChatRetentionResult {
   chatMedia: number;
 }
 
-export interface RetentionResult extends LiveChatRetentionResult {
+export interface RetentionResult extends LiveChatRetentionResult, AiRetentionResult {
   campaigns: number;
   messages: number;
   webhookEvents: number;
@@ -55,7 +77,21 @@ export class RetentionService {
 
   /** Runs every purge; one failing step does not stop the others, but fails the job. */
   async run(now = new Date()): Promise<RetentionResult> {
-    const result: RetentionResult = { campaigns: 0, messages: 0, webhookEvents: 0, files: 0, chatItems: 0, chatEvents: 0, chatOpenings: 0, chatMedia: 0, flowSessions: 0 };
+    const result: RetentionResult = {
+      campaigns: 0,
+      messages: 0,
+      webhookEvents: 0,
+      files: 0,
+      chatItems: 0,
+      chatEvents: 0,
+      chatOpenings: 0,
+      chatMedia: 0,
+      flowSessions: 0,
+      aiConversations: 0,
+      aiReplies: 0,
+      aiAsks: 0,
+      assistantRequests: 0,
+    };
     const failures: string[] = [];
     const step = async (name: string, fn: () => Promise<void>) => {
       try {
@@ -78,6 +114,9 @@ export class RetentionService {
     });
     await step('flow sessions', async () => {
       result.flowSessions = await this.purgeFlowSessions(now);
+    });
+    await step('ai', async () => {
+      Object.assign(result, await this.purgeAi(now));
     });
     this.logger.log({ ...result }, 'Retention run finished');
     if (failures.length) throw new Error(`Retention partly failed: ${failures.join('; ')}`);
@@ -165,6 +204,27 @@ export class RetentionService {
       await this.prisma.importJob.updateMany({ where: { errorFileKey: { in: chunk } }, data: { errorFileKey: null } });
     }
     return keys.length;
+  }
+
+  /**
+   * AI records (004 FR-051): AI conversations that ended over 12 months ago (their replies and
+   * unanswered asks go with them), replies and asks older than that, questions nobody asked for 12
+   * months, and assistant requests with their actions. Question counts follow the asks left.
+   */
+  async purgeAi(now: Date): Promise<AiRetentionResult> {
+    const cutoff = monthsBefore(now, CAMPAIGN_MONTHS);
+    const aiConversations = await this.deleteInBatches('ai_conversations', Prisma.sql`status = 'ENDED' AND ended_at < ${cutoff}`);
+    const aiReplies = await this.deleteInBatches('ai_replies', Prisma.sql`created_at < ${cutoff}`);
+    const aiAsks = await this.deleteInBatches('ai_unanswered_asks', Prisma.sql`asked_at < ${cutoff}`);
+    await this.prisma.$executeRaw`
+      UPDATE ai_unanswered_questions q SET ask_count = c.n
+        FROM (SELECT q2.id, count(a.id)::int AS n
+                FROM ai_unanswered_questions q2 LEFT JOIN ai_unanswered_asks a ON a.question_id = q2.id
+               GROUP BY q2.id) c
+       WHERE c.id = q.id AND q.ask_count <> c.n`;
+    await this.prisma.$executeRaw`DELETE FROM ai_unanswered_questions WHERE last_asked_at < ${cutoff}`;
+    const assistantRequests = await this.deleteInBatches('assistant_requests', Prisma.sql`created_at < ${cutoff}`);
+    return { aiConversations, aiReplies, aiAsks, assistantRequests };
   }
 
   /** Deletes matching rows in batches so no single statement holds locks for long. */
