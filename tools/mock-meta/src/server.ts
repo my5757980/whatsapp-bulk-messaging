@@ -4,7 +4,7 @@
 // Feature 004 (T006): a fake Claude Messages endpoint under /anthropic (src/ai.ts).
 import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { aiRequests, answerMessages, resetAi, setAiRules } from './ai.js';
+import { aiRequests, answerMessages, resetAi, setAiRules, streamEvents } from './ai.js';
 import { env } from './env.js';
 import { postSigned, statusPayload, templateStatusPayload } from './webhook-emitter.js';
 
@@ -209,6 +209,11 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   // Feature 004: the fake Claude endpoint (the SDK may add ?beta=true) and its test helpers.
   if (req.method === 'POST' && url.pathname === '/anthropic/v1/messages') {
     const answer = answerMessages(url.pathname + url.search, await readBody(req));
+    if (answer.stream && answer.status === 200) {
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' });
+      res.end(streamEvents(answer.body as Parameters<typeof streamEvents>[0]));
+      return;
+    }
     return send(res, answer.status, answer.body);
   }
   if (req.method === 'POST' && url.pathname === '/mock/ai/rules') return send(res, 200, { rules: setAiRules(JSON.parse((await readBody(req)) || '[]')) });

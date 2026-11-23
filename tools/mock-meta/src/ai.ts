@@ -22,6 +22,7 @@ interface ClaudeRequest {
   messages?: ClaudeMessage[];
   tools?: Array<{ name?: string }>;
   output_config?: { format?: unknown; effort?: string };
+  stream?: boolean;
 }
 
 /** The reply JSON of contracts/claude-messages.md §4; rules may give only some fields. */
@@ -84,12 +85,15 @@ function textOfToolResult(content: unknown): string {
   return '';
 }
 
-/** The customer's latest words: the last user message that is not a tool result or a knowledge block. */
+/** Context the platform adds to a user message: knowledge for agents, the workspace for the team assistant. */
+const CONTEXT_BLOCK = /^\s*<(knowledge|workspace)>/;
+
+/** The customer's (or member's) latest words: the last user message that is not a tool result or context. */
 function lastCustomerText(messages: ClaudeMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
     if (message?.role !== 'user') continue;
-    const parts = blocks(message.content).filter((b) => b.type === 'text' && typeof b.text === 'string' && !b.text.trimStart().startsWith('<knowledge>'));
+    const parts = blocks(message.content).filter((b) => b.type === 'text' && typeof b.text === 'string' && !CONTEXT_BLOCK.test(b.text));
     if (parts.length) return parts.map((b) => b.text).join('\n');
   }
   return '';
@@ -188,6 +192,34 @@ const estimateTokens = (value: unknown): number => Math.max(1, Math.ceil(JSON.st
 export interface AiResponse {
   status: number;
   body: unknown;
+  /** The request asked for a streamed reply (`stream: true`): send `streamEvents(body)` as server-sent events. */
+  stream?: boolean;
+}
+
+interface ReplyBlock {
+  type: string;
+  text?: string;
+  id?: string;
+  name?: string;
+  input?: unknown;
+}
+
+/** A Messages API reply as the events of a streamed response (the team assistant streams, US9). */
+export function streamEvents(message: { content: ReplyBlock[]; stop_reason: string; usage: { output_tokens: number } } & Record<string, unknown>): string {
+  const events: Array<[string, unknown]> = [['message_start', { type: 'message_start', message: { ...message, content: [], stop_reason: null, usage: { ...message.usage, output_tokens: 1 } } }]];
+  message.content.forEach((block, index) => {
+    if (block.type === 'tool_use') {
+      events.push(['content_block_start', { type: 'content_block_start', index, content_block: { type: 'tool_use', id: block.id, name: block.name, input: {} } }]);
+      events.push(['content_block_delta', { type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: JSON.stringify(block.input ?? {}) } }]);
+    } else {
+      events.push(['content_block_start', { type: 'content_block_start', index, content_block: { type: 'text', text: '' } }]);
+      events.push(['content_block_delta', { type: 'content_block_delta', index, delta: { type: 'text_delta', text: block.text ?? '' } }]);
+    }
+    events.push(['content_block_stop', { type: 'content_block_stop', index }]);
+  });
+  events.push(['message_delta', { type: 'message_delta', delta: { stop_reason: message.stop_reason, stop_sequence: null }, usage: { output_tokens: message.usage.output_tokens } }]);
+  events.push(['message_stop', { type: 'message_stop' }]);
+  return events.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join('');
 }
 
 /** Answers one `POST /anthropic/v1/messages` call. */
@@ -216,10 +248,12 @@ export function answerMessages(path: string, raw: string): AiResponse {
     usage: { input_tokens: estimateTokens(body), output_tokens: 50, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
   };
 
+  const stream = body.stream === true;
   if (rule?.toolCall) {
     return {
       status: 200,
       body: { ...base, content: [{ type: 'tool_use', id: `toolu_mock_${counter}`, name: rule.toolCall.name, input: rule.toolCall.input }], stop_reason: 'tool_use' },
+      stream,
     };
   }
 
@@ -227,5 +261,5 @@ export function answerMessages(path: string, raw: string): AiResponse {
   const text = structured ? JSON.stringify({ ...DEFAULT_REPLY, ...(rule?.reply ? rule.reply : defaultReply(body, question)) }) : (rule?.text ?? 'Done.');
   const stopReason = rule?.stopReason ?? 'end_turn';
   const content = stopReason === 'refusal' ? [] : [{ type: 'text', text: stopReason === 'max_tokens' ? text.slice(0, Math.max(1, Math.floor(text.length / 2))) : text }];
-  return { status: 200, body: { ...base, content, stop_reason: stopReason } };
+  return { status: 200, body: { ...base, content, stop_reason: stopReason }, stream };
 }
