@@ -49,7 +49,7 @@ what the platform sent (check that no phone number appears).
 | US6 Flows | With a "menu" keyword flow on the same number: send "menu", finish the flow, ask a free question. Add a "Hand to AI agent" step to a flow and run it. Give the agent a "Start a flow: Book a visit" skill and ask to book. | The flow answers "menu", the agent the free question; the hand-to-AI step ends the flow and the agent continues; the booking flow starts, and after it ends the agent answers again. |
 | US7 Usage and limit | As an admin, set the monthly limit to 5 in **AI usage**; ask 6 questions from a test phone; raise the limit. | Replies 1–5 counted (test shown apart) with an estimated cost; alerts at 4 and 5; the 6th message goes to Waiting for agent with "AI reply limit reached"; after raising the limit the agent answers. |
 | US8 Starters | Create an agent from "Lead qualification", accept creating its attributes, try to publish with the example answers, replace them and publish. | Publishing is refused with "replace me" problems listed; after replacing, it publishes and the conversation fills the attributes. |
-| US9 Assistant | As a manager open **Assistant**: ask for a weekend sale template with a "Shop now" button; a flow that asks for name and city and hands over; a campaign of that template to VIP contacts; to raise the AI reply limit. | A template draft (not submitted) and an unpublished flow draft open for review; the campaign shows a preview with the recipient count and cost and sends only after Confirm; raising the limit is refused (admins only). |
+| US9 Assistant | As a manager open **Assistant**: ask for a weekend sale template with a "Shop now" button; a flow that asks for name and city and hands over; a campaign of that template to VIP contacts; to raise the AI reply limit. | A template draft (not submitted) opens as **Review template draft** in the template editor, and submitting it there sends it to Meta; an unpublished flow draft opens in the flow editor; the campaign shows a preview with the recipient count and cost and sends only after Confirm (within 30 minutes); raising the limit is refused (admins only). |
 
 ## 4. Automated checks
 
@@ -57,16 +57,21 @@ what the platform sent (check that no phone number appears).
 npm run lint
 npm run typecheck
 npm test                    # unit: reply schema, prompt builder, masking, chunker, extraction, search query, limits, eligibility
-npm run test:integration    # ai-agents-build-publish, ai-knowledge, ai-turns, ai-live-chat, ai-skills, ai-flows, ai-usage, ai-testing, ai-assistant (Claude mocked with nock)
+npm run test:integration    # ai-agents-build-publish, ai-knowledge, ai-turns, ai-live-chat, ai-skills, ai-flows, ai-usage, ai-testing, ai-starters, ai-assistant (Claude mocked with nock), retention and contact deletion
 npm run test:contract       # AI responses vs contracts/ai-api.openapi.yaml
 npm run test:e2e            # Playwright: ai-us1 … ai-us9 with mock-meta's fake model
 $env:PERF_NUMBER_ID="<number id>"; npm run perf:ai     # SC-001 overhead with the fake model (api and worker running)
 ```
 
-Quality with the real model (costs money; run before release, with approval):
+Quality with the real model (costs money; run before release, with approval). The eval asks the
+platform's preview chat, so the api and the worker run with the real key (`ANTHROPIC_API_KEY` in
+`.env`, `ANTHROPIC_BASE_URL` empty); nothing is sent to WhatsApp:
 
 ```powershell
-$env:ANTHROPIC_API_KEY="..."; npm run eval:ai          # SC-002, SC-003, SC-005 question sets and SC-010 summaries
+npm run eval:ai                                         # says what it would run (500 calls, about 30 minutes)
+$env:EVAL_CONFIRM="yes"; npm run eval:ai                # runs it: SC-002, SC-003, SC-005 scores
+# Review sheets (SC-003 replies, SC-010 hand-over summaries) are written to tools/eval/results/<time>/.
+$env:EVAL_ONLY="person"; $env:EVAL_LIMIT="10"; $env:EVAL_CONFIRM="yes"; npm run eval:ai   # a short run of one set
 ```
 
 ## 5. Troubleshooting
@@ -74,7 +79,7 @@ $env:ANTHROPIC_API_KEY="..."; npm run eval:ai          # SC-002, SC-003, SC-005 
 | Symptom | Check |
 |---|---|
 | The agent never answers | Is the agent published and chosen for this number? Is the chat Open? Did a flow keyword match first? Is the contact blocked or opted out? Is the monthly limit reached (AI usage)? |
-| Every reply is the fallback message | `ANTHROPIC_API_KEY` missing or invalid, or the service is failing: see the `AI_FAILING` alert and the worker log (request ids, never prompts). |
+| Every reply is the fallback message | `ANTHROPIC_API_KEY` missing or invalid, or the service is failing: see the `WbmAiFailing` alert and the worker log ("AI turn failed", with request ids, never prompts). |
 | A website stays Failed | The error tells: not HTTPS, a private address, blocked by robots rules, or no readable text. |
 | A PDF fails | "No text found" means a scanned image; export it with text or paste the content as written answers. |
 | Answers miss facts that are in a long document | Over 120,000 characters the agent searches; check **Unanswered** and add written answers, which always win. |
