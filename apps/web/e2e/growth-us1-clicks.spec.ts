@@ -48,6 +48,7 @@ test('US1: track a button link and see who clicked', async ({ page }) => {
   await page.goto('/templates/new');
   await page.getByLabel('Account').selectOption(wabaId);
   await page.getByLabel('Template name').fill(templateName);
+  await page.getByLabel('Category').selectOption('MARKETING');
   await page.getByLabel('Message text').fill('Hi {{1}}, our sale is on!');
   await page.getByLabel('Sample for {{1}}').fill('Sara');
   await page.getByRole('button', { name: 'Add tracked link button' }).click();
@@ -61,7 +62,7 @@ test('US1: track a button link and see who clicked', async ({ page }) => {
   await page.goto('/campaigns/new');
   await page.getByLabel('Campaign name').fill(`E2E clicks ${suffix}`);
   await page.getByLabel('Send from').selectOption({ label: `${label} (+1 555 010 0000)` });
-  await page.getByLabel('Approved template').selectOption({ label: `${templateName} · en_US · Utility` });
+  await page.getByLabel('Approved template').selectOption({ label: `${templateName} · en_US · Marketing` });
   await page.getByRole('button', { name: 'Save and continue' }).click();
 
   await page.getByLabel(/Recipient list/).setInputFiles({
