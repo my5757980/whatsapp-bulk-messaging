@@ -59,7 +59,7 @@ export const ACTION_PERMISSION = {
 const FLOW_GRAPH_GUIDE = [
   'The flow graph as a JSON string: {"version":1,"start":"<first step id>","triggers":[...],"steps":[...]}.',
   'Step ids: 1–40 lower-case letters, digits, - or _. A branch is a step id, or null to end there.',
-  'Steps: {"id","type":"message","text","next"}; {"id","type":"question","text","answer":{"kind":"text"|"number"|"email"|"phone"|"date"},"answerName":"city","next"} (answer names: lower-case, start with a letter, unique in the flow);',
+  'Steps: {"id","type":"message","text","next"}; {"id","type":"question","text","answer":{"kind":"text"|"number"|"email"|"phone"|"date"},"answerName":"city","retryText":"<sent after a wrong answer>","next"} (answer names: lower-case, start with a letter, unique in the flow);',
   '{"id","type":"buttons","text","buttons":[{"key":"yes","title":"Yes","next":"<step id>"}]} (1–3 buttons, titles up to 20 characters, every button leads to a step);',
   '{"id","type":"handover","note":"<for the team>"} hands the chat to a person; {"id","type":"end"} ends the flow.',
   'Answers can be used in later texts as {answer:city}. Triggers (optional): {"id":"keyword-1","kind":"KEYWORD","match":"CONTAINS","phrases":["price"],"canInterrupt":false}.',
