@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { betaTool } from '@anthropic-ai/sdk/helpers/beta/json-schema';
+import type { BetaToolRunnerParams } from '@anthropic-ai/sdk/lib/tools/BetaToolRunner';
 import { Inject, Injectable } from '@nestjs/common';
 import { addUsage, NO_USAGE, type TokenUsage } from '@wbm/shared';
 import { APP_CONFIG } from '../../../common/config/config.module.js';
@@ -42,6 +43,8 @@ export interface TurnRequest {
   deadlineMs: number;
   maxIterations: number;
   maxTokens?: number;
+  /** Streams each turn (long answers such as the team assistant's drafts), so no HTTP timeout cuts them off. */
+  stream?: boolean;
 }
 
 export interface TurnResult {
@@ -86,41 +89,44 @@ export class ClaudeClient {
 
   async runTurn(request: TurnRequest): Promise<TurnResult> {
     if (!this.client) throw new ClaudeFailure('AUTH', 'No AI service is configured (ANTHROPIC_API_KEY)');
+    const params: BetaToolRunnerParams = {
+      model: this.model,
+      max_tokens: request.maxTokens ?? 8000,
+      betas: [FALLBACK_BETA],
+      fallbacks: 'default',
+      output_config: {
+        effort: request.effort,
+        ...(request.schema ? { format: { type: 'json_schema' as const, schema: request.schema } } : {}),
+      },
+      system: request.system,
+      tools: request.tools.map((tool) => ({
+        ...betaTool({
+          name: tool.name,
+          description: tool.description,
+          inputSchema: tool.inputSchema,
+          run: (input: unknown) => tool.run(input as Record<string, unknown>),
+        }),
+        strict: true,
+      })),
+      messages: request.messages as Anthropic.Beta.BetaMessageParam[],
+      max_iterations: request.maxIterations,
+      thread: false,
+    };
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), request.deadlineMs);
     try {
-      const runner = this.client.beta.messages.toolRunner(
-        {
-          model: this.model,
-          max_tokens: request.maxTokens ?? 8000,
-          betas: [FALLBACK_BETA],
-          fallbacks: 'default',
-          output_config: {
-            effort: request.effort,
-            ...(request.schema ? { format: { type: 'json_schema' as const, schema: request.schema } } : {}),
-          },
-          system: request.system,
-          tools: request.tools.map((tool) => ({
-            ...betaTool({
-              name: tool.name,
-              description: tool.description,
-              inputSchema: tool.inputSchema,
-              run: (input: unknown) => tool.run(input as Record<string, unknown>),
-            }),
-            strict: true,
-          })),
-          messages: request.messages as Anthropic.Beta.BetaMessageParam[],
-          max_iterations: request.maxIterations,
-          thread: false,
-        },
-        { signal: controller.signal },
-      );
-
       let usage = NO_USAGE;
       let last: Anthropic.Beta.BetaMessage | undefined;
-      for await (const message of runner) {
-        last = message as Anthropic.Beta.BetaMessage;
-        usage = addUsage(usage, usageOf(last));
+      if (request.stream) {
+        for await (const stream of this.client.beta.messages.toolRunner({ ...params, stream: true }, { signal: controller.signal })) {
+          last = await stream.finalMessage();
+          usage = addUsage(usage, usageOf(last));
+        }
+      } else {
+        for await (const message of this.client.beta.messages.toolRunner({ ...params, stream: false }, { signal: controller.signal })) {
+          last = message;
+          usage = addUsage(usage, usageOf(last));
+        }
       }
       if (!last) throw new ClaudeFailure('INVALID_OUTPUT', 'The AI service returned no answer');
       if (last.stop_reason === 'refusal') throw new ClaudeFailure('REFUSAL', 'The AI service declined to answer');

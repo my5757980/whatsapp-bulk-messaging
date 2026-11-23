@@ -55,6 +55,14 @@ export class AiUsageService {
     return Number(row?.replies ?? 0) >= settings.replyLimit;
   }
 
+  /** The month's assistant requests have reached their own limit (FR-046): a new request gets 429. */
+  async assistantLimitReached(settings: UsageSettings, at: Date = new Date()): Promise<boolean> {
+    if (settings.assistantLimit <= 0) return true;
+    const month = monthKey(at, settings.timezone);
+    const [row] = await this.prisma.$queryRaw<Array<{ assistant_requests: number }>>`SELECT assistant_requests FROM ai_usage_months WHERE month = ${month}::date`;
+    return Number(row?.assistant_requests ?? 0) >= settings.assistantLimit;
+  }
+
   /**
    * Claims one AI reply of the month inside the apply transaction (research R10). The guarded update
    * lets exactly as many replies through as the limit allows, however many turns run at once; null

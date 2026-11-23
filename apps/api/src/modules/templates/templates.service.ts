@@ -87,7 +87,10 @@ export class TemplatesService {
 
     const token = await this.accountToken(input.wabaId);
     const key = { wabaId_name_language: { wabaId: input.wabaId, name: input.name, language: input.language } };
-    if (await this.prisma.template.findUnique({ where: key, select: { id: true } })) {
+    // A local draft with this name (004 US9) is what is being submitted now; any other row is a clash.
+    const existing = await this.prisma.template.findUnique({ where: key, select: { id: true, status: true, metaTemplateId: true } });
+    const draft = existing?.status === 'DRAFT' && !existing.metaTemplateId ? existing : null;
+    if (existing && !draft) {
       throw AppError.conflict('A template with this name and language already exists for this account');
     }
 
@@ -107,20 +110,56 @@ export class TemplatesService {
     }
 
     try {
+      const data = {
+        wabaId: input.wabaId,
+        metaTemplateId: result.id,
+        name: input.name,
+        language: input.language,
+        category: mapTemplateCategory(result.category || input.category),
+        parameterFormat: 'POSITIONAL' as const,
+        components: components as Prisma.InputJsonValue,
+        variables: extractTemplateVariables(components as unknown as MetaTemplateComponent[]) as unknown as Prisma.InputJsonValue,
+        status: mapTemplateStatus(result.status || 'PENDING'),
+        headerMediaAssetId: media?.id ?? null,
+        createdById: userId,
+        lastSyncedAt: new Date(),
+      };
+      const template = draft ? await this.prisma.template.update({ where: { id: draft.id }, data }) : await this.prisma.template.create({ data });
+      return toTemplateDto(template);
+    } catch (error) {
+      if (isUniqueViolation(error)) throw AppError.conflict('A template with this name and language already exists for this account');
+      throw error;
+    }
+  }
+
+  /**
+   * A local draft (004 US9, FR-043): checked like a new template but not submitted to Meta. It opens
+   * in the template editor ("Duplicate & edit" prefill); submitting it there replaces this row.
+   * Drafts have a text header or none, so no media sample is uploaded.
+   */
+  async saveDraft(input: TemplateInput, userId: string) {
+    if (input.header && input.header.format !== 'TEXT') {
+      throw AppError.validation('The template has problems', [{ field: 'header.format', issue: 'drafts can only have a text header' }]);
+    }
+    const issues = validateTemplate(input, null);
+    if (issues.length) throw AppError.validation('The template has problems', issues);
+    if (!(await this.prisma.whatsAppNumber.findFirst({ where: { wabaId: input.wabaId }, select: { id: true } }))) {
+      throw AppError.validation('Unknown WhatsApp Business Account', [{ field: 'wabaId', issue: 'connect a number for this account first' }]);
+    }
+    const components = buildTemplateComponents(input, undefined);
+    try {
       const template = await this.prisma.template.create({
         data: {
           wabaId: input.wabaId,
-          metaTemplateId: result.id,
+          metaTemplateId: null,
           name: input.name,
           language: input.language,
-          category: mapTemplateCategory(result.category || input.category),
+          category: input.category,
           parameterFormat: 'POSITIONAL',
           components: components as Prisma.InputJsonValue,
           variables: extractTemplateVariables(components as unknown as MetaTemplateComponent[]) as unknown as Prisma.InputJsonValue,
-          status: mapTemplateStatus(result.status || 'PENDING'),
-          headerMediaAssetId: media?.id ?? null,
+          status: 'DRAFT',
           createdById: userId,
-          lastSyncedAt: new Date(),
         },
       });
       return toTemplateDto(template);

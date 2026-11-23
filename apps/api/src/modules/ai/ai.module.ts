@@ -27,13 +27,35 @@ import { PreviewService } from './turns/preview.service.js';
 import { TurnService } from './turns/turn.service.js';
 import { AiUsageReportService } from './usage/usage-report.service.js';
 import { AiSettingsController, AiUsageController } from './usage/usage.controller.js';
+import { AssistantActionsService } from './assistant/assistant-actions.service.js';
+import { AssistantContext } from './assistant/assistant-prompt.js';
+import { AssistantTools } from './assistant/assistant-tools.js';
+import { AssistantController } from './assistant/assistant.controller.js';
+import { AssistantRunner } from './assistant/assistant.runner.js';
+import { AssistantService } from './assistant/assistant.service.js';
 import { AiUsageService } from './usage/usage.service.js';
 
 // AI agent wiring (feature 004, T018), following 002 and 003: shared services in a global domain
 // module (used by the 002 inbound handler in the worker and by live chat in the API), HTTP
 // controllers in AiApiModule, and the `ai` and `ai-knowledge` processors in WorkerFeaturesModule.
 
-const DOMAIN = [ClaudeClient, AgentSecretsVault, AiConversationsService, AgentSelector, AiAgentRouter, KnowledgeSearch, AiUsageService, UnansweredRecorder, TurnApplier, AiFailureMonitor, TurnService];
+const DOMAIN = [
+  ClaudeClient,
+  AgentSecretsVault,
+  AiConversationsService,
+  AgentSelector,
+  AiAgentRouter,
+  KnowledgeSearch,
+  AiUsageService,
+  UnansweredRecorder,
+  TurnApplier,
+  AiFailureMonitor,
+  TurnService,
+  // Team assistant (US9): requests are answered in the worker.
+  AssistantTools,
+  AssistantContext,
+  AssistantRunner,
+];
 
 /** AI services shared by the HTTP app and the worker. */
 @Global()
@@ -44,7 +66,18 @@ export class AiDomainModule {}
 @Module({
   // InboxApiModule gives the live chat controllers the 002 visibility rules (ConversationsService).
   imports: [AiDomainModule, InboxApiModule],
-  providers: [AgentsService, AgentPublishService, AgentVersionsService, AgentSecretsService, KnowledgeService, UnansweredService, PreviewService, AiUsageReportService],
+  providers: [
+    AgentsService,
+    AgentPublishService,
+    AgentVersionsService,
+    AgentSecretsService,
+    KnowledgeService,
+    UnansweredService,
+    PreviewService,
+    AiUsageReportService,
+    AssistantService,
+    AssistantActionsService,
+  ],
   controllers: [
     AgentsController,
     AgentStartersController,
@@ -56,6 +89,7 @@ export class AiDomainModule {}
     AiStateController,
     AiUsageController,
     AiSettingsController,
+    AssistantController,
   ],
 })
 export class AiApiModule {}

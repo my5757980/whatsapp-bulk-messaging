@@ -7,6 +7,7 @@ import { KnowledgeQueueProcessor } from './modules/ai/knowledge/knowledge-queue.
 import { KnowledgeProcessor } from './modules/ai/knowledge/knowledge.processor.js';
 import { AiExpiryProcessor } from './modules/ai/turns/expiry.processor.js';
 import { TurnProcessor } from './modules/ai/turns/turn.processor.js';
+import { AssistantProcessor } from './modules/ai/assistant/assistant.runner.js';
 import { AiQueueProcessor } from './modules/ai/turns/ai-queue.processor.js';
 import { DomainModule } from './modules/domain.module.js';
 import { ImportProcessor } from './modules/imports/import.processor.js';
@@ -73,6 +74,7 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     KnowledgeQueueProcessor,
     KnowledgeProcessor,
     TurnProcessor,
+    AssistantProcessor,
     AiExpiryProcessor,
     InboxNotifyProcessor,
     PushService,

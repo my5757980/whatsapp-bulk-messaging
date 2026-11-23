@@ -32,6 +32,19 @@ export function aiTurnJob(conversationId: string): { name: string; data: AiTurnJ
   };
 }
 
+export interface AssistantRequestJobData {
+  requestId: string;
+}
+
+/** A team assistant request (US9, research R14): runs once; a failure is shown on the request. */
+export function assistantRequestJob(requestId: string): { name: string; data: AssistantRequestJobData; opts: JobsOptions } {
+  return {
+    name: ASSISTANT_REQUEST_JOB,
+    data: { requestId },
+    opts: { jobId: `assistant-${requestId}`, attempts: 1, removeOnComplete: true, removeOnFail: 100 },
+  };
+}
+
 export interface KnowledgeProcessJobData {
   sourceId: string;
 }
