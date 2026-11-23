@@ -1,4 +1,5 @@
-# Secret scanning for the CI secret-scan job: gitleaks' built-in rules plus one narrow allowlist.
+# Secret scanning for the CI secret-scan job: gitleaks' built-in rules plus narrow allowlists for
+# known false positives (exact lines only).
 
 title = "WBM gitleaks configuration"
 
@@ -11,4 +12,11 @@ regexTarget = "line"
 regexes = [
   '''BNcRdreALRFXTkOOUHK1EtK2wtaz5Ry4YfYCA_0QTpQtUbVlUls0VJXg7A8u-Ts1XbjhazAkj7I99e8QcYP7DkM''',
   '''tBHItJI5svbpez7KI4CCXg''',
+]
+
+[[allowlists]]
+description = "Feature 005: the spec folder name '005-campaign-growth' in the contract-test helper's file map (apps/api/test/contract/openapi-validator.ts) matches generic-api-key because the line also contains 'api'; it is a folder name, not a secret"
+regexTarget = "line"
+regexes = [
+  '''growth-api\.openapi\.yaml': '005-campaign-growth''',
 ]
