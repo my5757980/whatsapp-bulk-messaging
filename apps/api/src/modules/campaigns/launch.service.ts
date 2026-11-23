@@ -1,10 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import type { MetaTemplateComponent } from '@wbm/shared';
+import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 import { AppError } from '../../common/errors/app-error.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import type { Campaign, Prisma, Template, WhatsAppNumber } from '../../generated/prisma/client.js';
 import { AuditService, type AuditActor } from '../audit/audit.service.js';
+import { TrackedLinkCodes } from '../growth/links/link-codes.js';
+import { TrackedLinksService } from '../growth/links/tracked-links.service.js';
 import { RateCardService } from '../rate-card/rate-card.controller.js';
 import { rateCategory } from '../reports/cost-calculator.js';
 import { headerMediaType } from '../sending/template-payload.builder.js';
@@ -41,6 +44,8 @@ export class LaunchService {
     private readonly dispatch: DispatchScheduler,
     private readonly audit: AuditService,
     private readonly rateCard: RateCardService,
+    private readonly trackedLinks: TrackedLinksService,
+    private readonly codes: TrackedLinkCodes,
   ) {}
 
   async load(campaignId: string): Promise<LaunchableCampaign> {
@@ -68,11 +73,24 @@ export class LaunchService {
     if (!number.sendingEnabled) throw AppError.conflict('Sending is turned off for this number');
 
     const variables = (Array.isArray(template.variables) ? template.variables : []) as Array<{ key: string }>;
-    const unmapped = unmappedVariables(variables, (campaign.variableMapping ?? {}) as VariableMapping);
+    // Tracked-link variables (feature 005) carry each recipient's code instead of a mapping.
+    const tracked = await this.snapshot.trackedKeys(campaign.id, variables);
+    const unmapped = unmappedVariables(
+      variables.filter((v) => !tracked.has(v.key)),
+      (campaign.variableMapping ?? {}) as VariableMapping,
+    );
     if (unmapped.length) {
       throw AppError.validation('Map every template variable', unmapped.map((key) => ({ field: `variableMapping.${key}`, issue: 'is not mapped' })));
     }
-    if (headerMediaType(template.components as unknown as MetaTemplateComponent[]) && !campaign.headerMediaAssetId) {
+    const components = template.components as unknown as MetaTemplateComponent[];
+    const untracked = this.trackedLinks.buttonsWithoutDestination(components, tracked);
+    if (untracked.length) {
+      throw AppError.validation(
+        'Set where each tracked link button goes',
+        untracked.map((key) => ({ field: `trackedLinks.${key}`, issue: 'needs a destination' })),
+      );
+    }
+    if (headerMediaType(components) && !campaign.headerMediaAssetId) {
       throw AppError.validation('This template needs header media', [{ field: 'headerMediaAssetId', issue: 'is required' }]);
     }
     await this.snapshot.assertReady(campaign);
@@ -97,25 +115,44 @@ export class LaunchService {
         });
         if (!count) throw AppError.conflict(fromState === 'DRAFT' ? 'Only draft campaigns can be launched' : 'The campaign is no longer scheduled');
         await tx.message.deleteMany({ where: { campaignId } });
+        // Tracked links (feature 005): every recipient gets their own code per tracked variable.
+        const variables = (Array.isArray(template.variables) ? template.variables : []) as Array<{ key: string }>;
+        const trackedKeys = await this.snapshot.trackedKeys(campaignId, variables, tx);
+        const targets = (await this.trackedLinks.targetsOf(campaignId, tx)).filter((t) => trackedKeys.has(t.variableKey));
 
         for await (const batch of this.snapshot.evaluate(campaign, template, tx)) {
           for (let i = 0; i < batch.length; i += INSERT_BATCH) {
-            const slice = batch.slice(i, i + INSERT_BATCH);
-            await tx.message.createMany({
-              data: slice.map((r) => ({
-                origin: 'CAMPAIGN' as const,
-                campaignId,
-                contactId: r.contactId,
-                phoneE164: r.phoneE164,
-                recipientCountry: r.countryCode,
-                numberId: number.id,
-                templateId: template.id,
-                resolvedParams: r.params as Prisma.InputJsonValue,
-                status: r.status,
-                skipReason: r.skipReason,
-              })),
-              skipDuplicates: true,
-            });
+            const slice = batch.slice(i, i + INSERT_BATCH).map((r) => ({ ...r, id: uuidv7() }));
+            const plan = targets.length
+              ? this.codes.plan(
+                  slice.filter((r) => r.status === 'PENDING').map((r) => ({ id: r.id, contactId: r.contactId })),
+                  targets,
+                )
+              : null;
+            const data = slice.map((r) => ({
+              id: r.id,
+              origin: 'CAMPAIGN' as const,
+              campaignId,
+              contactId: r.contactId,
+              phoneE164: r.phoneE164,
+              recipientCountry: r.countryCode,
+              numberId: number.id,
+              templateId: template.id,
+              resolvedParams: { ...r.params, ...(plan?.params.get(r.id) ?? {}) } as Prisma.InputJsonValue,
+              status: r.status,
+              skipReason: r.skipReason,
+            }));
+            if (plan) {
+              const inserted = await tx.message.createManyAndReturn({ data, skipDuplicates: true, select: { id: true } });
+              const ids = new Set(inserted.map((m) => m.id));
+              await this.codes.save(
+                tx,
+                plan.links.filter((l) => ids.has(l.messageId)),
+                targets,
+              );
+            } else {
+              await tx.message.createMany({ data, skipDuplicates: true });
+            }
             recipients += slice.length;
             for (const r of slice) {
               if (r.status !== 'PENDING') continue;

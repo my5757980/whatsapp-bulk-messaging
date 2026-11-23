@@ -37,7 +37,7 @@ export class JourneyService {
   ) {}
 
   async entries(conversationId: string): Promise<JourneyEntry[]> {
-    const [events, sends] = await Promise.all([
+    const [events, sends, clicks] = await Promise.all([
       this.prisma.conversationEvent.findMany({
         where: { conversationId },
         include: { actorUser: { select: { name: true } } },
@@ -50,6 +50,7 @@ export class JourneyService {
         orderBy: { occurredAt: 'desc' },
         take: JOURNEY_LIMIT,
       }),
+      this.linkClicks(conversationId),
     ]);
     const merged: Array<JourneyEntry & { sortAt: number }> = [
       ...events.map((e) => ({
@@ -71,11 +72,39 @@ export class JourneyService {
         data: { campaignId: s.message?.campaign?.id ?? null, template: s.message?.template.name ?? null, status: s.message?.status ?? null },
         sortAt: s.occurredAt.getTime(),
       })),
+      // Clicks on tracked links of messages sent on this chat's number (feature 005, FR-009).
+      ...clicks.map((c) => ({
+        type: 'LINK_CLICKED',
+        at: c.clickedAt.toISOString(),
+        actor: { type: 'CUSTOMER' as const, name: null },
+        data: { campaignId: c.campaignId, campaignName: c.campaignName, dripId: c.dripId, dripName: c.dripName, destination: c.destination },
+        sortAt: c.clickedAt.getTime(),
+      })),
     ];
     return merged
       .sort((a, b) => b.sortAt - a.sortAt)
       .slice(0, JOURNEY_LIMIT)
       .map(({ sortAt: _sortAt, ...entry }) => entry);
+  }
+
+  /** The contact's clicks on links sent from this chat's number, newest first. */
+  private linkClicks(conversationId: string) {
+    return this.prisma.$queryRaw<
+      Array<{ clickedAt: Date; campaignId: string | null; campaignName: string | null; dripId: string | null; dripName: string | null; destination: string }>
+    >`
+      SELECT lc.clicked_at AS "clickedAt", lc.campaign_id AS "campaignId", cp.name AS "campaignName",
+             d.id AS "dripId", d.name::text AS "dripName", t.destination
+        FROM conversations cv
+        JOIN link_clicks lc ON lc.contact_id = cv.contact_id
+        JOIN tracked_links tl ON tl.id = lc.tracked_link_id
+        JOIN messages m ON m.id = tl.message_id AND m.number_id = cv.number_id
+        JOIN tracked_link_targets t ON t.id = lc.target_id
+        LEFT JOIN campaigns cp ON cp.id = lc.campaign_id
+        LEFT JOIN drip_steps s ON s.id = lc.drip_step_id
+        LEFT JOIN drips d ON d.id = s.drip_id
+       WHERE cv.id = ${conversationId}::uuid
+       ORDER BY lc.clicked_at DESC
+       LIMIT ${JOURNEY_LIMIT}`;
   }
 
   /** Adds the same journey event to every chat of a contact (consent, blocking). */

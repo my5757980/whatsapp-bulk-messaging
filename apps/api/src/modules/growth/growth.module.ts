@@ -1,12 +1,26 @@
 import { Global, Module } from '@nestjs/common';
+import type { Redis } from 'ioredis';
+import { APP_CONFIG } from '../../common/config/config.module.js';
+import type { AppConfig } from '../../common/config/config.js';
+import { REDIS_CLIENT } from '../../common/queue/queue.module.js';
+import { ClickRecorder } from './links/click-recorder.js';
+import { ClicksController } from './links/clicks.controller.js';
+import { ClicksService } from './links/clicks.service.js';
+import { TrackedLinkCodes } from './links/link-codes.js';
+import { LinkRateLimiter } from './links/link-rate-limiter.js';
+import { LinkRedirectController } from './links/link-redirect.controller.js';
+import { LinkRedirectService } from './links/link-redirect.service.js';
+import { LinkResolver } from './links/link-resolver.js';
+import { TrackedLinksController } from './links/tracked-links.controller.js';
+import { TrackedLinksService } from './links/tracked-links.service.js';
 
 // Campaign growth wiring (feature 005, T013), following 002-004: services shared by the HTTP app and
-// the worker in a global domain module (the drip event writer, the leaving rules and the click
-// recorder are called from contacts, consent, imports, flows, the public API and live chat code),
-// HTTP controllers in GrowthApiModule, and the `drips` tick and the retry-round processor in
-// WorkerFeaturesModule. Each story adds its providers here.
+// the worker in a global domain module (campaign launch needs the tracked links in both; later the
+// drip event writer and the leaving rules are called from contacts, consent, imports, flows, the
+// public API and live chat code), HTTP controllers in GrowthApiModule, and the `drips` tick and the
+// retry-round processor in WorkerFeaturesModule. Each story adds its providers here.
 
-const DOMAIN: Array<new (...args: never[]) => unknown> = [];
+const DOMAIN = [TrackedLinksService, TrackedLinkCodes];
 
 /** Campaign growth services shared by the HTTP app and the worker. */
 @Global()
@@ -16,7 +30,17 @@ export class GrowthDomainModule {}
 /** Tracked links, clicks, retry plans and drips endpoints (HTTP app only). */
 @Module({
   imports: [GrowthDomainModule],
-  providers: [],
-  controllers: [],
+  providers: [
+    LinkResolver,
+    ClickRecorder,
+    LinkRedirectService,
+    ClicksService,
+    {
+      provide: LinkRateLimiter,
+      inject: [REDIS_CLIENT, APP_CONFIG],
+      useFactory: (redis: Redis, config: AppConfig) => new LinkRateLimiter(redis, config.TOKEN_ENCRYPTION_KEY),
+    },
+  ],
+  controllers: [LinkRedirectController, TrackedLinksController, ClicksController],
 })
 export class GrowthApiModule {}

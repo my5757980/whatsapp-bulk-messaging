@@ -4,12 +4,14 @@ import { AppError } from '../../common/errors/app-error.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { Prisma, type Campaign, type ImportJob, type Template } from '../../generated/prisma/client.js';
 import { AudienceQueryBuilder, type AudienceContact, type AudienceFilter, type FilterAudience } from '../contacts/audience-query.builder.js';
+import { TrackedLinkCodes } from '../growth/links/link-codes.js';
 import { RETARGET_STATUSES } from './retarget.service.js';
 import { resolveVariables, type VariableMapping } from './variable-resolver.js';
 
 // Recipient evaluation shared by the estimate (T095) and the launch snapshot (T096). Consent is
 // enforced here first (research R11): opted-out contacts are skipped, and MARKETING templates
-// need an explicit opt-in.
+// need an explicit opt-in. Tracked-link variables (feature 005) need no mapping: they carry a
+// sample link here and each recipient's own code from the launch.
 
 export interface RecipientDecision {
   contactId: string;
@@ -29,6 +31,7 @@ export class AudienceSnapshotService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audience: AudienceQueryBuilder,
+    private readonly codes: TrackedLinkCodes,
   ) {}
 
   /** The filter audience of a FILTER / ALL_OPTED_IN campaign; FILTER needs at least one rule. */
@@ -93,20 +96,24 @@ export class AudienceSnapshotService {
     template: Pick<Template, 'category' | 'variables'>,
     db: Db = this.prisma,
   ): AsyncGenerator<RecipientDecision[]> {
-    const variables = (Array.isArray(template.variables) ? template.variables : []) as Array<{ key: string }>;
+    const all = (Array.isArray(template.variables) ? template.variables : []) as Array<{ key: string }>;
+    const tracked = await this.trackedKeys(campaign.id, all, db);
+    const variables = all.filter((v) => !tracked.has(v.key));
+    const samples = Object.fromEntries([...tracked].map((key) => [key, this.codes.sampleValue(key)]));
     const mapping = (campaign.variableMapping ?? {}) as VariableMapping;
     const marketing = template.category === 'MARKETING';
+    const decide = (c: AudienceContact, row: Record<string, unknown>) => this.decide(c, row, variables, mapping, marketing, samples);
 
     if (campaign.audienceType === 'RETARGET') {
       // Uploaded columns of the source campaign still feed "column" variables.
       for await (const contacts of this.retargetContacts(campaign, db)) {
-        yield contacts.map((c) => this.decide(c, (c.row_data ?? {}) as Record<string, unknown>, variables, mapping, marketing));
+        yield contacts.map((c) => decide(c, (c.row_data ?? {}) as Record<string, unknown>));
       }
       return;
     }
     if (campaign.audienceType !== 'UPLOAD') {
       for await (const contacts of this.audience.iterate(this.filterAudience(campaign), db)) {
-        yield contacts.map((c) => this.decide(c, {}, variables, mapping, marketing));
+        yield contacts.map((c) => decide(c, {}));
       }
       return;
     }
@@ -140,10 +147,17 @@ export class AudienceSnapshotService {
           attributes: contact.attributes,
           consent_status: contact.consentStatus,
         };
-        decisions.push(this.decide(asAudience, (row.data ?? {}) as Record<string, unknown>, variables, mapping, marketing));
+        decisions.push(decide(asAudience, (row.data ?? {}) as Record<string, unknown>));
       }
       yield decisions;
     }
+  }
+
+  /** The template variables that carry a tracked link in this campaign (feature 005). */
+  async trackedKeys(campaignId: string, variables: ReadonlyArray<{ key: string }>, db: Db = this.prisma): Promise<Set<string>> {
+    const keys = new Set(variables.map((v) => v.key));
+    const rows = await db.trackedLinkTarget.findMany({ where: { campaignId }, select: { variableKey: true } });
+    return new Set(rows.map((r) => r.variableKey).filter((key) => keys.has(key)));
   }
 
   private decide(
@@ -152,6 +166,7 @@ export class AudienceSnapshotService {
     variables: Array<{ key: string }>,
     mapping: VariableMapping,
     marketing: boolean,
+    samples: Record<string, string>,
   ): RecipientDecision {
     const base = { contactId: contact.id, phoneE164: contact.phone_e164, countryCode: contact.country_code, params: {} };
     if (contact.consent_status === 'OPTED_OUT') return { ...base, status: 'SKIPPED', skipReason: 'OPTED_OUT' };
@@ -161,7 +176,7 @@ export class AudienceSnapshotService {
       row,
     });
     return resolved.ok
-      ? { ...base, status: 'PENDING', skipReason: null, params: resolved.params }
+      ? { ...base, status: 'PENDING', skipReason: null, params: { ...resolved.params, ...samples } }
       : { ...base, status: 'SKIPPED', skipReason: 'MISSING_VARIABLE' };
   }
 }

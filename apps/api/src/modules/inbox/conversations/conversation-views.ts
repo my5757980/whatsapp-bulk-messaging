@@ -90,6 +90,8 @@ export const ITEM_INCLUDE = {
       sentBy: { select: { id: true, name: true } },
       template: { select: { name: true, language: true, components: true } },
       campaign: { select: { id: true, name: true } },
+      // Feature 005 (FR-009): the first click on a tracked link of this message.
+      trackedLinks: { select: { clicks: { select: { clickedAt: true }, orderBy: { clickedAt: 'asc' }, take: 1 } } },
     },
   },
 } satisfies Prisma.ChatMessageInclude;
@@ -111,7 +113,14 @@ export interface ChatItemDto {
   sentBy: MemberRef | null;
   template: { name: string; language: string; renderedText: string } | null;
   campaign: { id: string; name: string } | null;
+  /** When the contact first opened a tracked link of this template message (feature 005). */
+  firstClickAt: string | null;
   occurredAt: string;
+}
+
+function firstClickOf(ref: ChatItemRow['message']): string | null {
+  const times = (ref?.trackedLinks ?? []).flatMap((l) => l.clicks.map((c) => c.clickedAt.getTime()));
+  return times.length ? new Date(Math.min(...times)).toISOString() : null;
 }
 
 /** The text of a template's BODY component. */
@@ -163,6 +172,7 @@ export function toItemDto(row: ChatItemRow): ChatItemDto {
         }
       : null,
     campaign: ref?.campaign ? { id: ref.campaign.id, name: ref.campaign.name } : null,
+    firstClickAt: firstClickOf(ref),
     occurredAt: row.occurredAt.toISOString(),
   };
 }
