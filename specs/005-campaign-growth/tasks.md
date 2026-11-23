@@ -53,20 +53,20 @@ stories use.
   - the partial unique index on active enrolments and the indexes of data-model.md §1
 
   Update apps/api/prisma/schema.prisma and run `prisma generate`.
-- [ ] T006 [P] Unit tests packages/shared/src/growth/links.test.ts: a code is 10 characters from `[0-9A-Za-z]`; destinations are only `https://` or `http://` (with an `http` warning flag), at most 2,000 characters, and not on the tracking base; campaign tags are added and existing query parameters are kept
-- [ ] T007 [P] Unit tests packages/shared/src/growth/bots.test.ts: these are previews, not clicks: `WhatsApp/2.24.20.72 A`, `facebookexternalhit/1.1`, `Twitterbot`, `Slackbot`, a generic `bot` or `crawler` token, `HEAD`, and `Purpose: prefetch`. Device kind is `MOBILE` for Android and iPhone, `DESKTOP` for Windows Chrome, `OTHER` for no user agent
-- [ ] T008 [P] Unit tests packages/shared/src/growth/retries.test.ts: plans have 0–3 rounds, delays only from {30, 60, 120, 240, 480, 720}, and a sum of at most 1,440 minutes (`RETRY_WINDOW_EXCEEDED`); a round's due time is the previous finish plus its delay; a round after launch + 24 hours is skipped
-- [ ] T009 [P] Unit tests packages/shared/src/growth/quiet-hours.test.ts: inside and outside a window, windows across midnight, chosen days only, the next time sending may start in `Asia/Dubai` and in a time zone with daylight saving
-- [ ] T010 [P] Unit tests packages/shared/src/growth/drips.test.ts: wait limits (0 only at step 1, 10–43,200 minutes otherwise); the next due time is the previous send plus the wait, moved past quiet hours; a removed step moves a waiting contact on to the next live step; leaving-rule decisions per event and setting
-- [ ] T011 Implement packages/shared/src/growth/links.ts, bots.ts, retries.ts, quiet-hours.ts and drips.ts (pure) and export them from packages/shared/src/index.ts
-- [ ] T012 [P] Add the 005 audit actions of data-model.md §2 to apps/api/src/modules/audit/audit-actions.ts, and list them in `PENDING` in apps/api/test/unit/audit-coverage.spec.ts until their story records them
-- [ ] T013 Create apps/api/src/modules/growth/growth.module.ts and wire it into apps/api/src/app.module.ts and apps/api/src/worker-features.module.ts:
+- [X] T006 [P] Unit tests packages/shared/src/growth/links.test.ts: a code is 10 characters from `[0-9A-Za-z]`; destinations are only `https://` or `http://` (with an `http` warning flag), at most 2,000 characters, and not on the tracking base; campaign tags are added and existing query parameters are kept
+- [X] T007 [P] Unit tests packages/shared/src/growth/bots.test.ts: these are previews, not clicks: `WhatsApp/2.24.20.72 A`, `facebookexternalhit/1.1`, `Twitterbot`, `Slackbot`, a generic `bot` or `crawler` token, `HEAD`, and `Purpose: prefetch`. Device kind is `MOBILE` for Android and iPhone, `DESKTOP` for Windows Chrome, `OTHER` for no user agent
+- [X] T008 [P] Unit tests packages/shared/src/growth/retries.test.ts: plans have 0–3 rounds, delays only from {30, 60, 120, 240, 480, 720}, and a sum of at most 1,440 minutes (`RETRY_WINDOW_EXCEEDED`); a round's due time is the previous finish plus its delay; a round after launch + 24 hours is skipped
+- [X] T009 [P] Unit tests packages/shared/src/growth/quiet-hours.test.ts: inside and outside a window, windows across midnight, chosen days only, the next time sending may start in `Asia/Dubai` and in a time zone with daylight saving
+- [X] T010 [P] Unit tests packages/shared/src/growth/drips.test.ts: wait limits (0 only at step 1, 10–43,200 minutes otherwise); the next due time is the previous send plus the wait, moved past quiet hours; a removed step moves a waiting contact on to the next live step; leaving-rule decisions per event and setting
+- [X] T011 Implement packages/shared/src/growth/links.ts, bots.ts, retries.ts, quiet-hours.ts and drips.ts (pure) and export them from packages/shared/src/index.ts
+- [X] T012 [P] Add the 005 audit actions of data-model.md §2 to apps/api/src/modules/audit/audit-actions.ts, and list them in `PENDING` in apps/api/test/unit/audit-coverage.spec.ts until their story records them
+- [X] T013 Create apps/api/src/modules/growth/growth.module.ts and wire it into apps/api/src/app.module.ts and apps/api/src/worker-features.module.ts:
   - `GrowthDomainModule` (global): the drip event writer, the leaving rules and the link click recorder
   - `GrowthApiModule`: the controllers
   - the worker processors
 
   Keep apps/api/test/unit/app-module.spec.ts green.
-- [ ] T014 [P] Add apps/web/src/lib/growth.ts (types from the contract and query keys) and a **Drips** entry (`campaigns.view`) to the dashboard navigation in apps/web/src/app/(dashboard)/layout.tsx
+- [X] T014 [P] Add apps/web/src/lib/growth.ts (types from the contract and query keys). The **Drips** navigation entry comes with its page in T049
 
 **Checkpoint**: migration applies, shared logic is green, the module compiles in the HTTP app and
 the worker.
@@ -281,6 +281,7 @@ step 1; the one who replies leaves; a step due in quiet hours waits.
   - quiet hours, the leaving rules and stop tags
   - activate, pause and archive, with the problems listed
   - the enrol dialog with its preview, and the enrolments list with remove
+  - a **Drips** entry (`campaigns.view`) in the dashboard navigation of apps/web/src/app/(dashboard)/layout.tsx
 
 **Checkpoint**: drips run by hand-enrolment with every leaving rule.
 
