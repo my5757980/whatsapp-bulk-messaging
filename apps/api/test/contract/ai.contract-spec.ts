@@ -160,6 +160,27 @@ describe('AI agent API contract', () => {
     await check('post', '/ai-agents', await call('post', '/ai-agents', { name: `No starter ${suffix}`, starterKey: 'no_such_starter' }), 422);
   });
 
+  it('US9: the team assistant', async () => {
+    const queued = await call('post', '/assistant/requests', { prompt: 'Write a template for the weekend sale' });
+    await check('post', '/assistant/requests', queued, 202);
+    await check('get', '/assistant/requests', await call('get', '/assistant/requests'), 200);
+    await check('get', '/assistant/requests/{id}', await call('get', `/assistant/requests/${queued.body.id}`), 200);
+    await check('get', '/assistant/requests/{id}', await call('get', `/assistant/requests/${randomUUID()}`), 404);
+    // The worker prepares actions; here they are made directly to decide them.
+    const make = () =>
+      ctx.prisma.assistantAction.create({
+        data: { requestId: queued.body.id, userId: manager.userId, kind: 'DELETE_TAGS', params: { tagIds: [] }, preview: { tags: [], notFound: [] }, expiresAt: new Date(Date.now() + 600_000) },
+      });
+    const cancelled = await make();
+    await check('post', '/assistant/actions/{id}/cancel', await call('post', `/assistant/actions/${cancelled.id}/cancel`), 200);
+    await check('post', '/assistant/actions/{id}/cancel', await call('post', `/assistant/actions/${cancelled.id}/cancel`), 409);
+    await check('post', '/assistant/actions/{id}/confirm', await call('post', `/assistant/actions/${cancelled.id}/confirm`), 409);
+    const confirmed = await make();
+    await check('post', '/assistant/actions/{id}/confirm', await call('post', `/assistant/actions/${confirmed.id}/confirm`), 200);
+    await check('post', '/assistant/actions/{id}/confirm', await call('post', `/assistant/actions/${randomUUID()}/confirm`), 404);
+    await check('get', '/assistant/requests/{id}', await call('get', `/assistant/requests/${queued.body.id}`), 200);
+  });
+
   it('US7: usage and AI settings (admins)', async () => {
     const admin = await signIn(ctx, 'ADMIN');
     const asAdmin = (method: 'get' | 'put', url: string, body?: object) => {
