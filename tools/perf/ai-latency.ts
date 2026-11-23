@@ -10,14 +10,13 @@
 // and the api's META_APP_SECRET. Use a number no other agent needs (for example from perf:inbox-seed):
 //   PERF_NUMBER_ID=<id> npm run perf:ai
 // Env: PERF_API_URL, PERF_ADMIN_EMAIL, PERF_ADMIN_PASSWORD, META_APP_SECRET, PERF_NUMBER_ID,
-//      MOCK_META_URL (default http://localhost:4010), PERF_CUSTOMERS (default 50), PERF_ROUNDS (default 3).
+//      PERF_MOCK_META_URL (default http://localhost:4010), PERF_CUSTOMERS (default 50), PERF_ROUNDS (default 3).
 import { ApiClient, metaAppSecret, openStream, p95, perfEnv, postInboundTexts, report, run } from './client.js';
 
 const CUSTOMERS = Number(process.env.PERF_CUSTOMERS ?? 50);
 const ROUNDS = Number(process.env.PERF_ROUNDS ?? 3);
 const LIMIT_MS = 10_000;
 const REPLY_TIMEOUT_MS = 30_000;
-const MOCK_META = process.env.MOCK_META_URL ?? 'http://localhost:4010';
 const ANSWER = 'Perf answer: we deliver across the UAE within two days.';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -32,8 +31,8 @@ run(async () => {
   if (!number) throw new Error(`Number ${numberId} not found`);
 
   // No scripted rules: the fake model answers with the written answer that shares words with the question.
-  const rules = await fetch(`${MOCK_META}/mock/ai/rules`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '[]' });
-  if (!rules.ok) throw new Error(`The fake model at ${MOCK_META} did not answer (${rules.status})`);
+  const rules = await fetch(`${env.mockMetaUrl}/mock/ai/rules`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '[]' });
+  if (!rules.ok) throw new Error(`The fake model at ${env.mockMetaUrl} did not answer (${rules.status})`);
 
   const suffix = Date.now().toString().slice(-6);
   const agent = await api.post<{ id: string; config: Record<string, unknown> }>('/api/ai-agents', { name: `Perf agent ${suffix}` });
