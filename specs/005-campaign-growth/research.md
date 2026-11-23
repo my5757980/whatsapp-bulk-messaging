@@ -114,7 +114,7 @@ summaries were available, that is said.
   - When the campaign's first pass is final (every message sent, failed or skipped), round 1 is due
     after the first delay. Each later round is due its delay after the previous round finishes.
   - A round row (`campaign_retry_rounds`) is created when it becomes due. It runs as a delayed
-    BullMQ job `campaign-retry-round` on the existing `campaigns` queue. A one-minute sweep in the
+    BullMQ job `campaign-retry-round` on the existing `campaign-dispatch` queue. A one-minute sweep in the
     existing schedule reconciler starts due rounds whose job was lost.
   - Running a round:
     - select the campaign's `FAILED` messages with a retryable last failure and
