@@ -187,6 +187,8 @@ enum NotificationType {
   INBOX_MENTION
   AI_USAGE
   AI_FAILING
+  /// A drip paused itself (feature 005, FR-032).
+  DRIP_PAUSED
 }
 
 // ---------- Live chat enums (feature 002) ----------

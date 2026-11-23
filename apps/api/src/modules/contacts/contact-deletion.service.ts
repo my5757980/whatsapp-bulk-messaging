@@ -65,6 +65,11 @@ export class ContactDeletionService {
         where: { id: { in: aiConversationIds } },
         data: { contactId: null, summary: null, pendingConfirmation: Prisma.DbNull, unansweredStreak: Prisma.DbNull },
       }),
+      // Campaign growth (005 FR-040): the contact leaves every drip; enrolments, clicks and tracked
+      // links lose the contact through their foreign keys and keep only anonymous counts.
+      this.prisma.$executeRaw`
+        UPDATE drip_enrolments SET status = 'LEFT', left_reason = 'DELETED', ended_at = now(), next_due_at = NULL
+         WHERE contact_id = ${contactId}::uuid AND status = 'ACTIVE'`,
       this.prisma.contact.delete({ where: { id: contactId } }),
     ]);
     // Files after the commit; one that cannot be deleted now is left for the retention job.

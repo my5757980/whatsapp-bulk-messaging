@@ -197,6 +197,32 @@ export const growthKeys = {
   dripResults: (id: string) => ['drips', 'detail', id, 'results'] as const,
 };
 
+export const DRIP_STATUS_LABEL: Record<DripStatus, string> = { DRAFT: 'Draft', ACTIVE: 'Active', PAUSED: 'Paused', ARCHIVED: 'Archived' };
+export const DRIP_STATUS_VARIANT: Record<DripStatus, 'secondary' | 'default' | 'outline' | 'destructive'> = {
+  DRAFT: 'secondary',
+  ACTIVE: 'default',
+  PAUSED: 'outline',
+  ARCHIVED: 'secondary',
+};
+
+/** Waits a step can have, in minutes (feature 005, FR-020): right away is for the first step only. */
+export const STEP_WAITS: Array<{ minutes: number; label: string }> = [
+  { minutes: 0, label: 'Right away' },
+  { minutes: 10, label: '10 minutes' },
+  { minutes: 30, label: '30 minutes' },
+  { minutes: 60, label: '1 hour' },
+  { minutes: 120, label: '2 hours' },
+  { minutes: 240, label: '4 hours' },
+  { minutes: 480, label: '8 hours' },
+  { minutes: 720, label: '12 hours' },
+  { minutes: 1440, label: '1 day' },
+  { minutes: 2880, label: '2 days' },
+  { minutes: 4320, label: '3 days' },
+  { minutes: 10080, label: '1 week' },
+  { minutes: 20160, label: '2 weeks' },
+  { minutes: 43200, label: '30 days' },
+];
+
 /** Plain-words labels for why a contact left a drip. */
 export const LEFT_REASON_LABEL: Record<DripLeftReason, string> = {
   REPLIED: 'Replied',

@@ -37,4 +37,15 @@ describe('journey entries', () => {
       'Opened a link in drip "Welcome series"',
     );
   });
+
+  it('says when a contact joined, left or finished a drip, and why (005 FR-033)', () => {
+    const system = { type: 'SYSTEM' as const, name: null };
+    expect(describeJourneyEntry(entry('DRIP_JOINED', { dripId: 'd1', dripName: 'Welcome series', via: 'MANUAL' }, system))).toBe(
+      'Joined drip "Welcome series" (added by a member)',
+    );
+    expect(describeJourneyEntry(entry('DRIP_LEFT', { dripId: 'd1', dripName: 'Welcome series', reason: 'REPLIED' }, system))).toBe(
+      'Left drip "Welcome series": wrote to the number',
+    );
+    expect(describeJourneyEntry(entry('DRIP_LEFT', { dripId: 'd1', dripName: 'Welcome series', reason: 'FINISHED' }, system))).toBe('Finished drip "Welcome series"');
+  });
 });

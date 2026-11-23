@@ -772,6 +772,10 @@ components:
         template: { type: [object, 'null'], properties: { name: { type: string }, language: { type: string }, renderedText: { type: string } } }
         campaign: { type: [object, 'null'], properties: { id: { type: string }, name: { type: string } } }
         firstClickAt: { type: [string, 'null'], format: date-time, description: 'Feature 005: when the contact first opened a tracked link of this template message' }
+        drip:
+          type: [object, 'null']
+          description: 'Feature 005: the drip and step that sent this template message'
+          properties: { id: { type: string }, name: { type: string }, step: { type: integer } }
         occurredAt: { type: string, format: date-time }
     JourneyEntry:
       type: object

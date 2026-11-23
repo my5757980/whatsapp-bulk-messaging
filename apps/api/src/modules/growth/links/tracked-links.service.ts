@@ -178,7 +178,7 @@ export class TrackedLinksService {
     return toTargetDto(updated);
   }
 
-  private assertDestination(destination: string, field: string, code = 'BAD_DESTINATION'): void {
+  assertDestination(destination: string, field: string, code = 'BAD_DESTINATION'): void {
     const problem = destinationProblem(destination, this.config.PUBLIC_LINK_BASE_URL);
     if (problem) throw AppError.validation(`The destination ${DESTINATION_ISSUE[problem] ?? 'is not valid'}`, [{ field, issue: DESTINATION_ISSUE[problem] ?? problem }], code);
   }

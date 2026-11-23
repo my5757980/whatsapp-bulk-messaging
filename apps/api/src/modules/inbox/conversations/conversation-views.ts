@@ -92,6 +92,8 @@ export const ITEM_INCLUDE = {
       campaign: { select: { id: true, name: true } },
       // Feature 005 (FR-009): the first click on a tracked link of this message.
       trackedLinks: { select: { clicks: { select: { clickedAt: true }, orderBy: { clickedAt: 'asc' }, take: 1 } } },
+      // Feature 005 (FR-033): drip messages are labelled with the drip and the step.
+      dripStep: { select: { position: true, drip: { select: { id: true, name: true } } } },
     },
   },
 } satisfies Prisma.ChatMessageInclude;
@@ -115,6 +117,8 @@ export interface ChatItemDto {
   campaign: { id: string; name: string } | null;
   /** When the contact first opened a tracked link of this template message (feature 005). */
   firstClickAt: string | null;
+  /** The drip and step that sent this template message (feature 005). */
+  drip: { id: string; name: string; step: number } | null;
   occurredAt: string;
 }
 
@@ -173,6 +177,7 @@ export function toItemDto(row: ChatItemRow): ChatItemDto {
       : null,
     campaign: ref?.campaign ? { id: ref.campaign.id, name: ref.campaign.name } : null,
     firstClickAt: firstClickOf(ref),
+    drip: ref?.dripStep ? { id: ref.dripStep.drip.id, name: ref.dripStep.drip.name, step: ref.dripStep.position } : null,
     occurredAt: row.occurredAt.toISOString(),
   };
 }

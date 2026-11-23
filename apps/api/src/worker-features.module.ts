@@ -15,6 +15,7 @@ import { InboundChatHandler } from './modules/inbox/inbound/inbound-chat.handler
 import { InboundMediaProcessor } from './modules/inbox/inbound/inbound-media.processor.js';
 import { FlowsDomainModule } from './modules/flows/flows.module.js';
 import { GrowthDomainModule } from './modules/growth/growth.module.js';
+import { DripTickProcessor } from './modules/growth/drips/drip-tick.processor.js';
 import { RetryRoundProcessor } from './modules/growth/retries/retry-round.processor.js';
 import { FlowApiProcessor } from './modules/flows/steps/api-step.processor.js';
 import { FlowExpiryProcessor } from './modules/flows/steps/expiry.processor.js';
@@ -85,6 +86,7 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     AutoResolveProcessor,
     // Campaign growth (feature 005)
     RetryRoundProcessor,
+    DripTickProcessor,
   ],
 })
 export class WorkerFeaturesModule {}

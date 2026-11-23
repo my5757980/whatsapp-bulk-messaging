@@ -308,8 +308,9 @@ contacts listed under each.
   week, in the company time zone). Steps that fall due then MUST wait until sending may start, in
   their order.
 - **FR-022**: Activating a drip MUST be refused, with each problem listed, when a step's template is
-  not approved or not fully mapped, the number is not connected, or no starting event is chosen and
-  nobody is enrolled by hand.
+  not approved or not fully mapped, or the number is not connected. A drip with no starting event
+  can be activated: its contacts are enrolled by hand (clarified during implementation, since
+  manual enrolment needs an active drip).
 - **FR-023**: Drips MUST have the states Draft, Active, Paused and Archived. Managers MUST be able
   to edit an active drip; changes apply to steps contacts have not reached. A contact waiting for a
   removed step moves on to the next step at its wait.

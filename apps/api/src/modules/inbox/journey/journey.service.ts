@@ -37,7 +37,7 @@ export class JourneyService {
   ) {}
 
   async entries(conversationId: string): Promise<JourneyEntry[]> {
-    const [events, sends, clicks] = await Promise.all([
+    const [events, sends, clicks, drips] = await Promise.all([
       this.prisma.conversationEvent.findMany({
         where: { conversationId },
         include: { actorUser: { select: { name: true } } },
@@ -51,6 +51,7 @@ export class JourneyService {
         take: JOURNEY_LIMIT,
       }),
       this.linkClicks(conversationId),
+      this.dripEnrolments(conversationId),
     ]);
     const merged: Array<JourneyEntry & { sortAt: number }> = [
       ...events.map((e) => ({
@@ -80,6 +81,27 @@ export class JourneyService {
         data: { campaignId: c.campaignId, campaignName: c.campaignName, dripId: c.dripId, dripName: c.dripName, destination: c.destination },
         sortAt: c.clickedAt.getTime(),
       })),
+      // Joining and leaving drips of this chat's number, with the reason (feature 005, FR-033).
+      ...drips.flatMap((d) => [
+        {
+          type: 'DRIP_JOINED',
+          at: d.joinedAt.toISOString(),
+          actor: { type: 'SYSTEM' as const, name: null },
+          data: { dripId: d.dripId, dripName: d.dripName, via: d.joinedVia },
+          sortAt: d.joinedAt.getTime(),
+        },
+        ...(d.endedAt
+          ? [
+              {
+                type: 'DRIP_LEFT',
+                at: d.endedAt.toISOString(),
+                actor: { type: 'SYSTEM' as const, name: null },
+                data: { dripId: d.dripId, dripName: d.dripName, reason: d.leftReason ?? 'FINISHED' },
+                sortAt: d.endedAt.getTime(),
+              },
+            ]
+          : []),
+      ]),
     ];
     return merged
       .sort((a, b) => b.sortAt - a.sortAt)
@@ -104,6 +126,21 @@ export class JourneyService {
         LEFT JOIN drips d ON d.id = s.drip_id
        WHERE cv.id = ${conversationId}::uuid
        ORDER BY lc.clicked_at DESC
+       LIMIT ${JOURNEY_LIMIT}`;
+  }
+
+  /** The contact's drip enrolments on this chat's number, newest first. */
+  private dripEnrolments(conversationId: string) {
+    return this.prisma.$queryRaw<
+      Array<{ dripId: string; dripName: string; joinedVia: string; joinedAt: Date; endedAt: Date | null; leftReason: string | null }>
+    >`
+      SELECT d.id AS "dripId", d.name::text AS "dripName", e.joined_via::text AS "joinedVia", e.joined_at AS "joinedAt",
+             e.ended_at AS "endedAt", e.left_reason::text AS "leftReason"
+        FROM conversations cv
+        JOIN drip_enrolments e ON e.contact_id = cv.contact_id
+        JOIN drips d ON d.id = e.drip_id AND d.number_id = cv.number_id
+       WHERE cv.id = ${conversationId}::uuid
+       ORDER BY e.joined_at DESC
        LIMIT ${JOURNEY_LIMIT}`;
   }
 

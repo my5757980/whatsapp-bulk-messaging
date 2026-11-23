@@ -55,6 +55,8 @@ describe('Drip campaigns (005 US4)', () => {
     ctx = await createTestContext();
     useNockLocalOnly();
     await setDefaultCountry(ctx, 'AE');
+    // Quiet hours are checked in the company time zone; these tests use UTC.
+    await ctx.prisma.settings.update({ where: { id: 1 }, data: { defaultTimezone: 'UTC' } });
     manager = await signIn(ctx, 'MANAGER');
     agent = await signIn(ctx, 'AGENT');
     admin = await signIn(ctx, 'ADMIN');
@@ -183,7 +185,7 @@ describe('Drip campaigns (005 US4)', () => {
     const [replier, outer, blockee, deletee, removee] = await enrolled(id, ['Replier', 'Outer', 'Blockee', 'Deletee', 'Removee']);
 
     const processor = ctx.app.get(WebhooksProcessor);
-    await processor.process(await postSignedWebhook(ctx, webhook.inbound(phoneNumberId, replier!.phoneE164.slice(1), 'Stop sending me offers please, I will call')));
+    await processor.process(await postSignedWebhook(ctx, webhook.inbound(phoneNumberId, replier!.phoneE164.slice(1), 'I will call you back later')));
     expect((await api(manager, 'patch', `/contacts/${outer!.id}`, { consentStatus: 'OPTED_OUT' })).status).toBe(200);
     expect((await api(manager, 'post', `/contacts/${blockee!.id}/block`)).status).toBeLessThan(300);
     const deletedEnrolment = await enrolment(id, deletee!.id);

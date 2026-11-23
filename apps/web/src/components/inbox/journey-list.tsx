@@ -22,6 +22,29 @@ const AI_ENDINGS: Record<string, string> = {
   BLOCKED: 'the customer was blocked',
 };
 
+/** How a contact joined a drip (feature 005), in our own words. */
+const DRIP_JOINED_VIA: Record<string, string> = {
+  MANUAL: 'added by a member',
+  TAG_ADDED: 'a tag was added',
+  OPTED_IN: 'opted in',
+  IMPORTED: 'imported',
+  API_CREATED: 'added by the API',
+  LINK_CLICKED: 'opened a link',
+};
+
+/** Why a contact left a drip (feature 005, FR-028). */
+const DRIP_LEFT_REASON: Record<string, string> = {
+  REPLIED: 'wrote to the number',
+  OPTED_OUT: 'opted out',
+  BLOCKED: 'blocked',
+  DELETED: 'contact deleted',
+  STOP_TAG: 'stop tag added',
+  CLICKED: 'opened a link',
+  REMOVED: 'removed by a member',
+  INVALID_NUMBER: 'number not on WhatsApp',
+  ARCHIVED: 'drip archived',
+};
+
 /** Our own wording for journey entries (constitution Principle II). */
 export function describeJourneyEntry(entry: JourneyEntry): string {
   const d = entry.data;
@@ -69,6 +92,12 @@ export function describeJourneyEntry(entry: JourneyEntry): string {
     case 'LINK_CLICKED':
       // Feature 005 (FR-009): name the campaign or drip whose link was opened.
       return d.dripName ? `Opened a link in drip "${String(d.dripName)}"` : `Opened a link in campaign "${String(d.campaignName ?? '')}"`;
+    case 'DRIP_JOINED':
+      return `Joined drip "${String(d.dripName ?? '')}"${DRIP_JOINED_VIA[String(d.via)] ? ` (${DRIP_JOINED_VIA[String(d.via)]})` : ''}`;
+    case 'DRIP_LEFT':
+      return d.reason === 'FINISHED'
+        ? `Finished drip "${String(d.dripName ?? '')}"`
+        : `Left drip "${String(d.dripName ?? '')}": ${DRIP_LEFT_REASON[String(d.reason)] ?? String(d.reason ?? '').toLowerCase().replace(/_/g, ' ')}`;
     default:
       return entry.type;
   }
