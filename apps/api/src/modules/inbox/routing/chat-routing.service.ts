@@ -3,6 +3,7 @@ import { can } from '@wbm/shared';
 import type { Role } from '../../../generated/prisma/client.js';
 import { maskPhone } from '../../../common/phone/phone.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
+import { AiConversationsService } from '../../ai/turns/ai-conversations.service.js';
 import { NotificationsService } from '../../notifications/notifications.service.js';
 import { AgentRulesLoader } from '../conversations/agent-rules.loader.js';
 import { factsOf, SUMMARY_INCLUDE, type ConversationRow } from '../conversations/conversation-views.js';
@@ -23,6 +24,7 @@ export class ChatRoutingService {
     private readonly notifications: NotificationsService,
     private readonly publisher: InboxPublisher,
     private readonly notifier: InboxNotifier,
+    private readonly ai: AiConversationsService,
   ) {}
 
   /** Active members with live chat access who may see the chat (FR-019). */
@@ -40,6 +42,8 @@ export class ChatRoutingService {
 
   /** In-app alert to every active member who may see the chat (FR-021). */
   async alertRequesting(conversationId: string): Promise<number> {
+    // Waiting for agent, however it happened, stops the AI agent in this chat (004 research R9).
+    await this.ai.endForConversation(conversationId, 'HANDED_OVER');
     const chat = await this.prisma.conversation.findUnique({ where: { id: conversationId }, include: SUMMARY_INCLUDE });
     if (!chat || chat.contact?.blockedAt) return 0;
     const recipients = (await this.membersWhoMaySee(chat)).map((m) => m.id);

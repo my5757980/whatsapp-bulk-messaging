@@ -305,6 +305,14 @@ class Runner {
           this.effects.push(step.note?.trim() ? { kind: 'handover', stepId: step.id, note: step.note.trim() } : { kind: 'handover', stepId: step.id });
           this.effects.push({ kind: 'stepLeft', stepId: step.id, branch: 'handover' });
           return this.end('HANDED_OVER');
+        case 'aiAgent': {
+          // The flow ends and the chosen AI agent answers the chat from the next message (004 FR-033).
+          const opening = step.openingMessage?.trim() ? this.render(step.openingMessage, {}) : '';
+          if (opening) this.effects.push({ kind: 'send', stepId: step.id, message: { type: 'text', text: opening } });
+          if (step.agentId) this.effects.push({ kind: 'handToAi', stepId: step.id, agentId: step.agentId });
+          this.effects.push({ kind: 'stepLeft', stepId: step.id, branch: 'aiAgent' });
+          return this.end('HANDED_TO_AI');
+        }
         case 'end':
           this.effects.push({ kind: 'stepLeft', stepId: step.id, branch: 'end' });
           return this.end('COMPLETED');

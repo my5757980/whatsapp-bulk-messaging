@@ -48,3 +48,27 @@ describe('sanitizeLogObject: chatbot flows (feature 003)', () => {
     expect(out.flowSecret).toEqual({ name: 'Shop token', valueEncrypted: '[REDACTED]' });
   });
 });
+
+// 004 T106: prompts, knowledge, AI replies, hand-over summaries and remembered values never reach the logs.
+describe('sanitizeLogObject: AI agent (feature 004)', () => {
+  it('removes prompts, knowledge, replies, summaries and remembered values', () => {
+    const out = sanitizeLogObject({
+      request: { id: 'r1', prompt: 'Draft a campaign to Sara Ali', system: 'You are the team assistant' },
+      knowledge: [{ id: 'k1', text: 'Delivery to Sharjah is AED 15' }],
+      chunks: ['Our refund policy'],
+      unanswered: { question: 'Do you ship to Oman?', count: 2 },
+      source: { kind: 'ANSWER', answer: 'Yes, within 3 days' },
+      turn: { result: 'SENT', reply: 'Hi Sara, your order ships today', summary: 'Asked about a late order 10234' },
+      remember: [{ key: 'city', value: 'Dubai' }],
+      ai: { remembered: { city: 'Dubai' }, pendingConfirmation: { skillId: 'cancel_order' } },
+    }) as Record<string, unknown>;
+    expect(out.request).toEqual({ id: 'r1', prompt: '[REDACTED]', system: '[REDACTED]' });
+    expect(out.knowledge).toBe('[REDACTED]');
+    expect(out.chunks).toBe('[REDACTED]');
+    expect(out.unanswered).toEqual({ question: '[REDACTED]', count: 2 });
+    expect(out.source).toEqual({ kind: 'ANSWER', answer: '[REDACTED]' });
+    expect(out.turn).toEqual({ result: 'SENT', reply: '[REDACTED]', summary: '[REDACTED]' });
+    expect(out.remember).toBe('[REDACTED]');
+    expect(out.ai).toEqual({ remembered: '[REDACTED]', pendingConfirmation: '[REDACTED]' });
+  });
+});

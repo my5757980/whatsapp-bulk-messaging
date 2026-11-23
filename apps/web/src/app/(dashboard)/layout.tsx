@@ -5,6 +5,7 @@ import type { Permission } from '@wbm/shared';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { AssistantButton } from '@/components/ai/assistant-panel';
 import { NotificationsBell } from '@/components/layout/notifications-bell';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api-client';
@@ -19,6 +20,8 @@ const NAV: Array<{ href: string; label: string; permission: Permission }> = [
   { href: '/contacts', label: 'Contacts', permission: 'contacts.view' },
   { href: '/templates', label: 'Templates', permission: 'templates.view' },
   { href: '/flows', label: 'Flows', permission: 'flows.manage' },
+  { href: '/ai-agents', label: 'AI agents', permission: 'ai.manage' },
+  { href: '/ai-usage', label: 'AI usage', permission: 'ai.usage' },
   { href: '/api-messages', label: 'API messages', permission: 'campaigns.view' },
   { href: '/settings/numbers', label: 'Settings', permission: 'settings.view' },
 ];
@@ -89,6 +92,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               Alerts
             </Link>
           )}
+          {permissions.has('assistant.use') && <AssistantButton />}
           <NotificationsBell />
           <span className="text-muted-foreground">
             {me.data.name} · {me.data.role.toLowerCase()}

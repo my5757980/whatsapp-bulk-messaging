@@ -33,8 +33,11 @@ export class ConsentService {
     status: ConsentStatus,
     source: ConsentSource,
     opts: { note?: string | null; actorUserId?: string | null } = {},
+    /** The caller's transaction (004: an AI opt-out is recorded with the AI conversation's end). */
+    within?: Prisma.TransactionClient,
   ): Promise<ConsentChange> {
-    return this.prisma.$transaction(async (tx) => {
+    const run = (work: (tx: Prisma.TransactionClient) => Promise<ConsentChange>) => (within ? work(within) : this.prisma.$transaction(work));
+    return run(async (tx) => {
       const rows = await tx.$queryRaw<Array<{ consent_status: ConsentStatus }>>`
         SELECT consent_status FROM contacts WHERE id = ${contactId}::uuid FOR UPDATE`;
       const current = rows[0]?.consent_status;

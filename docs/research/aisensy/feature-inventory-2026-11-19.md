@@ -9,7 +9,7 @@
 - Where a page leaves a detail out, we choose a sensible default and mark it "default". Nothing undocumented is claimed as "identical".
 
 **Status legend:**
-- ✅ built (features 001, 002 and 003)
+- ✅ built (features 001, 002, 003 and 004)
 - 🟡 partly built
 - ❌ missing
 - ➖ not applicable to a single company running its own WhatsApp account
@@ -115,7 +115,7 @@
 
 | # | Capability | Our status | Planned in |
 |---|---|---|---|
-| 7.1 | Build by drag-and-drop canvas, from a template (60+ by industry), or with an AI generator from a prompt | 🟡 Canvas and 6 starter flows of our own (003); an AI generator is not built | 003 Flow builder (AI generator in AI agent) |
+| 7.1 | Build by drag-and-drop canvas, from a template (60+ by industry), or with an AI generator from a prompt | 🟡 Canvas and 6 starter flows of our own (003); the team assistant drafts a flow from a prompt (004); fewer starters than 60 | 003 Flow builder (AI generator in 004 AI agent) |
 | 7.2 | **Triggers**: keywords, regex, template-message buttons, QR codes, Click-to-WhatsApp ads | 🟡 Keywords, patterns (regex), template quick-reply buttons and first-message rules (003); QR codes and ads not yet | 003 Flow builder (QR in Integrations, ads in Ads) |
 | 7.3 | **Message nodes**: text/media, reply buttons, list menus | ✅ (003) | 003 Flow builder |
 | 7.4 | **Commerce nodes**: product cards, catalog, cart, payments, native forms | ❌ | Commerce |
@@ -138,12 +138,12 @@
 
 | # | Capability | Our status | Planned in |
 |---|---|---|---|
-| 9.1 | **AI Agent Studio**, 7 steps: business info and instructions → tone/personality/guardrails → skills → knowledge (website crawl, PDF/DOCX uploads) → test (3 numbers) → publish | ❌ | AI agent |
-| 9.2 | Agent skills: tool calling to any REST API with dynamic variables; replies with buttons, media or lists; long-term memory; escalation rules to a human | ❌ | AI agent |
-| 9.3 | Agent library: prebuilt agents (sales, support, booking, lead qualification, returns, KYC, admissions…) | ❌ We will write our own | AI agent |
-| 9.4 | AI message metering (1 reply = 1 AI message), with a usage dashboard | ❌ | AI agent |
-| 9.5 | **AI Assistant**: dashboard copilot for contacts, templates, broadcasts, ads, flows and reports, with a confirmation preview before sending, spending or deleting | ❌ | AI agent |
-| 9.6 | AI template generator, AI flow generator, AI campaign agent | ❌ | AI agent |
+| 9.1 | **AI Agent Studio**, 7 steps: business info and instructions → tone/personality/guardrails → skills → knowledge (website crawl, PDF/DOCX uploads) → test (3 numbers) → publish | ✅ Our own agent editor: instructions, tone and guardrails, skills, knowledge (written answers, website pages, PDF and Word files), a preview chat and up to 3 test numbers, publish with numbered versions (004) | 004 AI agent |
+| 9.2 | Agent skills: tool calling to any REST API with dynamic variables; replies with buttons, media or lists; long-term memory; escalation rules to a human | ✅ Safe API skills with variables and stored secrets (the customer confirms calls that change data), buttons, lists and media replies, remembering answers in contact attributes, starting flows, hand-over rules (004) | 004 AI agent |
+| 9.3 | Agent library: prebuilt agents (sales, support, booking, lead qualification, returns, KYC, admissions…) | 🟡 Four starter agents written by us: sales enquiries, customer support, booking requests and lead qualification (004); returns, KYC and admissions not yet | 004 AI agent |
+| 9.4 | AI message metering (1 reply = 1 AI message), with a usage dashboard | ✅ Every AI reply counts against a monthly limit with alerts at 80% and 100%; the AI usage page shows replies, test replies, cost and outcomes (004) | 004 AI agent |
+| 9.5 | **AI Assistant**: dashboard copilot for contacts, templates, broadcasts, ads, flows and reports, with a confirmation preview before sending, spending or deleting | 🟡 The team assistant drafts templates, flows and campaigns, answers campaign report questions, and prepares sends and contact or tag deletions on a preview the member confirms (004); ads not yet | 004 AI agent (ads in Ads) |
+| 9.6 | AI template generator, AI flow generator, AI campaign agent | ✅ The team assistant drafts templates (not submitted), flows (not published) and campaigns (not scheduled) from a prompt (004) | 004 AI agent |
 | 9.7 | AI ads agent, AI ad creative generator, AI video ad generator | ❌ | Ads |
 
 ## 10. Ads manager
@@ -190,15 +190,15 @@
 
 ## Roadmap to full functional parity
 
-Feature numbers follow the order specs are started. 002 and 003 are built; each remaining row gets the next
-free number when its spec starts. Agreed order: the AI agent next, then click tracking, drip campaigns and
-integrations, then click-to-WhatsApp ads and payments; the other rows are scheduled around them.
+Feature numbers follow the order specs are started. 002, 003 and 004 are built; each remaining row gets the
+next free number when its spec starts. Agreed order: the AI agent (built), then click tracking, drip
+campaigns and integrations, then click-to-WhatsApp ads and payments; the other rows are scheduled around them.
 
 | Feature | Scope | Depends on |
 |---|---|---|
 | **002 Live chat inbox** ✅ built | Items 6.1–6.11, 6.13 and 6.14. Also agent rules 2.4, notifications 2.5, block 3.11, and "replied" metrics 5.6. | 001 |
 | **003 Chatbot flow builder** ✅ built | Items 7.1–7.3 and 7.5–7.7: canvas, starters, keyword, pattern, template-button and first-message triggers, questions, lists, logic, API calls, hand-over, test numbers, versions and analytics | 002 |
-| **AI agent and AI suite** (next) | Items 9.1–9.6; AI generators for templates and flows | 002, 003 |
+| **004 AI agent and AI suite** ✅ built | Items 9.1–9.6: agents answering from knowledge, skills, hand-over, starter agents, usage and limits, the team assistant drafting templates, flows and campaigns. Still open: more starter agents (9.3) and ads in the assistant (9.5) | 002, 003 |
 | **Integrations and developer platform** | Items 5.9 and 5.12; 7.8; 11.2–11.7; guided connect 1.1; QR codes for flow triggers | 002, 003 |
 | **Templates and campaign growth** | Items 4.1, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9 and 4.11; 5.3, 5.5, 5.7, 5.8, 5.10, 5.13 and 5.14 (click tracking, drip); 12.1 and 12.2 | 001 |
 | **Ads manager** | Items 9.7 and 10.1–10.4 (click-to-WhatsApp ads start flows) | 003, Integrations |

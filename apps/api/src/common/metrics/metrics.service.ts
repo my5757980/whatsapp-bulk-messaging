@@ -110,6 +110,50 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  // ---- AI agent (feature 004, T104) ----
+
+  readonly aiTurnsTotal = new Counter({
+    name: 'wbm_ai_turns_total',
+    help: 'AI customer turns by result: sent, failed, limited, opted_out, dropped, newer, nothing or not_eligible',
+    labelNames: ['result'] as const,
+    registers: [this.registry],
+  });
+
+  readonly aiTurnDuration = new Histogram({
+    name: 'wbm_ai_turn_duration_seconds',
+    help: 'Seconds an AI turn took from its start to its result, model call included (turns that called the model)',
+    buckets: [0.5, 1, 2, 3, 5, 8, 13, 20, 30],
+    registers: [this.registry],
+  });
+
+  readonly aiTokensTotal = new Counter({
+    name: 'wbm_ai_tokens_total',
+    help: 'Tokens used with the AI service, by kind: input, cache_read, cache_write or output',
+    labelNames: ['kind'] as const,
+    registers: [this.registry],
+  });
+
+  readonly aiRepliesTotal = new Counter({
+    name: 'wbm_ai_replies_total',
+    help: 'AI replies counted against the monthly limit, by whether they went to a test number',
+    labelNames: ['test'] as const,
+    registers: [this.registry],
+  });
+
+  readonly aiKnowledgeJobsTotal = new Counter({
+    name: 'wbm_ai_knowledge_jobs_total',
+    help: 'Knowledge files and websites read, by kind (file or website) and outcome (ready or failed)',
+    labelNames: ['kind', 'outcome'] as const,
+    registers: [this.registry],
+  });
+
+  readonly aiAssistantRequestsTotal = new Counter({
+    name: 'wbm_ai_assistant_requests_total',
+    help: 'Team assistant requests answered, by outcome: done, refused or failed',
+    labelNames: ['outcome'] as const,
+    registers: [this.registry],
+  });
+
   constructor() {
     collectDefaultMetrics({ register: this.registry });
   }

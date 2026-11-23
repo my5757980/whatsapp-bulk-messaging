@@ -32,3 +32,6 @@ npm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# AI agent eval runs (004 T112): results and review sheets stay local
+tools/eval/results/

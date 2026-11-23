@@ -1,6 +1,6 @@
 'use client';
 
-import type { ChatItem, ChatItemStatus } from '@/lib/inbox-types';
+import type { AiItemPayload, ChatItem, ChatItemStatus } from '@/lib/inbox-types';
 import { cn } from '@/lib/utils';
 
 const mediaUrl = (id: string) => `/api/inbox/media/${id}`;
@@ -57,10 +57,47 @@ function MediaBody({ item }: { item: ChatItem }) {
   }
 }
 
-/** The chatbot flow that sent an automatic message, if any (feature 003). */
-function flowName(item: ChatItem): string | null {
+/** The AI agent (feature 004, with "test" for draft replies) or chatbot flow (feature 003) that sent an automatic message. */
+function automationName(item: ChatItem): string | null {
+  const ai = item.payload.ai;
+  if (ai && typeof ai === 'object' && typeof (ai as { agentName?: unknown }).agentName === 'string') {
+    const { agentName, test } = ai as { agentName: string; test?: unknown };
+    return test === true ? `${agentName} · test` : agentName;
+  }
   const flow = item.payload.flow;
   return flow && typeof flow === 'object' && typeof (flow as { flowName?: unknown }).flowName === 'string' ? (flow as { flowName: string }).flowName : null;
+}
+
+const SOURCE_KINDS: Record<string, string> = { ANSWER: 'Written answer', WEBSITE: 'Website', FILE: 'File' };
+
+/** The knowledge and skills an AI reply used (004 FR-020), folded away under the message. */
+function AiUsed({ item }: { item: ChatItem }) {
+  const ai = item.payload.ai as Partial<AiItemPayload> | undefined;
+  if (!ai || typeof ai !== 'object') return null;
+  const sources = Array.isArray(ai.sources) ? ai.sources : [];
+  const skills = Array.isArray(ai.skills) ? ai.skills : [];
+  if (!sources.length && !skills.length) return null;
+  const counts = [
+    sources.length ? `${sources.length} ${sources.length === 1 ? 'source' : 'sources'}` : null,
+    skills.length ? `${skills.length} ${skills.length === 1 ? 'skill' : 'skills'}` : null,
+  ].filter(Boolean);
+  return (
+    <details className="mt-1 text-[11px] text-muted-foreground" data-testid="ai-used">
+      <summary className="cursor-pointer select-none">Used {counts.join(' and ')}</summary>
+      <ul className="mt-1 grid gap-0.5">
+        {sources.map((source) => (
+          <li key={source.id}>
+            {SOURCE_KINDS[source.kind] ?? source.kind}: {source.title}
+          </li>
+        ))}
+        {skills.map((skill, i) => (
+          <li key={`${skill.skillId}:${i}`}>
+            Skill: {skill.name} ({skill.outcome})
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
 }
 
 function Body({ item }: { item: ChatItem }) {
@@ -169,10 +206,11 @@ export function ChatItemView({ item }: { item: ChatItem }) {
         <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
           {item.kind === 'NOTE' && <span className="font-medium text-amber-700 dark:text-amber-300">Internal note ·</span>}
           {item.sentBy && <span>{item.sentBy.name} ·</span>}
-          {item.origin === 'AUTOMATIC' && <span>{flowName(item) ? `Automatic · ${flowName(item)} ·` : 'Automatic ·'}</span>}
+          {item.origin === 'AUTOMATIC' && <span>{automationName(item) ? `Automatic · ${automationName(item)} ·` : 'Automatic ·'}</span>}
           <span>{time(item.occurredAt)}</span>
           {ours && item.kind !== 'NOTE' && <Ticks status={item.status} />}
         </div>
+        <AiUsed item={item} />
         {item.status === 'FAILED' && item.failureReason && <p className="mt-1 text-xs text-destructive">Not sent: {item.failureReason}</p>}
       </div>
     </div>

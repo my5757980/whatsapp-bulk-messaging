@@ -67,6 +67,21 @@ const EnvSchema = z.object({
     .transform((v) => (v ? v : undefined))
     .refine((v) => v === undefined || /^(mailto:|https:\/\/)/.test(v), 'must start with mailto: or https://'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
+  /** AI agent (feature 004): the company's Anthropic API key. Without it (and without a base URL) agents fail closed. */
+  ANTHROPIC_API_KEY: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+  /** Points the Claude SDK at mock-meta's fake model in tests and local runs (contracts/claude-messages.md §7). */
+  ANTHROPIC_BASE_URL: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : undefined))
+    .refine((v) => v === undefined || /^https?:\/\//.test(v), 'must be an http(s) URL'),
+  /** The Claude model for customer replies and the assistant (research R1). */
+  AI_MODEL: z.string().trim().min(1).default('claude-opus-5-5'),
 }).superRefine((env, ctx) => {
   const pushKeys = [env.WEB_PUSH_PUBLIC_KEY, env.WEB_PUSH_PRIVATE_KEY, env.WEB_PUSH_SUBJECT].filter(Boolean).length;
   if (pushKeys > 0 && pushKeys < 3) {

@@ -52,11 +52,12 @@ export const STEP_LABELS: Record<StepType, string> = {
   api: 'API call',
   jump: 'Go to flow',
   handover: 'Hand over',
+  aiAgent: 'Hand to AI agent',
   end: 'End',
 };
 
 /** Steps available so far; later stories add the rest (hand-over arrives with US3). */
-export const PALETTE: StepType[] = ['message', 'buttons', 'question', 'list', 'tags', 'attributes', 'condition', 'delay', 'api', 'jump', 'end'];
+export const PALETTE: StepType[] = ['message', 'buttons', 'question', 'list', 'tags', 'attributes', 'condition', 'delay', 'api', 'jump', 'aiAgent', 'end'];
 
 /** A readable name for a branch of a step. */
 export function branchLabel(step: FlowStep, branch: string): string {
@@ -108,6 +109,8 @@ export function stepSummary(step: FlowStep): string {
     }
     case 'handover':
       return 'The chat waits for a person in live chat';
+    case 'aiAgent':
+      return step.agentId ? 'An AI agent answers from here' : 'No agent chosen';
     case 'end':
       return 'The flow ends';
   }
@@ -130,7 +133,9 @@ export function answerNamesIn(graph: FlowGraph): string[] {
 
 export function nextStepId(graph: FlowGraph, type: StepType): string {
   const used = new Set(graph.steps.map((s) => s.id));
-  for (let n = 1; ; n++) if (!used.has(`${type}-${n}`)) return `${type}-${n}`;
+  // Step ids use lower-case letters only ("aiAgent" steps become "ai-agent-1").
+  const prefix = type.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+  for (let n = 1; ; n++) if (!used.has(`${prefix}-${n}`)) return `${prefix}-${n}`;
 }
 
 export function newStep(type: StepType, id: string, position: { x: number; y: number }): FlowStep {
@@ -169,6 +174,8 @@ export function newStep(type: StepType, id: string, position: { x: number; y: nu
       return { id, type, position, method: 'GET', url: '', headers: [], query: [], timeoutSeconds: 5, map: [], success: null, failed: null };
     case 'handover':
       return { id, type, position };
+    case 'aiAgent':
+      return { id, type, position, agentId: null };
     case 'end':
       return { id, type, position };
     default:

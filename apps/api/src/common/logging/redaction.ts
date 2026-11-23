@@ -49,6 +49,19 @@ const CONTENT_KEYS = new Set([
   // Chatbot flows (feature 003): what customers answered, and reply fields an API step mapped.
   'answers',
   'mapped',
+  // AI agent (feature 004, T106): prompts, knowledge, replies, hand-over summaries and remembered values.
+  'prompt',
+  'system',
+  'knowledge',
+  'chunks',
+  'question',
+  'answer',
+  'reply',
+  'summary',
+  'remember',
+  'remembered',
+  'pendingconfirmation',
+  'pending_confirmation',
 ]);
 
 const PHONE_KEYS = new Set([

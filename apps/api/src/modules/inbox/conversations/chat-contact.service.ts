@@ -11,6 +11,7 @@ import { JourneyService } from '../journey/journey.service.js';
 import { InboxPublisher } from '../realtime/inbox-publisher.js';
 import { ConversationsService } from './conversations.service.js';
 import type { Viewer } from './visibility.js';
+import { AiConversationsService } from '../../ai/turns/ai-conversations.service.js';
 import { FlowSessionService } from '../../flows/engine/session.service.js';
 
 /** PATCH /inbox/conversations/{id}/contact (contracts/inbox-api.openapi.yaml). */
@@ -40,6 +41,7 @@ export class ChatContactService {
     private readonly publisher: InboxPublisher,
     private readonly audit: AuditService,
     private readonly flows: FlowSessionService,
+    private readonly ai: AiConversationsService,
   ) {}
 
   async profile(contactId: string) {
@@ -133,7 +135,13 @@ export class ChatContactService {
     await this.journey.recordForContact(contactId, { type: blocked ? 'BLOCKED' : 'UNBLOCKED', actorType: 'MEMBER', actorUserId: user.id });
     await this.audit.record({ userId: user.id, ip }, blocked ? 'contact.blocked' : 'contact.unblocked', { type: 'contact', id: contactId });
     // A blocked contact's flows end at once (003 data model: BLOCKED).
-    if (blocked) for (const chat of chats) await this.flows.endRunning(chat.id, 'BLOCKED');
+    if (blocked) {
+      for (const chat of chats) {
+        await this.flows.endRunning(chat.id, 'BLOCKED');
+        // The AI agent stops too (004 FR-016).
+        await this.ai.endForConversation(chat.id, 'BLOCKED');
+      }
+    }
     await this.publisher.contactUpdated(contactId);
     // Live lists drop or restore the chats (realtime-events.md rule 1).
     for (const chat of chats) await this.publisher.conversation(chat.id, { state: chat.state, intervenedById: chat.intervenedById, blocked: !blocked });

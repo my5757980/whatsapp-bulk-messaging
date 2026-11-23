@@ -2,6 +2,13 @@ import { Module } from '@nestjs/common';
 import { AudienceUploadProcessor } from './modules/campaigns/audience-upload.processor.js';
 import { CampaignProgressProcessor } from './modules/campaigns/campaign-progress.processor.js';
 import { ScheduleReconcilerProcessor } from './modules/campaigns/schedule-reconciler.processor.js';
+import { AiDomainModule } from './modules/ai/ai.module.js';
+import { KnowledgeQueueProcessor } from './modules/ai/knowledge/knowledge-queue.processor.js';
+import { KnowledgeProcessor } from './modules/ai/knowledge/knowledge.processor.js';
+import { AiExpiryProcessor } from './modules/ai/turns/expiry.processor.js';
+import { TurnProcessor } from './modules/ai/turns/turn.processor.js';
+import { AssistantProcessor } from './modules/ai/assistant/assistant.runner.js';
+import { AiQueueProcessor } from './modules/ai/turns/ai-queue.processor.js';
 import { DomainModule } from './modules/domain.module.js';
 import { ImportProcessor } from './modules/imports/import.processor.js';
 import { InboundChatHandler } from './modules/inbox/inbound/inbound-chat.handler.js';
@@ -36,7 +43,7 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
  * integration tests, which drive the processors directly with a stub ProcessorRegistry.
  */
 @Module({
-  imports: [DomainModule, WebhooksWorkerModule, InboxDomainModule, FlowsDomainModule],
+  imports: [DomainModule, WebhooksWorkerModule, InboxDomainModule, FlowsDomainModule, AiDomainModule],
   providers: [
     StatusHandler,
     InboundHandler,
@@ -62,6 +69,13 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     FlowTimerProcessor,
     FlowExpiryProcessor,
     FlowApiProcessor,
+    // AI agent (feature 004)
+    AiQueueProcessor,
+    KnowledgeQueueProcessor,
+    KnowledgeProcessor,
+    TurnProcessor,
+    AssistantProcessor,
+    AiExpiryProcessor,
     InboxNotifyProcessor,
     PushService,
     SessionSendProcessor,

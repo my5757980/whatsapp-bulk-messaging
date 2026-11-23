@@ -165,6 +165,47 @@ describe('Retention', () => {
     expect(await ctx.prisma.flowSession.findUnique({ where: { id: recent.id } })).not.toBeNull();
   });
 
+  it('purges AI conversations that ended over 12 months ago with their replies and asks, stale questions and old assistant requests (004)', async () => {
+    const number = await seedNumber(ctx);
+    const contact = await seedContact(ctx, uaePhone());
+    const chat = await ctx.prisma.conversation.create({ data: { contactId: contact.id, numberId: number.id } });
+    const agent = await ctx.prisma.aiAgent.create({ data: { name: `Retention agent ${randomUUID().slice(0, 6)}`, draft: {} } });
+    const question = await ctx.prisma.aiUnansweredQuestion.create({
+      data: { agentId: agent.id, text: 'Do you ship to Oman?', normalized: `ship oman ${randomUUID()}`, askCount: 2, firstAskedAt: monthsAgo(13), lastAskedAt: monthsAgo(2) },
+    });
+    const ended = async (months: number) => {
+      const at = monthsAgo(months);
+      const conversation = await ctx.prisma.aiConversation.create({
+        data: { conversationId: chat.id, agentId: agent.id, contactId: contact.id, numberId: number.id, startedBy: 'CUSTOMER', status: 'ENDED', result: 'EXPIRED', summary: 'Asked about shipping', startedAt: at, lastActivityAt: at, endedAt: at },
+      });
+      await ctx.prisma.aiReply.create({ data: { aiConversationId: conversation.id, agentId: agent.id, kind: 'REPLY', modelId: 'claude-opus-5-5', createdAt: at } });
+      await ctx.prisma.aiUnansweredAsk.create({ data: { questionId: question.id, aiConversationId: conversation.id, askedAt: at } });
+      return conversation;
+    };
+    const old = await ended(13);
+    const recent = await ended(2);
+    const stale = await ctx.prisma.aiUnansweredQuestion.create({
+      data: { agentId: agent.id, text: 'Old question', normalized: `old question ${randomUUID()}`, askCount: 0, firstAskedAt: monthsAgo(15), lastAskedAt: monthsAgo(13) },
+    });
+    const oldRequest = await ctx.prisma.assistantRequest.create({ data: { userId, prompt: 'An old request', status: 'DONE', createdAt: monthsAgo(13) } });
+    await ctx.prisma.assistantAction.create({ data: { requestId: oldRequest.id, userId, kind: 'DELETE_TAGS', status: 'EXPIRED', params: {}, preview: {}, expiresAt: monthsAgo(13) } });
+    const newRequest = await ctx.prisma.assistantRequest.create({ data: { userId, prompt: 'A new request', status: 'DONE' } });
+
+    const result = await retention.purgeAi(new Date());
+    expect(result.aiConversations).toBeGreaterThanOrEqual(1);
+    expect(result.assistantRequests).toBeGreaterThanOrEqual(1);
+    expect(await ctx.prisma.aiConversation.findUnique({ where: { id: old.id } })).toBeNull();
+    expect(await ctx.prisma.aiReply.count({ where: { aiConversationId: old.id } })).toBe(0);
+    expect(await ctx.prisma.aiConversation.findUnique({ where: { id: recent.id } })).not.toBeNull();
+    expect(await ctx.prisma.aiReply.count({ where: { aiConversationId: recent.id } })).toBe(1);
+    // The question keeps its recent ask and counts what is left; one nobody asked for a year goes.
+    expect(await ctx.prisma.aiUnansweredQuestion.findUniqueOrThrow({ where: { id: question.id } })).toMatchObject({ askCount: 1 });
+    expect(await ctx.prisma.aiUnansweredQuestion.findUnique({ where: { id: stale.id } })).toBeNull();
+    expect(await ctx.prisma.assistantRequest.findUnique({ where: { id: oldRequest.id } })).toBeNull();
+    expect(await ctx.prisma.assistantAction.count({ where: { requestId: oldRequest.id } })).toBe(0);
+    expect(await ctx.prisma.assistantRequest.findUnique({ where: { id: newRequest.id } })).not.toBeNull();
+  });
+
   it('runs every step daily on the maintenance queue', async () => {
     expect(await retention.run()).toEqual({
       campaigns: expect.any(Number),
@@ -176,6 +217,10 @@ describe('Retention', () => {
       chatOpenings: expect.any(Number),
       chatMedia: expect.any(Number),
       flowSessions: expect.any(Number),
+      aiConversations: expect.any(Number),
+      aiReplies: expect.any(Number),
+      aiAsks: expect.any(Number),
+      assistantRequests: expect.any(Number),
     });
     const scheduler = await ctx.app.get(QueueRegistry).get(QUEUES.MAINTENANCE).getJobScheduler('retention');
     expect(scheduler?.pattern).toBe('15 3 * * *');

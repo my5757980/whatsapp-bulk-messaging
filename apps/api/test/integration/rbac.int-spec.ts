@@ -6,13 +6,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { restoreNetwork, useNockLocalOnly } from '../support/fixtures.js';
 import { createTestContext, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
 
-// T167, T097, 003 T086: every operation's `x-permission` in the dashboard (001), live chat (002) and
-// flows (003) contracts is enforced for each role (001 FR-007, 002 FR-041, 003 FR-038).
+// T167, T097, 003 T086, 004 T108: every operation's `x-permission` in the dashboard (001), live chat
+// (002), flows (003) and AI (004) contracts is enforced for each role (001 FR-007, 002 FR-041,
+// 003 FR-038, 004 FR-045 and FR-049).
 const SPECS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../specs');
 const CONTRACTS = [
   path.join(SPECS, '001-whatsapp-bulk-messaging/contracts/dashboard-api.openapi.yaml'),
   path.join(SPECS, '002-team-inbox/contracts/inbox-api.openapi.yaml'),
   path.join(SPECS, '003-chatbot-flow-builder/contracts/flows-api.openapi.yaml'),
+  path.join(SPECS, '004-ai-agent/contracts/ai-api.openapi.yaml'),
 ];
 /** The live event stream never ends, so a plain request would hang; inbox-realtime.int-spec.ts covers it. */
 const SKIP = new Set(['get /inbox/events']);
@@ -58,13 +60,18 @@ describe('Role permissions on every endpoint', () => {
     expect(operations.some((op) => op.route === '/inbox/team-metrics')).toBe(true);
     // Flow builder operations too (003 T086).
     expect(operations.some((op) => op.route === '/flows/{id}/publish')).toBe(true);
+    // And AI agents, usage and the team assistant (004 T108).
+    expect(operations.some((op) => op.route === '/ai-agents/{id}/publish')).toBe(true);
+    expect(operations.some((op) => op.route === '/ai-settings' && op.permission === 'ai.usage')).toBe(true);
+    expect(operations.some((op) => op.route === '/assistant/actions/{id}/confirm')).toBe(true);
   });
 
   it.each(ROLES)('%s gets 403 exactly where the role table says so', async (role) => {
     const who = agents[role];
     const mismatches: string[] = [];
     for (const op of operations) {
-      const url = `/api${op.route.replace(/\{id\}/g, DUMMY_ID)}`;
+      // Every path parameter ({id}, {secretId}, {sourceId}, …) gets an id that matches nothing.
+      const url = `/api${op.route.replace(/\{[^}]+\}/g, DUMMY_ID)}`;
       const method = op.method as 'get' | 'post' | 'put' | 'patch' | 'delete';
       let req = who.agent[method](url);
       if (method !== 'get') req = req.set('x-csrf-token', who.csrf).send({});

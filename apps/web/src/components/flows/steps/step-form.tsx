@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { STEP_LABELS, updateStep } from '@/lib/flows';
 import type { FlowSecret } from '../secrets-panel';
 import type { GraphChange } from '../use-graph-history';
+import { AiAgentForm } from './ai-agent-form';
 import { ApiStepForm } from './api-step-form';
 import { ButtonsForm } from './buttons-form';
 import { TEXTAREA_CLASS } from './form-bits';
@@ -71,6 +72,7 @@ export function StepForm({ step, graph, isStart, problems, onChange, onSetStart,
       {step.type === 'condition' && <ConditionForm step={step} graph={graph} onPatch={patch} />}
       {step.type === 'delay' && <DelayForm step={step} graph={graph} onPatch={patch} />}
       {step.type === 'jump' && <JumpForm step={step} onPatch={patch} />}
+      {step.type === 'aiAgent' && <AiAgentForm step={step} onPatch={patch} />}
       {step.type === 'handover' && (
         <div className="grid gap-1">
           <Label htmlFor="handover-note">Note for the team (optional)</Label>

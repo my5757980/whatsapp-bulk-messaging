@@ -171,8 +171,14 @@ export function run(main: () => Promise<void>): void {
   });
 }
 
-/** One live event stream; calls `onText` with each new message's text and its arrival time. */
-export async function openStream(url: string, cookie: string, onText: (text: string, at: number) => void): Promise<AbortController> {
+/** The data of a `message.created` live event (002 inbox-publisher). */
+export interface StreamMessage {
+  conversationId?: string;
+  item?: { text?: string | null; kind?: string; origin?: string };
+}
+
+/** One live event stream; calls `onText` with each new message's text, its arrival time and the event data. */
+export async function openStream(url: string, cookie: string, onText: (text: string, at: number, data: StreamMessage) => void): Promise<AbortController> {
   const abort = new AbortController();
   const res = await fetch(url, { headers: { cookie, accept: 'text/event-stream' }, signal: abort.signal });
   if (!res.ok || !res.body) throw new Error(`Event stream -> ${res.status}`);
@@ -194,8 +200,9 @@ export async function openStream(url: string, cookie: string, onText: (text: str
             .filter((line) => line.startsWith('data: '))
             .map((line) => line.slice(6))
             .join('\n');
-          const text = (JSON.parse(data) as { item?: { text?: string | null } }).item?.text;
-          if (text) onText(text, Date.now());
+          const message = JSON.parse(data) as StreamMessage;
+          const text = message.item?.text;
+          if (text) onText(text, Date.now(), message);
         }
       }
     } catch {

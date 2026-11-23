@@ -25,15 +25,16 @@ import { FlowStartController } from './live-chat/flow-start.controller.js';
 /** Flow services shared by the HTTP app and the worker. */
 @Global()
 @Module({
-  providers: [FlowSessionService, FlowRouter, TriggerMatcher, FlowSecretsVault],
-  exports: [FlowSessionService, FlowRouter, TriggerMatcher, FlowSecretsVault],
+  // FlowsService and ReservedKeywords are here too: the 004 team assistant drafts flows in the worker.
+  providers: [FlowSessionService, FlowRouter, TriggerMatcher, FlowSecretsVault, FlowsService, ReservedKeywords],
+  exports: [FlowSessionService, FlowRouter, TriggerMatcher, FlowSecretsVault, FlowsService, ReservedKeywords],
 })
 export class FlowsDomainModule {}
 
 /** Flow builder endpoints (HTTP app only). */
 @Module({
   imports: [FlowsDomainModule, InboxApiModule],
-  providers: [FlowsService, PublishService, ReservedKeywords, FlowSecretsService, ApiTestService, FlowVersionsService, FlowAnalyticsService],
+  providers: [PublishService, FlowSecretsService, ApiTestService, FlowVersionsService, FlowAnalyticsService],
   controllers: [FlowsController, FlowStartController, FlowSecretsController, FlowVersionsController, FlowAnalyticsController, FlowStartersController],
 })
 export class FlowsApiModule {}

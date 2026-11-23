@@ -20,6 +20,15 @@ describe('validateForPublish', () => {
     expect(validateForPublish(g)).toEqual([]);
   });
 
+  it('needs the agent of a Hand to AI agent step, which ends the flow (004 T077)', () => {
+    const steps = (agentId: string | null) => [
+      { id: 'hi', type: 'message', text: 'Hello!', next: 'ai' },
+      { id: 'ai', type: 'aiAgent', agentId, openingMessage: 'Our assistant will help you now.' },
+    ];
+    expect(codes(validateForPublish(graph({ start: 'hi', steps: steps(null) })))).toEqual(['MISSING_CONTENT:ai']);
+    expect(validateForPublish(graph({ start: 'hi', steps: steps('0190a000-0000-7000-8000-0000000000a1') }))).toEqual([]);
+  });
+
   it('needs a start step', () => {
     expect(codes(validateForPublish(graph({ start: null, steps: [] })))).toEqual(['NO_START:-']);
   });

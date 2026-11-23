@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { AppError } from '../../common/errors/app-error.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { StorageService } from '../../common/storage/storage.service.js';
+import { Prisma } from '../../generated/prisma/client.js';
 import { AuditService, type AuditActor } from '../audit/audit.service.js';
 
 /**
@@ -13,6 +14,9 @@ import { AuditService, type AuditActor } from '../audit/audit.service.js';
  * payloads or media; the customer's own media files are deleted, library files are kept; journey
  * entries lose attribute values; in-app alerts about these chats are removed. Openings and counts
  * stay for the team view.
+ *
+ * AI agent (004 FR-051): AI conversations lose the contact, summary and pending confirmation, the
+ * customer's unanswered asks are deleted; AI reply records keep only counts and sources.
  */
 @Injectable()
 export class ContactDeletionService {
@@ -27,6 +31,12 @@ export class ContactDeletionService {
     if (!contact) throw AppError.notFound('Contact not found');
 
     const chatIds = (await this.prisma.conversation.findMany({ where: { contactId }, select: { id: true } })).map((c) => c.id);
+    const aiConversationIds = (
+      await this.prisma.aiConversation.findMany({ where: { OR: [{ contactId }, { conversationId: { in: chatIds } }] }, select: { id: true } })
+    ).map((c) => c.id);
+    const questionIds = aiConversationIds.length
+      ? (await this.prisma.aiUnansweredAsk.findMany({ where: { aiConversationId: { in: aiConversationIds } }, select: { questionId: true }, distinct: ['questionId'] })).map((a) => a.questionId)
+      : [];
     const customerMedia = chatIds.length
       ? await this.prisma.mediaAsset.findMany({ where: { purpose: 'INBOUND', chatMessages: { some: { conversationId: { in: chatIds } } } }, select: { id: true, storageKey: true } })
       : [];
@@ -43,6 +53,18 @@ export class ContactDeletionService {
       this.prisma.notification.deleteMany({ where: { link: { in: chatIds.map((id) => `/inbox?c=${id}`) } } }),
       // Flow answers are what the customer typed (003 T083); sessions stay for analytics without them.
       this.prisma.flowSession.updateMany({ where: { contactId }, data: { answers: {}, contactId: null } }),
+      // AI agent (004 FR-051): their unanswered asks go (a question only they asked goes too, shared
+      // counts follow); AI conversations lose the contact, summary and pending confirmation; reply
+      // records keep only counts and sources; remembered values go with the contact's attributes.
+      this.prisma.aiUnansweredAsk.deleteMany({ where: { aiConversationId: { in: aiConversationIds } } }),
+      this.prisma.$executeRaw`
+        UPDATE ai_unanswered_questions q SET ask_count = (SELECT count(*)::int FROM ai_unanswered_asks a WHERE a.question_id = q.id)
+         WHERE q.id = ANY(${questionIds}::uuid[])`,
+      this.prisma.aiUnansweredQuestion.deleteMany({ where: { id: { in: questionIds }, askCount: 0 } }),
+      this.prisma.aiConversation.updateMany({
+        where: { id: { in: aiConversationIds } },
+        data: { contactId: null, summary: null, pendingConfirmation: Prisma.DbNull, unansweredStreak: Prisma.DbNull },
+      }),
       this.prisma.contact.delete({ where: { id: contactId } }),
     ]);
     // Files after the commit; one that cannot be deleted now is left for the retention job.

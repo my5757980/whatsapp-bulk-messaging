@@ -127,3 +127,21 @@ groups:
           description: >-
             Customers in these flows take the "failed" branch. Check the worker logs for "Flow API
             step failed" (with its reason) and the external systems the flows call.
+
+      - alert: WbmAiFailing
+        expr: |
+          (
+            sum(increase(wbm_ai_turns_total{result="failed"}[15m]))
+              /
+            sum(increase(wbm_ai_turns_total{result=~"sent|failed|opted_out|dropped|newer"}[15m]))
+          ) > 0.20
+          and on()
+          sum(increase(wbm_ai_turns_total{result=~"sent|failed|opted_out|dropped|newer"}[15m])) >= 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 20% of AI agent turns failed in the last 15 minutes
+          description: >-
+            Customers get the fallback message and wait for a person. Check the worker logs for "AI
+            turn failed" (with its reason), the Anthropic key and status page, and the AI usage page.

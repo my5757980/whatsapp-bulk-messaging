@@ -15,6 +15,7 @@ WhatsApp Cloud API. One company, a small team, prices in USD.
 | Public API (US7) | Other company systems send templates with an API key, with idempotency keys and per-key rate limits. |
 | Live chat (feature 002) | A shared team inbox for customer replies: live updates, take, transfer and close chats, the 24-hour reply window, templates from a chat, saved replies, a media library, customer profiles and blocking, welcome and off-hours messages, browser alerts, internal notes and a team view. See [Live chat](#live-chat). |
 | Chatbot flows (feature 003) | Automatic conversations built on a canvas: buttons, lists, questions that save answers to contacts, conditions, delays, safe API calls, hand-over to live chat, test numbers, versions, analytics and starter flows. See [Chatbot flows](#chatbot-flows). |
+| AI agents (feature 004) | AI agents that answer customers from your own knowledge with Claude, hand over to the team when needed, use safe API skills and flows, stay within a monthly limit, and a team assistant that drafts templates, flows and campaigns. See [AI agents](#ai-agents). |
 
 ## Architecture
 
@@ -118,6 +119,60 @@ Feature 003 ([spec](specs/003-chatbot-flow-builder/spec.md), [quickstart](specs/
 Performance check (SC-001, a reply queued within 3 seconds for 95% of messages with 20 customers
 writing at once): `PERF_NUMBER_ID=<id> npm run perf:flows` with the api and the worker running.
 
+## AI agents
+
+Feature 004 ([spec](specs/004-ai-agent/spec.md), [quickstart](specs/004-ai-agent/quickstart.md)).
+
+- **Setup:** agents use Claude Opus 5.5 (`AI_MODEL=claude-opus-5-5`) through the company's Anthropic
+  account. Put the key in `.env` as `ANTHROPIC_API_KEY` (a secret, billed per use). For local runs
+  and tests, `ANTHROPIC_BASE_URL=http://localhost:4010/anthropic` uses mock-meta's fake model
+  instead. Without either, agents fail closed: customers get the fallback message and wait for a
+  person.
+- **Build:** *AI agents → New agent*, empty or from one of four starter agents written by us (Sales
+  enquiries, Customer support, Booking requests, Lead qualification). The editor's tabs set the goal,
+  business details, tone, guardrails, reply languages and introductions, the knowledge, the skills,
+  test numbers and versions. The draft saves itself; the problems panel lists what blocks
+  publishing (for example a starter's example answers still marked "Replace me"). Publish, then
+  choose the agent's numbers.
+- **Knowledge:** written answers, website pages (HTTPS, robots.txt respected, optional weekly
+  refresh) and PDF or Word files. Small knowledge goes into the prompt whole; larger knowledge is
+  searched. Questions the agent could not answer collect under *Unanswered*, where a member answers
+  them into the knowledge.
+- **In live chat:** the number's agent answers Open chats in the 24-hour window, after flows and
+  never in a chat a member took. It hands over (*Waiting for agent*, with a summary note) when the
+  customer asks for a person, when a hand-over topic comes up, after too many replies or when the
+  AI service fails. STOP opts the customer out. A banner shows when an agent is answering a chat.
+- **Skills:** buttons and lists, files from the media library, remembering answers in contact
+  attributes, safe API calls (the flows' safety rules; calls that change data need the customer's
+  confirmation first; header secrets are stored encrypted) and starting flows. A flow's *Hand to AI
+  agent* step passes a chat to an agent.
+- **Testing and versions:** the *Test* tab is a preview chat that shows what a reply would do without
+  sending anything; up to three test numbers talk to the draft. Each publish makes a numbered version
+  that can be restored into the draft.
+- **Usage and limits:** *AI usage* (admins) shows AI replies against the monthly limit (default
+  1,000), test replies, the estimated cost from the measured tokens and your prices, per agent, per
+  day and how AI conversations ended. Admins are alerted at 80% and 100%; at the limit new messages
+  go to the team with an optional message to the customer.
+- **Team assistant:** the header's *Assistant* (admins and managers) drafts templates (not
+  submitted to Meta), flows (not published) and campaigns (not scheduled), and answers questions
+  about campaign results. Anything that sends, schedules or deletes waits on a preview the member
+  confirms within 30 minutes. It acts with the member's own permissions and has its own monthly
+  limit (default 300).
+- **Data handling:** a chat is sent to the AI service only for the turn being answered, and no
+  conversation is kept open there between calls (no message threads). The provider's own retention
+  terms still apply; zero data retention is a decision in the release checklist. Contact phone
+  numbers are never sent to the model.
+  Logs leave out prompts, knowledge, replies, summaries and remembered values. AI records follow the
+  12-month retention, and deleting a contact erases its AI conversation details while keeping
+  anonymous counts.
+- **Permissions:** admins and managers build agents (`ai.manage`) and use the assistant
+  (`assistant.use`); only admins see usage and change limits and prices (`ai.usage`).
+
+Checks: `PERF_NUMBER_ID=<id> npm run perf:ai` (SC-001, an AI reply queued within 10 seconds for 95%
+of messages with 50 customers writing at once, against the fake model). `npm run eval:ai` measures
+answer quality with the real model (SC-002, SC-003, SC-005, SC-010). It costs money, so it runs only
+by hand with `EVAL_CONFIRM=yes`, never in CI.
+
 ## Getting started
 
 Prerequisites: Node.js 26, npm 11 and Docker Desktop. The full walkthrough, including how to
@@ -147,6 +202,9 @@ npm run perf:import         # SC-007: 50k-row import within 5 min (api + worker 
 npm run perf:campaign       # SC-002: 10k campaign within 20 min (api + worker + mock-meta running)
 npm run perf:inbox-seed     # live chat: 10,000 chats and one chat of 5,000 messages (api + worker running)
 npm run perf:inbox          # live chat SC-006 list/open times and SC-001 event latency (after the seed)
+npm run perf:flows          # chatbot flows SC-001 (PERF_NUMBER_ID set)
+npm run perf:ai             # AI agents SC-001 against the fake model (PERF_NUMBER_ID set)
+npm run eval:ai             # AI answer quality with the real model: by hand only, EVAL_CONFIRM=yes
 ```
 
 CI (`.github/workflows/ci.yml`) also runs `npm audit`, checks the alert rules with `promtool`,
@@ -169,8 +227,12 @@ the web proxy.
   rules are in [`ops/alerts.yml`](ops/alerts.yml).
 - **Retention:** a daily job purges campaigns and messages 12 months after they end, live chat
   messages, journey entries and openings after 12 months (with unused customer media), and webhook
-  events and uploaded files after 30 days. Audit logs are kept. Deleting a contact erases its chat
-  content but keeps anonymous counts.
+  events and uploaded files after 30 days. AI conversations, AI reply records, unanswered-question
+  occurrences and assistant requests also go after 12 months. Audit logs are kept. Deleting a
+  contact erases its chat content and AI conversation details but keeps anonymous counts.
+- **AI service:** set `ANTHROPIC_API_KEY` from the company's Anthropic account (leave
+  `ANTHROPIC_BASE_URL` empty in production). The `WbmAiFailing` alert fires when more than 20% of AI
+  turns fail in 15 minutes.
 - **Live chat behind a proxy:** keep `/api/inbox/events` unbuffered and allow long-lived
   connections (the api sends `: ping` every 15 s).
 - **Real numbers:** to connect a real WhatsApp number, follow quickstart §5. Check each step
@@ -201,6 +263,13 @@ the web proxy.
   [flow graph](specs/003-chatbot-flow-builder/contracts/flow-graph.md),
   [quickstart](specs/003-chatbot-flow-builder/quickstart.md), [tasks](specs/003-chatbot-flow-builder/tasks.md) and
   [release checklist](specs/003-chatbot-flow-builder/checklists/release.md)
+- AI agents (feature 004): [spec](specs/004-ai-agent/spec.md), [plan](specs/004-ai-agent/plan.md),
+  [research](specs/004-ai-agent/research.md), [data model](specs/004-ai-agent/data-model.md),
+  [AI API](specs/004-ai-agent/contracts/ai-api.openapi.yaml),
+  [agent configuration](specs/004-ai-agent/contracts/agent-config.md),
+  [Claude messages](specs/004-ai-agent/contracts/claude-messages.md),
+  [quickstart](specs/004-ai-agent/quickstart.md), [tasks](specs/004-ai-agent/tasks.md) and
+  [release checklist](specs/004-ai-agent/checklists/release.md)
 - Architecture decisions:
   - [ADR-0001 Frontend stack](history/adr/0001-frontend-stack.md)
   - [ADR-0002 Backend runtime, process model and monorepo](history/adr/0002-backend-runtime-process-model-and-monorepo.md)

@@ -25,6 +25,7 @@ import {
 } from './conversation-views.js';
 import { canAccess, seesAll, visibleSql, type Viewer } from './visibility.js';
 import { isLive } from './window.js';
+import { AiConversationsService } from '../../ai/turns/ai-conversations.service.js';
 import { FlowSessionService } from '../../flows/engine/session.service.js';
 
 export const ConversationListQuerySchema = z.object({
@@ -85,6 +86,7 @@ export class ConversationsService {
     private readonly routing: ChatRoutingService,
     private readonly audit: AuditService,
     private readonly flows: FlowSessionService,
+    private readonly ai: AiConversationsService,
   ) {}
 
   /** Hands a taken chat to another member who may see it (FR-022): the owner, or an admin or manager. */
@@ -364,8 +366,9 @@ export class ConversationsService {
       const owner = current?.intervenedBy?.name ?? 'Another member';
       throw new AppError(HttpStatus.CONFLICT, 'ALREADY_TAKEN', `${owner} has already taken this chat`, [{ field: 'intervenedBy', issue: owner }]);
     }
-    // A member who takes the chat stops the flow answering it (003 FR-026).
+    // A member who takes the chat stops the flow and the AI agent answering it (003 FR-026, 004 FR-026).
     await this.flows.stopForConversation(row.id);
+    await this.ai.endForConversation(row.id, 'MEMBER_TOOK');
     await this.publisher.conversation(row.id, previous(row));
   }
 
@@ -393,6 +396,7 @@ export class ConversationsService {
       return true;
     });
     if (!resolved) throw AppError.conflict('The chat changed meanwhile; refresh and try again', 'CONFLICT');
+    await this.ai.endForConversation(id, 'CLOSED');
     await this.publisher.conversation(id, previous(row));
     return this.summaryFor(viewer, id);
   }
