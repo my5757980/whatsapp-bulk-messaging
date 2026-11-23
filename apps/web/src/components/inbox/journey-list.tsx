@@ -66,6 +66,9 @@ export function describeJourneyEntry(entry: JourneyEntry): string {
       return `AI agent "${agent}" started answering${d.startedBy === 'FLOW' ? ' (handed over by a flow)' : ''}${test}`;
     case 'AI_ENDED':
       return `AI agent "${agent}" stopped: ${AI_ENDINGS[String(d.result)] ?? String(d.result ?? '').toLowerCase().replace(/_/g, ' ')}${test}`;
+    case 'LINK_CLICKED':
+      // Feature 005 (FR-009): name the campaign or drip whose link was opened.
+      return d.dripName ? `Opened a link in drip "${String(d.dripName)}"` : `Opened a link in campaign "${String(d.campaignName ?? '')}"`;
     default:
       return entry.type;
   }

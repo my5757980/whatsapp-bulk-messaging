@@ -15,8 +15,12 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { toast } from '@/components/ui/toaster';
 import { ApiError, api } from '@/lib/api-client';
 import { errorMessage } from '@/lib/errors';
+import { growthKeys, type TrackedLinkConfig } from '@/lib/growth';
 import { queryKeys } from '@/lib/query';
 import type { Template, WhatsAppNumber } from '@/lib/types';
+
+/** Sample code for a tracked link button; each recipient gets their own code when a campaign sends (feature 005). */
+const SAMPLE_LINK_CODE = 'AbCdEf1234';
 
 const EMPTY: TemplateDraft = {
   wabaId: '',
@@ -71,6 +75,8 @@ function Editor() {
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   const numbers = useQuery({ queryKey: queryKeys.numbers, queryFn: () => api<WhatsAppNumber[]>('/numbers') });
+  const linkConfig = useQuery({ queryKey: growthKeys.linkConfig, queryFn: () => api<TrackedLinkConfig>('/tracked-links/config'), staleTime: 5 * 60_000 });
+  const trackedUrl = linkConfig.data?.enabled ? linkConfig.data.buttonUrl : null;
   const accounts = useMemo(() => {
     const seen = new Map<string, string>();
     for (const n of numbers.data ?? []) if (n.connectionStatus === 'CONNECTED' && !seen.has(n.wabaId)) seen.set(n.wabaId, `${n.verifiedName} (${n.wabaId})`);
@@ -299,20 +305,34 @@ function Editor() {
             </CardHeader>
             <CardContent className="grid gap-4">
               <FieldError message={errors.buttons} />
-              {buttons.map((b, i) => (
+              {buttons.map((b, i) => {
+                const tracked = b.type === 'URL' && trackedUrl !== null && b.url === trackedUrl;
+                return (
                 <div key={i} className="grid gap-3 rounded-md border p-3 sm:grid-cols-2" data-testid="template-button">
                   <div className="text-sm font-medium sm:col-span-2">
-                    Button {i + 1}: {b.type === 'URL' ? 'Website' : b.type === 'PHONE_NUMBER' ? 'Phone call' : 'Quick reply'}
+                    Button {i + 1}: {tracked ? 'Tracked link' : b.type === 'URL' ? 'Website' : b.type === 'PHONE_NUMBER' ? 'Phone call' : 'Quick reply'}
                   </div>
+                  {tracked ? (
+                    <p className="text-xs text-muted-foreground sm:col-span-2">
+                      Each person gets their own short link on your company&apos;s address, so campaign results show who clicked. You choose where it
+                      goes when you prepare a campaign or a drip.
+                    </p>
+                  ) : null}
                   <Field id={`tpl-btn-${i}-text`} label={`Button ${i + 1} text`} error={errors[`buttons.${i}.text`]}>
                     <Input id={`tpl-btn-${i}-text`} value={b.text} onChange={(e) => setButton(i, { text: e.target.value })} maxLength={40} />
                   </Field>
                   {b.type === 'URL' ? (
                     <>
                       <Field id={`tpl-btn-${i}-url`} label={`Button ${i + 1} link`} error={errors[`buttons.${i}.url`]}>
-                        <Input id={`tpl-btn-${i}-url`} value={b.url ?? ''} onChange={(e) => setButton(i, { url: e.target.value })} placeholder="https://example.com/offers/{{1}}" />
+                        <Input
+                          id={`tpl-btn-${i}-url`}
+                          value={b.url ?? ''}
+                          readOnly={tracked}
+                          onChange={(e) => setButton(i, { url: e.target.value })}
+                          placeholder="https://example.com/offers/{{1}}"
+                        />
                       </Field>
-                      {/\{\{\s*1\s*\}\}$/.test(b.url ?? '') ? (
+                      {!tracked && /\{\{\s*1\s*\}\}$/.test(b.url ?? '') ? (
                         <Field id={`tpl-btn-${i}-sample`} label={`Button ${i + 1} sample`} error={errors[`buttons.${i}.urlExample`]}>
                           <Input id={`tpl-btn-${i}-sample`} value={b.urlExample ?? ''} onChange={(e) => setButton(i, { urlExample: e.target.value })} placeholder="summer" />
                         </Field>
@@ -330,13 +350,24 @@ function Editor() {
                     </Button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => update({ buttons: [...buttons, { type: 'QUICK_REPLY', text: '' }] })}>
                   Add quick reply
                 </Button>
                 <Button type="button" variant="outline" size="sm" onClick={() => update({ buttons: [...buttons, { type: 'URL', text: '', url: '' }] })}>
                   Add website button
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!trackedUrl}
+                  title={trackedUrl ? undefined : 'Link tracking is not set up on this server'}
+                  onClick={() => trackedUrl && update({ buttons: [...buttons, { type: 'URL', text: '', url: trackedUrl, urlExample: SAMPLE_LINK_CODE }] })}
+                >
+                  Add tracked link button
                 </Button>
                 <Button type="button" variant="outline" size="sm" onClick={() => update({ buttons: [...buttons, { type: 'PHONE_NUMBER', text: '', phoneNumber: '' }] })}>
                   Add phone button

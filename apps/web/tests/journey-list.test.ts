@@ -27,4 +27,14 @@ describe('journey entries', () => {
     expect(describeJourneyEntry(entry('ATTRIBUTE_CHANGED', { key: 'city', to: 'Dubai' }, { type: 'MEMBER', name: 'Omar' }))).toBe('city changed to Dubai by Omar');
     expect(describeJourneyEntry(entry('TAG_ADDED', { tag: 'vip' }, { type: 'FLOW', name: 'Welcome' }))).toBe('Tag "vip" added by Welcome');
   });
+
+  it('names the campaign or drip whose tracked link was opened (005 FR-009)', () => {
+    const customer = { type: 'CUSTOMER' as const, name: null };
+    expect(describeJourneyEntry(entry('LINK_CLICKED', { campaignId: 'c1', campaignName: 'Summer Sale', dripId: null, dripName: null }, customer))).toBe(
+      'Opened a link in campaign "Summer Sale"',
+    );
+    expect(describeJourneyEntry(entry('LINK_CLICKED', { campaignId: null, campaignName: null, dripId: 'd1', dripName: 'Welcome series' }, customer))).toBe(
+      'Opened a link in drip "Welcome series"',
+    );
+  });
 });

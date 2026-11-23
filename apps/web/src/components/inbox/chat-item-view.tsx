@@ -211,6 +211,11 @@ export function ChatItemView({ item }: { item: ChatItem }) {
           {ours && item.kind !== 'NOTE' && <Ticks status={item.status} />}
         </div>
         <AiUsed item={item} />
+        {item.firstClickAt ? (
+          <p className="mt-1 text-right text-[11px] text-emerald-700 dark:text-emerald-300" data-testid="link-opened">
+            Link opened {time(item.firstClickAt)}
+          </p>
+        ) : null}
         {item.status === 'FAILED' && item.failureReason && <p className="mt-1 text-xs text-destructive">Not sent: {item.failureReason}</p>}
       </div>
     </div>

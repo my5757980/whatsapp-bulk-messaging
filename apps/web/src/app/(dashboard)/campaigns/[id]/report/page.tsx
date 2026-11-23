@@ -3,6 +3,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
+import { ClickResults } from '@/components/campaigns/click-results';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -120,6 +121,8 @@ export default function CampaignReportPage() {
           </CardHeader>
         </Card>
       </div>
+
+      <ClickResults campaignId={id} />
 
       <Card>
         <CardHeader>
