@@ -157,4 +157,48 @@ describe('Campaign growth API contract', () => {
     await check('post', '/campaigns/{id}/retry-rounds/cancel', await call('post', `/campaigns/${id}/retry-rounds/cancel`), 200);
     await check('post', '/campaigns/{id}/retry-rounds/cancel', await call('post', `/campaigns/${randomUUID()}/retry-rounds/cancel`), 404);
   });
+
+  it('US4: drips, steps, lifecycle and enrolments', async () => {
+    const template = await seedTemplate(ctx, wabaId);
+    const contact = await seedContact(ctx, uaePhone());
+    const name = `Contract drip ${randomUUID().slice(0, 6)}`;
+    const created = await call('post', '/drips', { name, numberId });
+    await check('post', '/drips', created, 201);
+    await check('post', '/drips', await call('post', '/drips', { name: '', numberId }), 422);
+    await check('post', '/drips', await call('post', '/drips', { name, numberId }), 409);
+    const id = created.body.id as string;
+
+    await check('get', '/drips', await call('get', '/drips'), 200);
+    await check('get', '/drips/{id}', await call('get', `/drips/${id}`), 200);
+    await check('get', '/drips/{id}', await call('get', `/drips/${randomUUID()}`), 404);
+    await check('patch', '/drips/{id}', await call('patch', `/drips/${id}`, { leaveOnClick: true, quietHours: { from: '22:00', to: '08:00', days: [1, 2, 3, 4, 5] } }), 200);
+    await check('patch', '/drips/{id}', await call('patch', `/drips/${id}`, { quietHours: { from: '25:00', to: '08:00', days: [1] } }), 422);
+    await check('patch', '/drips/{id}', await call('patch', `/drips/${randomUUID()}`, { leaveOnClick: true }), 404);
+    await check('post', '/drips/{id}/activate', await call('post', `/drips/${id}/activate`), 422);
+    await check('put', '/drips/{id}/steps', await call('put', `/drips/${id}/steps`, { steps: [] }), 422);
+    const steps = await call('put', `/drips/${id}/steps`, { steps: [{ templateId: template.id, variableMapping: { 'BODY.1': { source: 'field', key: 'name' } }, waitMinutes: 0 }] });
+    await check('put', '/drips/{id}/steps', steps, 200);
+    await check('post', '/drips/{id}/activate', await call('post', `/drips/${id}/activate`), 200);
+
+    await check('post', '/drips/{id}/enrolments/preview', await call('post', `/drips/${id}/enrolments/preview`, { contactIds: [contact.id] }), 200);
+    await check('post', '/drips/{id}/enrolments', await call('post', `/drips/${id}/enrolments`, {}), 422);
+    await check('post', '/drips/{id}/enrolments', await call('post', `/drips/${id}/enrolments`, { contactIds: [contact.id] }), 200);
+    const enrolments = await call('get', `/drips/${id}/enrolments?page=1&pageSize=20`);
+    await check('get', '/drips/{id}/enrolments', enrolments, 200);
+    const enrolmentId = (enrolments.body.items as Array<{ id: string }>)[0]!.id;
+    await check('delete', '/drips/{id}/enrolments/{enrolmentId}', await call('delete', `/drips/${id}/enrolments/${enrolmentId}`), 204);
+    await check('delete', '/drips/{id}/enrolments/{enrolmentId}', await call('delete', `/drips/${id}/enrolments/${enrolmentId}`), 409);
+
+    await check('post', '/drips/{id}/pause', await call('post', `/drips/${id}/pause`), 200);
+    await check('post', '/drips/{id}/pause', await call('post', `/drips/${id}/pause`), 409);
+    await check('post', '/drips/{id}/enrolments', await call('post', `/drips/${id}/enrolments`, { contactIds: [contact.id] }), 409);
+    await check('post', '/drips/{id}/activate', await call('post', `/drips/${id}/activate`), 200);
+    await check('post', '/drips/{id}/archive', await call('post', `/drips/${id}/archive`), 200);
+    await check('delete', '/drips/{id}', await call('delete', `/drips/${id}`), 409);
+    await check('patch', '/drips/{id}', await call('patch', `/drips/${id}`, { allowRejoin: true }), 409);
+
+    const draft = await call('post', '/drips', { name: `Contract draft drip ${randomUUID().slice(0, 6)}`, numberId });
+    await check('delete', '/drips/{id}', await call('delete', `/drips/${draft.body.id}`), 204);
+    await check('delete', '/drips/{id}', await call('delete', `/drips/${randomUUID()}`), 404);
+  });
 });
