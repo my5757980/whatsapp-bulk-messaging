@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ORDER_FIELDS, ORDER_FIELD_LABELS, parseVariableKey } from '@wbm/shared';
+import { COD_DEFAULTS, ORDER_FIELDS, ORDER_FIELD_LABELS, parseVariableKey } from '@wbm/shared';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
@@ -20,6 +20,7 @@ import { errorMessage, toastError } from '@/lib/errors';
 import { formatDateTime, titleCase } from '@/lib/format';
 import {
   AUTOMATION_KIND_LABEL,
+  COD_STATUS_LABEL,
   SKIP_REASON_LABEL,
   STORE_PLATFORM_LABEL,
   STORE_STATUS_LABEL,
@@ -122,6 +123,8 @@ function StoreView() {
         {ORDER_KINDS.map((kind) => (
           <AutomationCard key={kind} store={s} kind={kind} />
         ))}
+        <h3 className="text-base font-semibold">Cash on delivery</h3>
+        <AutomationCard store={s} kind="COD_CONFIRMATION" />
       </div>
 
       <OrdersCard storeId={s.id} />
@@ -248,7 +251,14 @@ function AutomationEditor({
   const [templateId, setTemplateId] = useState(step?.templateId ?? '');
   const [mapping, setMapping] = useState<Record<string, Source | undefined>>((step?.variableMapping ?? {}) as Record<string, Source>);
   const waba = (numbers.data ?? []).find((n) => n.id === store.numberId)?.wabaId;
-  const usable = (templates.data ?? []).filter((t) => !waba || t.wabaId === waba);
+  // COD needs a template whose first two buttons are quick replies: confirm, then cancel.
+  const codReady = (t: Template) => {
+    const buttons = t.components.find((c) => c.type.toUpperCase() === 'BUTTONS')?.buttons ?? [];
+    return buttons.length >= 2 && buttons[0]?.type === 'QUICK_REPLY' && buttons[1]?.type === 'QUICK_REPLY';
+  };
+  const usable = (templates.data ?? []).filter((t) => (!waba || t.wabaId === waba) && (kind !== 'COD_CONFIRMATION' || codReady(t)));
+  const saved = { ...COD_DEFAULTS, ...(automation.settings ?? {}) };
+  const [cod, setCod] = useState(saved);
   const template = usable.find((t) => t.id === templateId);
   const variables = (template?.variables ?? []).map((v) => v.key);
 
@@ -256,7 +266,11 @@ function AutomationEditor({
     mutationFn: () =>
       api<StoreAutomation>(`/stores/${store.id}/automations/${kind}`, {
         method: 'PUT',
-        json: { enabled, steps: [{ templateId, variableMapping: Object.fromEntries(variables.flatMap((v) => (mapping[v] ? [[v, mapping[v]]] : []))) }] },
+        json: {
+          enabled,
+          steps: [{ templateId, variableMapping: Object.fromEntries(variables.flatMap((v) => (mapping[v] ? [[v, mapping[v]]] : []))) }],
+          ...(kind === 'COD_CONFIRMATION' ? { settings: { ...cod, reminderMinutes: Number(cod.reminderMinutes), finalMinutes: Number(cod.finalMinutes) } } : {}),
+        },
       }),
     onSuccess: () => {
       toast.success('Saved');
@@ -278,6 +292,11 @@ function AutomationEditor({
           {Number(counts.orders ?? 0)} orders · {Number(counts.sent ?? 0)} sent · {Number(counts.delivered ?? 0)} delivered · {Number(counts.read ?? 0)} read ·{' '}
           {Number(counts.failed ?? 0)} failed · {Number(counts.skipped ?? 0)} skipped
           {skips.length ? ` (${skips.map(([r, n]) => `${SKIP_REASON_LABEL[r] ?? r}: ${n}`).join(', ')})` : ''}
+          {kind === 'COD_CONFIRMATION' ? (
+            <span data-testid="cod-results" className="block">
+              {Number(counts.asked ?? 0)} asked · {Number(counts.confirmed ?? 0)} confirmed · {Number(counts.cancelled ?? 0)} cancelled · {Number(counts.notConfirmed ?? 0)} not confirmed
+            </span>
+          ) : null}
         </CardDescription>
       </CardHeader>
       <Can permission="campaigns.manage">
@@ -346,6 +365,40 @@ function AutomationEditor({
               </div>
             );
           })}
+          {kind === 'COD_CONFIRMATION' ? (
+            <div className="grid gap-3 rounded-md border p-3">
+              <p className="text-xs text-muted-foreground">The customer taps the first button to confirm and the second to cancel. The first answer counts.</p>
+              {(
+                [
+                  ['confirmedReply', 'Reply when confirmed'],
+                  ['cancelledReply', 'Reply when cancelled'],
+                  ['alreadyAnsweredReply', 'Reply to a second tap'],
+                ] as const
+              ).map(([field, label]) => (
+                <div key={field} className="grid gap-1">
+                  <Label htmlFor={`cod-${field}`}>{label}</Label>
+                  <Input id={`cod-${field}`} value={cod[field]} maxLength={1000} onChange={(e) => setCod((c) => ({ ...c, [field]: e.target.value }))} />
+                </div>
+              ))}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-1">
+                  <Label htmlFor="cod-reminder">Reminder after (minutes)</Label>
+                  <Input id="cod-reminder" type="number" min={30} max={1440} value={cod.reminderMinutes} onChange={(e) => setCod((c) => ({ ...c, reminderMinutes: Number(e.target.value) }))} />
+                </div>
+                <div className="grid gap-1">
+                  <Label htmlFor="cod-final">No answer after (minutes)</Label>
+                  <Input id="cod-final" type="number" min={60} max={4320} value={cod.finalMinutes} onChange={(e) => setCod((c) => ({ ...c, finalMinutes: Number(e.target.value) }))} />
+                </div>
+              </div>
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" className="mt-0.5 size-4" checked={cod.autoCancel} onChange={(e) => setCod((c) => ({ ...c, autoCancel: e.target.checked }))} />
+                <span className="grid gap-0.5">
+                  <span>Cancel the order in the store when the customer cancels</span>
+                  <span className="text-xs text-muted-foreground">Off: the order is only tagged, and admins are told to cancel it themselves.</span>
+                </span>
+              </label>
+            </div>
+          ) : null}
           {automation.problems.length ? (
             <ul className="list-disc pl-5 text-sm text-destructive">
               {automation.problems.map((p) => (
@@ -369,12 +422,29 @@ function AutomationEditor({
 }
 
 function OrdersCard({ storeId }: { storeId: string }) {
-  const orders = useQuery({ queryKey: ['store-orders', storeId], queryFn: () => api<{ items: StoreOrderRow[]; total: number }>(`/stores/${storeId}/orders?pageSize=50`) });
+  const [codStatus, setCodStatus] = useState('');
+  const orders = useQuery({
+    queryKey: ['store-orders', storeId, codStatus],
+    queryFn: () => api<{ items: StoreOrderRow[]; total: number }>(`/stores/${storeId}/orders?pageSize=50${codStatus ? `&codStatus=${codStatus}` : ''}`),
+  });
   return (
     <Card>
       <CardHeader>
         <CardTitle className="text-base">Orders</CardTitle>
         <CardDescription>{orders.data ? `${orders.data.total} orders seen` : 'Orders the store reported'}</CardDescription>
+        <div className="max-w-xs">
+          <Label htmlFor="orders-cod" className="sr-only">
+            COD status
+          </Label>
+          <NativeSelect id="orders-cod" value={codStatus} onChange={(e) => setCodStatus(e.target.value)}>
+            <option value="">All orders</option>
+            {(['ASKED', 'CONFIRMED', 'CANCELLED', 'NO_ANSWER', 'CLOSED'] as const).map((st) => (
+              <option key={st} value={st}>
+                COD: {COD_STATUS_LABEL[st]}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         {!orders.data?.items.length ? (
@@ -387,6 +457,7 @@ function OrdersCard({ storeId }: { storeId: string }) {
                 <TableHead>Customer</TableHead>
                 <TableHead>Total</TableHead>
                 <TableHead>Payment</TableHead>
+                <TableHead>COD</TableHead>
                 <TableHead>Messages</TableHead>
                 <TableHead>Placed</TableHead>
               </TableRow>
@@ -408,6 +479,9 @@ function OrdersCard({ storeId }: { storeId: string }) {
                     {o.total} {o.currency}
                   </TableCell>
                   <TableCell>{titleCase(o.paymentKind)}</TableCell>
+                  <TableCell className="text-xs" data-testid="order-cod">
+                    {COD_STATUS_LABEL[o.codStatus]}
+                  </TableCell>
                   <TableCell className="text-xs">
                     {o.messages.length
                       ? o.messages.map((m) => (

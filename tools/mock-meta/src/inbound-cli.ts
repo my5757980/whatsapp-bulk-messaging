@@ -23,6 +23,7 @@ Content (exactly one):
   --button-reply <title> [--button-id <id>]   (a tap on a reply button)
   --list-reply <title> [--list-id <id>] [--description <text>]
   --quick-reply <text> [--context <wamid>]    (a template quick-reply button; --context names the template message)
+  --button-payload <payload> [--button-text <text>]   (a quick-reply tap with its own payload, e.g. cod1:<orderId>:Y)
   --form-reply '<json>'          --reaction <emoji> --to-wamid <wamid>   (an empty emoji removes it)
   --unsupported
 
@@ -66,6 +67,7 @@ const CONTENT_FLAGS = [
   'contact-card',
   'button-reply',
   'quick-reply',
+  'button-payload',
   'list-reply',
   'form-reply',
   'reaction',
@@ -98,6 +100,8 @@ const { values } = parseArgs({
     'contact-card': { type: 'string' },
     'button-reply': { type: 'string' },
     'quick-reply': { type: 'string' },
+    'button-payload': { type: 'string' },
+    'button-text': { type: 'string' },
     'list-reply': { type: 'string' },
     'button-id': { type: 'string' },
     'list-id': { type: 'string' },
@@ -202,6 +206,10 @@ async function buildContent(): Promise<Record<string, unknown>> {
     case 'quick-reply': {
       const text = values['quick-reply']!;
       return { type: 'button', button: { text, payload: text } };
+    }
+    case 'button-payload': {
+      const payload = values['button-payload']!;
+      return { type: 'button', button: { text: values['button-text'] ?? (payload.endsWith(':N') ? 'No' : 'Yes'), payload } };
     }
     case 'list-reply': {
       const title = values['list-reply']!;
