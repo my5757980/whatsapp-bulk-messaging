@@ -155,7 +155,21 @@ export class StoreAutomationsService {
        WHERE o.store_id = ${storeId}::uuid AND m.kind = ${kind}::"StoreMessageKind" AND m.outcome = 'SKIPPED'
          AND m.skip_reason IS NOT NULL AND m.skip_reason <> 'off' AND m.created_at >= ${from} AND m.created_at < ${to}
        GROUP BY 1`;
-    return { kind, counts: counts ?? {}, skipReasons: Object.fromEntries(reasons.map((r) => [r.reason, r.n])) };
+    // COD adds the answers (FR-038).
+    const cod =
+      kind === 'COD_CONFIRMATION'
+        ? (
+            await this.prisma.$queryRaw<Array<Record<string, number>>>`
+              SELECT (count(*) FILTER (WHERE cod_asked_at IS NOT NULL))::int AS asked,
+                     (count(*) FILTER (WHERE cod_status = 'CONFIRMED'))::int AS confirmed,
+                     (count(*) FILTER (WHERE cod_status = 'CANCELLED'))::int AS cancelled,
+                     (count(*) FILTER (WHERE cod_status = 'NO_ANSWER'))::int AS "notConfirmed",
+                     (count(*) FILTER (WHERE cod_status = 'CLOSED'))::int AS closed
+                FROM store_orders
+               WHERE store_id = ${storeId}::uuid AND cod_asked_at >= ${from} AND cod_asked_at < ${to}`
+          )[0]
+        : undefined;
+    return { kind, counts: { ...(counts ?? {}), ...(cod ?? {}) }, skipReasons: Object.fromEntries(reasons.map((r) => [r.reason, r.n])) };
   }
 
   async orders(storeId: string, query: OrdersQuery, role: Role) {
