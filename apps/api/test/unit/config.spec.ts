@@ -49,4 +49,14 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...production, PUBLIC_LINK_BASE_URL: 'http://go.company.example' })).toThrow(/PUBLIC_LINK_BASE_URL/);
     expect(loadConfig({ ...production, PUBLIC_LINK_BASE_URL: 'https://go.company.example' }).PUBLIC_LINK_BASE_URL).toBe('https://go.company.example');
   });
+
+  it('pins the Shopify API version and allows local outbound requests outside production only (feature 006, T001)', () => {
+    expect(loadConfig({ ...required }).SHOPIFY_API_VERSION).toBe('2026-10');
+    expect(loadConfig({ ...required, SHOPIFY_API_VERSION: '2027-01' }).SHOPIFY_API_VERSION).toBe('2027-01');
+    expect(() => loadConfig({ ...required, SHOPIFY_API_VERSION: 'latest' })).toThrow(/SHOPIFY_API_VERSION/);
+    expect(loadConfig({ ...required }).OUTBOUND_ALLOW_LOCAL).toBe(false);
+    expect(loadConfig({ ...required, NODE_ENV: 'test', OUTBOUND_ALLOW_LOCAL: 'true' }).OUTBOUND_ALLOW_LOCAL).toBe(true);
+    const production = { ...required, NODE_ENV: 'production', COOKIE_SECURE: 'true', APP_URL: 'https://wa.example.com' };
+    expect(() => loadConfig({ ...production, OUTBOUND_ALLOW_LOCAL: 'true' })).toThrow(/OUTBOUND_ALLOW_LOCAL/);
+  });
 });

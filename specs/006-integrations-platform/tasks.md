@@ -32,11 +32,11 @@ its implementation.
 
 **Purpose**: configuration, queue names, the QR library, contract lint and the request catcher.
 
-- [ ] T001 Add the settings `SHOPIFY_API_VERSION` (pattern `YYYY-MM`, default `2026-10`) and `OUTBOUND_ALLOW_LOCAL` (boolean, default false) to the env schema in apps/api/src/common/config/config.ts. The schema must refuse `OUTBOUND_ALLOW_LOCAL=true` when `NODE_ENV=production`. Document both in .env.example, and set `OUTBOUND_ALLOW_LOCAL=true` for the e2e job in .github/workflows/ci.yml
-- [ ] T002 [P] Add `WEBHOOKS_OUT: 'webhooks-out'` and `STORES: 'stores'` to `QUEUES` in apps/api/src/common/queue/queue.constants.ts, with comments (feature 006, plan Complexity Tracking)
-- [ ] T003 [P] Add `qrcode` 1.5.4 and `@types/qrcode` (exact versions) to apps/api/package.json and update package-lock.json
-- [ ] T004 [P] Add specs/006-integrations-platform/contracts/integrations-api.openapi.yaml and specs/006-integrations-platform/contracts/public-api-v1.openapi.yaml to the `lint:contracts` script in package.json
-- [ ] T005 [P] Add a request catcher to mock-meta in tools/mock-meta/src/catch.ts, mounted from tools/mock-meta/src/server.ts: `POST /catch/:name` records method, headers and raw body and answers 200 (or the status in `?status=`); `GET /catch/:name` lists them; `DELETE /catch/:name` clears them
+- [X] T001 Add the settings `SHOPIFY_API_VERSION` (pattern `YYYY-MM`, default `2026-10`) and `OUTBOUND_ALLOW_LOCAL` (boolean, default false) to the env schema in apps/api/src/common/config/config.ts. The schema must refuse `OUTBOUND_ALLOW_LOCAL=true` when `NODE_ENV=production`. Document both in .env.example, and set `OUTBOUND_ALLOW_LOCAL=true` for the e2e job in .github/workflows/ci.yml
+- [X] T002 [P] Add `WEBHOOKS_OUT: 'webhooks-out'` and `STORES: 'stores'` to `QUEUES` in apps/api/src/common/queue/queue.constants.ts, with comments (feature 006, plan Complexity Tracking)
+- [X] T003 [P] Add `qrcode` 1.5.4 and `@types/qrcode` (exact versions) to apps/api/package.json and update package-lock.json
+- [X] T004 [P] Add specs/006-integrations-platform/contracts/integrations-api.openapi.yaml and specs/006-integrations-platform/contracts/public-api-v1.openapi.yaml to the `lint:contracts` script in package.json
+- [X] T005 [P] Add a request catcher to mock-meta in tools/mock-meta/src/catch.ts, mounted from tools/mock-meta/src/server.ts: `POST /catch/:name` records method, headers and raw body and answers 200 (or the status in `?status=`); `GET /catch/:name` lists them; `DELETE /catch/:name` clears them
 
 ---
 

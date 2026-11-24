@@ -15,6 +15,16 @@ export const QUEUES = {
   AI_KNOWLEDGE: 'ai-knowledge',
   /** Drip campaigns: the 30-second tick that enrols from starting events and sends due steps (feature 005, research R7). */
   DRIPS: 'drips',
+  /**
+   * Outbound webhooks: one job per delivery with its retry waits, plus the sweep that re-adds lost
+   * jobs (feature 006, research R2; a queue of its own so long retries never wait behind housekeeping).
+   */
+  WEBHOOKS_OUT: 'webhooks-out',
+  /**
+   * Stores: saved store events, the 15-minute reconciler, token refresh, the 30-second store tick for
+   * COD and cart reminders, and store updates (feature 006, research R7–R11).
+   */
+  STORES: 'stores',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];

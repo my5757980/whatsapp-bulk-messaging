@@ -5,6 +5,7 @@
 import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { aiRequests, answerMessages, resetAi, setAiRules, streamEvents } from './ai.js';
+import { answerFor, catchName, clear as clearCaught, list as listCaught, record as recordCaught, setAnswer as setCatchAnswer } from './catch.js';
 import { env } from './env.js';
 import { postSigned, statusPayload, templateStatusPayload } from './webhook-emitter.js';
 
@@ -209,6 +210,25 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { status: 'ok' });
   if (req.method === 'GET' && url.pathname === '/mock/sent') return send(res, 200, { count: sent.length, messages: sent });
   if (req.method === 'GET' && url.pathname === '/mock/reads') return send(res, 200, { count: reads.length, reads });
+
+  // Feature 006: the request catcher for outbound webhooks (src/catch.ts).
+  const caughtAt = catchName(url.pathname);
+  if (caughtAt) {
+    if (caughtAt.action === 'answer' && req.method === 'POST') {
+      const { status } = JSON.parse((await readBody(req)) || '{}') as { status?: number };
+      setCatchAnswer(caughtAt.name, Number(status) || 200);
+      return send(res, 200, { name: caughtAt.name, status: Number(status) || 200 });
+    }
+    if (caughtAt.action === 'record' && req.method === 'POST') {
+      recordCaught(caughtAt.name, req.method, req.headers, await readBody(req));
+      return send(res, answerFor(caughtAt.name, url.searchParams.get('status')), { received: true });
+    }
+    if (caughtAt.action === 'record' && req.method === 'GET') return send(res, 200, { name: caughtAt.name, requests: listCaught(caughtAt.name) });
+    if (caughtAt.action === 'record' && req.method === 'DELETE') {
+      clearCaught(caughtAt.name);
+      return send(res, 200, { cleared: true });
+    }
+  }
 
   // Feature 004: the fake Claude endpoint (the SDK may add ?beta=true) and its test helpers.
   if (req.method === 'POST' && url.pathname === '/anthropic/v1/messages') {
