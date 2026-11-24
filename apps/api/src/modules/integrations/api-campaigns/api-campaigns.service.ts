@@ -434,7 +434,7 @@ export class ApiCampaignsService {
   }
 }
 
-/** A ready-made request for the developer (FR-017). */
+/** A ready-made request for the developer (FR-017); the key comes from the WBM_API_KEY variable, never inline. */
 export function callExample(baseUrl: string, apiName: string, valueKeys: string[], needsMedia: boolean): string {
   const body = {
     phone: '+971501234567',
@@ -444,9 +444,9 @@ export function callExample(baseUrl: string, apiName: string, valueKeys: string[
   };
   return [
     `curl -X POST '${baseUrl.replace(/\/+$/, '')}/api/v1/api-campaigns/${apiName}/messages' \\`,
-    "  -H 'Authorization: Bearer wbk_YOUR_KEY' \\",
+    '  -H "Authorization: Bearer $WBM_API_KEY" \\',
     "  -H 'Content-Type: application/json' \\",
-    "  -H 'Idempotency-Key: a-unique-id-per-message' \\",
+    "  -H 'Idempotency-Key: <a new id for each message>' \\",
     `  -d '${JSON.stringify(body)}'`,
   ].join('\n');
 }

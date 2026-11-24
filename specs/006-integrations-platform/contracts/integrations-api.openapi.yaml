@@ -847,7 +847,7 @@ components:
       properties:
         id: { type: string, format: uuid }
         eventId: { type: string }
-        type: { $ref: '#/components/schemas/EventType' }
+        type: { anyOf: [{ $ref: '#/components/schemas/EventType' }, { type: string, const: test.ping }], description: 'The event type, or test.ping for a test event sent from the dashboard' }
         status: { type: string, enum: [PENDING, DELIVERED, FAILED, CANCELLED] }
         attempts: { type: integer }
         nextAttemptAt: { type: [string, 'null'], format: date-time }

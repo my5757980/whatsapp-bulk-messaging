@@ -142,7 +142,7 @@ function ApiCampaignView() {
         <CardHeader>
           <CardTitle className="text-base">Ready-made request</CardTitle>
           <CardDescription>
-            Use an API key with the permission &quot;Trigger API campaigns&quot; (Settings → API keys). Send a new Idempotency-Key for each message, so a retry never sends twice.
+            Put an API key with the permission &quot;Trigger API campaigns&quot; (Settings → API keys) in the WBM_API_KEY variable. Send a new Idempotency-Key for each message, so a retry never sends twice.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2">

@@ -28,3 +28,11 @@ regexes = [
   '''whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw''',
   '''g0hM9SsE\+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=''',
 ]
+
+[[allowlists]]
+description = "Feature 006: placeholder text in the API campaign call example of commit b2f193e (apps/api/src/modules/integrations/api-campaigns/api-campaigns.service.ts); 'wbk_YOUR_KEY' and the idempotency example are not secrets, and later commits use $WBM_API_KEY"
+regexTarget = "line"
+regexes = [
+  '''Authorization: Bearer wbk_YOUR_KEY''',
+  '''Idempotency-Key: a-unique-id-per-message''',
+]
