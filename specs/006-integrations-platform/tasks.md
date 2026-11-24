@@ -79,20 +79,20 @@ module wiring, audit actions and redaction that all stories use.
   - no builder accepts a secret field
 - [X] T011 [P] Unit tests packages/shared/src/integrations/scopes.test.ts (R4): the five scope names, `messages.send` as the default for old keys, and the route scope check
 - [X] T012 Implement packages/shared/src/integrations/signing.ts, retries.ts, events.ts and scopes.ts (pure) and export them from packages/shared/src/index.ts
-- [ ] T013 Move the 003 safe request rules (`isBlockedAddress`, `createSafeLookup`, no redirects, https only, a timeout, a size cap) into apps/api/src/common/http/safe-http.ts:
+- [X] T013 Move the 003 safe request rules (`isBlockedAddress`, `createSafeLookup`, no redirects, https only, a timeout, a size cap) into apps/api/src/common/http/safe-http.ts:
   - add `safeRequest({ method, url, headers, body, timeoutMs, maxBytes })`
   - add the `OUTBOUND_ALLOW_LOCAL` allowance for `http://localhost` outside production
   - re-export from apps/api/src/modules/flows/steps/api-client.ts, so 003 and 004 behave as before
   - add unit tests in apps/api/test/unit/safe-http.spec.ts: blocked private and reserved addresses, redirects refused, localhost refused unless allowed, the allowance ignored in production
-- [ ] T014 [P] Add the 006 audit actions of data-model.md §5 to apps/api/src/modules/audit/audit-actions.ts, and list them in `PENDING` in apps/api/test/unit/audit-coverage.spec.ts until their story records them
-- [ ] T015 [P] Add these keys to the redaction list in apps/api/src/common/logging/redaction.ts, with cases in apps/api/test/unit/logging-redaction.spec.ts: `credentials`, `clientsecret`, `consumerkey`, `consumersecret`, `pin`, `webhook-signature`, `x-shopify-hmac-sha256` and `x-wc-webhook-signature` (`secret` and `accesstoken` are already there)
-- [ ] T016 Create apps/api/src/modules/integrations/integrations.module.ts and wire it into apps/api/src/app.module.ts and apps/api/src/worker-features.module.ts:
+- [X] T014 [P] Add the 006 audit actions of data-model.md §5 to apps/api/src/modules/audit/audit-actions.ts, and list them in `PENDING` in apps/api/test/unit/audit-coverage.spec.ts until their story records them
+- [X] T015 [P] Add these keys to the redaction list in apps/api/src/common/logging/redaction.ts, with cases in apps/api/test/unit/logging-redaction.spec.ts: `credentials`, `clientsecret`, `consumerkey`, `consumersecret`, `pin`, `webhook-signature`, `x-shopify-hmac-sha256` and `x-wc-webhook-signature` (`secret` and `accesstoken` are already there)
+- [X] T016 Create apps/api/src/modules/integrations/integrations.module.ts and wire it into apps/api/src/app.module.ts and apps/api/src/worker-features.module.ts:
   - `IntegrationsDomainModule` (global), which exports the services other modules call: `OutboundEvents` (T021), `CodService` (T060), `ChatLinkMatcher` (T075) and `StoreCartStops` (T067)
   - `IntegrationsApiModule`: the controllers
   - the worker processors
 
   Keep apps/api/test/unit/app-module.spec.ts green.
-- [ ] T017 [P] Add apps/web/src/lib/integrations.ts: types from both contracts, query keys and labels for event types, scopes, statuses and reasons
+- [X] T017 [P] Add apps/web/src/lib/integrations.ts: types from both contracts, query keys and labels for event types, scopes, statuses and reasons
 
 **Checkpoint**: the migration applies, shared logic is green, and the module compiles in the HTTP
 app and the worker.

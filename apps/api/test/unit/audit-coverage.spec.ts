@@ -6,8 +6,33 @@ import { AUDIT_ACTIONS } from '../../src/modules/audit/audit-actions.js';
 
 // T175: every audited action of data-model.md §1 is recorded somewhere in the code base.
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
-/** Actions listed before the code that records them exists (empty: every 005 action is recorded, T063). */
-const PENDING = new Set<string>();
+/** Actions listed before the code that records them exists (feature 006 T014; each story removes its own). */
+const PENDING = new Set<string>([
+  'webhook_endpoint.created',
+  'webhook_endpoint.updated',
+  'webhook_endpoint.paused',
+  'webhook_endpoint.resumed',
+  'webhook_endpoint.deleted',
+  'webhook_endpoint.secret_renewed',
+  'webhook_delivery.resent',
+  'api_key.scopes_changed',
+  'store.connected',
+  'store.updated',
+  'store.disconnected',
+  'store.consent_confirmed',
+  'api_campaign.created',
+  'api_campaign.updated',
+  'api_campaign.live',
+  'api_campaign.paused',
+  'api_campaign.stopped',
+  'store_automation.updated',
+  'chat_link.created',
+  'chat_link.updated',
+  'chat_link.turned_off',
+  'chat_link.deleted',
+  'number.connected_with_wizard',
+  'number.fixed_with_wizard',
+]);
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -93,6 +118,30 @@ describe('audit coverage', () => {
       'drip.deleted',
       'drip.contacts_enrolled',
       'drip.contact_removed',
+      'webhook_endpoint.created',
+      'webhook_endpoint.updated',
+      'webhook_endpoint.paused',
+      'webhook_endpoint.resumed',
+      'webhook_endpoint.deleted',
+      'webhook_endpoint.secret_renewed',
+      'webhook_delivery.resent',
+      'api_key.scopes_changed',
+      'store.connected',
+      'store.updated',
+      'store.disconnected',
+      'store.consent_confirmed',
+      'api_campaign.created',
+      'api_campaign.updated',
+      'api_campaign.live',
+      'api_campaign.paused',
+      'api_campaign.stopped',
+      'store_automation.updated',
+      'chat_link.created',
+      'chat_link.updated',
+      'chat_link.turned_off',
+      'chat_link.deleted',
+      'number.connected_with_wizard',
+      'number.fixed_with_wizard',
     ]);
   });
 

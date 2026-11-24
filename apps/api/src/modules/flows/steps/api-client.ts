@@ -1,6 +1,6 @@
-import { lookup as dnsLookup, type LookupAddress } from 'node:dns';
 import { request } from 'node:https';
-import { BlockList, isIP } from 'node:net';
+import { isIP } from 'node:net';
+import { createSafeLookup as createLookup, isBlockedAddress, type Resolver } from '../../../common/http/safe-http.js';
 
 // The HTTP client of API steps and test requests (003 T057, research R11, FR-014). Only HTTPS to
 // public addresses: names are checked when they resolve (the connection uses the checked address,
@@ -24,90 +24,14 @@ export class ApiCallError extends Error {
 
 const blocked = () => new ApiCallError('BLOCKED_ADDRESS', 'This address is private or reserved, so a flow cannot call it');
 
-/**
- * Private, loopback, link-local, shared, documentation, multicast and reserved ranges, in two lists:
- * Node also checks IPv4 addresses against IPv4-mapped IPv6 rules, so one list holding ::ffff:0:0/96
- * would block every IPv4 address. IPv4 inside IPv6 is handled in isBlockedAddress instead.
- */
-const BLOCKED_V4 = new BlockList();
-const BLOCKED_V6 = new BlockList();
-for (const [network, prefix] of [
-  ['0.0.0.0', 8],
-  ['10.0.0.0', 8],
-  ['100.64.0.0', 10],
-  ['127.0.0.0', 8],
-  ['169.254.0.0', 16],
-  ['172.16.0.0', 12],
-  ['192.0.0.0', 24],
-  ['192.0.2.0', 24],
-  ['192.88.99.0', 24],
-  ['192.168.0.0', 16],
-  ['198.18.0.0', 15],
-  ['198.51.100.0', 24],
-  ['203.0.113.0', 24],
-  ['224.0.0.0', 4],
-  ['240.0.0.0', 4],
-] as const) {
-  BLOCKED_V4.addSubnet(network, prefix, 'ipv4');
-}
-for (const [network, prefix] of [
-  ['::', 128],
-  ['::1', 128],
-  ['64:ff9b::', 96],
-  ['100::', 64],
-  ['2001::', 23],
-  ['2001:db8::', 32],
-  ['fc00::', 7],
-  ['fe80::', 10],
-  ['fec0::', 10],
-  ['ff00::', 8],
-] as const) {
-  BLOCKED_V6.addSubnet(network, prefix, 'ipv6');
-}
-
-/** The eight 16-bit groups of an IPv6 address (a dotted IPv4 tail is allowed); null when malformed. */
-function ipv6Groups(address: string): number[] | null {
-  let text = address.toLowerCase();
-  const tail = /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(text);
-  if (tail) {
-    const [a, b, c, d] = tail.slice(1).map(Number) as [number, number, number, number];
-    text = `${text.slice(0, tail.index)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
-  }
-  const [head = '', rest] = text.split('::');
-  const left = head ? head.split(':') : [];
-  const right = rest === undefined ? null : rest ? rest.split(':') : [];
-  const groups = right === null ? left : [...left, ...Array<string>(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right];
-  return groups.length === 8 ? groups.map((g) => parseInt(g || '0', 16)) : null;
-}
-
-/** True for any address an API step may not reach; anything that is not an IP address is refused too. */
-export function isBlockedAddress(address: string): boolean {
-  const family = isIP(address);
-  if (family === 4) return BLOCKED_V4.check(address, 'ipv4');
-  if (family !== 6) return true;
-  const g = ipv6Groups(address);
-  if (!g) return true;
-  // IPv4 inside IPv6 (::ffff:a.b.c.d, also written in hex) is judged as the IPv4 address it is.
-  if (g.slice(0, 5).every((x) => x === 0) && g[5] === 0xffff) {
-    return BLOCKED_V4.check(`${g[6]! >> 8}.${g[6]! & 255}.${g[7]! >> 8}.${g[7]! & 255}`, 'ipv4');
-  }
-  return BLOCKED_V6.check(address, 'ipv6');
-}
-
-type Resolver = (hostname: string, options: { all: true }, callback: (error: NodeJS.ErrnoException | null, addresses: LookupAddress[]) => void) => void;
-type LookupCallback = (error: Error | null, address: string | LookupAddress[], family?: number) => void;
+// The address rules live in common/http/safe-http.ts (feature 006, T013). Flows and the AI agent keep
+// their own error type, so a refused lookup is still an ApiCallError with the reason BLOCKED_ADDRESS.
+export { isBlockedAddress };
+export type { Resolver };
 
 /** A `lookup` for https.request that refuses a name when any address it resolves to is not public. */
-export function createSafeLookup(resolve: Resolver = (host, options, callback) => dnsLookup(host, options, callback)) {
-  return (hostname: string, options: { all?: boolean }, callback: LookupCallback): void => {
-    resolve(hostname, { all: true }, (error, addresses) => {
-      if (error) return callback(error, '');
-      if (!addresses.length || addresses.some((a) => isBlockedAddress(a.address))) return callback(blocked(), '');
-      if (options.all) return callback(null, addresses);
-      const [first] = addresses;
-      return callback(null, first!.address, first!.family);
-    });
-  };
+export function createSafeLookup(resolve?: Resolver) {
+  return createLookup(resolve, blocked);
 }
 
 const safeLookup = createSafeLookup();
