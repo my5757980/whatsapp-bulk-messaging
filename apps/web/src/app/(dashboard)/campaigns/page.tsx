@@ -56,6 +56,9 @@ export default function CampaignsPage() {
           <Button variant="outline" asChild>
             <Link href="/campaigns/retries">Retry rounds</Link>
           </Button>
+          <Button variant="outline" asChild>
+            <Link href="/campaigns/api">API campaigns</Link>
+          </Button>
           <Can permission="campaigns.manage">
             <Button asChild>
               <Link href="/campaigns/new">New campaign</Link>
