@@ -623,6 +623,9 @@ connected.
     WooCommerce documentation.
   - Stores send order and checkout events as they happen. Planning also chooses how missed events
     are fetched again.
+  - WooCommerce has no abandoned cart event of its own (research R8). For WooCommerce stores, cart
+    reminders cover orders left unpaid, linking to the order's payment page. Carts that were never
+    submitted are covered for Shopify only.
 - **Template categories and consent:**
   - Order notifications and COD confirmations use utility templates. Meta decides the category at
     approval.

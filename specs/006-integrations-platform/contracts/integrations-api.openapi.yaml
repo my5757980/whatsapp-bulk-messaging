@@ -1,0 +1,1145 @@
+openapi: 3.1.0
+info:
+  title: WhatsApp Platform - Integrations API
+  version: 0.1.0
+  description: >
+    Webhook endpoints, API key permissions, API campaigns, store connections and automations, chat
+    links and the number connection wizard for the Next.js dashboard (feature
+    006-integrations-platform). Same conventions as 001–005: httpOnly session cookie, an
+    X-CSRF-Token header on every mutating request, an x-permission on every operation, and the
+    error shape {code, message, details, requestId}. Permissions:
+      integrations.manage  ADMIN                 - webhook endpoints, store connections (new in 006)
+      apikeys.manage       ADMIN                 - API key permissions (001)
+      numbers.manage       ADMIN                 - the number connection wizard (001)
+      campaigns.manage     ADMIN, MANAGER        - building API campaigns, store automations, chat links
+      campaigns.launch     ADMIN, MANAGER        - setting API campaigns live, pausing and stopping them
+      campaigns.view       ADMIN, MANAGER, AGENT - results (phone numbers masked for agents)
+      data.export          ADMIN, MANAGER        - CSV exports
+
+    Public routes need no session:
+    - the store webhook receivers check the store's signature first (research R7, R8)
+    - GET /l/c/{code} is served outside /api (servers override), answers 302 to WhatsApp and counts
+      an opening unless the request is a preview or a robot (research R12)
+servers:
+  - url: /api
+security:
+  - sessionCookie: []
+tags:
+  - name: webhooks
+  - name: api-keys
+  - name: api-campaigns
+  - name: stores
+  - name: chat-links
+  - name: number-wizard
+  - name: public
+
+paths:
+  /webhook-event-types:
+    get:
+      tags: [webhooks]
+      summary: The event catalog (research R3)
+      x-permission: integrations.manage
+      responses:
+        '200':
+          description: Event types
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [type, label, group]
+                  properties:
+                    type: { type: string, examples: [message.status] }
+                    label: { type: string }
+                    group: { type: string, enum: [messages, contacts, links, drips, live_chat, api_campaigns, stores, test] }
+
+  /webhook-endpoints:
+    get:
+      tags: [webhooks]
+      summary: List webhook endpoints
+      x-permission: integrations.manage
+      responses:
+        '200': { description: Endpoints, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/WebhookEndpoint' } } } } }
+    post:
+      tags: [webhooks]
+      summary: Add an endpoint; the secret is returned once (FR-001, FR-003)
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WebhookEndpointInput' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/WebhookEndpointWithSecret' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /webhook-endpoints/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [webhooks]
+      summary: One endpoint
+      x-permission: integrations.manage
+      responses:
+        '200': { description: Endpoint, content: { application/json: { schema: { $ref: '#/components/schemas/WebhookEndpoint' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [webhooks]
+      summary: Change name, address, events or the content setting
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/WebhookEndpointPatch' } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/WebhookEndpoint' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [webhooks]
+      summary: Delete; waiting deliveries are cancelled
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /webhook-endpoints/{id}/pause:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [webhooks]
+      summary: Pause deliveries (events keep queuing)
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Paused, content: { application/json: { schema: { $ref: '#/components/schemas/WebhookEndpoint' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /webhook-endpoints/{id}/resume:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [webhooks]
+      summary: Resume; waiting deliveries are due at once
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Active, content: { application/json: { schema: { $ref: '#/components/schemas/WebhookEndpoint' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /webhook-endpoints/{id}/renew-secret:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [webhooks]
+      summary: Make a new secret; the old one keeps signing for 24 hours
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: New secret (shown once), content: { application/json: { schema: { $ref: '#/components/schemas/WebhookEndpointWithSecret' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /webhook-endpoints/{id}/test:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [webhooks]
+      summary: Send a signed test.ping now and return the answer
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200':
+          description: The endpoint's answer
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, durationMs]
+                properties:
+                  ok: { type: boolean }
+                  statusCode: { type: [integer, 'null'] }
+                  error: { type: [string, 'null'], enum: [TIMEOUT, BLOCKED_ADDRESS, NETWORK, REDIRECT, HTTP_4XX, HTTP_5XX, null] }
+                  durationMs: { type: integer }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /webhook-endpoints/{id}/deliveries:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [webhooks]
+      summary: Delivery log, newest first, last 30 days (FR-007)
+      x-permission: integrations.manage
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [PENDING, DELIVERED, FAILED, CANCELLED] } }
+        - { name: type, in: query, schema: { type: string } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of deliveries
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/WebhookDelivery' } }
+                  total: { type: integer }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /webhook-deliveries/{id}/resend:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [webhooks]
+      summary: Send a delivery again with the same event id (FR-007)
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '202': { description: Queued, content: { application/json: { schema: { $ref: '#/components/schemas/WebhookDelivery' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api-keys/{id}/scopes:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [api-keys]
+      summary: Set what an API key may do (FR-010)
+      x-permission: apikeys.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scopes]
+              properties:
+                scopes: { type: array, minItems: 1, uniqueItems: true, items: { $ref: '#/components/schemas/ApiKeyScope' } }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, scopes]
+                properties:
+                  id: { type: string, format: uuid }
+                  scopes: { type: array, items: { $ref: '#/components/schemas/ApiKeyScope' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /api-campaigns:
+    get:
+      tags: [api-campaigns]
+      summary: List API campaigns
+      x-permission: campaigns.view
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ApiCampaignStatus' } }
+      responses:
+        '200': { description: Campaigns, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ApiCampaign' } } } } }
+    post:
+      tags: [api-campaigns]
+      summary: Create a draft API campaign (FR-017)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ApiCampaignInput' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ApiCampaign' } } } }
+        '409': { description: NAME_TAKEN or API_NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /api-campaigns/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [api-campaigns]
+      summary: One API campaign with its call example
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Campaign, content: { application/json: { schema: { $ref: '#/components/schemas/ApiCampaign' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [api-campaigns]
+      summary: Change it; live campaigns change for new calls only (FR-018)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ApiCampaignInput' } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/ApiCampaign' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: STOPPED or API_NAME_FIXED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /api-campaigns/{id}/go-live:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [api-campaigns]
+      summary: Set live; refused with problems when a variable has no source or the template is not approved
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Live, content: { application/json: { schema: { $ref: '#/components/schemas/ApiCampaign' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_READY with problems, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api-campaigns/{id}/pause:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [api-campaigns]
+      summary: Pause; calls are refused with "paused"
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Paused, content: { application/json: { schema: { $ref: '#/components/schemas/ApiCampaign' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_LIVE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /api-campaigns/{id}/stop:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [api-campaigns]
+      summary: Stop for good; results stay, the name is freed
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Stopped, content: { application/json: { schema: { $ref: '#/components/schemas/ApiCampaign' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api-campaigns/{id}/results:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [api-campaigns]
+      summary: Triggers, sent, delivered, read, failed and clicks, in total and per day (FR-022)
+      x-permission: campaigns.view
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Results, content: { application/json: { schema: { $ref: '#/components/schemas/ApiCampaignResults' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api-campaigns/{id}/export:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [api-campaigns]
+      summary: The campaign's triggers and messages as CSV
+      x-permission: data.export
+      responses:
+        '200': { description: CSV file, content: { text/csv: { schema: { type: string } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /stores:
+    get:
+      tags: [stores]
+      summary: Connected stores
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Stores, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Store' } } } } }
+    post:
+      tags: [stores]
+      summary: Connect a store; the access is tested and the store's webhooks are created (FR-023)
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/StoreConnectInput' } } }
+      responses:
+        '201': { description: Connected, content: { application/json: { schema: { $ref: '#/components/schemas/Store' } } } }
+        '409': { description: TOO_MANY_STORES or STORE_EXISTS, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: VALIDATION_FAILED or STORE_ACCESS_FAILED with the store's reason, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /stores/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [stores]
+      summary: One store with its automations
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Store, content: { application/json: { schema: { $ref: '#/components/schemas/Store' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [stores]
+      summary: Change number, country, tag, status mapping, consent confirmation or access details
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/StorePatch' } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Store' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /stores/{id}/disconnect:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [stores]
+      summary: Disconnect; automations stop and the store's webhooks are removed (FR-024)
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Disconnected, content: { application/json: { schema: { $ref: '#/components/schemas/Store' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /stores/{id}/sync:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [stores]
+      summary: Check the connection, repair webhooks and fetch missed orders now (FR-026)
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '202': { description: Queued }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /stores/{id}/automations/{kind}:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { name: kind, in: path, required: true, schema: { $ref: '#/components/schemas/StoreAutomationKind' } }
+    get:
+      tags: [stores]
+      summary: One automation's settings
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Automation, content: { application/json: { schema: { $ref: '#/components/schemas/StoreAutomation' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [stores]
+      summary: Save and turn on or off (FR-029, FR-034, FR-039)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/StoreAutomationInput' } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/StoreAutomation' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /stores/{id}/automations/{kind}/results:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { name: kind, in: path, required: true, schema: { $ref: '#/components/schemas/StoreAutomationKind' } }
+    get:
+      tags: [stores]
+      summary: Results with skip reasons (FR-033, FR-038, FR-044)
+      x-permission: campaigns.view
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Results, content: { application/json: { schema: { $ref: '#/components/schemas/StoreAutomationResults' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /stores/{id}/orders:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [stores]
+      summary: Orders seen, with their messages and COD status
+      x-permission: campaigns.view
+      parameters:
+        - { name: codStatus, in: query, schema: { type: string, enum: [ASKED, CONFIRMED, CANCELLED, NO_ANSWER, CLOSED] } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of orders
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/StoreOrder' } }
+                  total: { type: integer }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /stores/{id}/carts:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [stores]
+      summary: Carts with reminders and recovery
+      x-permission: campaigns.view
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [OPEN, REMINDING, RECOVERED, STOPPED, SKIPPED, EXPIRED] } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of carts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/StoreCart' } }
+                  total: { type: integer }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /integrations/shopify/{storeId}/webhooks:
+    parameters: [{ name: storeId, in: path, required: true, schema: { type: string, format: uuid } }]
+    post:
+      tags: [public]
+      summary: Shopify webhook receiver; X-Shopify-Hmac-Sha256 is checked before anything else (R7)
+      x-permission: public
+      security: []
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object } } }
+      responses:
+        '200': { description: 'Saved (or a repeat, ignored)' }
+        '401': { description: Signature missing or wrong }
+        '404': { description: Unknown or disconnected store }
+
+  /integrations/woocommerce/{storeId}/webhooks:
+    parameters: [{ name: storeId, in: path, required: true, schema: { type: string, format: uuid } }]
+    post:
+      tags: [public]
+      summary: WooCommerce webhook receiver; X-WC-Webhook-Signature is checked, the activation ping is answered (R8)
+      x-permission: public
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { type: object } }
+          application/x-www-form-urlencoded: { schema: { type: object } }
+      responses:
+        '200': { description: 'Saved, a repeat, or the activation ping' }
+        '401': { description: Signature missing or wrong }
+        '404': { description: Unknown or disconnected store }
+
+  /chat-links:
+    get:
+      tags: [chat-links]
+      summary: Chat links with their counts
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Chat links, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/ChatLink' } } } } }
+    post:
+      tags: [chat-links]
+      summary: Create a chat link (FR-045)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ChatLinkInput' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ChatLink' } } } }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /chat-links/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [chat-links]
+      summary: One chat link
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Chat link, content: { application/json: { schema: { $ref: '#/components/schemas/ChatLink' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [chat-links]
+      summary: Change name, message, flow, tag or status; the link and reference stay
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ChatLinkPatch' } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/ChatLink' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [chat-links]
+      summary: Delete; the link shows "no longer in use" and results stay
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /chat-links/{id}/qr:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [chat-links]
+      summary: The QR code image (FR-046)
+      x-permission: campaigns.view
+      parameters:
+        - { name: format, in: query, schema: { type: string, enum: [svg, png], default: svg } }
+        - { name: size, in: query, schema: { type: integer, minimum: 128, maximum: 2048, default: 1024 } }
+      responses:
+        '200':
+          description: Image
+          content:
+            image/svg+xml: { schema: { type: string } }
+            image/png: { schema: { type: string, format: binary } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /chat-links/{id}/results:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [chat-links]
+      summary: Opens, chats started and new contacts per day (FR-049)
+      x-permission: campaigns.view
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Results, content: { application/json: { schema: { $ref: '#/components/schemas/ChatLinkResults' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /chat-links/{id}/contacts:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [chat-links]
+      summary: The contacts who started chats (phones masked for agents)
+      x-permission: campaigns.view
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of contacts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ContactRow' } }
+                  total: { type: integer }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /chat-links/{id}/contacts/export:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [chat-links]
+      summary: The same contacts as CSV
+      x-permission: data.export
+      responses:
+        '200': { description: CSV file, content: { text/csv: { schema: { type: string } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /chat-links/{id}/contacts/tag:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [chat-links]
+      summary: Add a tag to every contact who started a chat (for a campaign audience)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [tag], properties: { tag: { type: string, minLength: 1, maxLength: 50 } } }
+      responses:
+        '200': { description: Tagged, content: { application/json: { schema: { type: object, required: [tagged], properties: { tagged: { type: integer } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /l/c/{code}:
+    servers: [{ url: / }]
+    parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [public]
+      summary: Open a chat link; 302 to WhatsApp, opening counted unless a preview or robot (FR-047)
+      x-permission: public
+      security: []
+      responses:
+        '302': { description: 'To https://wa.me/{number}?text={message with reference}' }
+        '404': { description: 'Unknown, turned off or deleted link page (FR-050)', content: { text/html: { schema: { type: string } } } }
+        '429': { description: Too many openings from one client }
+
+  /number-wizard/sessions:
+    post:
+      tags: [number-wizard]
+      summary: Check a pasted token and list the accounts and numbers it reaches (FR-051)
+      x-permission: numbers.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [accessToken], properties: { accessToken: { type: string, minLength: 20 } } }
+      responses:
+        '201': { description: Wizard session (the token is kept encrypted for 30 minutes), content: { application/json: { schema: { $ref: '#/components/schemas/WizardSession' } } } }
+        '422': { description: TOKEN_INVALID with the reason, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /number-wizard/sessions/{id}/checks:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [number-wizard]
+      summary: Run every check on the chosen number (FR-052)
+      x-permission: numbers.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [wabaId, phoneNumberId]
+              properties: { wabaId: { type: string }, phoneNumberId: { type: string } }
+      responses:
+        '200': { description: Results, content: { application/json: { schema: { $ref: '#/components/schemas/WizardChecks' } } } }
+        '404': { description: Session expired or unknown, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /number-wizard/sessions/{id}/fixes:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [number-wizard]
+      summary: Apply one fix after the admin confirms (register with the PIN, or subscribe the app) (FR-053)
+      x-permission: numbers.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [fix, phoneNumberId, wabaId]
+              properties:
+                fix: { type: string, enum: [REGISTER_NUMBER, SUBSCRIBE_APP] }
+                phoneNumberId: { type: string }
+                wabaId: { type: string }
+                pin: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '200': { description: The checks again, content: { application/json: { schema: { $ref: '#/components/schemas/WizardChecks' } } } }
+        '404': { description: Session expired or unknown, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: FIX_FAILED with Meta's reason, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /number-wizard/sessions/{id}/test-message:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [number-wizard]
+      summary: Send an approved template to the admin's phone and wait for its delivered status (FR-054)
+      x-permission: numbers.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phoneNumberId, wabaId, to]
+              properties: { phoneNumberId: { type: string }, wabaId: { type: string }, to: { type: string } }
+      responses:
+        '200':
+          description: Result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sent, delivered]
+                properties:
+                  sent: { type: boolean }
+                  delivered: { type: boolean, description: True when the delivered status webhook arrived within 60 seconds }
+                  error: { type: [string, 'null'] }
+        '404': { description: Session expired or unknown, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /number-wizard/sessions/{id}/connect:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [number-wizard]
+      summary: Save the number as connected (the 001 number record, token encrypted)
+      x-permission: numbers.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phoneNumberId, wabaId, label]
+              properties:
+                phoneNumberId: { type: string }
+                wabaId: { type: string }
+                label: { type: string, minLength: 1, maxLength: 60 }
+                withoutTest: { type: boolean, default: false }
+      responses:
+        '201': { description: The 001 number, content: { application/json: { schema: { type: object, required: [id], properties: { id: { type: string, format: uuid } } } } } }
+        '404': { description: Session expired or unknown, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: NUMBER_EXISTS, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /numbers/{id}/health-check:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [number-wizard]
+      summary: Run the checks on a connected number with its stored token, changing nothing (FR-055)
+      x-permission: numbers.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Results, content: { application/json: { schema: { $ref: '#/components/schemas/WizardChecks' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: sid }
+    csrfHeader: { type: apiKey, in: header, name: X-CSRF-Token }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+  responses:
+    NotFound:
+      description: Not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationFailed:
+      description: VALIDATION_FAILED, with field details
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [VALIDATION_FAILED, NAME_TAKEN, API_NAME_TAKEN, API_NAME_FIXED, NOT_READY, NOT_LIVE, STOPPED, TOO_MANY_STORES, STORE_EXISTS, STORE_ACCESS_FAILED, TOKEN_INVALID, FIX_FAILED, NUMBER_EXISTS] }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: object, properties: { field: { type: string }, issue: { type: string } } }
+        problems:
+          type: array
+          items: { type: object, required: [code, message], properties: { code: { type: string }, message: { type: string } } }
+        requestId: { type: string }
+    EventType:
+      type: string
+      enum: [message.status, message.received, contact.created, contact.updated, contact.deleted, contact.tags_changed, contact.opted_in, contact.opted_out, link.clicked, drip.joined, drip.finished, drip.left, chat.assigned, chat.closed, api_campaign.triggered, store.notification_sent, store.cod_answered, store.cart_recovered]
+    WebhookEndpointInput:
+      type: object
+      required: [name, url, eventTypes]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        url: { type: string, maxLength: 2000, pattern: '^https://' }
+        eventTypes: { type: array, minItems: 1, uniqueItems: true, items: { $ref: '#/components/schemas/EventType' } }
+        includeContent: { type: boolean, default: true }
+    WebhookEndpointPatch:
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        url: { type: string, maxLength: 2000, pattern: '^https://' }
+        eventTypes: { type: array, minItems: 1, uniqueItems: true, items: { $ref: '#/components/schemas/EventType' } }
+        includeContent: { type: boolean }
+    WebhookEndpoint:
+      type: object
+      required: [id, name, url, eventTypes, includeContent, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        url: { type: string }
+        eventTypes: { type: array, items: { $ref: '#/components/schemas/EventType' } }
+        includeContent: { type: boolean }
+        status: { type: string, enum: [ACTIVE, PAUSED, FAILING] }
+        secretHint: { type: string, description: The last 4 characters only, examples: ['…x9Qa'] }
+        lastSuccessAt: { type: [string, 'null'], format: date-time }
+        lastFailureAt: { type: [string, 'null'], format: date-time }
+        failingSince: { type: [string, 'null'], format: date-time }
+        waiting: { type: integer, description: Deliveries waiting }
+        createdAt: { type: string, format: date-time }
+    WebhookEndpointWithSecret:
+      allOf:
+        - $ref: '#/components/schemas/WebhookEndpoint'
+        - type: object
+          required: [secret]
+          properties:
+            secret: { type: string, description: Shown once, examples: [whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw] }
+    WebhookDelivery:
+      type: object
+      required: [id, eventId, type, status, attempts, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        eventId: { type: string }
+        type: { $ref: '#/components/schemas/EventType' }
+        status: { type: string, enum: [PENDING, DELIVERED, FAILED, CANCELLED] }
+        attempts: { type: integer }
+        nextAttemptAt: { type: [string, 'null'], format: date-time }
+        lastStatusCode: { type: [integer, 'null'] }
+        lastError: { type: [string, 'null'] }
+        lastDurationMs: { type: [integer, 'null'] }
+        deliveredAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+    ApiKeyScope:
+      type: string
+      enum: [messages.send, contacts.read, contacts.write, campaigns.trigger, drips.enrol]
+    ApiCampaignStatus:
+      type: string
+      enum: [DRAFT, LIVE, PAUSED, STOPPED]
+    VariableSource:
+      oneOf:
+        - { type: object, required: [source, key], properties: { source: { const: value }, key: { type: string, pattern: '^[a-z][a-z0-9_]{0,39}$' } } }
+        - { type: object, required: [source, key], properties: { source: { const: field }, key: { type: string } } }
+        - { type: object, required: [source, value], properties: { source: { const: static }, value: { type: string, maxLength: 1024 } } }
+    ApiCampaignInput:
+      type: object
+      required: [name, apiName, numberId, templateId]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        apiName: { type: string, pattern: '^[a-z0-9][a-z0-9-]{1,58}[a-z0-9]$' }
+        numberId: { type: string, format: uuid }
+        templateId: { type: string, format: uuid }
+        variableMapping: { type: object, additionalProperties: { $ref: '#/components/schemas/VariableSource' } }
+        headerMediaAssetId: { type: [string, 'null'], format: uuid }
+        tags: { type: array, maxItems: 10, items: { type: string, maxLength: 50 } }
+        attributes: { type: object, additionalProperties: true }
+        createContacts: { type: boolean, default: true }
+        dailyLimit: { type: [integer, 'null'], minimum: 1, maximum: 100000 }
+    ApiCampaign:
+      type: object
+      required: [id, name, apiName, numberId, templateId, status, variableMapping, createContacts]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        apiName: { type: string }
+        numberId: { type: string, format: uuid }
+        templateId: { type: string, format: uuid }
+        templateName: { type: string }
+        variableMapping: { type: object, additionalProperties: { $ref: '#/components/schemas/VariableSource' } }
+        headerMediaAssetId: { type: [string, 'null'], format: uuid }
+        tags: { type: array, items: { type: string } }
+        attributes: { type: object, additionalProperties: true }
+        createContacts: { type: boolean }
+        dailyLimit: { type: [integer, 'null'] }
+        status: { $ref: '#/components/schemas/ApiCampaignStatus' }
+        pausedReason: { type: [string, 'null'], enum: [TEMPLATE_UNAVAILABLE, NUMBER_DISCONNECTED, MEMBER, null] }
+        callExample: { type: string, description: A ready-made request for the developer }
+        todayTriggers: { type: integer }
+    ApiCampaignResults:
+      type: object
+      required: [totals, days, notSentReasons]
+      properties:
+        totals: { $ref: '#/components/schemas/MessageCounts' }
+        days:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/MessageCounts'
+              - { type: object, required: [date], properties: { date: { type: string, format: date } } }
+        notSentReasons: { type: object, additionalProperties: { type: integer } }
+        failureReasons: { type: object, additionalProperties: { type: integer } }
+    MessageCounts:
+      type: object
+      required: [triggers, sent, delivered, read, failed, clicked, notSent]
+      properties:
+        triggers: { type: integer }
+        sent: { type: integer }
+        delivered: { type: integer }
+        read: { type: integer }
+        failed: { type: integer }
+        clicked: { type: integer }
+        notSent: { type: integer }
+    StorePlatform: { type: string, enum: [SHOPIFY, WOOCOMMERCE] }
+    StoreConnectInput:
+      type: object
+      required: [platform, baseUrl, numberId, defaultCountry, customerTag, credentials]
+      properties:
+        platform: { $ref: '#/components/schemas/StorePlatform' }
+        baseUrl: { type: string, pattern: '^https://', maxLength: 255, examples: ['https://company-shop.myshopify.com'] }
+        numberId: { type: string, format: uuid }
+        defaultCountry: { type: string, pattern: '^[A-Z]{2}$' }
+        customerTag: { type: string, minLength: 1, maxLength: 50 }
+        credentials:
+          description: Never returned. Shopify needs clientId and clientSecret (Dev Dashboard app), or accessToken and clientSecret (legacy custom app); WooCommerce needs consumerKey and consumerSecret.
+          type: object
+          properties:
+            clientId: { type: string }
+            clientSecret: { type: string }
+            accessToken: { type: string }
+            consumerKey: { type: string, pattern: '^ck_' }
+            consumerSecret: { type: string, pattern: '^cs_' }
+    StorePatch:
+      type: object
+      minProperties: 1
+      properties:
+        numberId: { type: string, format: uuid }
+        defaultCountry: { type: string, pattern: '^[A-Z]{2}$' }
+        customerTag: { type: string, minLength: 1, maxLength: 50 }
+        consentIsWhatsapp: { type: boolean, description: The admin confirms the store's consent text names WhatsApp (FR-027) }
+        shippedStatus: { type: [string, 'null'], description: WooCommerce only }
+        deliveredStatus: { type: [string, 'null'], description: WooCommerce only }
+        credentials: { $ref: '#/components/schemas/StoreConnectInput/properties/credentials' }
+    StoreAutomationKind:
+      type: string
+      enum: [ORDER_CONFIRMED, ORDER_SHIPPED, ORDER_DELIVERED, ORDER_CANCELLED, COD_CONFIRMATION, CART_REMINDER]
+    Store:
+      type: object
+      required: [id, platform, name, baseUrl, numberId, defaultCountry, customerTag, consentIsWhatsapp, status, automations]
+      properties:
+        id: { type: string, format: uuid }
+        platform: { $ref: '#/components/schemas/StorePlatform' }
+        name: { type: string }
+        baseUrl: { type: string }
+        numberId: { type: string, format: uuid }
+        defaultCountry: { type: string }
+        customerTag: { type: string }
+        consentIsWhatsapp: { type: boolean }
+        shippedStatus: { type: [string, 'null'] }
+        deliveredStatus: { type: [string, 'null'] }
+        status: { type: string, enum: [CONNECTED, ERROR, DISCONNECTED] }
+        lastError: { type: [string, 'null'] }
+        lastEventAt: { type: [string, 'null'], format: date-time }
+        lastSyncedAt: { type: [string, 'null'], format: date-time }
+        automations:
+          type: array
+          items: { type: object, required: [kind, enabled], properties: { kind: { $ref: '#/components/schemas/StoreAutomationKind' }, enabled: { type: boolean } } }
+    AutomationStep:
+      type: object
+      required: [templateId, variableMapping]
+      properties:
+        templateId: { type: string, format: uuid }
+        variableMapping:
+          type: object
+          description: 'Per template variable: an order field (source "order" with a key such as order_number), a contact field or fixed text'
+          additionalProperties: { type: object }
+        waitMinutes: { type: integer, minimum: 30, maximum: 10080, description: Cart reminders only }
+    StoreAutomationInput:
+      type: object
+      required: [enabled, steps]
+      properties:
+        enabled: { type: boolean }
+        steps: { type: array, minItems: 1, maxItems: 3, items: { $ref: '#/components/schemas/AutomationStep' } }
+        settings:
+          type: object
+          description: COD only
+          properties:
+            confirmedReply: { type: string, maxLength: 1000 }
+            cancelledReply: { type: string, maxLength: 1000 }
+            alreadyAnsweredReply: { type: string, maxLength: 1000 }
+            reminderMinutes: { type: integer, minimum: 30, maximum: 1440, default: 360 }
+            finalMinutes: { type: integer, minimum: 60, maximum: 4320, default: 1440 }
+            autoCancel: { type: boolean, default: false }
+    StoreAutomation:
+      allOf:
+        - $ref: '#/components/schemas/StoreAutomationInput'
+        - type: object
+          required: [kind, problems]
+          properties:
+            kind: { $ref: '#/components/schemas/StoreAutomationKind' }
+            problems: { type: array, items: { type: object, required: [code, message], properties: { code: { type: string }, message: { type: string } } } }
+    StoreAutomationResults:
+      type: object
+      required: [kind, counts, skipReasons]
+      properties:
+        kind: { $ref: '#/components/schemas/StoreAutomationKind' }
+        counts:
+          type: object
+          description: Orders or carts, sent, delivered, read, failed and skipped; COD adds asked, confirmed, cancelled and notConfirmed; carts add perStep, clicks, recovered and recoveredValue
+          additionalProperties: true
+        skipReasons: { type: object, additionalProperties: { type: integer } }
+    StoreOrder:
+      type: object
+      required: [id, orderNumber, total, currency, paymentKind, codStatus, placedAt, messages]
+      properties:
+        id: { type: string, format: uuid }
+        orderNumber: { type: string }
+        contact: { type: [object, 'null'], properties: { id: { type: string }, name: { type: [string, 'null'] }, phone: { type: [string, 'null'] } } }
+        total: { type: string, description: Decimal as text }
+        currency: { type: string }
+        paymentKind: { type: string, enum: [COD, PREPAID, UNPAID] }
+        status: { type: string }
+        codStatus: { type: string, enum: [NONE, ASKED, CONFIRMED, CANCELLED, NO_ANSWER, CLOSED] }
+        placedAt: { type: string, format: date-time }
+        messages:
+          type: array
+          items: { type: object, required: [kind, outcome], properties: { kind: { type: string }, outcome: { type: string, enum: [QUEUED, SKIPPED] }, skipReason: { type: [string, 'null'] }, status: { type: [string, 'null'] } } }
+    StoreCart:
+      type: object
+      required: [id, value, currency, status, remindersSent, startedAt]
+      properties:
+        id: { type: string, format: uuid }
+        contact: { type: [object, 'null'], properties: { id: { type: string }, name: { type: [string, 'null'] }, phone: { type: [string, 'null'] } } }
+        value: { type: string }
+        currency: { type: string }
+        status: { type: string, enum: [OPEN, REMINDING, RECOVERED, STOPPED, SKIPPED, EXPIRED] }
+        stopReason: { type: [string, 'null'] }
+        remindersSent: { type: integer }
+        recoveredValue: { type: [string, 'null'] }
+        startedAt: { type: string, format: date-time }
+    ChatLinkInput:
+      type: object
+      required: [name, numberId, message]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        numberId: { type: string, format: uuid }
+        message: { type: string, minLength: 1, maxLength: 500 }
+        flowId: { type: [string, 'null'], format: uuid }
+        tagId: { type: [string, 'null'], format: uuid }
+    ChatLinkPatch:
+      type: object
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        message: { type: string, minLength: 1, maxLength: 500 }
+        flowId: { type: [string, 'null'], format: uuid }
+        tagId: { type: [string, 'null'], format: uuid }
+        status: { type: string, enum: [ACTIVE, OFF] }
+    ChatLink:
+      type: object
+      required: [id, name, numberId, message, ref, shortUrl, whatsappUrl, status, opens, chatsStarted]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        numberId: { type: string, format: uuid }
+        message: { type: string }
+        ref: { type: string, examples: [K7QX2M] }
+        shortUrl: { type: string, examples: ['https://go.company.example/c/Ab3dEf9hJk'] }
+        whatsappUrl: { type: string, examples: ['https://wa.me/971501234567?text=Hi%20(ref%20K7QX2M)'] }
+        flowId: { type: [string, 'null'], format: uuid }
+        tagId: { type: [string, 'null'], format: uuid }
+        status: { type: string, enum: [ACTIVE, OFF] }
+        opens: { type: integer }
+        chatsStarted: { type: integer }
+    ChatLinkResults:
+      type: object
+      required: [totals, days]
+      properties:
+        totals: { type: object, required: [opens, chatsStarted, newContacts], properties: { opens: { type: integer }, chatsStarted: { type: integer }, newContacts: { type: integer } } }
+        days:
+          type: array
+          items: { type: object, required: [date, opens, chatsStarted, newContacts], properties: { date: { type: string, format: date }, opens: { type: integer }, chatsStarted: { type: integer }, newContacts: { type: integer } } }
+    ContactRow:
+      type: object
+      required: [id]
+      properties:
+        id: { type: [string, 'null'] }
+        name: { type: [string, 'null'] }
+        phone: { type: [string, 'null'], description: Masked for roles without phones.full }
+        startedAt: { type: string, format: date-time }
+    WizardSession:
+      type: object
+      required: [id, token, accounts, expiresAt]
+      properties:
+        id: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time }
+        token: { $ref: '#/components/schemas/WizardCheck' }
+        accounts:
+          type: array
+          items:
+            type: object
+            required: [wabaId, name, numbers]
+            properties:
+              wabaId: { type: string }
+              name: { type: string }
+              businessName: { type: [string, 'null'] }
+              numbers:
+                type: array
+                items:
+                  type: object
+                  required: [phoneNumberId, displayPhoneNumber]
+                  properties:
+                    phoneNumberId: { type: string }
+                    displayPhoneNumber: { type: string }
+                    verifiedName: { type: [string, 'null'] }
+                    alreadyConnected: { type: boolean }
+    WizardCheck:
+      type: object
+      required: [check, result, detail]
+      properties:
+        check: { type: string, enum: [TOKEN_VALID, TOKEN_PERMISSIONS, TOKEN_EXPIRY, NUMBER_REGISTERED, TWO_STEP_PIN, DISPLAY_NAME, QUALITY, MESSAGING_LIMIT, APP_SUBSCRIBED, WEBHOOK_CALLBACK, TEST_MESSAGE] }
+        result: { type: string, enum: [PASSED, FAILED, WARNING] }
+        detail: { type: string }
+        fix: { type: [string, 'null'], description: 'Plain steps, or the wizard fix that applies' }
+        fixAction: { type: [string, 'null'], enum: [REGISTER_NUMBER, SUBSCRIBE_APP, null] }
+    WizardChecks:
+      type: object
+      required: [checks, ready]
+      properties:
+        checks: { type: array, items: { $ref: '#/components/schemas/WizardCheck' } }
+        ready: { type: boolean, description: No FAILED check }

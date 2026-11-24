@@ -1,0 +1,319 @@
+openapi: 3.1.0
+info:
+  title: WhatsApp Bulk Messaging - Public API v1 (feature 006 additions)
+  version: 1.1.0
+  description: >
+    Additions to the 001 public API (specs/001-whatsapp-bulk-messaging/contracts/public-api.openapi.yaml)
+    for contacts, tags, attributes, drip enrolment and API campaigns (feature 006, FR-010 to FR-022).
+    Same rules as 001:
+    - authenticate with `Authorization: Bearer wbk_...`
+    - requests are limited per key (default 60 per minute, with `Retry-After` on 429)
+    - send `Idempotency-Key` on changing requests; a repeated key within 24 hours returns the first
+      answer
+    Each operation's `x-scope` names the key permission it needs. Keys made before 006 have only
+    `messages.send`, and other operations answer 403 `insufficient_scope`. Phone numbers are E.164
+    in answers; numbers without a country code are read with the company's default country.
+servers:
+  - url: /api/v1
+security:
+  - apiKey: []
+
+paths:
+  /contacts:
+    get:
+      summary: List contacts, oldest change first, for syncing (FR-012)
+      x-scope: contacts.read
+      parameters:
+        - { name: tag, in: query, schema: { type: string } }
+        - { name: updatedSince, in: query, schema: { type: string, format: date-time } }
+        - { name: cursor, in: query, schema: { type: string }, description: The nextCursor of the previous page }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 100 } }
+      responses:
+        '200':
+          description: A page
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, nextCursor]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Contact' } }
+                  nextCursor: { type: [string, 'null'] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+    post:
+      summary: Create a contact, or update the one with this phone number (FR-011)
+      x-scope: contacts.write
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ContactUpsert' } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Contact' } } } }
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Contact' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /contacts/lookup:
+    get:
+      summary: Find a contact by phone number
+      x-scope: contacts.read
+      parameters:
+        - { name: phone, in: query, required: true, schema: { type: string } }
+      responses:
+        '200': { description: The contact, content: { application/json: { schema: { $ref: '#/components/schemas/Contact' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /contacts/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      summary: One contact
+      x-scope: contacts.read
+      responses:
+        '200': { description: The contact, content: { application/json: { schema: { $ref: '#/components/schemas/Contact' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      summary: Change name or attributes (null removes an attribute)
+      x-scope: contacts.write
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                name: { type: [string, 'null'], maxLength: 120 }
+                attributes: { type: object, additionalProperties: true }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/Contact' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /contacts/{id}/tags:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      summary: Add tags (new tags are created)
+      x-scope: contacts.write
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [tags], properties: { tags: { type: array, minItems: 1, maxItems: 20, items: { type: string, maxLength: 50 } } } }
+      responses:
+        '200': { description: The contact, content: { application/json: { schema: { $ref: '#/components/schemas/Contact' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /contacts/{id}/tags/{tag}:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { name: tag, in: path, required: true, schema: { type: string } }
+    delete:
+      summary: Remove a tag
+      x-scope: contacts.write
+      responses:
+        '200': { description: The contact, content: { application/json: { schema: { $ref: '#/components/schemas/Contact' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /contacts/{id}/opt-in:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      summary: Record an opt-in; a source note is required (FR-013)
+      x-scope: contacts.write
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [sourceNote], properties: { sourceNote: { type: string, minLength: 3, maxLength: 500 } } }
+      responses:
+        '200': { description: The contact, content: { application/json: { schema: { $ref: '#/components/schemas/Contact' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: OPTED_OUT (only the customer can opt in again after opting out by STOP), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /contacts/{id}/opt-out:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      summary: Record an opt-out; it always wins
+      x-scope: contacts.write
+      responses:
+        '200': { description: The contact, content: { application/json: { schema: { $ref: '#/components/schemas/Contact' } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /tags:
+    get:
+      summary: All tags
+      x-scope: contacts.read
+      responses:
+        '200': { description: Tags, content: { application/json: { schema: { type: array, items: { type: object, required: [id, name], properties: { id: { type: string, format: uuid }, name: { type: string } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+
+  /attributes:
+    get:
+      summary: Attribute definitions
+      x-scope: contacts.read
+      responses:
+        '200': { description: Attributes, content: { application/json: { schema: { type: array, items: { type: object, required: [key, label, type], properties: { key: { type: string }, label: { type: string }, type: { type: string, enum: [TEXT, NUMBER, DATE, BOOLEAN] } } } } } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+
+  /drips/{drip}/enrolments:
+    parameters: [{ name: drip, in: path, required: true, schema: { type: string }, description: The drip's id or name }]
+    post:
+      summary: Add a contact to an active drip under its rules (FR-014)
+      x-scope: drips.enrol
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              oneOf:
+                - { required: [contactId], properties: { contactId: { type: string, format: uuid } } }
+                - { required: [phone], properties: { phone: { type: string } } }
+      responses:
+        '200':
+          description: The result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enrolled]
+                properties:
+                  enrolled: { type: boolean }
+                  reason: { type: [string, 'null'], enum: [opted_out, blocked, already_in, not_found, null] }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_ACTIVE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /drips/{drip}/enrolments/{contactId}:
+    parameters:
+      - { name: drip, in: path, required: true, schema: { type: string } }
+      - { name: contactId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      summary: Remove a contact from a drip (they leave with the reason REMOVED)
+      x-scope: drips.enrol
+      responses:
+        '204': { description: Removed }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api-campaigns/{apiName}/messages:
+    parameters: [{ name: apiName, in: path, required: true, schema: { type: string } }]
+    post:
+      summary: Trigger an API campaign for one phone number (FR-019)
+      x-scope: campaigns.trigger
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone: { type: string }
+                name: { type: string, maxLength: 120, description: Used when the contact is new }
+                values: { type: object, additionalProperties: { type: string, maxLength: 1024 } }
+                mediaUrl: { type: string, pattern: '^https://', description: 'Header image, video or document when the template has one and the campaign sets none' }
+                optIn: { type: object, required: [sourceNote], properties: { sourceNote: { type: string, minLength: 3, maxLength: 500 } } }
+      responses:
+        '202':
+          description: Queued
+          content:
+            application/json:
+              schema: { type: object, required: [messageId, contactId], properties: { messageId: { type: string, format: uuid }, contactId: { type: string, format: uuid } } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'NOT_LIVE (paused or stopped), DAILY_LIMIT, or NOT_SENT with reason opted_out, no_opt_in or blocked', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: VALIDATION_FAILED or MISSING_VALUE naming the value, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+components:
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      description: API key created in Settings > API keys (format wbk_...)
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, schema: { type: string, maxLength: 100 } }
+  responses:
+    Unauthorized:
+      description: Missing, unknown or revoked key
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    InsufficientScope:
+      description: insufficient_scope, naming the scope needed
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationFailed:
+      description: VALIDATION_FAILED, with field details
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    TooManyRequests:
+      description: Rate limit exceeded; see Retry-After
+      headers: { Retry-After: { schema: { type: integer } } }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [VALIDATION_FAILED, insufficient_scope, NOT_LIVE, DAILY_LIMIT, NOT_SENT, MISSING_VALUE, OPTED_OUT, NOT_ACTIVE] }
+        message: { type: string }
+        reason: { type: [string, 'null'] }
+        details:
+          type: array
+          items: { type: object, properties: { field: { type: string }, issue: { type: string } } }
+        requestId: { type: string }
+    ContactUpsert:
+      type: object
+      required: [phone]
+      properties:
+        phone: { type: string }
+        name: { type: [string, 'null'], maxLength: 120 }
+        tags: { type: array, maxItems: 20, items: { type: string, maxLength: 50 } }
+        attributes: { type: object, additionalProperties: true }
+        optIn: { type: object, required: [sourceNote], properties: { sourceNote: { type: string, minLength: 3, maxLength: 500 } } }
+    Contact:
+      type: object
+      required: [id, phone, tags, attributes, consentStatus, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        phone: { type: string, examples: ['+971501234567'] }
+        name: { type: [string, 'null'] }
+        tags: { type: array, items: { type: string } }
+        attributes: { type: object, additionalProperties: true }
+        consentStatus: { type: string, enum: [OPTED_IN, OPTED_OUT, UNKNOWN] }
+        consentAt: { type: [string, 'null'], format: date-time }
+        blocked: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
