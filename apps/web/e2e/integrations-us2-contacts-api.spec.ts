@@ -34,8 +34,10 @@ test('US2: manage contacts through the API with a scoped key', async ({ page, pl
   // 4. The dashboard shows it, with its tags and consent.
   await page.goto(`/contacts/${contact.id}`);
   await expect(page.getByText('Layla').first()).toBeVisible();
-  await expect(page.getByText('crm-lead').first()).toBeVisible();
-  await expect(page.getByText('newsletter').first()).toBeVisible();
+  // Tags show in the editable tags field.
+  const tags = page.getByLabel('Tags (comma separated)');
+  await expect(tags).toHaveValue(/crm-lead/);
+  await expect(tags).toHaveValue(/newsletter/);
   await expect(page.getByText(/Opted in/i).first()).toBeVisible();
 
   // A send-only key cannot read contacts.
