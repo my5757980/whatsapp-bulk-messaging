@@ -7,6 +7,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { aiRequests, answerMessages, resetAi, setAiRules, streamEvents } from './ai.js';
 import { answerFor, catchName, clear as clearCaught, list as listCaught, record as recordCaught, setAnswer as setCatchAnswer } from './catch.js';
 import { env } from './env.js';
+import { handleShopify } from './shopify.js';
+import { handleWoo } from './woocommerce.js';
 import { postSigned, statusPayload, templateStatusPayload } from './webhook-emitter.js';
 
 interface MockTemplate {
@@ -210,6 +212,10 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   if (req.method === 'GET' && url.pathname === '/health') return send(res, 200, { status: 'ok' });
   if (req.method === 'GET' && url.pathname === '/mock/sent') return send(res, 200, { count: sent.length, messages: sent });
   if (req.method === 'GET' && url.pathname === '/mock/reads') return send(res, 200, { count: reads.length, reads });
+
+  // Feature 006: mock Shopify and WooCommerce stores (src/shopify.ts, src/woocommerce.ts).
+  if (await handleShopify(req, res, url)) return;
+  if (await handleWoo(req, res, url)) return;
 
   // Feature 006: the request catcher for outbound webhooks (src/catch.ts).
   const caughtAt = catchName(url.pathname);
