@@ -783,7 +783,7 @@ components:
       properties:
         type: { type: string, examples: [INTERVENED, TRANSFERRED, RESOLVED, AUTO_RESOLVED, REQUESTED, TAG_ADDED, CAMPAIGN_SENT, CONSENT_CHANGED, BLOCKED] }
         at: { type: string, format: date-time }
-        actor: { type: object, properties: { type: { type: string, enum: [MEMBER, CUSTOMER, SYSTEM, CAMPAIGN, FLOW, AI_AGENT] }, name: { type: [string, 'null'] } } }
+        actor: { type: object, properties: { type: { type: string, enum: [MEMBER, CUSTOMER, SYSTEM, CAMPAIGN, FLOW, AI_AGENT, API_KEY], description: API_KEY marks changes made through the public API (feature 006) }, name: { type: [string, 'null'] } } }
         data: { type: object, additionalProperties: true }
     CannedMessageInput:
       type: object

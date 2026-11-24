@@ -6,7 +6,7 @@ import { api } from '@/lib/api-client';
 export interface JourneyEntry {
   type: string;
   at: string;
-  actor: { type: 'MEMBER' | 'CUSTOMER' | 'SYSTEM' | 'CAMPAIGN' | 'FLOW' | 'AI_AGENT'; name: string | null };
+  actor: { type: 'MEMBER' | 'CUSTOMER' | 'SYSTEM' | 'CAMPAIGN' | 'FLOW' | 'AI_AGENT' | 'API_KEY'; name: string | null };
   data: Record<string, unknown>;
 }
 
@@ -48,8 +48,14 @@ const DRIP_LEFT_REASON: Record<string, string> = {
 /** Our own wording for journey entries (constitution Principle II). */
 export function describeJourneyEntry(entry: JourneyEntry): string {
   const d = entry.data;
-  // Changes the AI agent made say so, with the agent's name (004 T110).
-  const by = entry.actor.name ? (entry.actor.type === 'AI_AGENT' ? ` by AI agent "${entry.actor.name}"` : ` by ${entry.actor.name}`) : '';
+  // Changes the AI agent made say so, with the agent's name (004 T110); API changes name the key (006).
+  const by = entry.actor.name
+    ? entry.actor.type === 'AI_AGENT'
+      ? ` by AI agent "${entry.actor.name}"`
+      : entry.actor.type === 'API_KEY'
+        ? ` by API key "${entry.actor.name}"`
+        : ` by ${entry.actor.name}`
+    : '';
   const agent = String(d.agentName ?? entry.actor.name ?? '');
   const test = d.test ? ' (test)' : '';
   switch (entry.type) {
