@@ -145,6 +145,18 @@ export class PlatformEvents {
     return this.when('contact.opted_out', async () => ({ contact: await this.contact(db, contactId), source }), db);
   }
 
+  /** A call to an API campaign, sent or refused (feature 006 US3, FR-019). */
+  apiCampaignTriggered(
+    db: Db,
+    input: { campaign: { id: string; name: string; apiName: string }; contactId: string | null; outcome: 'QUEUED' | 'NOT_SENT'; reason: string | null; messageId: string | null },
+  ): Promise<void> {
+    return this.when(
+      'api_campaign.triggered',
+      async () => ({ apiCampaign: input.campaign, contact: await this.contact(db, input.contactId), outcome: input.outcome, reason: input.reason, messageId: input.messageId }),
+      db,
+    );
+  }
+
   linkClicked(db: Db, input: { contactId: string | null; campaignId: string | null; dripId: string | null; destination: string; device: string; at: Date }): Promise<void> {
     return this.when(
       'link.clicked',

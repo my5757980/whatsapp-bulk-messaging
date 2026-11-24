@@ -212,6 +212,7 @@ export class ContactsService {
             countryCode: phone.country,
             name: input.name ?? null,
             attributes: attributes as Prisma.InputJsonValue,
+            ...(source === 'api' ? { leadSource: 'API' } : {}),
             ...(status ? { consentStatus: status, consentSource: 'MANUAL' as const, consentSourceNote: input.consentSourceNote ?? null, consentAt: now } : {}),
           },
         });

@@ -1,6 +1,7 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { CampaignsService } from '../../campaigns/campaigns.service.js';
+import { ApiCampaignPauser } from '../../integrations/api-campaigns/api-campaign-pauser.js';
 import { TemplatesSyncService, mapTemplateStatus } from '../../templates/templates-sync.service.js';
 import { WebhookRouter, type WebhookChange, type WebhookChangeHandler } from '../webhook-router.js';
 
@@ -21,6 +22,7 @@ export class TemplateStatusHandler implements WebhookChangeHandler, OnModuleInit
     private readonly prisma: PrismaService,
     private readonly campaigns: CampaignsService,
     private readonly sync: TemplatesSyncService,
+    private readonly apiCampaigns: ApiCampaignPauser,
   ) {}
 
   onModuleInit(): void {
@@ -58,5 +60,7 @@ export class TemplateStatusHandler implements WebhookChangeHandler, OnModuleInit
       const running = await this.prisma.campaign.findMany({ where: { templateId: template.id, state: 'RUNNING' }, select: { id: true } });
       for (const campaign of running) await this.campaigns.autoPause(campaign.id, `template_${status.toLowerCase()}`);
     }
+    // Live API campaigns pause on any status other than approved (feature 006, FR-021).
+    if (status !== 'APPROVED') await this.apiCampaigns.pauseForTemplate(template.id);
   }
 }

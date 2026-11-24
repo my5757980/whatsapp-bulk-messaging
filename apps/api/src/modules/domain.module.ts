@@ -30,7 +30,9 @@ import { NumbersController } from './numbers/numbers.controller.js';
 import { NumbersService } from './numbers/numbers.service.js';
 import { IdempotencyService } from './public-api/idempotency.service.js';
 import { PublicApiService } from './public-api/public-api.service.js';
+import { ApiCampaignTriggerService } from './integrations/api-campaigns/api-campaign-trigger.service.js';
 import { IdempotentResponses } from './public-api/idempotent-responses.service.js';
+import { PublicApiCampaignsController } from './public-api/public-api-campaigns.controller.js';
 import { PublicContactsController } from './public-api/public-contacts.controller.js';
 import { PublicContactsService } from './public-api/public-contacts.service.js';
 import { PublicDripsController, PublicDripsService } from './public-api/public-drips.controller.js';
@@ -113,7 +115,7 @@ export class DomainModule {}
   imports: [DomainModule],
   // Team management needs AuthService, which only the HTTP app loads; keeping these out of
   // DomainModule lets the worker boot without the auth module.
-  providers: [MailerService, InvitationsService, UsersService, PublicContactsService, PublicDripsService],
+  providers: [MailerService, InvitationsService, UsersService, PublicContactsService, PublicDripsService, ApiCampaignTriggerService],
   controllers: [
     NumbersController,
     TemplatesController,
@@ -135,6 +137,7 @@ export class DomainModule {}
     PublicTemplatesController,
     PublicContactsController,
     PublicDripsController,
+    PublicApiCampaignsController,
     ApiMessagesController,
   ],
 })

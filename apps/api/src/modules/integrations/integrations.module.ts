@@ -1,4 +1,7 @@
 import { Global, Module, type Provider, type Type } from '@nestjs/common';
+import { ApiCampaignPauser } from './api-campaigns/api-campaign-pauser.js';
+import { ApiCampaignsController } from './api-campaigns/api-campaigns.controller.js';
+import { ApiCampaignsService } from './api-campaigns/api-campaigns.service.js';
 import { OutboundEvents } from './webhooks/outbound-events.js';
 import { PlatformEvents } from './webhooks/platform-events.js';
 import { WebhookDeliveries } from './webhooks/webhook-deliveries.service.js';
@@ -11,15 +14,16 @@ import { WebhookEndpointsService } from './webhooks/webhook-endpoints.service.js
 // webhooks, live chat, consent and contact changes. HTTP controllers live in IntegrationsApiModule,
 // and the queue processors in WorkerFeaturesModule. Each story adds its providers here.
 
-const DOMAIN: Provider[] = [OutboundEvents, WebhookDeliveries, PlatformEvents];
+// The API campaign pauser runs from template webhooks and number disconnects (US3, FR-021).
+const DOMAIN: Provider[] = [OutboundEvents, WebhookDeliveries, PlatformEvents, ApiCampaignPauser];
 
 /** Integration services shared by the HTTP app and the worker. */
 @Global()
 @Module({ providers: DOMAIN, exports: DOMAIN })
 export class IntegrationsDomainModule {}
 
-const API_PROVIDERS: Provider[] = [WebhookEndpointsService];
-const CONTROLLERS: Type[] = [WebhookEndpointsController];
+const API_PROVIDERS: Provider[] = [WebhookEndpointsService, ApiCampaignsService];
+const CONTROLLERS: Type[] = [WebhookEndpointsController, ApiCampaignsController];
 
 /** Webhook endpoint, API campaign, store, chat link and number wizard endpoints (HTTP app only). */
 @Module({
