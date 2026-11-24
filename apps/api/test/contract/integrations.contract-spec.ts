@@ -1,5 +1,6 @@
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import nock from 'nock';
+import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { OutboundEvents } from '../../src/modules/integrations/webhooks/outbound-events.js';
 import { WebhookDeliveryProcessor } from '../../src/modules/integrations/webhooks/webhook-delivery.processor.js';
@@ -101,5 +102,71 @@ describe('Integrations API contract', () => {
     await check('post', '/api-campaigns/{id}/stop', await call('post', `/api-campaigns/${id}/stop`), 200);
     await check('post', '/api-campaigns/{id}/stop', await call('post', `/api-campaigns/${missing}/stop`), 404);
     await check('patch', '/api-campaigns/{id}', await call('patch', `/api-campaigns/${id}`, { dailyLimit: 5 }), 409);
+  });
+
+  it('US4: stores, automations, results, orders, sync, disconnect and both receivers', async () => {
+    const number = await seedNumber(ctx);
+    const template = await seedTemplate(ctx, number.wabaId, { components: [{ type: 'BODY', text: 'Order {{1}} confirmed' }], variables: [{ key: 'BODY.1', example: '1001' }] });
+    const missing = randomUUID();
+    const key = { consumerKey: 'ck_contract_0123456789', consumerSecret: 'cs_contract_0123456789' };
+    const site = `https://${uniq('woo-contract-')}.example.test`;
+    const hooks: Array<{ id: number; secret: string }> = [];
+    nock(site).persist().get('/wp-json/').reply(200, { name: 'Contract Woo' });
+    nock(site).persist().get('/wp-json/wc/v3/orders').query(true).reply(200, []);
+    nock(site).persist().get('/wp-json/wc/v3/webhooks').query(true).reply(200, []);
+    nock(site)
+      .persist()
+      .post('/wp-json/wc/v3/webhooks')
+      .reply((_uri, body) => {
+        const b = (typeof body === 'string' ? JSON.parse(body) : body) as { secret: string };
+        hooks.push({ id: hooks.length + 1, secret: b.secret });
+        return [201, { id: hooks.length, status: 'active' }];
+      });
+    nock(site).persist().delete(/\/wp-json\/wc\/v3\/webhooks\/\d+/).query(true).reply(200, {});
+    const input = { platform: 'WOOCOMMERCE', baseUrl: site, numberId: number.id, defaultCountry: 'AE', customerTag: 'woo', credentials: key };
+    const created = await call('post', '/stores', input);
+    await check('post', '/stores', created, 201);
+    await check('post', '/stores', await call('post', '/stores', input), 409);
+    await check('post', '/stores', await call('post', '/stores', { ...input, baseUrl: 'http://not-https.example.test' }), 422);
+    const id = created.body.id as string;
+    await check('get', '/stores', await call('get', '/stores'), 200);
+    await check('get', '/stores/{id}', await call('get', `/stores/${id}`), 200);
+    await check('get', '/stores/{id}', await call('get', `/stores/${missing}`), 404);
+    await check('patch', '/stores/{id}', await call('patch', `/stores/${id}`, { customerTag: 'woo-buyers', consentIsWhatsapp: true }), 200);
+    await check('patch', '/stores/{id}', await call('patch', `/stores/${id}`, { defaultCountry: 'uae' }), 422);
+    await check('patch', '/stores/{id}', await call('patch', `/stores/${missing}`, { customerTag: 'x' }), 404);
+
+    const automation = { enabled: true, steps: [{ templateId: template.id, variableMapping: { 'BODY.1': { source: 'order', key: 'order_number' } } }] };
+    await check('put', '/stores/{id}/automations/{kind}', await call('put', `/stores/${id}/automations/ORDER_CONFIRMED`, automation), 200);
+    await check('put', '/stores/{id}/automations/{kind}', await call('put', `/stores/${id}/automations/ORDER_CONFIRMED`, { enabled: true, steps: [] }), 422);
+    await check('put', '/stores/{id}/automations/{kind}', await call('put', `/stores/${missing}/automations/ORDER_CONFIRMED`, automation), 404);
+    await check('get', '/stores/{id}/automations/{kind}', await call('get', `/stores/${id}/automations/ORDER_CONFIRMED`), 200);
+    await check('get', '/stores/{id}/automations/{kind}', await call('get', `/stores/${missing}/automations/ORDER_CONFIRMED`), 404);
+
+    const order = JSON.stringify({ id: 990, number: '990', status: 'processing', currency: 'AED', total: '10.00', payment_method: 'bacs', date_created_gmt: new Date().toISOString().slice(0, 19), date_modified_gmt: new Date().toISOString().slice(0, 19), billing: { phone: uaePhone() }, shipping: {}, line_items: [], meta_data: [] });
+    const woo = (signature: string) =>
+      request(ctx.server())
+        .post(`/api/integrations/woocommerce/${id}/webhooks`)
+        .set('content-type', 'application/json')
+        .set('x-wc-webhook-topic', 'order.created')
+        .set('x-wc-webhook-delivery-id', randomUUID())
+        .set('x-wc-webhook-signature', signature)
+        .send(order);
+    const wooRoute = '/integrations/woocommerce/{storeId}/webhooks';
+    await check('post', wooRoute, await woo('bad'), 401);
+    await check('post', wooRoute, await woo(createHmac('sha256', hooks[0]!.secret).update(order).digest('base64')), 200);
+    const shopifyRoute = '/integrations/shopify/{storeId}/webhooks';
+    const toShopify = request(ctx.server()).post(`/api/integrations/shopify/${id}/webhooks`).set('content-type', 'application/json').set('x-shopify-hmac-sha256', 'bad').send('{}');
+    await check('post', shopifyRoute, await toShopify, 404);
+
+    await check('get', '/stores/{id}/automations/{kind}/results', await call('get', `/stores/${id}/automations/ORDER_CONFIRMED/results`), 200);
+    await check('get', '/stores/{id}/automations/{kind}/results', await call('get', `/stores/${missing}/automations/ORDER_CONFIRMED/results`), 404);
+    await check('get', '/stores/{id}/orders', await call('get', `/stores/${id}/orders`), 200);
+    await check('get', '/stores/{id}/orders', await call('get', `/stores/${missing}/orders`), 404);
+    await check('post', '/stores/{id}/sync', await call('post', `/stores/${id}/sync`), 202);
+    await check('post', '/stores/{id}/sync', await call('post', `/stores/${missing}/sync`), 404);
+    await check('post', '/stores/{id}/disconnect', await call('post', `/stores/${id}/disconnect`), 200);
+    await check('post', '/stores/{id}/disconnect', await call('post', `/stores/${missing}/disconnect`), 404);
+    nock.cleanAll();
   });
 });
