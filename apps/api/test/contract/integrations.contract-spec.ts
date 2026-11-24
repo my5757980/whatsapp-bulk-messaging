@@ -3,7 +3,7 @@ import nock from 'nock';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { OutboundEvents } from '../../src/modules/integrations/webhooks/outbound-events.js';
 import { WebhookDeliveryProcessor } from '../../src/modules/integrations/webhooks/webhook-delivery.processor.js';
-import { restoreNetwork, seedContact, setDefaultCountry, uaePhone, useNockLocalOnly } from '../support/fixtures.js';
+import { restoreNetwork, seedContact, seedNumber, seedTemplate, setDefaultCountry, uaePhone, useNockLocalOnly } from '../support/fixtures.js';
 import { createTestContext, signIn, uniq, type SignedInAgent, type TestContext } from '../support/test-context.js';
 import { expectMatchesContract } from './openapi-validator.js';
 
@@ -69,5 +69,37 @@ describe('Integrations API contract', () => {
 
     await check('delete', '/webhook-endpoints/{id}', await call('delete', `/webhook-endpoints/${id}`), 204);
     await check('delete', '/webhook-endpoints/{id}', await call('delete', `/webhook-endpoints/${missing}`), 404);
+  });
+
+  it('US3: API campaigns from draft to live, paused, results, export and stopped', async () => {
+    const number = await seedNumber(ctx);
+    const template = await seedTemplate(ctx, number.wabaId, { components: [{ type: 'BODY', text: 'Order {{1}} is ready' }], variables: [{ key: 'BODY.1', example: 'A-1' }] });
+    const missing = randomUUID();
+    const input = { name: uniq('Contract campaign '), apiName: uniq('contract-'), numberId: number.id, templateId: template.id, tags: ['contract'] };
+    const created = await call('post', '/api-campaigns', input);
+    await check('post', '/api-campaigns', created, 201);
+    await check('post', '/api-campaigns', await call('post', '/api-campaigns', input), 409);
+    await check('post', '/api-campaigns', await call('post', '/api-campaigns', { ...input, name: uniq('Other '), apiName: 'Not Valid' }), 422);
+    const id = created.body.id as string;
+    await check('get', '/api-campaigns', await call('get', '/api-campaigns'), 200);
+    await check('get', '/api-campaigns/{id}', await call('get', `/api-campaigns/${id}`), 200);
+    await check('get', '/api-campaigns/{id}', await call('get', `/api-campaigns/${missing}`), 404);
+    await check('post', '/api-campaigns/{id}/go-live', await call('post', `/api-campaigns/${id}/go-live`), 409);
+    await check('post', '/api-campaigns/{id}/go-live', await call('post', `/api-campaigns/${missing}/go-live`), 404);
+    await check('patch', '/api-campaigns/{id}', await call('patch', `/api-campaigns/${id}`, { variableMapping: { 'BODY.1': { source: 'value', key: 'order' } } }), 200);
+    await check('patch', '/api-campaigns/{id}', await call('patch', `/api-campaigns/${id}`, { dailyLimit: 0 }), 422);
+    await check('patch', '/api-campaigns/{id}', await call('patch', `/api-campaigns/${missing}`, { dailyLimit: 5 }), 404);
+    await check('post', '/api-campaigns/{id}/go-live', await call('post', `/api-campaigns/${id}/go-live`), 200);
+    await check('patch', '/api-campaigns/{id}', await call('patch', `/api-campaigns/${id}`, { apiName: uniq('renamed-') }), 409);
+    await check('post', '/api-campaigns/{id}/pause', await call('post', `/api-campaigns/${id}/pause`), 200);
+    await check('post', '/api-campaigns/{id}/pause', await call('post', `/api-campaigns/${id}/pause`), 409);
+    await check('post', '/api-campaigns/{id}/pause', await call('post', `/api-campaigns/${missing}/pause`), 404);
+    await check('get', '/api-campaigns/{id}/results', await call('get', `/api-campaigns/${id}/results`), 200);
+    await check('get', '/api-campaigns/{id}/results', await call('get', `/api-campaigns/${missing}/results`), 404);
+    await check('get', '/api-campaigns/{id}/export', await call('get', `/api-campaigns/${id}/export`), 200);
+    await check('get', '/api-campaigns/{id}/export', await call('get', `/api-campaigns/${missing}/export`), 404);
+    await check('post', '/api-campaigns/{id}/stop', await call('post', `/api-campaigns/${id}/stop`), 200);
+    await check('post', '/api-campaigns/{id}/stop', await call('post', `/api-campaigns/${missing}/stop`), 404);
+    await check('patch', '/api-campaigns/{id}', await call('patch', `/api-campaigns/${id}`, { dailyLimit: 5 }), 409);
   });
 });

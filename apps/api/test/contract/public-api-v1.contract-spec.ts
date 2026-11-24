@@ -73,4 +73,24 @@ describe('Public API v1 (006) contract', () => {
     await check('delete', '/drips/{drip}/enrolments/{contactId}', await call(key, 'delete', `/drips/${drip.id}/enrolments/${member.id}`), 204);
     await check('delete', '/drips/{drip}/enrolments/{contactId}', await call(key, 'delete', `/drips/${drip.id}/enrolments/${member.id}`), 404);
   });
+
+  it('US3: triggering an API campaign', async () => {
+    const number = await seedNumber(ctx);
+    const template = await seedTemplate(ctx, number.wabaId, { category: 'UTILITY', components: [{ type: 'BODY', text: 'Order {{1}} is ready' }], variables: [{ key: 'BODY.1', example: 'A-1' }] });
+    const csrf = { 'X-CSRF-Token': admin.csrf };
+    const campaign = await admin.agent.post('/api/api-campaigns').set(csrf).send({ name: uniq('Trigger contract '), apiName: uniq('trigger-'), numberId: number.id, templateId: template.id, variableMapping: { 'BODY.1': { source: 'value', key: 'order' } } });
+    expect((await admin.agent.post(`/api/api-campaigns/${campaign.body.id}/go-live`).set(csrf).send({})).status).toBe(200);
+    const created = await admin.agent.post('/api/api-keys').set(csrf).send({ name: uniq('Trigger '), rateLimitPerMinute: 600 });
+    await admin.agent.put(`/api/api-keys/${created.body.id}/scopes`).set(csrf).send({ scopes: ['campaigns.trigger'] });
+    const trigger = created.body.secret as string;
+    const route = '/api-campaigns/{apiName}/messages';
+    const path = `/api-campaigns/${campaign.body.apiName}/messages`;
+    await check('post', route, await call(trigger, 'post', path, { phone: uaePhone(), values: { order: 'A-1' } }), 202);
+    await check('post', route, await call(trigger, 'post', path, { phone: uaePhone(), values: {} }), 422);
+    await check('post', route, await call(trigger, 'post', '/api-campaigns/no-such-campaign/messages', { phone: uaePhone() }), 404);
+    await check('post', route, await call(key, 'post', path, { phone: uaePhone(), values: { order: 'A-1' } }), 403);
+    await check('post', route, await call('wbk_' + 'y'.repeat(32), 'post', path, { phone: uaePhone() }), 401);
+    const optedOut = await seedContact(ctx, uaePhone(), { consentStatus: 'OPTED_OUT' });
+    await check('post', route, await call(trigger, 'post', path, { phone: optedOut.phoneE164, values: { order: 'A-1' } }), 409);
+  });
 });
