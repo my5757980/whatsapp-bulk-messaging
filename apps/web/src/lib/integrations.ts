@@ -135,8 +135,6 @@ export interface ApiCampaignResults {
   failureReasons?: Record<string, number>;
 }
 
-export const API_CAMPAIGN_STATUS_LABEL: Record<ApiCampaignStatus, string> = { DRAFT: 'Draft', LIVE: 'Live', PAUSED: 'Paused', STOPPED: 'Stopped' };
-
 export const API_CAMPAIGN_STATUS_VARIANT: Record<ApiCampaignStatus, 'secondary' | 'success' | 'warning' | 'outline'> = {
   DRAFT: 'secondary',
   LIVE: 'success',
@@ -149,20 +147,6 @@ export const PAUSED_REASON_LABEL: Record<NonNullable<ApiCampaign['pausedReason']
   MEMBER: 'Paused by a team member',
   TEMPLATE_UNAVAILABLE: 'Paused itself: its template is no longer approved',
   NUMBER_DISCONNECTED: 'Paused itself: its WhatsApp number is not connected',
-};
-
-/** Why a trigger was not sent (api_campaign_triggers.reason). */
-export const NOT_SENT_LABEL: Record<string, string> = {
-  not_live: 'Campaign not live',
-  missing_value: 'A value was missing',
-  invalid_phone: 'Not a valid phone number',
-  invalid_value: 'An attribute value did not fit',
-  opted_out: 'Contact opted out',
-  no_opt_in: 'No opt-in (marketing template)',
-  blocked: 'Contact blocked',
-  not_a_contact: 'Not a contact',
-  daily_limit: 'Daily limit reached',
-  number_unavailable: 'Sending off for the number',
 };
 
 export const RESULT_LABELS: Array<[keyof MessageCounts, string]> = [
@@ -403,6 +387,9 @@ export const NOT_SENT_REASON_LABEL: Record<string, string> = {
   not_live: 'The campaign was not live',
   invalid_phone: 'Not a valid WhatsApp number',
   blocked: 'Blocked contact',
+  invalid_value: 'An attribute value did not fit',
+  not_a_contact: 'Not a contact yet',
+  number_unavailable: 'Sending was off for the number',
 };
 
 export const STORE_PLATFORM_LABEL: Record<StorePlatform, string> = {

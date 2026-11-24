@@ -22,7 +22,7 @@ import { formatNumber, titleCase } from '@/lib/format';
 import {
   API_CAMPAIGN_STATUS_LABEL,
   API_CAMPAIGN_STATUS_VARIANT,
-  NOT_SENT_LABEL,
+  NOT_SENT_REASON_LABEL,
   PAUSED_REASON_LABEL,
   RESULT_LABELS,
   type ApiCampaign,
@@ -538,7 +538,7 @@ function ResultsCard({
               <p className="text-sm text-muted-foreground">No triggers yet.</p>
             )}
             <div className="grid gap-4 sm:grid-cols-2">
-              <ReasonList title="Not sent, by reason" reasons={results.notSentReasons} labels={NOT_SENT_LABEL} />
+              <ReasonList title="Not sent, by reason" reasons={results.notSentReasons} labels={NOT_SENT_REASON_LABEL} />
               <ReasonList title="Failed, by reason" reasons={results.failureReasons ?? {}} labels={{}} />
             </div>
           </>
