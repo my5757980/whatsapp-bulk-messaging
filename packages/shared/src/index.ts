@@ -29,3 +29,4 @@ export * from './integrations/events.js';
 export * from './integrations/scopes.js';
 export * from './integrations/api-campaigns.js';
 export * from './integrations/stores.js';
+export * from './integrations/cod.js';
