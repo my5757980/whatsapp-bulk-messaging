@@ -117,8 +117,8 @@ describe('Integrations API contract', () => {
     nock(site)
       .persist()
       .post('/wp-json/wc/v3/webhooks')
-      .reply((_uri: string, body: nock.Body) => {
-        const b = (typeof body === 'string' ? JSON.parse(body) : body) as { secret: string };
+      .reply(async (request: Request) => {
+        const b = (await request.json()) as { secret: string };
         hooks.push({ id: hooks.length + 1, secret: b.secret });
         return [201, { id: hooks.length, status: 'active' }];
       });

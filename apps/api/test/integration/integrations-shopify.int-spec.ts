@@ -77,8 +77,8 @@ function fakeShop(host: string): FakeShop {
   nock(host)
     .persist()
     .post('/admin/oauth/access_token')
-    .reply((_uri: string, body: nock.Body) => {
-      const b = (typeof body === 'string' ? JSON.parse(body) : body) as Json;
+    .reply(async (request: Request) => {
+      const b = (await request.json()) as Json;
       if (shop.down || b.client_secret !== SECRET || b.grant_type !== 'client_credentials') return [401, { error: 'invalid_client' }];
       shop.tokens += 1;
       return [200, { access_token: `shpat_test_${shop.tokens}`, scope: 'read_orders,write_orders,read_customers', expires_in: 86399 }];
@@ -86,9 +86,9 @@ function fakeShop(host: string): FakeShop {
   nock(host)
     .persist()
     .post(`/admin/api/${VERSION}/graphql.json`)
-    .reply((_uri: string, body: nock.Body) => {
+    .reply(async (request: Request) => {
       if (shop.down) return [401, { errors: '[API] Invalid API key or access token (unrecognized login or wrong password)' }];
-      const { query, variables = {} } = (typeof body === 'string' ? JSON.parse(body) : body) as { query: string; variables?: Json };
+      const { query, variables = {} } = (await request.json()) as { query: string; variables?: Json };
       if (query.includes('webhookSubscriptionCreate')) {
         const sub = { id: `gid://shopify/WebhookSubscription/${shop.subscriptions.length + 1}${Date.now()}`, topic: String(variables.topic), uri: String((variables.webhookSubscription as Json).uri) };
         shop.subscriptions.push(sub);
@@ -286,22 +286,25 @@ describe('Shopify stores (006 US4)', () => {
     const store = (await connect(shopHost)).body as { id: string };
     const drip = await ctx.prisma.drip.create({ data: { name: uniq('Order drip '), numberId, status: 'ACTIVE' } });
     await ctx.prisma.dripTrigger.createMany({ data: [{ dripId: drip.id, kind: 'ORDER_PLACED' }, { dripId: drip.id, kind: 'ORDER_DELIVERED' }] });
+    try {
+      const before = restOrder(2001, { buyer_accepts_marketing: true });
+      await deliver(store.id, 'orders/create', before);
+      await processAll(store.id);
+      const first = await ctx.prisma.contact.findUniqueOrThrow({ where: { phoneE164: (before.shipping_address as Json).phone as string }, include: { tags: { include: { tag: true } } } });
+      expect(first.tags.map((t) => t.tag.name)).toContain('shopify');
+      expect(first.consentStatus).toBe('UNKNOWN');
+      expect(await ctx.prisma.dripEvent.count({ where: { contactId: first.id, kind: 'ORDER_PLACED' } })).toBe(1);
 
-    const before = restOrder(2001, { buyer_accepts_marketing: true });
-    await deliver(store.id, 'orders/create', before);
-    await processAll(store.id);
-    const first = await ctx.prisma.contact.findUniqueOrThrow({ where: { phoneE164: (before.shipping_address as Json).phone as string }, include: { tags: { include: { tag: true } } } });
-    expect(first.tags.map((t) => t.tag.name)).toContain('shopify');
-    expect(first.consentStatus).toBe('UNKNOWN');
-    expect(await ctx.prisma.dripEvent.count({ where: { contactId: first.id, kind: 'ORDER_PLACED' } })).toBe(1);
-
-    expect((await dashboard('patch', `/stores/${store.id}`, { consentIsWhatsapp: true })).body.consentIsWhatsapp).toBe(true);
-    expect(await ctx.prisma.auditLog.count({ where: { action: 'store.consent_confirmed', targetId: store.id } })).toBe(1);
-    const after = restOrder(2002, { buyer_accepts_marketing: true });
-    await deliver(store.id, 'orders/create', after);
-    await processAll(store.id);
-    expect(await ctx.prisma.contact.findUniqueOrThrow({ where: { phoneE164: (after.shipping_address as Json).phone as string } })).toMatchObject({ consentStatus: 'OPTED_IN', consentSource: 'STORE' });
-    await ctx.prisma.drip.update({ where: { id: drip.id }, data: { status: 'ARCHIVED' } });
+      expect((await dashboard('patch', `/stores/${store.id}`, { consentIsWhatsapp: true })).body.consentIsWhatsapp).toBe(true);
+      expect(await ctx.prisma.auditLog.count({ where: { action: 'store.consent_confirmed', targetId: store.id } })).toBe(1);
+      const after = restOrder(2002, { buyer_accepts_marketing: true });
+      await deliver(store.id, 'orders/create', after);
+      await processAll(store.id);
+      expect(await ctx.prisma.contact.findUniqueOrThrow({ where: { phoneE164: (after.shipping_address as Json).phone as string } })).toMatchObject({ consentStatus: 'OPTED_IN', consentSource: 'STORE' });
+    } finally {
+      // At most 20 drips may be active; leave room for the other test files.
+      await ctx.prisma.drip.update({ where: { id: drip.id }, data: { status: 'ARCHIVED' } });
+    }
   });
 
   it('sends shipped with the tracking link, delivered from shipmentStatus, and cancelled', async () => {
