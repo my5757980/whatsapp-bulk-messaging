@@ -47,7 +47,7 @@ module wiring, audit actions and redaction that all stories use.
 
 **⚠️ CRITICAL**: no user story work can begin until this phase is complete.
 
-- [ ] T006 Write the Prisma models and the migration apps/api/prisma/migrations/20261201000000_integrations/migration.sql per data-model.md:
+- [X] T006 Write the Prisma models and the migration apps/api/prisma/migrations/20261201000000_integrations/migration.sql per data-model.md:
   - every table of §1, and the columns of §2 on `api_keys` and `messages`
   - the new enums: `WebhookEndpointStatus`, `DeliveryStatus`, `ApiCampaignStatus`, `TriggerOutcome`, `StorePlatform`, `StoreStatus`, `StoreEventStatus`, `StoreAutomationKind`, `PaymentKind`, `CodStatus`, `StoreMessageKind`, `CartStatus` and `ChatLinkStatus`
   - the enum values of §2:
@@ -62,23 +62,23 @@ module wiring, audit actions and redaction that all stories use.
   - every index of §1
 
   Update apps/api/prisma/schema.prisma and run `prisma generate`.
-- [ ] T007 [P] Add the permission `integrations.manage` (admins only) to packages/shared/src/permissions.ts, with a case in its test file
-- [ ] T008 [P] Unit tests packages/shared/src/integrations/signing.test.ts (research R1):
+- [X] T007 [P] Add the permission `integrations.manage` (admins only) to packages/shared/src/permissions.ts, with a case in its test file
+- [X] T008 [P] Unit tests packages/shared/src/integrations/signing.test.ts (research R1):
   - the Standard Webhooks signature of a known vector (`{id}.{timestamp}.{body}`, base64 HMAC-SHA256 with the key decoded from `whsec_…`)
   - two `v1,` values while rotating
   - the verifier accepts any matching value and refuses timestamps over 5 minutes old
   - new secrets are `whsec_` plus 32 random bytes in base64
-- [ ] T009 [P] Unit tests packages/shared/src/integrations/retries.test.ts (R2):
-  - the waits are 10 s, 1 min, 5 min, 30 min, 1 h, 2 h, 4 h, 8 h and 8 h (9 retries, about 23 h 46 min)
+- [X] T009 [P] Unit tests packages/shared/src/integrations/retries.test.ts (R2):
+  - the waits are 10 s, 1 min, 5 min, 30 min, 1 h, 2 h, 4 h, 8 h and 8 h (9 retries, about 23 h 36 min)
   - `nextAttemptAt` and the last-attempt rule
   - the auto-pause rule: no success for 24 h and at least 10 failed attempts
-- [ ] T010 [P] Unit tests packages/shared/src/integrations/events.test.ts (R3, contracts/webhook-events.md):
+- [X] T010 [P] Unit tests packages/shared/src/integrations/events.test.ts (R3, contracts/webhook-events.md):
   - every catalog type has a group and a label
   - the payload builders give E.164 phones and the common `contact` and `message` shapes
   - with content off, `text`, `buttonPayload` and captions are removed
   - no builder accepts a secret field
-- [ ] T011 [P] Unit tests packages/shared/src/integrations/scopes.test.ts (R4): the five scope names, `messages.send` as the default for old keys, and the route scope check
-- [ ] T012 Implement packages/shared/src/integrations/signing.ts, retries.ts, events.ts and scopes.ts (pure) and export them from packages/shared/src/index.ts
+- [X] T011 [P] Unit tests packages/shared/src/integrations/scopes.test.ts (R4): the five scope names, `messages.send` as the default for old keys, and the route scope check
+- [X] T012 Implement packages/shared/src/integrations/signing.ts, retries.ts, events.ts and scopes.ts (pure) and export them from packages/shared/src/index.ts
 - [ ] T013 Move the 003 safe request rules (`isBlockedAddress`, `createSafeLookup`, no redirects, https only, a timeout, a size cap) into apps/api/src/common/http/safe-http.ts:
   - add `safeRequest({ method, url, headers, body, timeoutMs, maxBytes })`
   - add the `OUTBOUND_ALLOW_LOCAL` allowance for `http://localhost` outside production

@@ -46,7 +46,7 @@ AiSensy's app (constitution Principle II).
   - **Fairness:** at most 5 deliveries in flight per endpoint (a Redis counter), so one slow endpoint
     cannot hold the worker. Worker concurrency is 20.
   - **Retries:** waits of 10 s, 1 min, 5 min, 30 min, 1 h, 2 h, 4 h, 8 h and 8 h after the first
-    attempt, about 23 h 46 min in all; after that the delivery is `FAILED`. When an endpoint
+    attempt, about 23 h 36 min in all; after that the delivery is `FAILED`. When an endpoint
     succeeds after failures, its waiting deliveries are due at once, so an outage ends quickly
     (SC-001).
   - **Auto-pause:** an endpoint with no success for 24 hours and at least 10 failed attempts is

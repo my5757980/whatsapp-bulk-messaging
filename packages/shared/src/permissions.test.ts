@@ -26,6 +26,8 @@ const table: Array<[string, Permission[], { ADMIN: boolean; MANAGER: boolean; AG
   ['build, test and publish AI agents; knowledge and unanswered questions', ['ai.manage'], { ADMIN: true, MANAGER: true, AGENT: false }],
   ['AI usage page, monthly limits and prices', ['ai.usage'], { ADMIN: true, MANAGER: false, AGENT: false }],
   ['use the team assistant', ['assistant.use'], { ADMIN: true, MANAGER: true, AGENT: false }],
+  // Feature 006 integrations (spec FR-056): endpoints get full phone numbers, so only admins add them
+  ['webhook endpoints and store connections', ['integrations.manage'], { ADMIN: true, MANAGER: false, AGENT: false }],
 ];
 
 describe('permission matrix (spec.md role table)', () => {

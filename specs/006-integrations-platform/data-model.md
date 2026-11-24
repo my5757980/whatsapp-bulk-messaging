@@ -26,6 +26,7 @@ An admin's webhook endpoint (FR-001, FR-003, FR-006, FR-009).
 | previous_secret_encrypted | text? | still signs until `previous_secret_until` |
 | previous_secret_until | timestamptz? | renewal time + 24 h |
 | last_success_at / last_failure_at / failing_since | timestamptz? | |
+| consecutive_failures | integer, default 0 | failed attempts since the last success, for the auto-pause rule |
 | created_by_id | uuid? FK users `SET NULL` | |
 | created_at / updated_at | timestamptz | |
 
