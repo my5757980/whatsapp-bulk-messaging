@@ -210,6 +210,7 @@ paths:
         '403': { $ref: '#/components/responses/InsufficientScope' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { description: NOT_ACTIVE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
 
   /drips/{drip}/enrolments/{contactId}:
     parameters:
@@ -264,7 +265,7 @@ components:
       description: API key created in Settings > API keys (format wbk_...)
   parameters:
     Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
-    IdempotencyKey: { name: Idempotency-Key, in: header, schema: { type: string, maxLength: 100 } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, schema: { type: string, maxLength: 255 } }
   responses:
     Unauthorized:
       description: Missing, unknown or revoked key

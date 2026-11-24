@@ -197,7 +197,8 @@ export class ContactsService {
     return { items: items.map(toContactDto), page: pageMeta(query, total) };
   }
 
-  async create(input: ContactInput & { phone: string }, actorUserId: string) {
+  /** `source` is what webhook events report; 'api' also raises the drips' API_CREATED starting event (005). */
+  async create(input: ContactInput & { phone: string }, actorUserId: string | null, source: 'dashboard' | 'api' = 'dashboard') {
     const phone = await this.normalise(input.phone);
     const attributes = await this.checkAttributes(input.attributes ?? {}, false);
     this.requireNoteForOptIn(input);
@@ -221,7 +222,8 @@ export class ContactsService {
           if (status === 'OPTED_IN') await this.dripEvents.recordOptIns(tx, [contact.id]);
         }
         // Outbound webhooks (feature 006, FR-002): created first, then its consent and tags.
-        await this.platformEvents.contactCreated(tx, contact.id, 'dashboard', { attributes });
+        await this.platformEvents.contactCreated(tx, contact.id, source, { attributes });
+        if (source === 'api') await this.dripEvents.recordCreated(tx, 'API_CREATED', [contact.id]);
         if (status === 'OPTED_IN') await this.platformEvents.optedIn(tx, contact.id, 'MANUAL', input.consentSourceNote ?? null);
         if (status === 'OPTED_OUT') await this.platformEvents.optedOut(tx, contact.id, 'MANUAL');
         if (input.tags?.length) await this.setTags(tx, contact.id, input.tags);
@@ -234,7 +236,7 @@ export class ContactsService {
     }
   }
 
-  async update(id: string, input: ContactInput, actorUserId: string) {
+  async update(id: string, input: ContactInput, actorUserId: string | null) {
     const current = await this.prisma.contact.findUnique({ where: { id } });
     if (!current) throw AppError.notFound('Contact not found');
     const phone = input.phone !== undefined ? await this.normalise(input.phone) : null;

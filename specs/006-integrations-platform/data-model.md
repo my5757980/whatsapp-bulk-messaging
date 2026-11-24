@@ -292,19 +292,19 @@ contact once a day.
 
 ### api_idempotent_responses
 
-Saved answers of changing public API calls sent with an  (FR-015). The 001
- table keeps message sends; this one keeps any other answer.
+Saved answers of changing public API calls sent with an `Idempotency-Key` (FR-015). The 001
+`idempotency_records` table keeps message sends; this one keeps any other answer.
 
 | Column | Type | Notes |
 |---|---|---|
 | id | uuid PK | |
-| api_key_id | uuid FK api_keys  | |
+| api_key_id | uuid FK api_keys `CASCADE` | |
 | key | varchar(255) | the header value |
 | request_hash | text | method, path and body; a different request with the same key gets 409 |
 | status / body | smallint / jsonb | the first answer, returned again |
 | expires_at / created_at | timestamptz | 24 hours, cleaned hourly with the 001 records |
 
-Unique .
+Unique `(api_key_id, key)`.
 
 ### number_connection_checks
 

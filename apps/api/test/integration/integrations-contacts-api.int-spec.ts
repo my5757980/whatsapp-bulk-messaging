@@ -164,7 +164,8 @@ describe('Contacts through the public API (006 US2)', () => {
     expect((await v1(fullKey, 'post', `/drips/${drip.id}/enrolments`, { contactId: optedOut.id })).body).toEqual({ enrolled: false, reason: 'opted_out' });
     expect((await v1(fullKey, 'post', `/drips/${drip.id}/enrolments`, { phone: uaePhone() })).body).toEqual({ enrolled: false, reason: 'not_found' });
     expect((await v1(fullKey, 'post', '/drips/no-such-drip/enrolments', { contactId: contact.id })).status).toBe(404);
-    expect(await ctx.prisma.auditLog.count({ where: { action: 'drip.contacts_enrolled', targetId: drip.id, actorApiKeyId: fullKeyId } })).toBe(1);
+    // Each enrolment request is audited by the key, as in the dashboard (the unknown phone never reached the drip).
+    expect(await ctx.prisma.auditLog.count({ where: { action: 'drip.contacts_enrolled', targetId: drip.id, actorApiKeyId: fullKeyId } })).toBe(3);
 
     expect((await v1(fullKey, 'delete', `/drips/${drip.id}/enrolments/${contact.id}`)).status).toBe(204);
     expect(await ctx.prisma.dripEnrolment.findFirst({ where: { dripId: drip.id, contactId: contact.id } })).toMatchObject({ status: 'LEFT', leftReason: 'REMOVED' });

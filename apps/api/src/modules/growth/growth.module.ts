@@ -32,7 +32,8 @@ import { RetryRoundsService } from './retries/retry-rounds.service.js';
 // Retry rounds are finished and scheduled by the campaign progress worker and cancelled with their
 // campaign, so they are shared too, and so are the drip leaving rules, which run inside the
 // transactions of replies, opt-outs, blocks, deletions and status webhooks.
-const DOMAIN = [TrackedLinksService, TrackedLinkCodes, RetryRoundsService, DripLeaving, DripEvents];
+// Manual enrolment is shared too: the public API enrols with the dashboard rules (feature 006, FR-014).
+const DOMAIN = [TrackedLinksService, TrackedLinkCodes, RetryRoundsService, DripLeaving, DripEvents, EnrolmentsService];
 
 /** Campaign growth services shared by the HTTP app and the worker. */
 @Global()
@@ -49,7 +50,6 @@ export class GrowthDomainModule {}
     ClicksService,
     RetryPlanService,
     DripsService,
-    EnrolmentsService,
     DripResultsService,
     {
       provide: LinkRateLimiter,
