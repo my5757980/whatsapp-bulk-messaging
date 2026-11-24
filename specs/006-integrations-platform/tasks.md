@@ -187,7 +187,7 @@ lookup work; the journey shows the key; a send-only key gets 403 `insufficient_s
 
 ### Tests for User Story 2 (write first, must fail)
 
-- [ ] T026 [P] [US2] Integration test apps/api/test/integration/integrations-contacts-api.int-spec.ts:
+- [X] T026 [P] [US2] Integration test apps/api/test/integration/integrations-contacts-api.int-spec.ts:
   - a send-only key gets 403 `insufficient_scope` on every contacts route, and old keys still send messages
   - upsert by phone: 201 then 200 with no duplicate; local-form numbers use the default country
   - lookup, get, and the list with `tag`, `updatedSince` and the cursor, in a stable order
@@ -197,26 +197,26 @@ lookup work; the journey shows the key; a send-only key gets 403 `insufficient_s
   - idempotent repeats; 429 with `Retry-After`
   - drip enrol and remove by id or name under the 005 rules
   - the journey and audit show the API key, and webhook events and drip starting events are raised
-- [ ] T027 [P] [US2] Contract cases in apps/api/test/contract/public-api-v1.contract-spec.ts for every operation of contracts/public-api-v1.openapi.yaml except `/api-campaigns/{apiName}/messages` (US3), including 401, 403 `insufficient_scope` and 404. Add the contract to the validator
-- [ ] T028 [P] [US2] Playwright e2e apps/web/e2e/integrations-us2-contacts-api.spec.ts:
+- [X] T027 [P] [US2] Contract cases in apps/api/test/contract/public-api-v1.contract-spec.ts for every operation of contracts/public-api-v1.openapi.yaml except `/api-campaigns/{apiName}/messages` (US3), including 401, 403 `insufficient_scope` and 404. Add the contract to the validator
+- [X] T028 [P] [US2] Playwright e2e apps/web/e2e/integrations-us2-contacts-api.spec.ts:
   - give a key *Read contacts* and *Change contacts* on the API keys page
   - call the API with `page.request` and a Bearer key
   - see the contact, its tags and its journey entry "by API key" in the dashboard
 
 ### Implementation for User Story 2
 
-- [ ] T029 [US2] Add scopes to the public API guard in apps/api/src/modules/public-api/api-key.guard.ts:
+- [X] T029 [US2] Add scopes to the public API guard in apps/api/src/modules/public-api/api-key.guard.ts:
   - a `@RequireScope()` decorator
   - 403 with code `insufficient_scope`, naming the scope
   - the existing message and template routes require `messages.send`
   - the key's id goes on the request for actor and journey records
-- [ ] T030 [US2] Add `PUT /api-keys/{id}/scopes` to the controller in apps/api/src/modules/api-keys/api-keys.service.ts (the `@Controller('api-keys')` there), with the `api_key.scopes_changed` audit entry, and return `scopes` in the key list
-- [ ] T031 [US2] Add apps/api/src/modules/public-api/public-contacts.controller.ts and public-contacts.service.ts per the contract:
+- [X] T030 [US2] Add `PUT /api-keys/{id}/scopes` to the controller in apps/api/src/modules/api-keys/api-keys.service.ts (the `@Controller('api-keys')` there), with the `api_key.scopes_changed` audit entry, and return `scopes` in the key list
+- [X] T031 [US2] Add apps/api/src/modules/public-api/public-contacts.controller.ts and public-contacts.service.ts per the contract:
   - they reuse `ContactsService`, `ConsentService` and the attribute validator, with the API key as actor
   - the cursor over `(updated_at, id)`
   - idempotency through the 001 `IdempotencyService`, and rate limits through the existing guard
-- [ ] T032 [US2] Add apps/api/src/modules/public-api/public-drips.controller.ts (`POST` and `DELETE /v1/drips/{drip}/enrolments…`), reusing `EnrolmentsService` and `DripLeaving` (005). `{drip}` is an id or an exact name
-- [ ] T033 [P] [US2] Add a scopes editor to the API keys page apps/web/src/app/(dashboard)/settings/api-keys/page.tsx: checkboxes per scope with a plain description, a note that keys made before 006 can only send, and a confirmation
+- [X] T032 [US2] Add apps/api/src/modules/public-api/public-drips.controller.ts (`POST` and `DELETE /v1/drips/{drip}/enrolments…`), reusing `EnrolmentsService` and `DripLeaving` (005). `{drip}` is an id or an exact name
+- [X] T033 [P] [US2] Add a scopes editor to the API keys page apps/web/src/app/(dashboard)/settings/api-keys/page.tsx: checkboxes per scope with a plain description, a note that keys made before 006 can only send, and a confirmation
 
 **Checkpoint**: US1 and US2 together form the developer platform MVP.
 
