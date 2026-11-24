@@ -36,3 +36,14 @@ regexes = [
   '''Authorization: Bearer wbk_YOUR_KEY''',
   '''Idempotency-Key: a-unique-id-per-message''',
 ]
+
+[[allowlists]]
+description = "Feature 006: made-up store credentials in the store tests (apps/api/test/integration/integrations-shopify.int-spec.ts, integrations-woocommerce.int-spec.ts and the integrations contract test); they only sign requests to nock fakes"
+regexTarget = "line"
+regexes = [
+  '''shopify-client-secret-for-tests''',
+  '''ck_test_0123456789abcdef''',
+  '''cs_test_0123456789abcdef''',
+  '''ck_contract_0123456789''',
+  '''cs_contract_0123456789''',
+]
