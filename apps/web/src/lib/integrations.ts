@@ -438,6 +438,7 @@ export const SKIP_REASON_LABEL: Record<string, string> = {
   stale: 'The store reported it more than 3 days late',
   blocked: 'Blocked contact',
   template_unavailable: 'The template is not approved',
+  missing_value: 'A template value was missing',
   ordered: 'The customer ordered',
   replied: 'The customer wrote to us',
   store_disconnected: 'The store was disconnected',
