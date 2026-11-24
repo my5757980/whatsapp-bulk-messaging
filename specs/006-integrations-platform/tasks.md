@@ -110,7 +110,7 @@ resume, and the log shows every attempt.
 
 ### Tests for User Story 1 (write first, must fail)
 
-- [ ] T018 [P] [US1] Integration test apps/api/test/integration/integrations-webhooks.int-spec.ts, with nock endpoints:
+- [X] T018 [P] [US1] Integration test apps/api/test/integration/integrations-webhooks.int-spec.ts, with nock endpoints:
   - creating an endpoint returns the secret once; http and private addresses are refused
   - the test ping is signed, and the signature checks with the shared verifier
   - a campaign send's status webhooks and a customer reply give one delivery each for the chosen types only, with fixed ids; content off removes the text
@@ -119,8 +119,8 @@ resume, and the log shows every attempt.
   - 24 h of failures (moved clock) pauses the endpoint and notifies admins; resume sends the waiting events
   - resend keeps the event id; deleting an endpoint cancels its waiting deliveries
   - at most 5 in flight per endpoint, and a slow endpoint does not delay another
-- [ ] T019 [P] [US1] Contract cases in apps/api/test/contract/integrations.contract-spec.ts for `/webhook-event-types`, `/webhook-endpoints` (list, create, get, patch, delete, pause, resume, renew-secret, test, deliveries) and `/webhook-deliveries/{id}/resend`. Add the contract to the validator in apps/api/test/contract/openapi-validator.ts
-- [ ] T020 [P] [US1] Playwright e2e apps/web/e2e/integrations-us1-webhooks.spec.ts:
+- [X] T019 [P] [US1] Contract cases in apps/api/test/contract/integrations.contract-spec.ts for `/webhook-event-types`, `/webhook-endpoints` (list, create, get, patch, delete, pause, resume, renew-secret, test, deliveries) and `/webhook-deliveries/{id}/resend`. Add the contract to the validator in apps/api/test/contract/openapi-validator.ts
+- [X] T020 [P] [US1] Playwright e2e apps/web/e2e/integrations-us1-webhooks.spec.ts:
   - add an endpoint on `http://localhost:4010/catch/crm` and copy the secret
   - send the test event
   - send a template to two contacts and reply from one
@@ -129,26 +129,26 @@ resume, and the log shows every attempt.
 
 ### Implementation for User Story 1
 
-- [ ] T021 [US1] Implement `OutboundEvents` in apps/api/src/modules/integrations/webhooks/outbound-events.ts (R2):
+- [X] T021 [US1] Implement `OutboundEvents` in apps/api/src/modules/integrations/webhooks/outbound-events.ts (R2):
   - `record(tx, type, data)` writes one `outbound_events` row and one `webhook_deliveries` row per active endpoint subscribed to the type
   - the subscription lookup is cached and invalidated when endpoints change
   - `afterCommit(deliveryIds)` adds `webhooks-out` jobs with job id = delivery id
   - a 30-second sweep (apps/api/src/modules/integrations/webhooks/webhook-sweep.processor.ts) re-adds jobs for due deliveries that have none
-- [ ] T022 [US1] Implement the delivery processor apps/api/src/modules/integrations/webhooks/webhook-delivery.processor.ts:
+- [X] T022 [US1] Implement the delivery processor apps/api/src/modules/integrations/webhooks/webhook-delivery.processor.ts:
   - an in-flight counter per endpoint in Redis, at most 5
   - the body is built from the event with the endpoint's content setting, then signed (shared signing, both secrets while rotating)
   - sent with `safeRequest` (10 s, 4 KB)
   - the attempt, status, error and duration are recorded
   - the next retry or the final state is scheduled with the shared waits; a success makes waiting deliveries due at once
   - the auto-pause rule sends the `WEBHOOK_ENDPOINT_FAILING` notification to admins
-- [ ] T023 [US1] Implement apps/api/src/modules/integrations/webhooks/webhook-endpoints.service.ts and webhook-endpoints.controller.ts per the contract:
+- [X] T023 [US1] Implement apps/api/src/modules/integrations/webhooks/webhook-endpoints.service.ts and webhook-endpoints.controller.ts per the contract:
   - CRUD with an https check and a safe-address check, and up to 20 endpoints
   - secrets encrypted with the 001 token encryption
   - pause, resume, and renew-secret (the old secret signs for 24 h)
   - a synchronous test send
   - the delivery log with filters, resend, and the event types
   - audit entries
-- [ ] T024 [US1] Call `OutboundEvents.record` inside the transaction of each event source (R3):
+- [X] T024 [US1] Call `OutboundEvents.record` inside the transaction of each event source (R3):
   - `message.status`: apps/api/src/modules/webhooks/handlers/status.handler.ts
   - `message.received`: apps/api/src/modules/inbox/inbound/inbound-chat.handler.ts
   - contact events:
@@ -165,7 +165,7 @@ resume, and the log shows every attempt.
     - `drip.finished`: drip-tick.processor.ts
     - `drip.left`: drip-leaving.ts
   - `chat.assigned` and `chat.closed`: apps/api/src/modules/inbox/conversations/conversations.service.ts
-- [ ] T025 [P] [US1] Add the web pages apps/web/src/app/(dashboard)/settings/webhooks/page.tsx and apps/web/src/app/(dashboard)/settings/webhooks/[id]/page.tsx:
+- [X] T025 [P] [US1] Add the web pages apps/web/src/app/(dashboard)/settings/webhooks/page.tsx and apps/web/src/app/(dashboard)/settings/webhooks/[id]/page.tsx:
   - list and add, with the secret shown once with copy
   - an event picker by group and a content setting
   - a test button showing the answer

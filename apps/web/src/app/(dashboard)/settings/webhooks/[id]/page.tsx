@@ -112,7 +112,7 @@ function Endpoint() {
             title="Make a new signing secret?"
             description="For 24 hours events carry signatures for both the old and the new secret, so your receiver can switch without missing any."
             confirmLabel="Make new secret"
-            onConfirm={() => renew.mutate()}
+            onConfirm={() => renew.mutateAsync().then(() => undefined, () => undefined)}
           />
           <ConfirmDialog
             trigger={

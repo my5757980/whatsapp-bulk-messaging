@@ -8,13 +8,6 @@ import { AUDIT_ACTIONS } from '../../src/modules/audit/audit-actions.js';
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
 /** Actions listed before the code that records them exists (feature 006 T014; each story removes its own). */
 const PENDING = new Set<string>([
-  'webhook_endpoint.created',
-  'webhook_endpoint.updated',
-  'webhook_endpoint.paused',
-  'webhook_endpoint.resumed',
-  'webhook_endpoint.deleted',
-  'webhook_endpoint.secret_renewed',
-  'webhook_delivery.resent',
   'api_key.scopes_changed',
   'store.connected',
   'store.updated',
