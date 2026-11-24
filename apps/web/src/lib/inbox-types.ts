@@ -101,6 +101,10 @@ export interface ChatItem {
   sentBy: MemberRef | null;
   template: { name: string; language: string; renderedText: string } | null;
   campaign: { id: string; name: string } | null;
+  /** When the contact first opened a tracked link of this template message (feature 005). */
+  firstClickAt?: string | null;
+  /** The drip and step that sent this template message (feature 005). */
+  drip?: { id: string; name: string; step: number } | null;
   occurredAt: string;
 }
 

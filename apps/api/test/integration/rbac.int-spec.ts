@@ -6,18 +6,22 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { restoreNetwork, useNockLocalOnly } from '../support/fixtures.js';
 import { createTestContext, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
 
-// T167, T097, 003 T086, 004 T108: every operation's `x-permission` in the dashboard (001), live chat
-// (002), flows (003) and AI (004) contracts is enforced for each role (001 FR-007, 002 FR-041,
-// 003 FR-038, 004 FR-045 and FR-049).
+// T167, T097, 003 T086, 004 T108, 005 T064: every operation's `x-permission` in the dashboard (001),
+// live chat (002), flows (003), AI (004) and campaign growth (005) contracts is enforced for each
+// role (001 FR-007, 002 FR-041, 003 FR-038, 004 FR-045 and FR-049, 005 FR-037).
 const SPECS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../specs');
 const CONTRACTS = [
   path.join(SPECS, '001-whatsapp-bulk-messaging/contracts/dashboard-api.openapi.yaml'),
   path.join(SPECS, '002-team-inbox/contracts/inbox-api.openapi.yaml'),
   path.join(SPECS, '003-chatbot-flow-builder/contracts/flows-api.openapi.yaml'),
   path.join(SPECS, '004-ai-agent/contracts/ai-api.openapi.yaml'),
+  path.join(SPECS, '005-campaign-growth/contracts/growth-api.openapi.yaml'),
 ];
-/** The live event stream never ends, so a plain request would hang; inbox-realtime.int-spec.ts covers it. */
-const SKIP = new Set(['get /inbox/events']);
+/**
+ * The live event stream never ends, so a plain request would hang (inbox-realtime.int-spec.ts covers
+ * it); the public tracked-link route is outside `/api` and has no session (growth-clicks covers it).
+ */
+const SKIP = new Set(['get /inbox/events', 'get /l/{code}']);
 const ROLES = ['ADMIN', 'MANAGER', 'AGENT'] as const;
 /** Documented operations that are not implemented yet (none since US7). */
 const NOT_YET = new Set<string>();
@@ -64,6 +68,11 @@ describe('Role permissions on every endpoint', () => {
     expect(operations.some((op) => op.route === '/ai-agents/{id}/publish')).toBe(true);
     expect(operations.some((op) => op.route === '/ai-settings' && op.permission === 'ai.usage')).toBe(true);
     expect(operations.some((op) => op.route === '/assistant/actions/{id}/confirm')).toBe(true);
+    // And campaign growth: tracked links, retries and drips (005 T064).
+    expect(operations.some((op) => op.route === '/campaigns/{id}/tracked-links' && op.method === 'put')).toBe(true);
+    expect(operations.some((op) => op.route === '/campaigns/{id}/retry-rounds/cancel')).toBe(true);
+    expect(operations.some((op) => op.route === '/drips/{id}/activate' && op.permission === 'campaigns.launch')).toBe(true);
+    expect(operations.some((op) => op.route === '/l/{code}')).toBe(false);
   });
 
   it.each(ROLES)('%s gets 403 exactly where the role table says so', async (role) => {

@@ -206,8 +206,69 @@ describe('Retention', () => {
     expect(await ctx.prisma.assistantRequest.findUnique({ where: { id: newRequest.id } })).not.toBeNull();
   });
 
+  it('purges link clicks after 12 months, ended enrolments 12 months on and stale starting events; tracked links go with their messages (005 T061)', async () => {
+    const code = () => `Rt${randomUUID().replace(/-/g, '').slice(0, 8)}`;
+    const linked = async (completedAt: Date) => {
+      const campaign = await campaignWithMessages();
+      await ctx.prisma.campaign.update({ where: { id: campaign.id }, data: { state: 'COMPLETED', completedAt } });
+      const message = await ctx.prisma.message.findFirstOrThrow({ where: { campaignId: campaign.id } });
+      const target = await ctx.prisma.trackedLinkTarget.create({ data: { campaignId: campaign.id, variableKey: 'BODY.1', destination: 'https://shop.example/keep' } });
+      const link = await ctx.prisma.trackedLink.create({ data: { code: code(), targetId: target.id, messageId: message.id, contactId: message.contactId } });
+      return { campaign, target, link };
+    };
+    const click = (l: Awaited<ReturnType<typeof linked>>, clickedAt: Date) =>
+      ctx.prisma.linkClick.create({ data: { trackedLinkId: l.link.id, targetId: l.target.id, campaignId: l.campaign.id, contactId: l.link.contactId, device: 'MOBILE', clickedAt } });
+
+    // An old campaign's messages are purged by 001; their tracked links and clicks go with them.
+    const old = await linked(monthsAgo(13));
+    await click(old, monthsAgo(1));
+    await retention.purgeCampaigns(new Date());
+    expect(await ctx.prisma.trackedLink.findUnique({ where: { id: old.link.id } })).toBeNull();
+    expect(await ctx.prisma.linkClick.count({ where: { trackedLinkId: old.link.id } })).toBe(0);
+
+    // A recent campaign keeps its links; only its clicks older than 12 months go.
+    const recent = await linked(monthsAgo(2));
+    const oldClick = await click(recent, monthsAgo(13));
+    const newClick = await click(recent, monthsAgo(1));
+
+    const contact = await seedContact(ctx, uaePhone());
+    const drip = await ctx.prisma.drip.create({ data: { name: `Retention drip ${randomUUID().slice(0, 6)}`, numberId, status: 'ACTIVE' } });
+    const step = await ctx.prisma.dripStep.create({ data: { dripId: drip.id, position: 1, templateId, waitMinutes: 0 } });
+    const enrolment = (data: { status: 'ACTIVE' | 'FINISHED' | 'LEFT'; endedAt?: Date; joinedAt: Date; dripId?: string }) =>
+      ctx.prisma.dripEnrolment.create({
+        data: { dripId: data.dripId ?? drip.id, contactId: contact.id, joinedVia: 'MANUAL', status: data.status, joinedAt: data.joinedAt, endedAt: data.endedAt ?? null, leftReason: data.status === 'LEFT' ? 'REPLIED' : null },
+      });
+    const finishedLongAgo = await enrolment({ status: 'FINISHED', joinedAt: monthsAgo(14), endedAt: monthsAgo(13) });
+    await ctx.prisma.dripStepSend.create({ data: { enrolmentId: finishedLongAgo.id, stepId: step.id, outcome: 'SKIPPED', skipReason: 'NO_OPT_IN' } });
+    const other = await ctx.prisma.drip.create({ data: { name: `Retention drip ${randomUUID().slice(0, 6)}`, numberId, status: 'ACTIVE' } });
+    const leftRecently = await enrolment({ status: 'LEFT', joinedAt: monthsAgo(14), endedAt: monthsAgo(11), dripId: other.id });
+    const third = await ctx.prisma.drip.create({ data: { name: `Retention drip ${randomUUID().slice(0, 6)}`, numberId, status: 'ACTIVE' } });
+    const stillIn = await enrolment({ status: 'ACTIVE', joinedAt: monthsAgo(14), dripId: third.id });
+
+    const staleEvent = await ctx.prisma.dripEvent.create({ data: { kind: 'OPTED_IN', contactId: contact.id, occurredAt: new Date(Date.now() - 2 * DAY) } });
+    const freshEvent = await ctx.prisma.dripEvent.create({ data: { kind: 'OPTED_IN', contactId: contact.id } });
+
+    const result = await retention.purgeGrowth(new Date());
+    expect(result.linkClicks).toBeGreaterThanOrEqual(1);
+    expect(result.dripEnrolments).toBeGreaterThanOrEqual(1);
+    expect(result.dripEvents).toBeGreaterThanOrEqual(1);
+    expect(await ctx.prisma.linkClick.findUnique({ where: { id: oldClick.id } })).toBeNull();
+    expect(await ctx.prisma.linkClick.findUnique({ where: { id: newClick.id } })).not.toBeNull();
+    expect(await ctx.prisma.trackedLink.findUnique({ where: { id: recent.link.id } })).not.toBeNull();
+    expect(await ctx.prisma.dripEnrolment.findUnique({ where: { id: finishedLongAgo.id } })).toBeNull();
+    expect(await ctx.prisma.dripStepSend.count({ where: { enrolmentId: finishedLongAgo.id } })).toBe(0);
+    expect(await ctx.prisma.dripEnrolment.findUnique({ where: { id: leftRecently.id } })).not.toBeNull();
+    expect(await ctx.prisma.dripEnrolment.findUnique({ where: { id: stillIn.id } })).not.toBeNull();
+    expect(await ctx.prisma.dripEvent.findUnique({ where: { id: staleEvent.id } })).toBeNull();
+    expect(await ctx.prisma.dripEvent.findUnique({ where: { id: freshEvent.id } })).not.toBeNull();
+    await ctx.prisma.dripEvent.delete({ where: { id: freshEvent.id } });
+  });
+
   it('runs every step daily on the maintenance queue', async () => {
     expect(await retention.run()).toEqual({
+      linkClicks: expect.any(Number),
+      dripEnrolments: expect.any(Number),
+      dripEvents: expect.any(Number),
       campaigns: expect.any(Number),
       messages: expect.any(Number),
       webhookEvents: expect.any(Number),

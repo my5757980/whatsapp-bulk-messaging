@@ -84,7 +84,7 @@ export interface Campaign {
   audienceType: 'FILTER' | 'ALL_OPTED_IN' | 'UPLOAD' | 'RETARGET';
   audienceFilter?: AudienceFilter;
   sourceCampaignId?: string | null;
-  retargetStatus?: 'FAILED' | 'NOT_READ' | 'READ' | 'DELIVERED' | null;
+  retargetStatus?: 'FAILED' | 'NOT_READ' | 'READ' | 'DELIVERED' | 'CLICKED' | 'NOT_CLICKED' | 'REPLIED' | 'NOT_REPLIED' | 'HELD_BACK' | null;
   variableMapping: Record<string, VariableSource>;
   headerMediaAssetId: string | null;
   state: CampaignState;

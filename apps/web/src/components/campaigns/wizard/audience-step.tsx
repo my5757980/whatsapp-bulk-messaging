@@ -181,15 +181,29 @@ function UploadAudience({ campaign, onBack, onDone }: { campaign: CampaignDetail
 
 type AudienceMode = CampaignDetail['audienceType'];
 
-const RETARGET_LABEL: Record<string, string> = { FAILED: 'failed', NOT_READ: 'did not read it', READ: 'read it', DELIVERED: 'received it' };
+/** Who a retarget draft goes to, in plain words (001 groups and the feature 005 groups). */
+const RETARGET_LABEL: Record<string, string> = {
+  FAILED: 'whose message failed',
+  NOT_READ: 'who did not read it',
+  READ: 'who read it',
+  DELIVERED: 'who received it',
+  CLICKED: 'who opened a link in it',
+  NOT_CLICKED: 'who received it but did not open a link',
+  REPLIED: 'who wrote back within 3 days of receiving it',
+  NOT_REPLIED: 'who received it but did not write back within 3 days',
+  HELD_BACK: "whose message Meta held back (per-person marketing limit)",
+};
 
 /** Retarget audience (US5): recipients of the source campaign with the chosen result. */
 function RetargetAudience({ campaign, onBack, onDone }: { campaign: CampaignDetail; onBack: () => void; onDone: () => void }) {
   return (
     <div className="grid max-w-3xl gap-5">
       <div className="rounded-md border bg-muted/40 p-4 text-sm" data-testid="retarget-audience">
-        Recipients of the original campaign whose message {RETARGET_LABEL[campaign.retargetStatus ?? ''] ?? 'matched'}. They are selected when this
+        Recipients of the original campaign {RETARGET_LABEL[campaign.retargetStatus ?? ''] ?? 'in the chosen group'}. They are selected when this
         campaign starts; contacts who opted out are left out automatically.
+        {campaign.retargetStatus === 'HELD_BACK' ? (
+          <p className="mt-2 text-amber-700">Meta asks to wait at least 24 hours before sending these people another marketing message. Schedule this campaign for tomorrow.</p>
+        ) : null}
       </div>
       <div className="flex gap-2">
         <Button variant="outline" onClick={onBack}>

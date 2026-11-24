@@ -27,4 +27,25 @@ describe('journey entries', () => {
     expect(describeJourneyEntry(entry('ATTRIBUTE_CHANGED', { key: 'city', to: 'Dubai' }, { type: 'MEMBER', name: 'Omar' }))).toBe('city changed to Dubai by Omar');
     expect(describeJourneyEntry(entry('TAG_ADDED', { tag: 'vip' }, { type: 'FLOW', name: 'Welcome' }))).toBe('Tag "vip" added by Welcome');
   });
+
+  it('names the campaign or drip whose tracked link was opened (005 FR-009)', () => {
+    const customer = { type: 'CUSTOMER' as const, name: null };
+    expect(describeJourneyEntry(entry('LINK_CLICKED', { campaignId: 'c1', campaignName: 'Summer Sale', dripId: null, dripName: null }, customer))).toBe(
+      'Opened a link in campaign "Summer Sale"',
+    );
+    expect(describeJourneyEntry(entry('LINK_CLICKED', { campaignId: null, campaignName: null, dripId: 'd1', dripName: 'Welcome series' }, customer))).toBe(
+      'Opened a link in drip "Welcome series"',
+    );
+  });
+
+  it('says when a contact joined, left or finished a drip, and why (005 FR-033)', () => {
+    const system = { type: 'SYSTEM' as const, name: null };
+    expect(describeJourneyEntry(entry('DRIP_JOINED', { dripId: 'd1', dripName: 'Welcome series', via: 'MANUAL' }, system))).toBe(
+      'Joined drip "Welcome series" (added by a member)',
+    );
+    expect(describeJourneyEntry(entry('DRIP_LEFT', { dripId: 'd1', dripName: 'Welcome series', reason: 'REPLIED' }, system))).toBe(
+      'Left drip "Welcome series": wrote to the number',
+    );
+    expect(describeJourneyEntry(entry('DRIP_LEFT', { dripId: 'd1', dripName: 'Welcome series', reason: 'FINISHED' }, system))).toBe('Finished drip "Welcome series"');
+  });
 });

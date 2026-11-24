@@ -145,3 +145,16 @@ groups:
           description: >-
             Customers get the fallback message and wait for a person. Check the worker logs for "AI
             turn failed" (with its reason), the Anthropic key and status page, and the AI usage page.
+
+      - alert: WbmDripLagging
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(wbm_drip_due_lag_seconds_bucket[5m]))) > 300
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Drip steps are queued more than 5 minutes after they fall due (p95)
+          description: >-
+            Drip messages go out late (p95 {{ $value | humanizeDuration }}; quiet hours are not
+            counted). Check that the worker runs the drips tick every 30 seconds, the drips and
+            send queue depths, and the worker logs for "drip tick failed".

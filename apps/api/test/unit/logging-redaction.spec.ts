@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sanitizeLogObject } from '../../src/common/logging/redaction.js';
+import { redactRequestPath, sanitizeLogObject } from '../../src/common/logging/redaction.js';
 
 // T100: live chat content and push subscriptions never reach the logs (constitution Principle VI).
 describe('sanitizeLogObject: live chat (feature 002)', () => {
@@ -70,5 +70,36 @@ describe('sanitizeLogObject: AI agent (feature 004)', () => {
     expect(out.turn).toEqual({ result: 'SENT', reply: '[REDACTED]', summary: '[REDACTED]' });
     expect(out.remember).toBe('[REDACTED]');
     expect(out.ai).toEqual({ remembered: '[REDACTED]', pendingConfirmation: '[REDACTED]' });
+  });
+});
+
+// T062 (feature 005, FR-041): a tracked-link code opens its recipient's link (and counts a click),
+// and a destination can carry personal values, so neither reaches the logs.
+describe('sanitizeLogObject: campaign growth (feature 005)', () => {
+  it('removes tracked-link codes and destinations', () => {
+    const out = sanitizeLogObject({
+      linkCode: 'AbCdEf1234',
+      link: { id: 'l1', linkCodes: ['AbCdEf1234'], link_code: 'AbCdEf1234' },
+      target: { variableKey: 'BUTTON.0.1', destination: 'https://shop.example/sale?email=sara@example.com' },
+      step: { trackedLinks: [{ variableKey: 'BODY.2', destination: 'https://shop.example/x' }] },
+      trackedUrl: 'https://go.company.test/l/AbCdEf1234',
+      error: { code: 131026, title: 'Message undeliverable' },
+    }) as Record<string, unknown>;
+    expect(out.linkCode).toBe('[REDACTED]');
+    expect(out.link).toEqual({ id: 'l1', linkCodes: '[REDACTED]', link_code: '[REDACTED]' });
+    expect(out.target).toEqual({ variableKey: 'BUTTON.0.1', destination: '[REDACTED]' });
+    expect(out.step).toEqual({ trackedLinks: [{ variableKey: 'BODY.2', destination: '[REDACTED]' }] });
+    expect(out.trackedUrl).toBe('[REDACTED]');
+    // Meta error codes are numbers and stay readable.
+    expect(out.error).toEqual({ code: 131026, title: 'Message undeliverable' });
+  });
+
+  it('hides codes in logged paths and drops query strings from request paths', () => {
+    expect(redactRequestPath('/l/AbCdEf1234')).toBe('/l/[REDACTED]');
+    expect(redactRequestPath('/l/AbCdEf1234?utm_source=x')).toBe('/l/[REDACTED]');
+    expect(redactRequestPath('/api/campaigns/0190a000-0000-7000-8000-000000000000?page=2')).toBe('/api/campaigns/0190a000-0000-7000-8000-000000000000');
+    const out = sanitizeLogObject({ req: { method: 'GET', url: '/l/AbCdEf1234' }, path: '/l/ZZZZZZZZZZ' }) as Record<string, unknown>;
+    expect(out.req).toEqual({ method: 'GET', url: '/l/[REDACTED]' });
+    expect(out.path).toBe('/l/[REDACTED]');
   });
 });

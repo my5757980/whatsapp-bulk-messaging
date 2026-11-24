@@ -36,4 +36,17 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...production, COOKIE_SECURE: 'true', APP_URL: 'http://wa.example.com' })).toThrow(/APP_URL/);
     expect(loadConfig({ ...production, COOKIE_SECURE: 'true', APP_URL: 'https://wa.example.com' }).COOKIE_SECURE).toBe(true);
   });
+
+  it('reads the tracked-link address without a trailing slash, and needs https in production (feature 005, research R1)', () => {
+    expect(loadConfig({ ...required }).PUBLIC_LINK_BASE_URL).toBeUndefined();
+    expect(loadConfig({ ...required, PUBLIC_LINK_BASE_URL: '' }).PUBLIC_LINK_BASE_URL).toBeUndefined();
+    expect(loadConfig({ ...required, PUBLIC_LINK_BASE_URL: 'http://localhost:4000/l/' }).PUBLIC_LINK_BASE_URL).toBe('http://localhost:4000/l');
+    expect(loadConfig({ ...required, PUBLIC_LINK_BASE_URL: 'https://go.company.example' }).PUBLIC_LINK_BASE_URL).toBe('https://go.company.example');
+    expect(() => loadConfig({ ...required, PUBLIC_LINK_BASE_URL: 'go.company.example' })).toThrow(/PUBLIC_LINK_BASE_URL/);
+    expect(() => loadConfig({ ...required, PUBLIC_LINK_BASE_URL: 'https://go.company.example/?x=1' })).toThrow(/PUBLIC_LINK_BASE_URL/);
+
+    const production = { ...required, NODE_ENV: 'production', COOKIE_SECURE: 'true', APP_URL: 'https://wa.example.com' };
+    expect(() => loadConfig({ ...production, PUBLIC_LINK_BASE_URL: 'http://go.company.example' })).toThrow(/PUBLIC_LINK_BASE_URL/);
+    expect(loadConfig({ ...production, PUBLIC_LINK_BASE_URL: 'https://go.company.example' }).PUBLIC_LINK_BASE_URL).toBe('https://go.company.example');
+  });
 });

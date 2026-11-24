@@ -14,3 +14,5 @@ process.env.META_APP_ID ||= '1234567890';
 process.env.META_APP_SECRET ||= `test-app-secret-${randomUUID()}`;
 process.env.META_WEBHOOK_VERIFY_TOKEN ||= `test-verify-${randomUUID()}`;
 process.env.META_GRAPH_BASE_URL = 'https://graph.facebook.test';
+// Feature 005: tracked links in tests point at a made-up public address.
+process.env.PUBLIC_LINK_BASE_URL ||= 'https://go.wbm.test/l';

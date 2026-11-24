@@ -62,6 +62,16 @@ const CONTENT_KEYS = new Set([
   'remembered',
   'pendingconfirmation',
   'pending_confirmation',
+  // Campaign growth (feature 005, FR-041): a tracked-link code opens its recipient's link and counts
+  // a click, and a destination can carry personal values.
+  'linkcode',
+  'link_code',
+  'linkcodes',
+  'link_codes',
+  'trackedurl',
+  'tracked_url',
+  'destination',
+  'destinations',
 ]);
 
 const PHONE_KEYS = new Set([
@@ -74,8 +84,11 @@ const PHONE_KEYS = new Set([
   'recipientid',
   'wa_id',
   'waid',
-  'destination',
 ]);
+
+/** Keys whose string values are paths or addresses: tracked-link codes in them are hidden (005). */
+const PATH_KEYS = new Set(['url', 'path', 'originalurl']);
+const LINK_PATH = /\/l\/[^/?#\s]+/g;
 
 const REDACTED = '[REDACTED]';
 const MAX_DEPTH = 8;
@@ -92,11 +105,22 @@ function sanitize(value: unknown, depth: number): unknown {
       out[key] = REDACTED;
     } else if (PHONE_KEYS.has(k) && (typeof inner === 'string' || typeof inner === 'number')) {
       out[key] = maskPhone(String(inner));
+    } else if (PATH_KEYS.has(k) && typeof inner === 'string') {
+      out[key] = redactLinkPaths(inner);
     } else {
       out[key] = sanitize(inner, depth + 1);
     }
   }
   return out;
+}
+
+function redactLinkPaths(value: string): string {
+  return value.replace(LINK_PATH, `/l/${REDACTED}`);
+}
+
+/** A request path for the logs: no query string (it can carry secrets) and no tracked-link code. */
+export function redactRequestPath(url: string): string {
+  return redactLinkPaths(url.split('?')[0] ?? '');
 }
 
 /** Returns a sanitised copy; the input is never mutated. */

@@ -1,4 +1,4 @@
-import { classifyMetaError, describeMetaError } from '../meta/meta-error-classifier.js';
+import { AMBIGUOUS_FAILURE_REASON, classifyMetaError, describeMetaError } from '../meta/meta-error-classifier.js';
 import { MetaApiError, MetaNetworkError } from '../meta/meta-graph.client.js';
 
 // Send-worker decisions (research R7/R9/R11, T100). Pure so the rules are unit-tested (T076).
@@ -48,7 +48,7 @@ export type SendFailureDecision =
  */
 export function decideSendFailure(error: unknown, attempt: number): SendFailureDecision {
   if (error instanceof MetaNetworkError) {
-    if (error.phase === 'ambiguous') return { action: 'fail', code: null, reason: 'unknown_outcome_not_retried' };
+    if (error.phase === 'ambiguous') return { action: 'fail', code: null, reason: AMBIGUOUS_FAILURE_REASON };
     const reason = 'Could not reach Meta before sending';
     return attempt < MAX_SEND_ATTEMPTS ? { action: 'retry', code: null, reason } : { action: 'fail', code: null, reason };
   }

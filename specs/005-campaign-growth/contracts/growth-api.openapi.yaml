@@ -1,0 +1,795 @@
+openapi: 3.1.0
+info:
+  title: WhatsApp Platform - Campaign Growth API
+  version: 0.1.0
+  description: >
+    Tracked links and clicks, retargeting groups, retry rounds and drip campaigns for the Next.js
+    dashboard (feature 005-campaign-growth). Same conventions as 001–004: httpOnly session cookie,
+    an X-CSRF-Token header on every mutating request, an x-permission on every operation, and the
+    error shape {code, message, details, requestId}. No new permissions; the 001 ones are reused:
+      campaigns.view    ADMIN, MANAGER, AGENT - results (phone numbers masked for agents)
+      campaigns.manage  ADMIN, MANAGER        - tracked links, retry plans, building drips, retargeting
+      campaigns.launch  ADMIN, MANAGER        - retry rounds, activating, pausing and archiving drips, enrolling
+      data.export       ADMIN, MANAGER        - CSV exports
+
+    The public short-link route GET /l/{code} is served outside /api (servers override below). It
+    needs no session, answers 302 to the destination, and records a click unless the request is a
+    link preview or a robot (research R3). Unknown or expired codes get a 404 page.
+servers:
+  - url: /api
+security:
+  - sessionCookie: []
+tags:
+  - name: tracked-links
+  - name: clicks
+  - name: retarget
+  - name: retries
+  - name: drips
+  - name: public
+
+paths:
+  /l/{code}:
+    servers:
+      - url: /
+    parameters:
+      - { name: code, in: path, required: true, schema: { type: string, pattern: '^[0-9A-Za-z]{10}$' } }
+    get:
+      tags: [public]
+      summary: Open a tracked link (FR-003, FR-004, FR-005)
+      security: []
+      x-permission: public
+      responses:
+        '302':
+          description: Sent on to the destination
+          headers:
+            Location: { schema: { type: string } }
+            Cache-Control: { schema: { type: string, const: no-store } }
+        '404': { description: Unknown or expired link (an HTML page; nobody is sent onward) }
+        '429': { description: Too many requests from this client }
+
+  /tracked-links/config:
+    get:
+      tags: [tracked-links]
+      summary: The tracked-link address, so the template editor can make a Tracked link button
+      x-permission: templates.view
+      responses:
+        '200':
+          description: Settings
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [enabled, baseUrl, buttonUrl]
+                properties:
+                  enabled: { type: boolean, description: 'False when PUBLIC_LINK_BASE_URL is not set; links cannot be tracked then' }
+                  baseUrl: { type: [string, 'null'], examples: ['https://go.company.example'] }
+                  buttonUrl: { type: [string, 'null'], description: 'The URL button address to use in a template', examples: ['https://go.company.example/{{1}}'] }
+
+  /campaigns/{id}/tracked-links:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [tracked-links]
+      summary: The campaign's tracked buttons and link variables, and which variables could be tracked
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Tracked links, content: { application/json: { schema: { $ref: '#/components/schemas/TrackedLinkSet' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [tracked-links]
+      summary: Replace the tracked links of a draft or scheduled campaign (FR-001, FR-007)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/TrackedLinksInput' } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/TrackedLinkSet' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: CAMPAIGN_NOT_EDITABLE (it has started), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: 'VALIDATION_FAILED, LINK_NOT_TRACKABLE (the variable cannot carry a tracked link) or BAD_DESTINATION', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /tracked-link-targets/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    patch:
+      tags: [tracked-links]
+      summary: Change a tracked link's destination or campaign tags, also while it is in use (FR-006; audited)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              properties:
+                destination: { type: string, maxLength: 2000 }
+                addCampaignTags: { type: boolean }
+      responses:
+        '200': { description: Changed, content: { application/json: { schema: { $ref: '#/components/schemas/TrackedLinkTarget' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /campaigns/{id}/clicks/summary:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [clicks]
+      summary: Clickers, click rate and clicks per link (FR-008)
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Summary, content: { application/json: { schema: { $ref: '#/components/schemas/ClickSummary' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /campaigns/{id}/clicks:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [clicks]
+      summary: The Clicked view, one row per clicker (paged)
+      x-permission: campaigns.view
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of clickers
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Clicker' } }
+                  total: { type: integer }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /campaigns/{id}/clicks/export:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [clicks]
+      summary: The Clicked view as CSV
+      x-permission: data.export
+      responses:
+        '200': { description: CSV file, content: { text/csv: { schema: { type: string } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /campaigns/{id}/retarget-groups:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [retarget]
+      summary: Contacts in each retarget group right now, before a draft is made (FR-010, FR-011)
+      x-permission: campaigns.view
+      responses:
+        '200':
+          description: Group sizes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [groups]
+                properties:
+                  groups:
+                    type: array
+                    items:
+                      type: object
+                      required: [status, count, available]
+                      properties:
+                        status: { $ref: '#/components/schemas/RetargetStatus' }
+                        count: { type: integer }
+                        available: { type: boolean, description: false when the group is empty or the messages were purged }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /campaigns/{id}/retarget:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [retarget]
+      summary: 001's retarget, with the new groups (CLICKED, NOT_CLICKED, REPLIED, NOT_REPLIED, HELD_BACK)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              additionalProperties: false
+              properties:
+                status: { $ref: '#/components/schemas/RetargetStatus' }
+      responses:
+        '201': { description: The new draft campaign (001 Campaign) }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'Not started yet, or the messages were purged', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /campaigns/{id}/retry-plan:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [retries]
+      summary: The campaign's retry plan
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Plan, content: { application/json: { schema: { $ref: '#/components/schemas/RetryPlan' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [retries]
+      summary: Set retries for a draft or scheduled campaign (FR-013; audited)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/RetryPlan' } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/RetryPlan' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: CAMPAIGN_NOT_EDITABLE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: VALIDATION_FAILED or RETRY_WINDOW_EXCEEDED (more than 24 hours), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /campaigns/{id}/retry-rounds:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [retries]
+      summary: The campaign's rounds with their times, recipients and recoveries (FR-016, FR-018)
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Rounds, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/RetryRound' } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /campaigns/{id}/retry-rounds/cancel:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [retries]
+      summary: Cancel every scheduled round of the campaign (audited)
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Rounds after cancelling, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/RetryRound' } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /campaigns/{id}/retry-rounds/{round}/cancel:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { name: round, in: path, required: true, schema: { type: integer, minimum: 1, maximum: 3 } }
+    post:
+      tags: [retries]
+      summary: Cancel one scheduled round (audited)
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: The round, content: { application/json: { schema: { $ref: '#/components/schemas/RetryRound' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: ROUND_NOT_SCHEDULED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /retry-rounds:
+    get:
+      tags: [retries]
+      summary: Scheduled retries across campaigns (FR-016)
+      x-permission: campaigns.view
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [SCHEDULED, RUNNING, DONE, CANCELLED, SKIPPED] } }
+      responses:
+        '200':
+          description: Rounds with their campaign
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  allOf:
+                    - $ref: '#/components/schemas/RetryRound'
+                    - type: object
+                      required: [campaign]
+                      properties:
+                        campaign: { type: object, required: [id, name], properties: { id: { type: string, format: uuid }, name: { type: string } } }
+
+  /drips:
+    get:
+      tags: [drips]
+      summary: Drips with their state and counts
+      x-permission: campaigns.view
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/DripStatus' } }
+      responses:
+        '200': { description: Drips by name, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/DripSummary' } } } } }
+    post:
+      tags: [drips]
+      summary: Create a draft drip (FR-019; audited)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, numberId]
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 1, maxLength: 80 }
+                numberId: { type: string, format: uuid }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/DripDetail' } } } }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /drips/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [drips]
+      summary: A drip with its steps, triggers, rules and the problems that block activating it
+      x-permission: campaigns.view
+      responses:
+        '200': { description: The drip, content: { application/json: { schema: { $ref: '#/components/schemas/DripDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [drips]
+      summary: Change the name, quiet hours, leaving rules, starting events or rejoining (FR-021, FR-024, FR-026, FR-028; audited)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DripSettingsInput' } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/DripDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NAME_TAKEN or DRIP_ARCHIVED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [drips]
+      summary: Delete a draft drip that never had contacts (audited)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: DRIP_IN_USE (archive it instead), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /drips/{id}/steps:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [drips]
+      summary: Replace the steps; on an active drip, changes reach only steps contacts have not reached (FR-019, FR-020, FR-023; audited)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [steps]
+              additionalProperties: false
+              properties:
+                steps: { type: array, minItems: 1, maxItems: 10, items: { $ref: '#/components/schemas/DripStepInput' } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/DripDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: DRIP_ARCHIVED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /drips/{id}/activate:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [drips]
+      summary: Activate a draft or resume a paused drip after its checks (FR-022; audited)
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Active, content: { application/json: { schema: { $ref: '#/components/schemas/DripDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: TOO_MANY_ACTIVE_DRIPS or DRIP_ARCHIVED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: 'ACTIVATION_BLOCKED, with the problems listed in problems', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /drips/{id}/pause:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [drips]
+      summary: Pause an active drip (audited)
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Paused, content: { application/json: { schema: { $ref: '#/components/schemas/DripDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_ACTIVE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /drips/{id}/archive:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [drips]
+      summary: Archive a drip; contacts in it leave with ARCHIVED (audited)
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Archived, content: { application/json: { schema: { $ref: '#/components/schemas/DripDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /drips/{id}/enrolments:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [drips]
+      summary: Contacts in the drip (paged)
+      x-permission: campaigns.view
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - { name: status, in: query, schema: { type: string, enum: [ACTIVE, FINISHED, LEFT] } }
+        - { name: position, in: query, schema: { type: integer, minimum: 1, maximum: 10 } }
+      responses:
+        '200':
+          description: Page of enrolments
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Enrolment' } }
+                  total: { type: integer }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [drips]
+      summary: Enrol contacts by hand, chosen or by a filter (FR-025; audited)
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/EnrolInput' } } }
+      responses:
+        '200': { description: Enrolled, content: { application/json: { schema: { $ref: '#/components/schemas/EnrolResult' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_ACTIVE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /drips/{id}/enrolments/preview:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [drips]
+      summary: How many would join and how many cannot, without enrolling anyone
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/EnrolInput' } } }
+      responses:
+        '200': { description: Counts, content: { application/json: { schema: { $ref: '#/components/schemas/EnrolResult' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+
+  /drips/{id}/enrolments/{enrolmentId}:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { name: enrolmentId, in: path, required: true, schema: { type: string, format: uuid } }
+    delete:
+      tags: [drips]
+      summary: Remove a contact from the drip (leaves with REMOVED; audited)
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Removed }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_IN_DRIP (already finished or left), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+
+  /drips/{id}/results:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [drips]
+      summary: Contacts in, finished and left by reason; per-step counts (FR-035)
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Results, content: { application/json: { schema: { $ref: '#/components/schemas/DripResults' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /drips/{id}/results/contacts:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [drips]
+      summary: The contacts behind one count (paged)
+      x-permission: campaigns.view
+      parameters:
+        - { name: stepId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: metric, in: query, required: true, schema: { $ref: '#/components/schemas/StepMetric' } }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: Page of contacts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/ContactRow' } }
+                  total: { type: integer }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /drips/{id}/results/export:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [drips]
+      summary: The contacts behind one count as CSV
+      x-permission: data.export
+      parameters:
+        - { name: stepId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: metric, in: query, required: true, schema: { $ref: '#/components/schemas/StepMetric' } }
+      responses:
+        '200': { description: CSV file, content: { text/csv: { schema: { type: string } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: sid }
+    csrfHeader: { type: apiKey, in: header, name: X-CSRF-Token }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+  responses:
+    NotFound:
+      description: Not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationFailed:
+      description: VALIDATION_FAILED, with field details
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [VALIDATION_FAILED, NAME_TAKEN, CAMPAIGN_NOT_EDITABLE, LINK_NOT_TRACKABLE, BAD_DESTINATION, RETRY_WINDOW_EXCEEDED, ROUND_NOT_SCHEDULED, ACTIVATION_BLOCKED, TOO_MANY_ACTIVE_DRIPS, DRIP_IN_USE, DRIP_ARCHIVED, NOT_ACTIVE, NOT_IN_DRIP] }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: object, properties: { field: { type: string }, issue: { type: string } } }
+        problems:
+          type: array
+          items: { $ref: '#/components/schemas/Problem' }
+        requestId: { type: string }
+    Problem:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [NO_STEPS, TEMPLATE_NOT_APPROVED, VARIABLES_NOT_MAPPED, NUMBER_NOT_CONNECTED, WRONG_ACCOUNT, NO_START] }
+        message: { type: string }
+        stepPosition: { type: [integer, 'null'] }
+    TrackedLinkTarget:
+      type: object
+      required: [id, variableKey, destination, addCampaignTags]
+      properties:
+        id: { type: string, format: uuid }
+        variableKey: { type: string, examples: [BUTTON.0.1, BODY.2] }
+        destination: { type: string }
+        addCampaignTags: { type: boolean }
+    TrackedLinkSet:
+      type: object
+      required: [links, trackable]
+      properties:
+        links: { type: array, items: { $ref: '#/components/schemas/TrackedLinkTarget' } }
+        trackable:
+          type: array
+          description: The template's variables that can carry a tracked link, and why others cannot
+          items:
+            type: object
+            required: [variableKey, kind, trackable]
+            properties:
+              variableKey: { type: string }
+              kind: { type: string, enum: [URL_BUTTON, TEXT_VARIABLE] }
+              trackable: { type: boolean }
+              reason: { type: [string, 'null'], examples: ['The button address does not start with the tracked-link address'] }
+    TrackedLinksInput:
+      type: object
+      required: [links]
+      additionalProperties: false
+      properties:
+        links:
+          type: array
+          maxItems: 5
+          items: { $ref: '#/components/schemas/TrackedLinkInput' }
+    TrackedLinkInput:
+      type: object
+      required: [variableKey, destination]
+      additionalProperties: false
+      properties:
+        variableKey: { type: string, maxLength: 20 }
+        destination: { type: string, maxLength: 2000 }
+        addCampaignTags: { type: boolean, default: false }
+    ClickSummary:
+      type: object
+      required: [clickers, clicks, delivered, clickRate, links]
+      properties:
+        clickers: { type: integer }
+        clicks: { type: integer }
+        delivered: { type: integer }
+        clickRate: { type: number, description: clickers / delivered }
+        links:
+          type: array
+          items:
+            type: object
+            required: [targetId, variableKey, destination, clickers, clicks]
+            properties:
+              targetId: { type: string, format: uuid }
+              variableKey: { type: string }
+              destination: { type: string }
+              clickers: { type: integer }
+              clicks: { type: integer }
+    Clicker:
+      type: object
+      required: [contactId, name, phone, firstClickAt, lastClickAt, clicks]
+      properties:
+        contactId: { type: [string, 'null'], format: uuid }
+        name: { type: [string, 'null'] }
+        phone: { type: [string, 'null'], description: masked for roles without phones.full }
+        firstClickAt: { type: string, format: date-time }
+        lastClickAt: { type: string, format: date-time }
+        clicks: { type: integer }
+    RetargetStatus:
+      type: string
+      enum: [FAILED, NOT_READ, READ, DELIVERED, CLICKED, NOT_CLICKED, REPLIED, NOT_REPLIED, HELD_BACK]
+    RetryPlan:
+      type: object
+      required: [rounds, delaysMinutes]
+      additionalProperties: false
+      properties:
+        rounds: { type: integer, minimum: 0, maximum: 3 }
+        delaysMinutes:
+          type: array
+          maxItems: 3
+          items: { type: integer, enum: [30, 60, 120, 240, 480, 720] }
+    RetryRound:
+      type: object
+      required: [round, status, dueAt, recipients, recovered, startedAt, finishedAt, note]
+      properties:
+        round: { type: integer }
+        status: { type: string, enum: [SCHEDULED, RUNNING, DONE, CANCELLED, SKIPPED] }
+        dueAt: { type: string, format: date-time }
+        startedAt: { type: [string, 'null'], format: date-time }
+        finishedAt: { type: [string, 'null'], format: date-time }
+        recipients: { type: integer }
+        recovered: { type: integer }
+        note: { type: [string, 'null'] }
+    DripStatus:
+      type: string
+      enum: [DRAFT, ACTIVE, PAUSED, ARCHIVED]
+    DripSummary:
+      type: object
+      required: [id, name, status, number, steps, active, finished, left, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        status: { $ref: '#/components/schemas/DripStatus' }
+        pausedReason: { type: [string, 'null'] }
+        number: { type: object, required: [id, label], properties: { id: { type: string, format: uuid }, label: { type: string } } }
+        steps: { type: integer }
+        active: { type: integer }
+        finished: { type: integer }
+        left: { type: integer }
+        updatedAt: { type: string, format: date-time }
+    QuietHours:
+      type: [object, 'null']
+      required: [from, to, days]
+      properties:
+        from: { type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' }
+        to: { type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$' }
+        days: { type: array, items: { type: integer, minimum: 1, maximum: 7 }, minItems: 1 }
+    Trigger:
+      type: object
+      required: [kind]
+      additionalProperties: false
+      properties:
+        kind: { type: string, enum: [TAG_ADDED, OPTED_IN, IMPORTED, API_CREATED, LINK_CLICKED] }
+        tagId: { type: [string, 'null'], format: uuid }
+        campaignId: { type: [string, 'null'], format: uuid, description: LINK_CLICKED; null means any campaign }
+    DripSettingsInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        quietHours: { $ref: '#/components/schemas/QuietHours' }
+        leaveOnReply: { type: boolean }
+        leaveOnClick: { type: boolean }
+        stopTagIds: { type: array, maxItems: 20, items: { type: string, format: uuid } }
+        allowRejoin: { type: boolean }
+        triggers: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/Trigger' } }
+    DripStepInput:
+      type: object
+      required: [templateId, variableMapping, waitMinutes]
+      additionalProperties: false
+      properties:
+        id: { type: [string, 'null'], format: uuid, description: an existing step to keep; null for a new one }
+        templateId: { type: string, format: uuid }
+        variableMapping: { type: object, description: 001 VariableMapping }
+        headerMediaAssetId: { type: [string, 'null'], format: uuid }
+        waitMinutes: { type: integer, minimum: 0, maximum: 43200 }
+        trackedLinks: { type: array, maxItems: 5, items: { $ref: '#/components/schemas/TrackedLinkInput' } }
+    DripStep:
+      type: object
+      required: [id, position, template, variableMapping, headerMediaAssetId, waitMinutes, trackedLinks]
+      properties:
+        id: { type: string, format: uuid }
+        position: { type: integer }
+        template: { type: object, required: [id, name, language, status], properties: { id: { type: string, format: uuid }, name: { type: string }, language: { type: string }, status: { type: string } } }
+        variableMapping: { type: object }
+        headerMediaAssetId: { type: [string, 'null'], format: uuid }
+        waitMinutes: { type: integer }
+        trackedLinks: { type: array, items: { $ref: '#/components/schemas/TrackedLinkTarget' } }
+    DripDetail:
+      allOf:
+        - $ref: '#/components/schemas/DripSummary'
+        - type: object
+          required: [quietHours, leaveOnReply, leaveOnClick, stopTagIds, allowRejoin, triggers, stepList, problems]
+          properties:
+            quietHours: { $ref: '#/components/schemas/QuietHours' }
+            leaveOnReply: { type: boolean }
+            leaveOnClick: { type: boolean }
+            stopTagIds: { type: array, items: { type: string, format: uuid } }
+            allowRejoin: { type: boolean }
+            triggers: { type: array, items: { $ref: '#/components/schemas/Trigger' } }
+            stepList: { type: array, items: { $ref: '#/components/schemas/DripStep' } }
+            problems: { type: array, items: { $ref: '#/components/schemas/Problem' } }
+    EnrolInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      maxProperties: 1
+      properties:
+        contactIds: { type: array, minItems: 1, maxItems: 1000, items: { type: string, format: uuid } }
+        filter: { type: object, description: 001 AudienceFilter }
+    EnrolResult:
+      type: object
+      required: [enrolled, skippedOptedOut, skippedAlreadyIn, skippedNotFound]
+      properties:
+        enrolled: { type: integer }
+        skippedOptedOut: { type: integer }
+        skippedAlreadyIn: { type: integer }
+        skippedNotFound: { type: integer }
+    Enrolment:
+      type: object
+      required: [id, contact, status, joinedVia, currentPosition, nextDueAt, leftReason, joinedAt, endedAt]
+      properties:
+        id: { type: string, format: uuid }
+        contact: { $ref: '#/components/schemas/ContactRow' }
+        status: { type: string, enum: [ACTIVE, FINISHED, LEFT] }
+        joinedVia: { type: string, enum: [TAG_ADDED, OPTED_IN, IMPORTED, API_CREATED, LINK_CLICKED, MANUAL] }
+        currentPosition: { type: integer }
+        nextDueAt: { type: [string, 'null'], format: date-time }
+        leftReason: { type: [string, 'null'], enum: [REPLIED, OPTED_OUT, BLOCKED, DELETED, STOP_TAG, CLICKED, REMOVED, INVALID_NUMBER, ARCHIVED, null] }
+        joinedAt: { type: string, format: date-time }
+        endedAt: { type: [string, 'null'], format: date-time }
+    StepMetric:
+      type: string
+      enum: [SENT, DELIVERED, READ, CLICKED, REPLIED, FAILED, SKIPPED]
+    DripResults:
+      type: object
+      required: [active, finished, left, steps]
+      properties:
+        active: { type: integer }
+        finished: { type: integer }
+        left:
+          type: object
+          description: contacts who left, by reason
+          additionalProperties: { type: integer }
+        steps:
+          type: array
+          items:
+            type: object
+            required: [stepId, position, templateName, removed, sent, delivered, read, clicked, replied, failed, skipped]
+            properties:
+              stepId: { type: string, format: uuid }
+              position: { type: integer }
+              templateName: { type: string }
+              removed: { type: boolean }
+              sent: { type: integer }
+              delivered: { type: integer }
+              read: { type: integer }
+              clicked: { type: integer }
+              replied: { type: integer }
+              failed: { type: integer }
+              skipped: { type: integer }
+    ContactRow:
+      type: object
+      required: [id, name, phone]
+      properties:
+        id: { type: [string, 'null'], format: uuid }
+        name: { type: [string, 'null'] }
+        phone: { type: [string, 'null'], description: masked for roles without phones.full }

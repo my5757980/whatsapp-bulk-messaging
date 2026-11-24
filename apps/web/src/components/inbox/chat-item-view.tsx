@@ -59,6 +59,8 @@ function MediaBody({ item }: { item: ChatItem }) {
 
 /** The AI agent (feature 004, with "test" for draft replies) or chatbot flow (feature 003) that sent an automatic message. */
 function automationName(item: ChatItem): string | null {
+  // Drip steps (feature 005, FR-033) name the drip and the step.
+  if (item.drip) return `Drip "${item.drip.name}" · step ${item.drip.step}`;
   const ai = item.payload.ai;
   if (ai && typeof ai === 'object' && typeof (ai as { agentName?: unknown }).agentName === 'string') {
     const { agentName, test } = ai as { agentName: string; test?: unknown };
@@ -211,6 +213,11 @@ export function ChatItemView({ item }: { item: ChatItem }) {
           {ours && item.kind !== 'NOTE' && <Ticks status={item.status} />}
         </div>
         <AiUsed item={item} />
+        {item.firstClickAt ? (
+          <p className="mt-1 text-right text-[11px] text-emerald-700 dark:text-emerald-300" data-testid="link-opened">
+            Link opened {time(item.firstClickAt)}
+          </p>
+        ) : null}
         {item.status === 'FAILED' && item.failureReason && <p className="mt-1 text-xs text-destructive">Not sent: {item.failureReason}</p>}
       </div>
     </div>

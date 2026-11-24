@@ -154,6 +154,49 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  // Campaign growth (feature 005, research R13).
+  readonly linkClicksTotal = new Counter({
+    name: 'wbm_link_clicks_total',
+    help: 'Tracked links opened, by kind: click (counted), preview (previews and robots), unknown (no such code) or limited (too many from one address)',
+    labelNames: ['kind'] as const,
+    registers: [this.registry],
+  });
+
+  readonly linkRedirectDuration = new Histogram({
+    name: 'wbm_link_redirect_seconds',
+    help: 'Time to answer a tracked link (lookup, click record and redirect)',
+    buckets: [0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2],
+    registers: [this.registry],
+  });
+
+  readonly campaignRetryMessagesTotal = new Counter({
+    name: 'wbm_campaign_retry_messages_total',
+    help: 'Campaign messages in retry rounds, by outcome: requeued (sent again) or recovered (then sent)',
+    labelNames: ['outcome'] as const,
+    registers: [this.registry],
+  });
+
+  readonly dripStepsTotal = new Counter({
+    name: 'wbm_drip_steps_total',
+    help: 'Drip steps handled by the tick, by result: queued or skipped',
+    labelNames: ['result'] as const,
+    registers: [this.registry],
+  });
+
+  readonly dripEnrolmentsTotal = new Counter({
+    name: 'wbm_drip_enrolments_total',
+    help: 'Contacts who joined a drip, by how: manual or event',
+    labelNames: ['via'] as const,
+    registers: [this.registry],
+  });
+
+  readonly dripDueLag = new Histogram({
+    name: 'wbm_drip_due_lag_seconds',
+    help: 'Time from a drip step falling due to its message being queued (quiet hours excluded)',
+    buckets: [5, 15, 30, 60, 120, 300, 600, 1800],
+    registers: [this.registry],
+  });
+
   constructor() {
     collectDefaultMetrics({ register: this.registry });
   }

@@ -16,6 +16,7 @@ WhatsApp Cloud API. One company, a small team, prices in USD.
 | Live chat (feature 002) | A shared team inbox for customer replies: live updates, take, transfer and close chats, the 24-hour reply window, templates from a chat, saved replies, a media library, customer profiles and blocking, welcome and off-hours messages, browser alerts, internal notes and a team view. See [Live chat](#live-chat). |
 | Chatbot flows (feature 003) | Automatic conversations built on a canvas: buttons, lists, questions that save answers to contacts, conditions, delays, safe API calls, hand-over to live chat, test numbers, versions, analytics and starter flows. See [Chatbot flows](#chatbot-flows). |
 | AI agents (feature 004) | AI agents that answer customers from your own knowledge with Claude, hand over to the team when needed, use safe API skills and flows, stay within a monthly limit, and a team assistant that drafts templates, flows and campaigns. See [AI agents](#ai-agents). |
+| Campaign growth (feature 005) | Tracked links with a click count for each recipient, retargeting by clicked, replied and held back, retry rounds for failures that may pass, and drips: timed template steps that contacts join by hand or on events and leave when they reply. See [Campaign growth](#campaign-growth). |
 
 ## Architecture
 
@@ -173,6 +174,54 @@ of messages with 50 customers writing at once, against the fake model). `npm run
 answer quality with the real model (SC-002, SC-003, SC-005, SC-010). It costs money, so it runs only
 by hand with `EVAL_CONFIRM=yes`, never in CI.
 
+## Campaign growth
+
+Feature 005 ([spec](specs/005-campaign-growth/spec.md), [quickstart](specs/005-campaign-growth/quickstart.md)).
+
+- **Tracked links:** set `PUBLIC_LINK_BASE_URL` to an https address on the company's own domain,
+  for example `https://go.company.example/l`. Each recipient gets their own link
+  `<address>/<code>`; the api answers it at `/l/<code>` and sends the visitor straight on to the
+  destination. **When the address has no `/l` path** (for example `https://go.company.example`),
+  the reverse proxy must send `/<code>` to the api's `/l/<code>`. Leave the setting empty to turn
+  tracking off. A template's tracked button is made with *Tracked link button* (its address is
+  `<address>/{{1}}`, approved by Meta once); a text variable can carry a full tracked link too.
+- **Clicks:** previews, robots and HEAD requests are sent on but not counted. The visitor's address
+  is never stored; only a salted hash of it counts towards the limit of 120 opens a minute.
+  *Results → Clicked* lists who clicked, with first and last clicks and how often, and exports
+  them. Clicks also show in the contact's journey and in live chat.
+- **Retargeting:** a campaign's *Retarget* shows the size of each group: failed, not read, read,
+  delivered, clicked, not clicked, replied (wrote to the campaign's number within 3 days of
+  delivery), not replied and held back (Meta error 131049, its limit on marketing messages per
+  person). The retarget is a draft that names its source and group; its audience is taken at
+  launch, without opted-out contacts.
+- **Retries:** a campaign can retry failures that may pass, in up to 3 rounds with delays of
+  30 minutes to 12 hours, all within 24 hours of launch. Only temporary errors are retried, never
+  held-back messages or numbers that cannot receive WhatsApp. The campaign stays running while
+  rounds are pending. *Campaigns → Scheduled retries* lists the rounds, which can be cancelled; a
+  round past 24 hours, with a paused template or a disconnected number is skipped with a note.
+- **Drips:** *Drips → New drip* builds up to 10 template steps on one number, each after a wait
+  (the first step may send at once; later waits are 10 minutes to 30 days), with optional quiet
+  hours in the company time zone. Contacts join by hand (chosen or by filter) or on starting
+  events: a tag added, an opt-in, an import or the public API adding them, or a click on a
+  campaign's link. They leave when they reply (on by default), click a drip's link (optional), get
+  a stop tag, opt out, are blocked or deleted, or their number cannot receive WhatsApp; they rejoin
+  only when the drip allows it. Marketing steps skip contacts without an opt-in. A drip pauses
+  itself and alerts admins and managers when a step's template is no longer approved or its number
+  disconnects. Up to 20 active drips, each with up to 100,000 contacts in it.
+- **Results:** a drip's *Results* shows the contacts in it, finished and left by reason, and per
+  step sent, delivered, read, clicked, replied, failed and skipped. Each number opens the contacts
+  behind it, with an export.
+- **Permissions:** the campaign permissions apply. Managers and admins build drips, tracked links
+  and retry plans (`campaigns.manage`) and run them (`campaigns.launch`); agents see results with
+  masked phone numbers (`campaigns.view`); exports need `data.export`.
+- **Data handling:** clicks are kept 12 months, and enrolments 12 months after they end. Tracked
+  links go with their messages, so purged messages' links stop working. Deleting a contact ends
+  their drips and keeps their clicks and enrolments only as anonymous counts. Logs leave out link
+  codes and destinations.
+
+Check: `PERF_NUMBER_ID=<id> npm run perf:drips` (SC-005: 95% of drip steps queued within 5 minutes
+of falling due, with 10,000 contacts in a drip).
+
 ## Getting started
 
 Prerequisites: Node.js 26, npm 11 and Docker Desktop. The full walkthrough, including how to
@@ -204,6 +253,7 @@ npm run perf:inbox-seed     # live chat: 10,000 chats and one chat of 5,000 mess
 npm run perf:inbox          # live chat SC-006 list/open times and SC-001 event latency (after the seed)
 npm run perf:flows          # chatbot flows SC-001 (PERF_NUMBER_ID set)
 npm run perf:ai             # AI agents SC-001 against the fake model (PERF_NUMBER_ID set)
+npm run perf:drips          # drips SC-005 with 10,000 contacts (PERF_NUMBER_ID set)
 npm run eval:ai             # AI answer quality with the real model: by hand only, EVAL_CONFIRM=yes
 ```
 
@@ -228,13 +278,18 @@ the web proxy.
 - **Retention:** a daily job purges campaigns and messages 12 months after they end, live chat
   messages, journey entries and openings after 12 months (with unused customer media), and webhook
   events and uploaded files after 30 days. AI conversations, AI reply records, unanswered-question
-  occurrences and assistant requests also go after 12 months. Audit logs are kept. Deleting a
-  contact erases its chat content and AI conversation details but keeps anonymous counts.
+  occurrences and assistant requests also go after 12 months, and so do link clicks and drip
+  enrolments (12 months after they end). Audit logs are kept. Deleting a contact erases its chat
+  content and AI conversation details but keeps anonymous counts.
 - **AI service:** set `ANTHROPIC_API_KEY` from the company's Anthropic account (leave
   `ANTHROPIC_BASE_URL` empty in production). The `WbmAiFailing` alert fires when more than 20% of AI
   turns fail in 15 minutes.
 - **Live chat behind a proxy:** keep `/api/inbox/events` unbuffered and allow long-lived
   connections (the api sends `: ping` every 15 s).
+- **Tracked links:** `PUBLIC_LINK_BASE_URL` must be public https on the company's domain. When it
+  has no `/l` path, the reverse proxy sends `/<code>` to the api's `/l/<code>`. The
+  `WbmDripLagging` alert fires when drip steps are queued more than 5 minutes after falling due
+  (p95, for 15 minutes).
 - **Real numbers:** to connect a real WhatsApp number, follow quickstart §5. Check each step
   against Meta's current documentation.
 
@@ -270,6 +325,12 @@ the web proxy.
   [Claude messages](specs/004-ai-agent/contracts/claude-messages.md),
   [quickstart](specs/004-ai-agent/quickstart.md), [tasks](specs/004-ai-agent/tasks.md) and
   [release checklist](specs/004-ai-agent/checklists/release.md)
+- Campaign growth (feature 005): [spec](specs/005-campaign-growth/spec.md),
+  [plan](specs/005-campaign-growth/plan.md), [research](specs/005-campaign-growth/research.md),
+  [data model](specs/005-campaign-growth/data-model.md),
+  [growth API](specs/005-campaign-growth/contracts/growth-api.openapi.yaml),
+  [quickstart](specs/005-campaign-growth/quickstart.md), [tasks](specs/005-campaign-growth/tasks.md) and
+  [release checklist](specs/005-campaign-growth/checklists/release.md)
 - Architecture decisions:
   - [ADR-0001 Frontend stack](history/adr/0001-frontend-stack.md)
   - [ADR-0002 Backend runtime, process model and monorepo](history/adr/0002-backend-runtime-process-model-and-monorepo.md)

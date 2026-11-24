@@ -91,6 +91,8 @@ export const NotificationType = {
   // Feature 004 AI agent
   AI_USAGE: 'AI_USAGE',
   AI_FAILING: 'AI_FAILING',
+  // Feature 005 campaign growth
+  DRIP_PAUSED: 'DRIP_PAUSED',
 } as const;
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
 

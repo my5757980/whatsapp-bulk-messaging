@@ -24,6 +24,8 @@ interface SentMessage {
   to: string;
   /** Template name; empty for free-form messages. */
   template: string;
+  /** Template parameters as sent, so tests can read per-recipient values such as tracked-link codes (005). */
+  components?: unknown[];
   /** template | text | image | video | audio | document */
   type: string;
   /** Text body or media caption of a free-form message (body text for interactive messages). */
@@ -107,7 +109,7 @@ interface OutboundBody {
   type?: string;
   status?: string;
   message_id?: string;
-  template?: { name?: string };
+  template?: { name?: string; components?: unknown[] };
   text?: { body?: string };
   [mediaType: string]: unknown;
 }
@@ -115,6 +117,8 @@ interface OutboundBody {
 const templates = new Map<string, MockTemplate[]>(); // wabaId -> templates
 const sent: SentMessage[] = [];
 const reads: Array<{ phoneNumberId: string; messageId: string; at: string }> = [];
+/** Numbers ending 1016 that already failed once; their later sends are delivered (005 retry rounds). */
+const failedOnce = new Set<string>();
 /** Customer media posted by the inbound CLI, served back through GET /{media-id} like Meta does. */
 const media = new Map<string, StoredMedia>();
 
@@ -314,6 +318,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       phoneNumberId: id,
       to,
       template: templateName,
+      ...(type === 'template' && body.template?.components ? { components: body.template.components } : {}),
       type,
       text: type === 'text' ? body.text?.body : interactive ? interactive.body?.text : caption,
       ...(interactive ? { options: interactiveOptions(interactive) } : {}),
@@ -325,6 +330,13 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       later(500, () => postSigned(statusPayload({ wabaId, phoneNumberId: id, wamid, recipient: to, status: 'failed', error: { code, title, message } })));
     if (to.endsWith('0000')) {
       failWith(131026, 'Message undeliverable', 'Message undeliverable');
+    } else if (type === 'template' && to.endsWith('1049')) {
+      // Meta's per-person marketing limit (005): such messages are held back, never retried within 24 hours.
+      failWith(131049, 'This message was not delivered to maintain healthy ecosystem engagement.', 'This message was not delivered to maintain healthy ecosystem engagement.');
+    } else if (type === 'template' && to.endsWith('1016') && !failedOnce.has(`${id}:${to}`)) {
+      // A failure that may pass (005 retry rounds): the first send fails with 131016, later sends are delivered.
+      failedOnce.add(`${id}:${to}`);
+      failWith(131016, 'Service unavailable', 'A service is temporarily unavailable.');
     } else if (type !== 'template' && to.endsWith('0047')) {
       // A free-form message outside the 24-hour window fails asynchronously with 131047.
       failWith(131047, 'Re-engagement message', 'More than 24 hours have passed since the recipient last replied to the sender number.');

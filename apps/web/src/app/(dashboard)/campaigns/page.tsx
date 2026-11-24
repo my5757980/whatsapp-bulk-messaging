@@ -53,6 +53,9 @@ export default function CampaignsPage() {
               </option>
             ))}
           </NativeSelect>
+          <Button variant="outline" asChild>
+            <Link href="/campaigns/retries">Retry rounds</Link>
+          </Button>
           <Can permission="campaigns.manage">
             <Button asChild>
               <Link href="/campaigns/new">New campaign</Link>

@@ -11,6 +11,7 @@ import { ChatTimelineService } from '../inbox/messages/chat-timeline.service.js'
 import { MediaService } from '../media/media.service.js';
 import { MetaGraphClient } from '../meta/meta-graph.client.js';
 import { NumbersService } from '../numbers/numbers.service.js';
+import { DripLeaving } from '../growth/drips/drip-leaving.js';
 import { StatusHandler } from '../webhooks/handlers/status.handler.js';
 import { decideSendFailure, preSendCheck } from './send-outcome.js';
 import { HEADER_MEDIA_URL_PARAM, buildTemplatePayload, headerMediaType } from './template-payload.builder.js';
@@ -18,6 +19,8 @@ import { HEADER_MEDIA_ASSET_PARAM } from './template-send-rules.js';
 
 /** Blocking codes caused by the number's credentials or account (research R9). */
 export const NUMBER_BLOCKING = new Set([190, 10, 368, 133010]);
+/** Meta: the number is not on WhatsApp (or cannot receive messages). */
+const INVALID_NUMBER_CODE = 131026;
 /** Blocking codes that tell us the template's new state. */
 const TEMPLATE_STATE: Readonly<Record<number, 'PAUSED' | 'DISABLED'>> = { 132015: 'PAUSED', 132016: 'DISABLED' };
 
@@ -54,6 +57,7 @@ export class SendProcessor {
     private readonly metrics: MetricsService,
     private readonly numbers: NumbersService,
     private readonly timeline: ChatTimelineService,
+    private readonly drips: DripLeaving,
   ) {}
 
   /** @param attempt 1-based attempt number of this job */
@@ -174,7 +178,10 @@ export class SendProcessor {
       await this.campaigns.autoPause(m.campaign.id, decision.pauseReason);
       return { result: 'blocked', reason: decision.reason };
     }
-    return this.fail(m.id, 'SENDING', decision.code, decision.reason, attempt, m.number.phoneNumberId);
+    const outcome = await this.fail(m.id, 'SENDING', decision.code, decision.reason, attempt, m.number.phoneNumberId);
+    // A drip step to a number not on WhatsApp ends that drip for the contact (feature 005, FR-031).
+    if (m.origin === 'DRIP' && decision.code === INVALID_NUMBER_CODE) await this.drips.onInvalidNumber(m.id);
+    return outcome;
   }
 
   private async fail(id: string, from: MessageStatus, code: number | null, reason: string, attempt: number, phoneNumberId: string): Promise<SendOutcome> {

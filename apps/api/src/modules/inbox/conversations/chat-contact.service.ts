@@ -13,6 +13,7 @@ import { ConversationsService } from './conversations.service.js';
 import type { Viewer } from './visibility.js';
 import { AiConversationsService } from '../../ai/turns/ai-conversations.service.js';
 import { FlowSessionService } from '../../flows/engine/session.service.js';
+import { DripLeaving } from '../../growth/drips/drip-leaving.js';
 
 /** PATCH /inbox/conversations/{id}/contact (contracts/inbox-api.openapi.yaml). */
 export const EditContactSchema = z.strictObject({
@@ -42,6 +43,7 @@ export class ChatContactService {
     private readonly audit: AuditService,
     private readonly flows: FlowSessionService,
     private readonly ai: AiConversationsService,
+    private readonly drips: DripLeaving,
   ) {}
 
   async profile(contactId: string) {
@@ -131,7 +133,11 @@ export class ChatContactService {
     if (!contact) throw AppError.notFound('Contact not found');
     if ((contact.blockedAt !== null) === blocked) return;
     const chats = await this.prisma.conversation.findMany({ where: { contactId }, select: { id: true, state: true, intervenedById: true } });
-    await this.prisma.contact.update({ where: { id: contactId }, data: blocked ? { blockedAt: new Date(), blockedById: user.id } : { blockedAt: null, blockedById: null } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.contact.update({ where: { id: contactId }, data: blocked ? { blockedAt: new Date(), blockedById: user.id } : { blockedAt: null, blockedById: null } });
+      // A blocked contact leaves every drip at once (feature 005, FR-028).
+      if (blocked) await this.drips.onEvent(contactId, { kind: 'BLOCKED' }, tx);
+    });
     await this.journey.recordForContact(contactId, { type: blocked ? 'BLOCKED' : 'UNBLOCKED', actorType: 'MEMBER', actorUserId: user.id });
     await this.audit.record({ userId: user.id, ip }, blocked ? 'contact.blocked' : 'contact.unblocked', { type: 'contact', id: contactId });
     // A blocked contact's flows end at once (003 data model: BLOCKED).

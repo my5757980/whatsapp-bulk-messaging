@@ -64,6 +64,19 @@ export const AUDIT_ACTIONS = [
   'ai.number_agent_changed',
   'ai.limits_changed',
   'ai.assistant_action_confirmed',
+  // Campaign growth (feature 005, FR-038). Ids, names, counts and destinations only; never codes or phone numbers.
+  'campaign.retry_plan_changed',
+  'campaign.retry_round_cancelled',
+  'tracked_link.destination_changed',
+  'drip.created',
+  'drip.updated',
+  'drip.activated',
+  'drip.paused',
+  'drip.resumed',
+  'drip.archived',
+  'drip.deleted',
+  'drip.contacts_enrolled',
+  'drip.contact_removed',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

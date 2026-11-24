@@ -4,7 +4,7 @@ import { Module } from '@nestjs/common';
 import { LoggerModule } from 'nestjs-pino';
 import { APP_CONFIG } from '../config/config.module.js';
 import type { AppConfig } from '../config/config.js';
-import { sanitizeLogObject } from './redaction.js';
+import { redactRequestPath, sanitizeLogObject } from './redaction.js';
 
 /**
  * Structured JSON logs (constitution Principle VI, research R19):
@@ -30,11 +30,12 @@ import { sanitizeLogObject } from './redaction.js';
             return user ? { userId: user.id } : {};
           },
           serializers: {
-            // Path only: query strings can carry secrets (e.g. the webhook hub.verify_token).
+            // Path only: query strings can carry secrets (e.g. the webhook hub.verify_token), and
+            // tracked-link codes in `/l/{code}` are hidden (feature 005, FR-041).
             req: (req: { id: string; method: string; url: string }) => ({
               id: req.id,
               method: req.method,
-              url: req.url.split('?')[0],
+              url: redactRequestPath(req.url),
             }),
             res: (res: { statusCode?: number | null; raw?: { statusCode?: number } }) => ({
               statusCode: res.raw?.statusCode ?? res.statusCode ?? null,

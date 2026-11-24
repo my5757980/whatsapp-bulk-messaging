@@ -9,6 +9,7 @@ import { normalizeKeyword } from '../../webhooks/handlers/inbound.handler.js';
 import { WebhookRouter, type WebhookChange, type WebhookChangeHandler } from '../../webhooks/webhook-router.js';
 import { AiAgentRouter } from '../../ai/turns/ai-router.js';
 import { FlowRouter } from '../../flows/engine/flow-router.js';
+import { DripLeaving } from '../../growth/drips/drip-leaving.js';
 import { AutoRepliesService } from '../automation/auto-replies.service.js';
 import { InboxNotifier } from '../notifications/inbox-notifier.js';
 import { onCustomerMessage } from '../conversations/conversation-state.js';
@@ -56,6 +57,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly metrics: MetricsService,
     private readonly flows: FlowRouter,
     private readonly aiAgents: AiAgentRouter,
+    private readonly drips: DripLeaving,
   ) {}
 
   onModuleInit(): void {
@@ -130,6 +132,8 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
                 ${msg.replyToWaId}, ${msg.occurredAt}, 0, now(), now())
         ON CONFLICT (wa_message_id) DO NOTHING`;
       if (!inserted) return null; // a repeated webhook
+      // Writing to a drip's number ends that drip for the contact when its reply rule is on (005 FR-028).
+      await this.drips.onEvent(contact.id, { kind: 'REPLIED', numberId }, tx);
 
       const previous: PreviousFacts = { state: chat.state, intervenedById: chat.intervened_by_id, blocked: contact.blockedAt !== null };
       const { next, countRequest, becameRequesting } = onCustomerMessage(created ? null : { state: chat.state, intervenedById: chat.intervened_by_id }, {

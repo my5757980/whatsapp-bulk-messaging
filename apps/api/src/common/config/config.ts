@@ -82,6 +82,21 @@ const EnvSchema = z.object({
     .refine((v) => v === undefined || /^https?:\/\//.test(v), 'must be an http(s) URL'),
   /** The Claude model for customer replies and the assistant (research R1). */
   AI_MODEL: z.string().trim().min(1).default('claude-opus-5-5'),
+  /**
+   * Campaign growth (feature 005, research R1): the company's public address for tracked links,
+   * for example https://go.company.example or https://wa.company.example/l. A link is
+   * `${PUBLIC_LINK_BASE_URL}/<code>` and the api answers it at GET /l/:code. Without it links
+   * cannot be tracked.
+   */
+  PUBLIC_LINK_BASE_URL: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v.replace(/\/+$/, '') : undefined))
+    .refine(
+      (v) => v === undefined || /^https?:\/\/[^/?#\s]+(\/[^?#\s]*)?$/.test(v),
+      'must be an http(s) address without a query or fragment',
+    ),
 }).superRefine((env, ctx) => {
   const pushKeys = [env.WEB_PUSH_PUBLIC_KEY, env.WEB_PUSH_PRIVATE_KEY, env.WEB_PUSH_SUBJECT].filter(Boolean).length;
   if (pushKeys > 0 && pushKeys < 3) {
@@ -91,6 +106,9 @@ const EnvSchema = z.object({
   if (env.NODE_ENV !== 'production') return;
   if (!env.COOKIE_SECURE) ctx.addIssue({ code: 'custom', path: ['COOKIE_SECURE'], message: 'must be "true" in production' });
   if (!env.APP_URL.startsWith('https://')) ctx.addIssue({ code: 'custom', path: ['APP_URL'], message: 'must use https in production' });
+  if (env.PUBLIC_LINK_BASE_URL && !env.PUBLIC_LINK_BASE_URL.startsWith('https://')) {
+    ctx.addIssue({ code: 'custom', path: ['PUBLIC_LINK_BASE_URL'], message: 'must use https in production' });
+  }
 });
 
 export type AppConfig = z.infer<typeof EnvSchema>;

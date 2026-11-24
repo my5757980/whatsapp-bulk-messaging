@@ -5,6 +5,7 @@ import { isUniqueViolation } from '../../../common/prisma/prisma-errors.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { REDIS_CLIENT } from '../../../common/queue/queue.module.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
+import { DripLeaving } from '../../growth/drips/drip-leaving.js';
 import { InboxPublisher } from '../../inbox/realtime/inbox-publisher.js';
 import { RateCardService } from '../../rate-card/rate-card.controller.js';
 import { messageCost } from '../../reports/cost-calculator.js';
@@ -38,6 +39,7 @@ export class StatusHandler implements WebhookChangeHandler, OnModuleInit {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly rateCard: RateCardService,
     private readonly inbox: InboxPublisher,
+    private readonly drips: DripLeaving,
   ) {}
 
   onModuleInit(): void {
@@ -125,6 +127,8 @@ export class StatusHandler implements WebhookChangeHandler, OnModuleInit {
         const ref = await this.prisma.chatMessage.findUnique({ where: { messageId: known.id }, select: { id: true } });
         if (ref) await this.inbox.itemStatus(ref.id);
       }
+      // A drip step to a number not on WhatsApp ends that drip for the contact (feature 005, FR-031).
+      if (newStatus === 'FAILED' && known.origin === 'DRIP' && status.error?.code === 131026) await this.drips.onInvalidNumber(known.id);
     }
     return true;
   }

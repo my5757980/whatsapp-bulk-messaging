@@ -9,7 +9,7 @@
 - Where a page leaves a detail out, we choose a sensible default and mark it "default". Nothing undocumented is claimed as "identical".
 
 **Status legend:**
-- ✅ built (features 001, 002, 003 and 004)
+- ✅ built (features 001 to 005)
 - 🟡 partly built
 - ❌ missing
 - ➖ not applicable to a single company running its own WhatsApp account
@@ -81,14 +81,14 @@
 | 5.2 | Scheduler, up to 2 months ahead, time-zone aware | ✅ (no 2-month cap; time zones supported) | – |
 | 5.3 | Option to message duplicate numbers in a CSV | ❌ We always dedupe (one per contact) | Templates & growth (option) |
 | 5.4 | Throughput per number (their plans: 40–1,000 msg/s) | ✅ Up to 80 msg/s per number (Meta's default). Higher only if Meta upgrades the number. | – |
-| 5.5 | **Failed retries**: a "Retry Campaign" toggle per broadcast, up to 3 retries with set delays, all within 24 h; a "Scheduled Retries" section | 🟡 We retry transient errors automatically (3×). A user-configured retry of failed messages is missing. | Templates & growth |
-| 5.6 | Campaign analytics: sent, delivered, read, replied, clicked, failed with reasons; budget and cost | 🟡 Replied and clicked are missing | 002 (replied) and Templates & growth (clicked) |
-| 5.7 | **Retargeting** by Read, Replied, Clicked, Delivered (from the campaign tabs) | 🟡 We support failed and not-read. Replied, clicked and delivered are missing. | Templates & growth |
-| 5.8 | **Click tracking**: URL CTA buttons only; "Clicked" tab with per-user click counts; one-tap retarget of clickers | ❌ | Templates & growth |
+| 5.5 | **Failed retries**: a "Retry Campaign" toggle per broadcast, up to 3 retries with set delays, all within 24 h; a "Scheduled Retries" section | ✅ Retry rounds per campaign: up to 3, delays of 30 minutes to 12 hours, all within 24 hours of launch; only failures that may pass are retried (Meta's 131049 hold-back never); a Scheduled retries page with cancelling (005) | 005 Campaign growth |
+| 5.6 | Campaign analytics: sent, delivered, read, replied, clicked, failed with reasons; budget and cost | 🟡 Clicked shows in the campaign results with a click rate (005); replied is a retarget group with its size (005) but not yet a report column | Templates & growth (replied column) |
+| 5.7 | **Retargeting** by Read, Replied, Clicked, Delivered (from the campaign tabs) | ✅ Retarget by failed, not read, read, delivered, clicked, not clicked, replied, not replied and held back, with each group's size first (005) | 005 Campaign growth |
+| 5.8 | **Click tracking**: URL CTA buttons only; "Clicked" tab with per-user click counts; one-tap retarget of clickers | ✅ A tracked link per recipient on URL buttons and text variables; a Clicked view with first and last clicks and counts, an export, and one-click retargeting of clickers; previews and robots are not counted (005) | 005 Campaign growth |
 | 5.9 | **API campaigns**: a named "Live" campaign bound to one template, triggered by API with params, media, tags and attributes; auto-creates contacts | 🟡 Our public API sends a template directly, with idempotency and rate limits. Named API campaigns, and tags/attributes on API calls, are missing. | Integrations |
 | 5.10 | **QR code campaigns**: name, pre-filled message, optional linked flow; "Set Live and generate QR"; download the QR or a printable standee; track Scanned → Replied leads, then export, broadcast or tag them | ❌ | Templates & growth |
 | 5.11 | **Birthday automation**: a date-of-birth attribute; a toggle with send time; "skip opted-out"; a chosen template; analytics. Default: any date attribute. | ❌ | Contacts & settings |
-| 5.12 | **Drip sequences**: time-based follow-ups after an action | ❌ | Integrations |
+| 5.12 | **Drip sequences**: time-based follow-ups after an action | ✅ Drips of up to 10 timed template steps with quiet hours; contacts join by hand or on a tag, an opt-in, an import, the API or a link click, and leave on a reply, a stop tag, an opt-out and more; results per step (005) | 005 Campaign growth |
 | 5.13 | Campaign reports download (campaign, user, overview, opt-in/opt-out) | 🟡 Campaign export works; overview and opt-in/out reports are missing | Templates & growth |
 | 5.14 | Meta frequency capping awareness (marketing messages limited per user) | 🟡 Errors are shown; an explanation is missing | Templates & growth |
 
@@ -190,17 +190,19 @@
 
 ## Roadmap to full functional parity
 
-Feature numbers follow the order specs are started. 002, 003 and 004 are built; each remaining row gets the
-next free number when its spec starts. Agreed order: the AI agent (built), then click tracking, drip
-campaigns and integrations, then click-to-WhatsApp ads and payments; the other rows are scheduled around them.
+Feature numbers follow the order specs are started. 002 to 005 are built; each remaining row gets the
+next free number when its spec starts. Agreed order: the AI agent and campaign growth (click tracking
+and drips) are built; next integrations, then click-to-WhatsApp ads and payments; the other rows are
+scheduled around them.
 
 | Feature | Scope | Depends on |
 |---|---|---|
 | **002 Live chat inbox** ✅ built | Items 6.1–6.11, 6.13 and 6.14. Also agent rules 2.4, notifications 2.5, block 3.11, and "replied" metrics 5.6. | 001 |
 | **003 Chatbot flow builder** ✅ built | Items 7.1–7.3 and 7.5–7.7: canvas, starters, keyword, pattern, template-button and first-message triggers, questions, lists, logic, API calls, hand-over, test numbers, versions and analytics | 002 |
 | **004 AI agent and AI suite** ✅ built | Items 9.1–9.6: agents answering from knowledge, skills, hand-over, starter agents, usage and limits, the team assistant drafting templates, flows and campaigns. Still open: more starter agents (9.3) and ads in the assistant (9.5) | 002, 003 |
-| **Integrations and developer platform** | Items 5.9 and 5.12; 7.8; 11.2–11.7; guided connect 1.1; QR codes for flow triggers | 002, 003 |
-| **Templates and campaign growth** | Items 4.1, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9 and 4.11; 5.3, 5.5, 5.7, 5.8, 5.10, 5.13 and 5.14 (click tracking, drip); 12.1 and 12.2 | 001 |
+| **005 Campaign growth** ✅ built | Items 5.5, 5.7, 5.8 and 5.12, and clicked in 5.6: tracked links and clicks, retargeting by clicked, replied and held back, retry rounds, drips with starting events, leaving rules and results | 001, 002 |
+| **Integrations and developer platform** | Items 5.9; 7.8; 11.2–11.7; guided connect 1.1; QR codes for flow triggers | 002, 003 |
+| **Templates and campaign growth** | Items 4.1, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9 and 4.11; 5.3, 5.6 (replied column), 5.10, 5.13 and 5.14; 12.1 and 12.2 | 001 |
 | **Ads manager** | Items 9.7 and 10.1–10.4 (click-to-WhatsApp ads start flows) | 003, Integrations |
 | **Commerce, forms and payments** | Items 3.13, 4.8, 6.12, 7.4 and 8.1–8.5; 11.8 | 003 |
 | **Contacts, settings and security** | Items 1.3, 1.4, 1.6 and 2.3; 3.2, 3.3, 3.5, 3.8, 3.9 and 3.10 (3.7 first-message tags came with 003); 5.11 (birthday and date automations) | 001 |
