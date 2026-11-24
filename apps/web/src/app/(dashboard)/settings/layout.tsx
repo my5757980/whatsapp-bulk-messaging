@@ -17,6 +17,7 @@ const TABS: Array<{ href: string; label: string; permission: Permission }> = [
   { href: '/settings/saved-replies', label: 'Saved replies', permission: 'inbox.view' },
   { href: '/settings/media-library', label: 'Media library', permission: 'inbox.view' },
   { href: '/settings/api-keys', label: 'API keys', permission: 'apikeys.manage' },
+  { href: '/settings/webhooks', label: 'Webhooks', permission: 'integrations.manage' },
   { href: '/settings/audit', label: 'Audit log', permission: 'audit.view' },
 ];
 
