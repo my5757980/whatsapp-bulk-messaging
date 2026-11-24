@@ -134,6 +134,7 @@ function graphOrder(order: Json): Json {
     displayFinancialStatus: String(order.financial_status).toUpperCase(),
     displayFulfillmentStatus: order.fulfillment_status ? String(order.fulfillment_status).toUpperCase() : 'UNFULFILLED',
     paymentGatewayNames: order.payment_gateway_names,
+    customerAcceptsMarketing: order.buyer_accepts_marketing === true,
     currentTotalPriceSet: { shopMoney: { amount: order.total_price, currencyCode: order.currency } },
     customer: order.customer ? { firstName: (order.customer as Json).first_name, lastName: (order.customer as Json).last_name, phone: (order.customer as Json).phone } : null,
     shippingAddress: order.shipping_address
@@ -172,6 +173,10 @@ function graphql(shop: MockShop, query: string, variables: Json): Json {
     return { data: { orderCancel: { job: { id: `gid://shopify/Job/${randomUUID()}` }, orderCancelUserErrors: [] } } };
   }
   if (query.includes('abandonedCheckouts')) return { data: { abandonedCheckouts: { nodes: shop.checkouts } } };
+  if (query.includes('order(id')) {
+    const node = [...shop.orders.values()].find((o) => o.admin_graphql_api_id === variables.id);
+    return { data: { order: node ? graphOrder(node) : null } };
+  }
   if (query.includes('orders(')) {
     return { data: { orders: { nodes: [...shop.orders.values()].map(graphOrder), pageInfo: { hasNextPage: false, endCursor: null } } } };
   }
