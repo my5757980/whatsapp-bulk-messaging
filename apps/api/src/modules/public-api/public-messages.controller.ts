@@ -4,6 +4,7 @@ import { z, type ZodType } from 'zod';
 import { Public } from '../../common/auth/public.decorator.js';
 import { AppError } from '../../common/errors/app-error.js';
 import { ApiKeyGuard, type ApiKeyContext, type ApiRequest } from './api-key.guard.js';
+import { RequireScope } from './api-scope.decorator.js';
 import { PublicApiService, SendRequestSchema, type SendRequest } from './public-api.service.js';
 import { RateLimitGuard } from './rate-limit.guard.js';
 
@@ -35,6 +36,7 @@ const keyOf = (req: ApiRequest): ApiKeyContext => {
 @Controller('v1')
 @Public()
 @UseGuards(ApiKeyGuard, RateLimitGuard)
+@RequireScope('messages.send')
 export class PublicMessagesController {
   constructor(private readonly api: PublicApiService) {}
 
