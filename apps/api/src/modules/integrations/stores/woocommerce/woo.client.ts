@@ -74,6 +74,16 @@ export class WooClient {
     }
   }
 
+  /** COD answers (US5): a private order note. */
+  async addNote(store: Pick<StoreConnection, 'baseUrl'>, credentials: WooCredentials, orderId: string, note: string): Promise<void> {
+    await this.http.json({ method: 'POST', url: this.api(store.baseUrl, `/orders/${orderId}/notes`), headers: this.headers(credentials), body: { note, customer_note: false } });
+  }
+
+  /** COD answers (US5): meta values and, for automatic cancel, the status. */
+  async updateOrder(store: Pick<StoreConnection, 'baseUrl'>, credentials: WooCredentials, orderId: string, changes: Record<string, unknown>): Promise<void> {
+    await this.http.json({ method: 'PUT', url: this.api(store.baseUrl, `/orders/${orderId}`), headers: this.headers(credentials), body: changes });
+  }
+
   /** Orders changed since a time (GMT), oldest change first. */
   async ordersSince(store: Pick<StoreConnection, 'baseUrl'>, credentials: WooCredentials, since: Date): Promise<Json[]> {
     const out: Json[] = [];

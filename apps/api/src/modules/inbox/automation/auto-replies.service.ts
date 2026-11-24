@@ -81,6 +81,16 @@ export class AutoRepliesService {
     }
   }
 
+  /** A plain automatic text in a chat, e.g. the answer to a COD button (feature 006 US5). */
+  async sendText(conversationId: string, text: string): Promise<void> {
+    const chat = await this.prisma.conversation.findUniqueOrThrow({
+      where: { id: conversationId },
+      select: { contact: { select: { name: true, phoneE164: true, attributes: true, consentStatus: true, countryCode: true } } },
+    });
+    if (!chat.contact) return;
+    await this.send(conversationId, { kind: 'TEXT', text }, chat.contact);
+  }
+
   private async send(
     conversationId: string,
     content: NonNullable<AutoContent>,

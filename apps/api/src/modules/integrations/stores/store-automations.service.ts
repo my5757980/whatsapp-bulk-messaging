@@ -110,6 +110,12 @@ export class StoreAutomationsService {
       if (headerMediaType(template.components as unknown as MetaTemplateComponent[])) {
         problems.push({ code: 'MEDIA_HEADER', message: `${label}templates with an image, video or document header cannot be used here yet` });
       }
+      if (kind === 'COD_CONFIRMATION') {
+        const buttons = (template.components as unknown as Array<{ type: string; buttons?: Array<{ type: string }> }>).find((c) => c.type.toUpperCase() === 'BUTTONS')?.buttons ?? [];
+        if (buttons.length < 2 || buttons[0]?.type !== 'QUICK_REPLY' || buttons[1]?.type !== 'QUICK_REPLY') {
+          problems.push({ code: 'COD_BUTTONS', message: 'The template needs two quick-reply buttons first: confirm, then cancel' });
+        }
+      }
       const variables = ((Array.isArray(template.variables) ? template.variables : []) as Array<{ key: string }>).map((v) => v.key);
       for (const v of variables) if (!step.variableMapping[v]) problems.push({ code: 'MAPPING', message: `${label}${v} has no value source` });
       for (const v of Object.keys(step.variableMapping)) if (!variables.includes(v)) problems.push({ code: 'MAPPING', message: `${label}${v} is not a variable of the template` });

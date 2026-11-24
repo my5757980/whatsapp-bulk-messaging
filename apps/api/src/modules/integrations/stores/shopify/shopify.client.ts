@@ -18,6 +18,11 @@ const WEBHOOK_CREATE = `mutation WebhookCreate($topic: WebhookSubscriptionTopic!
 const WEBHOOK_LIST = `query WebhookList { webhookSubscriptions(first: 100) { nodes { id topic uri } } }`;
 const WEBHOOK_DELETE = `mutation WebhookDelete($id: ID!) { webhookSubscriptionDelete(id: $id) { deletedWebhookSubscriptionId userErrors { field message } } }`;
 const SHOP_INFO = `query ShopInfo { shop { name currencyCode } }`;
+const TAGS_ADD = `mutation TagsAdd($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { node { id } userErrors { field message } } }`;
+const METAFIELDS_SET = `mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $metafields) { metafields { key } userErrors { field message } } }`;
+const ORDER_CANCEL = `mutation OrderCancel($orderId: ID!, $reason: OrderCancelReason!, $refund: Boolean!, $restock: Boolean!, $notifyCustomer: Boolean) {
+  orderCancel(orderId: $orderId, reason: $reason, refund: $refund, restock: $restock, notifyCustomer: $notifyCustomer) { job { id } orderCancelUserErrors { field message } }
+}`;
 const ORDER_BY_ID = `query OrderById($id: ID!) { order(id: $id) { ...OrderFields } }
 ${ORDER_FIELDS_FRAGMENT}`;
 const ORDERS_SINCE = `query OrdersSince($query: String!, $after: String) {
@@ -104,6 +109,35 @@ export class ShopifyClient {
     const uri = this.http.receiverUrl('shopify', store.id);
     const existing = await this.graphql<{ webhookSubscriptions: { nodes: Array<{ id: string; uri?: string }> } }>(store.baseUrl, token, WEBHOOK_LIST);
     for (const node of existing.webhookSubscriptions.nodes.filter((n) => n.uri === uri)) await this.graphql(store.baseUrl, token, WEBHOOK_DELETE, { id: node.id });
+  }
+
+  /** COD answers (US5): a tag on the order. */
+  async tagOrder(store: Pick<StoreConnection, 'baseUrl'>, token: string, gid: string, tags: string[]): Promise<void> {
+    const data = await this.graphql<{ tagsAdd: { userErrors: Array<{ message: string }> } }>(store.baseUrl, token, TAGS_ADD, { id: gid, tags });
+    const error = data.tagsAdd.userErrors[0];
+    if (error) throw new StoreApiError(`Shopify refused the tag: ${error.message}`.slice(0, 200), null);
+  }
+
+  /** COD answers (US5): the whatsapp.cod_status metafield. */
+  async setCodStatus(store: Pick<StoreConnection, 'baseUrl'>, token: string, gid: string, value: string): Promise<void> {
+    const data = await this.graphql<{ metafieldsSet: { userErrors: Array<{ message: string }> } }>(store.baseUrl, token, METAFIELDS_SET, {
+      metafields: [{ ownerId: gid, namespace: 'whatsapp', key: 'cod_status', type: 'single_line_text_field', value }],
+    });
+    const error = data.metafieldsSet.userErrors[0];
+    if (error) throw new StoreApiError(`Shopify refused the metafield: ${error.message}`.slice(0, 200), null);
+  }
+
+  /** Automatic cancel (US5): reason customer, restock, no refund, the customer is not emailed. */
+  async cancelOrder(store: Pick<StoreConnection, 'baseUrl'>, token: string, gid: string): Promise<void> {
+    const data = await this.graphql<{ orderCancel: { orderCancelUserErrors: Array<{ message: string }> } }>(store.baseUrl, token, ORDER_CANCEL, {
+      orderId: gid,
+      reason: 'CUSTOMER',
+      refund: false,
+      restock: true,
+      notifyCustomer: false,
+    });
+    const error = data.orderCancel.orderCancelUserErrors[0];
+    if (error) throw new StoreApiError(`Shopify refused to cancel the order: ${error.message}`.slice(0, 200), null);
   }
 
   /** One order, in the REST shape of Shopify webhooks; null when Shopify has no such order. */

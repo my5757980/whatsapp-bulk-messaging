@@ -169,6 +169,18 @@ export class PlatformEvents {
     );
   }
 
+  /** A COD question was answered, or got no answer (feature 006 US5). */
+  codAnswered(
+    db: Db,
+    input: { store: { id: string; name: string; platform: string }; order: { id: string; number: string }; contactId: string | null; answer: string; cancelledInStore: boolean },
+  ): Promise<void> {
+    return this.when(
+      'store.cod_answered',
+      async () => ({ store: input.store, order: input.order, contact: await this.contact(db, input.contactId), answer: input.answer, cancelledInStore: input.cancelledInStore }),
+      db,
+    );
+  }
+
   linkClicked(db: Db, input: { contactId: string | null; campaignId: string | null; dripId: string | null; destination: string; device: string; at: Date }): Promise<void> {
     return this.when(
       'link.clicked',

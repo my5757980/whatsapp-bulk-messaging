@@ -18,6 +18,7 @@ import { GrowthDomainModule } from './modules/growth/growth.module.js';
 import { IntegrationsDomainModule } from './modules/integrations/integrations.module.js';
 import { StoreEventsProcessor } from './modules/integrations/stores/store-events.processor.js';
 import { StoreReconcilerProcessor } from './modules/integrations/stores/store-reconciler.processor.js';
+import { StoreTickProcessor } from './modules/integrations/stores/store-tick.processor.js';
 import { WebhookDeliveryProcessor } from './modules/integrations/webhooks/webhook-delivery.processor.js';
 import { WebhookSweepProcessor } from './modules/integrations/webhooks/webhook-sweep.processor.js';
 import { DripTickProcessor } from './modules/growth/drips/drip-tick.processor.js';
@@ -96,6 +97,7 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     WebhookSweepProcessor,
     StoreEventsProcessor,
     StoreReconcilerProcessor,
+    StoreTickProcessor,
   ],
 })
 export class WorkerFeaturesModule {}

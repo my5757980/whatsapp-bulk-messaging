@@ -27,6 +27,8 @@ export interface StoreOrderFacts {
   total: string;
   currency: string;
   paymentKind: OrderPaymentKind;
+  /** The order is paid (a COD order paid on delivery closes its question). */
+  paid: boolean;
   /** The store's own status words, for the orders list. */
   status: string;
   placedAt: string;
@@ -94,6 +96,7 @@ export function mapShopifyOrder(payload: unknown): StoreOrderFacts {
     total: str(o.current_total_price) ?? str(o.total_price) ?? '0',
     currency: (str(o.currency) ?? 'USD').toUpperCase(),
     paymentKind,
+    paid: ['paid', 'partially_paid', 'partially_refunded', 'refunded'].includes(financial),
     status: o.cancelled_at ? 'cancelled' : (str(o.fulfillment_status) ?? financial),
     placedAt,
     updatedAt: isoUtc(o.updated_at) ?? placedAt,
@@ -142,6 +145,7 @@ export function mapWooOrder(payload: unknown): StoreOrderFacts {
     total: str(o.total) ?? '0',
     currency: (str(o.currency) ?? 'USD').toUpperCase(),
     paymentKind,
+    paid,
     status,
     placedAt,
     updatedAt: isoUtc(o.date_modified_gmt) ?? isoUtc(o.date_modified) ?? placedAt,

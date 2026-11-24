@@ -2,6 +2,7 @@ import { Global, Module, type Provider, type Type } from '@nestjs/common';
 import { ApiCampaignPauser } from './api-campaigns/api-campaign-pauser.js';
 import { ApiCampaignsController } from './api-campaigns/api-campaigns.controller.js';
 import { ApiCampaignsService } from './api-campaigns/api-campaigns.service.js';
+import { CodService } from './stores/cod.service.js';
 import { ShopifyClient } from './stores/shopify/shopify.client.js';
 import { StoreAutomationsService } from './stores/store-automations.service.js';
 import { StoreConnectionsService } from './stores/store-connections.service.js';
@@ -25,7 +26,7 @@ import { WebhookEndpointsService } from './webhooks/webhook-endpoints.service.js
 
 // The API campaign pauser runs from template webhooks and number disconnects (US3, FR-021).
 // Store clients, the raw event store and store messages are used by receivers, processors and the COD and cart ticks (US4 - US6).
-const DOMAIN: Provider[] = [OutboundEvents, WebhookDeliveries, PlatformEvents, ApiCampaignPauser, StoreHttp, ShopifyClient, WooClient, StoreEventsInbox, StoreMessages];
+const DOMAIN: Provider[] = [OutboundEvents, WebhookDeliveries, PlatformEvents, ApiCampaignPauser, StoreHttp, ShopifyClient, WooClient, StoreEventsInbox, StoreMessages, CodService];
 
 /** Integration services shared by the HTTP app and the worker. */
 @Global()

@@ -24,6 +24,7 @@ import { normaliseTag } from '../../contacts/tags.controller.js';
 import { DripEvents } from '../../growth/drips/drip-events.js';
 import { JourneyService } from '../../inbox/journey/journey.service.js';
 import { headerMediaType } from '../../sending/template-payload.builder.js';
+import { CodService } from './cod.service.js';
 import { ShopifyClient } from './shopify/shopify.client.js';
 import { STORE_EVENT_JOB } from './store-events-inbox.js';
 import { StoreMessages } from './store-messages.js';
@@ -59,6 +60,7 @@ export class StoreEventsProcessor implements OnModuleInit {
     private readonly journey: JourneyService,
     private readonly dripEvents: DripEvents,
     private readonly messages: StoreMessages,
+    private readonly cod: CodService,
   ) {}
 
   onModuleInit(): void {
@@ -138,14 +140,24 @@ export class StoreEventsProcessor implements OnModuleInit {
       });
     }
 
+    // A COD question waiting for the customer closes when the store cancels the order or it is paid (US5).
+    if (existing) await this.cod.onStoreChange(order, facts);
+
     const stages = orderStages(facts, store.platform, { shippedStatus: store.shippedStatus, deliveredStatus: store.deliveredStatus });
     if (!stages.length) return 'processed';
+    const recipientPhone = phone && recipient ? { e164: phone.e164, country: recipient.country } : null;
+    // A new COD order is asked to confirm instead of getting the plain confirmation (US5, FR-034).
+    const cod = facts.paymentKind === 'COD' && stages.includes('ORDER_CONFIRMED') && order.codStatus === 'NONE' && !isStale(facts.updatedAt) ? await this.cod.automation(store.id) : null;
+    if (cod && !(await this.messages.claimed(order.id, 'COD_CONFIRMATION'))) {
+      await this.cod.ask(store, { id: order.id, orderNumber: order.orderNumber }, facts, cod, recipientPhone, contact, (reason) => this.messages.skip(order.id, 'COD_CONFIRMATION', reason));
+      await this.messages.skip(order.id, 'ORDER_CONFIRMED', 'cod');
+    }
     const automations = await this.prisma.storeAutomation.findMany({ where: { storeId: store.id, kind: { in: stages } } });
     for (const stage of stages) {
       if (await this.messages.claimed(order.id, stage)) continue;
       const automation = automations.find((a) => a.kind === stage && a.enabled);
       const step = automation ? ((automation.steps as unknown as Step[])[0] ?? null) : null;
-      const handled = await this.notify(store, { id: order.id, orderNumber: order.orderNumber }, stage, step, facts, phone && recipient ? { e164: phone.e164, country: recipient.country } : null, contact);
+      const handled = await this.notify(store, { id: order.id, orderNumber: order.orderNumber }, stage, step, facts, recipientPhone, contact);
       if (handled && stage === 'ORDER_DELIVERED' && contact) await this.dripEvents.recordOrderEvent(this.prisma, 'ORDER_DELIVERED', [contact.id]);
     }
     return 'processed';

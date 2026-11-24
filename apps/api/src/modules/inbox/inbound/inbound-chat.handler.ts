@@ -21,6 +21,7 @@ import { InboxPublisher, type PreviousFacts } from '../realtime/inbox-publisher.
 import { ChatRoutingService } from '../routing/chat-routing.service.js';
 import { LiveChatSettingsService } from '../settings/live-chat-settings.service.js';
 import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
+import { CodService } from '../../integrations/stores/cod.service.js';
 import { parseInboundMessage, previewOf, type ParsedInbound } from './message-parser.js';
 
 interface LockedChat {
@@ -60,6 +61,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly aiAgents: AiAgentRouter,
     private readonly drips: DripLeaving,
     private readonly platformEvents: PlatformEvents,
+    private readonly cod: CodService,
   ) {}
 
   onModuleInit(): void {
@@ -191,6 +193,9 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     else await this.notifier.queue({ kind: 'message', conversationId: outcome.conversationId, itemId });
     // An opt-out stops the AI agent at once; the flow router below ends flows and answers it (004 FR-027).
     if (optOutKeyword) await this.aiAgents.onOptOut(outcome.conversationId);
+    // COD answers (feature 006 US5): a cod1: button tap is answered here, before flows and the AI agent.
+    const tappedPayload = typeof msg.payload.payload === 'string' ? msg.payload.payload : null;
+    if (tappedPayload && (await this.cod.handleButton(tappedPayload, { conversationId: outcome.conversationId, contactId: contact.id }))) return;
     // Chatbot flows answer first (003 research R5); a flow answer replaces welcome/off-hours (FR-029).
     const flowAnswered = await this.flows.onCustomerMessage({
       conversationId: outcome.conversationId,

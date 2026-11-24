@@ -61,6 +61,7 @@ describe('store orders', () => {
       total: '120.50',
       currency: 'AED',
       paymentKind: 'COD',
+      paid: false,
       status: 'pending',
       placedAt: '2026-11-24T04:00:00.000Z',
       updatedAt: '2026-11-24T04:05:00.000Z',
