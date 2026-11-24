@@ -127,8 +127,10 @@ export interface SafeRequest {
   headers?: Record<string, string>;
   body?: string;
   timeoutMs: number;
-  /** Answers larger than this fail with TOO_LARGE (default 100 KB). */
+  /** Answers larger than this fail with TOO_LARGE (default 100 KB), or are cut there with onLimit 'truncate'. */
   maxBytes?: number;
+  /** 'truncate' keeps the status and the first maxBytes of the answer (webhook deliveries only need the status). */
+  onLimit?: 'fail' | 'truncate';
   /** OUTBOUND_ALLOW_LOCAL: lets http(s)://localhost through outside production. */
   allowLocal?: boolean;
 }
@@ -183,7 +185,12 @@ export function safeRequest(input: SafeRequest): Promise<SafeResponse> {
       res.on('data', (chunk: Buffer) => {
         size += chunk.length;
         if (size > maxBytes) {
-          finish(new SafeHttpError('TOO_LARGE', `The answer is larger than ${Math.round(maxBytes / 1024)} KB`));
+          if (input.onLimit === 'truncate') {
+            chunks.push(chunk.subarray(0, Math.max(0, chunk.length - (size - maxBytes))));
+            finish(null, { status, headers: res.headers, text: Buffer.concat(chunks).toString('utf8'), durationMs: Date.now() - started });
+          } else {
+            finish(new SafeHttpError('TOO_LARGE', `The answer is larger than ${Math.round(maxBytes / 1024)} KB`));
+          }
           req.destroy();
           return;
         }

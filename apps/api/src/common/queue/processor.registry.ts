@@ -43,8 +43,11 @@ export class ProcessorRegistry implements OnApplicationBootstrap, OnModuleDestro
    * Registers a handler for one job name on a queue shared by several job types (e.g. the
    * maintenance queue). The queue's single Worker routes jobs by `job.name`.
    */
-  registerHandler<T, R>(queue: string, jobName: string, handler: JobProcessor<T, R>): void {
+  registerHandler<T, R>(queue: string, jobName: string, handler: JobProcessor<T, R>, options: Partial<WorkerOptions> = {}): void {
     let handlers = this.named.get(queue);
+    // Worker options (for example concurrency) given by any handler apply to the queue's one Worker.
+    const existing = this.definitions.get(queue);
+    if (existing && Object.keys(options).length) existing.options = { ...existing.options, ...options };
     if (!handlers) {
       const routes = new Map<string, JobProcessor>();
       handlers = routes;
@@ -53,7 +56,7 @@ export class ProcessorRegistry implements OnApplicationBootstrap, OnModuleDestro
         const route = routes.get(job.name);
         if (!route) throw new Error(`No handler for job "${job.name}" on queue "${queue}"`);
         return route(job);
-      });
+      }, options);
     }
     handlers.set(jobName, handler as JobProcessor);
   }

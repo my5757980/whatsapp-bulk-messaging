@@ -20,3 +20,11 @@ regexTarget = "line"
 regexes = [
   '''growth-api\.openapi\.yaml': '005-campaign-growth''',
 ]
+
+[[allowlists]]
+description = "Feature 006: the published Standard Webhooks reference vector (a documentation example secret and its signature, not real credentials) in packages/shared/src/integrations/signing.test.ts and the integrations contract example"
+regexTarget = "line"
+regexes = [
+  '''whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw''',
+  '''g0hM9SsE\+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=''',
+]
