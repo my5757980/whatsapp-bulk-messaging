@@ -147,6 +147,26 @@ describe('Contact deletion', () => {
     expect(await ctx.prisma.aiUnansweredAsk.count({ where: { aiConversationId: otherConversation.id } })).toBe(1);
   });
 
+  it('ends their drips and clears them from clicks, enrolments, tracked links and starting events (005 FR-040)', async () => {
+    const number = await seedNumber(ctx);
+    const template = await seedTemplate(ctx, number.wabaId);
+    const contact = await seedContact(ctx, uaePhone());
+    const campaign = await seedRunningCampaign(ctx, { numberId: number.id, templateId: template.id, createdById: admin.userId, contacts: [contact] });
+    const message = await ctx.prisma.message.findFirstOrThrow({ where: { campaignId: campaign.id, contactId: contact.id } });
+    const target = await ctx.prisma.trackedLinkTarget.create({ data: { campaignId: campaign.id, variableKey: 'BODY.1', destination: 'https://shop.example/erase' } });
+    const link = await ctx.prisma.trackedLink.create({ data: { code: `Er${randomUUID().replace(/-/g, '').slice(0, 8)}`, targetId: target.id, messageId: message.id, contactId: contact.id } });
+    const click = await ctx.prisma.linkClick.create({ data: { trackedLinkId: link.id, targetId: target.id, campaignId: campaign.id, contactId: contact.id, device: 'MOBILE' } });
+    const drip = await ctx.prisma.drip.create({ data: { name: `Erasure drip ${randomUUID().slice(0, 6)}`, numberId: number.id, status: 'ACTIVE' } });
+    const enrolment = await ctx.prisma.dripEnrolment.create({ data: { dripId: drip.id, contactId: contact.id, joinedVia: 'MANUAL', nextDueAt: new Date() } });
+    await ctx.prisma.dripEvent.create({ data: { kind: 'OPTED_IN', contactId: contact.id } });
+
+    expect((await admin.agent.delete(`/api/contacts/${contact.id}`).set('x-csrf-token', admin.csrf)).status).toBe(204);
+    expect(await ctx.prisma.trackedLink.findUniqueOrThrow({ where: { id: link.id } })).toMatchObject({ contactId: null });
+    expect(await ctx.prisma.linkClick.findUniqueOrThrow({ where: { id: click.id } })).toMatchObject({ contactId: null, device: 'MOBILE' });
+    expect(await ctx.prisma.dripEnrolment.findUniqueOrThrow({ where: { id: enrolment.id } })).toMatchObject({ contactId: null, status: 'LEFT', leftReason: 'DELETED', nextDueAt: null });
+    expect(await ctx.prisma.dripEvent.count({ where: { contactId: contact.id } })).toBe(0);
+  });
+
   it('is admin-only and returns 404 for unknown contacts', async () => {
     const contact = await seedContact(ctx, uaePhone());
     const manager = await signIn(ctx, 'MANAGER');

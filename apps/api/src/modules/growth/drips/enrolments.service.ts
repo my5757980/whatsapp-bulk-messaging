@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { MAX_ACTIVE_ENROLMENTS, enrolDecision, type EnrolmentStatusCode } from '@wbm/shared';
 import { z } from 'zod';
 import { AppError } from '../../../common/errors/app-error.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { PageQuerySchema } from '../../../common/validation/pagination.js';
 import type { EnrolmentStatus, Prisma } from '../../../generated/prisma/client.js';
@@ -57,6 +58,7 @@ export class EnrolmentsService {
     private readonly audience: AudienceQueryBuilder,
     private readonly audit: AuditService,
     private readonly leaving: DripLeaving,
+    private readonly metrics: MetricsService,
   ) {}
 
   /** Enrols chosen contacts or a filter (FR-025). Opted-out and blocked contacts, and contacts already in, are counted and skipped. */
@@ -113,6 +115,7 @@ export class EnrolmentsService {
     }
 
     if (!dryRun) {
+      if (result.enrolled) this.metrics.dripEnrolmentsTotal.inc({ via: 'manual' }, result.enrolled);
       await this.audit.record(actor, 'drip.contacts_enrolled', { type: 'drip', id: dripId }, { ...result, by: 'contactIds' in input ? 'contacts' : 'filter' });
     }
     return result;

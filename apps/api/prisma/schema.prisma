@@ -1849,6 +1849,8 @@ model LinkClick {
   @@index([targetId])
   @@index([contactId])
   @@index([clickedAt])
+  // Clicks go with their tracked link (cascade) when 001 purges messages (005 T061).
+  @@index([trackedLinkId])
   @@map("link_clicks")
 }
 
@@ -1988,6 +1990,8 @@ model DripEnrolment {
   @@index([status, nextDueAt])
   @@index([contactId, status])
   @@index([dripId, status])
+  // Retention: enrolments go 12 months after they end (005 T061).
+  @@index([endedAt])
   @@map("drip_enrolments")
 }
 

@@ -15,6 +15,10 @@ import { Prisma } from '../../generated/prisma/client.js';
 // - AI agent (004 FR-051): AI conversations that ended over 12 months ago with their replies and
 //   unanswered asks, older asks and replies, questions nobody asked for 12 months, and assistant
 //   requests with their actions. Usage rows are anonymous and kept.
+// - campaign growth (005 R12): link clicks after 12 months, drip enrolments 12 months after they
+//   finished or left (their step records go with them), and starting events not consumed within a
+//   day. Tracked links go with their messages through a foreign key cascade, so their codes stop
+//   working when the messages are purged.
 // Audit logs are never purged here (the spec keeps them at least 12 months).
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -34,7 +38,17 @@ type PurgeTable =
   | 'ai_conversations'
   | 'ai_replies'
   | 'ai_unanswered_asks'
-  | 'assistant_requests';
+  | 'assistant_requests'
+  | 'link_clicks'
+  | 'drip_enrolments'
+  | 'drip_events';
+
+/** Campaign growth records removed by one run (005). */
+export interface GrowthRetentionResult {
+  linkClicks: number;
+  dripEnrolments: number;
+  dripEvents: number;
+}
 
 /** AI records removed by one run (004). */
 export interface AiRetentionResult {
@@ -51,7 +65,7 @@ export interface LiveChatRetentionResult {
   chatMedia: number;
 }
 
-export interface RetentionResult extends LiveChatRetentionResult, AiRetentionResult {
+export interface RetentionResult extends LiveChatRetentionResult, AiRetentionResult, GrowthRetentionResult {
   campaigns: number;
   messages: number;
   webhookEvents: number;
@@ -91,6 +105,9 @@ export class RetentionService {
       aiReplies: 0,
       aiAsks: 0,
       assistantRequests: 0,
+      linkClicks: 0,
+      dripEnrolments: 0,
+      dripEvents: 0,
     };
     const failures: string[] = [];
     const step = async (name: string, fn: () => Promise<void>) => {
@@ -117,6 +134,9 @@ export class RetentionService {
     });
     await step('ai', async () => {
       Object.assign(result, await this.purgeAi(now));
+    });
+    await step('campaign growth', async () => {
+      Object.assign(result, await this.purgeGrowth(now));
     });
     this.logger.log({ ...result }, 'Retention run finished');
     if (failures.length) throw new Error(`Retention partly failed: ${failures.join('; ')}`);
@@ -225,6 +245,16 @@ export class RetentionService {
     await this.prisma.$executeRaw`DELETE FROM ai_unanswered_questions WHERE last_asked_at < ${cutoff}`;
     const assistantRequests = await this.deleteInBatches('assistant_requests', Prisma.sql`created_at < ${cutoff}`);
     return { aiConversations, aiReplies, aiAsks, assistantRequests };
+  }
+
+  /** Campaign growth records (005 R12, T061); tracked links go with their messages (cascade). */
+  async purgeGrowth(now: Date): Promise<GrowthRetentionResult> {
+    const cutoff = monthsBefore(now, CAMPAIGN_MONTHS);
+    const linkClicks = await this.deleteInBatches('link_clicks', Prisma.sql`clicked_at < ${cutoff}`);
+    const dripEnrolments = await this.deleteInBatches('drip_enrolments', Prisma.sql`status <> 'ACTIVE' AND ended_at < ${cutoff}`);
+    // The drip tick consumes events every 30 seconds; any left a day later are stale.
+    const dripEvents = await this.deleteInBatches('drip_events', Prisma.sql`occurred_at < ${new Date(now.getTime() - DAY_MS)}`);
+    return { linkClicks, dripEnrolments, dripEvents };
   }
 
   /** Deletes matching rows in batches so no single statement holds locks for long. */

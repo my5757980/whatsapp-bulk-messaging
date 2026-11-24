@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { Prisma, type DripTriggerKind } from '../../../generated/prisma/client.js';
 import { DripLeaving } from './drip-leaving.js';
@@ -22,6 +23,7 @@ export class DripEvents {
   constructor(
     private readonly prisma: PrismaService,
     private readonly leaving: DripLeaving,
+    private readonly metrics: MetricsService,
   ) {}
 
   /** Tags newly added to a contact, by anyone or anything (members, bulk actions, imports, flows). */
@@ -67,7 +69,7 @@ export class DripEvents {
    * it. Opted-out and blocked contacts do not join. Events are deleted once handled.
    */
   async consume(): Promise<number> {
-    return this.prisma.$transaction(
+    const enrolled = await this.prisma.$transaction(
       async (tx) => {
         const taken = await tx.$queryRaw<Array<{ id: bigint }>>`
           SELECT id FROM drip_events ORDER BY id LIMIT ${CONSUME_BATCH} FOR UPDATE SKIP LOCKED`;
@@ -98,6 +100,8 @@ export class DripEvents {
       },
       { timeout: 60_000 },
     );
+    if (enrolled) this.metrics.dripEnrolmentsTotal.inc({ via: 'event' }, enrolled);
+    return enrolled;
   }
 
   private async record(db: Db, kind: 'OPTED_IN' | 'IMPORTED' | 'API_CREATED', contactIds: readonly string[]): Promise<void> {

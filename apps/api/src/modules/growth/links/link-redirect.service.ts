@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { deviceKind, isLinkCode, isPreviewRequest } from '@wbm/shared';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { ClickRecorder } from './click-recorder.js';
 import { LinkRateLimiter } from './link-rate-limiter.js';
 import { LinkResolver } from './link-resolver.js';
@@ -46,16 +47,32 @@ export class LinkRedirectService {
     private readonly resolver: LinkResolver,
     private readonly recorder: ClickRecorder,
     private readonly limiter: LinkRateLimiter,
+    private readonly metrics: MetricsService,
   ) {}
 
   async open(code: string, request: LinkRequest): Promise<LinkResponse> {
+    const done = this.metrics.linkRedirectDuration.startTimer();
+    try {
+      return await this.answer(code, request);
+    } finally {
+      done();
+    }
+  }
+
+  private async answer(code: string, request: LinkRequest): Promise<LinkResponse> {
     if (!(await this.limiter.allow(request.ip))) {
+      this.metrics.linkClicksTotal.inc({ kind: 'limited' });
       return { status: 429, headers: { ...PAGE_HEADERS, 'Retry-After': '60' }, body: TOO_MANY };
     }
     const link = isLinkCode(code) ? await this.resolver.resolve(code) : null;
-    if (!link) return { status: 404, headers: PAGE_HEADERS, body: NOT_AVAILABLE };
+    if (!link) {
+      this.metrics.linkClicksTotal.inc({ kind: 'unknown' });
+      return { status: 404, headers: PAGE_HEADERS, body: NOT_AVAILABLE };
+    }
 
-    if (!isPreviewRequest(request)) {
+    const preview = isPreviewRequest(request);
+    this.metrics.linkClicksTotal.inc({ kind: preview ? 'preview' : 'click' });
+    if (!preview) {
       try {
         await this.recorder.record(link, deviceKind(request.userAgent));
       } catch (error) {

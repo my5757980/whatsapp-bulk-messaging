@@ -32,6 +32,7 @@
     "perf:inbox": "tsx tools/perf/inbox-latency.ts",
     "perf:flows": "tsx tools/perf/flows-latency.ts",
     "perf:ai": "tsx tools/perf/ai-latency.ts",
+    "perf:drips": "tsx tools/perf/drips-latency.ts",
     "eval:ai": "tsx tools/eval/ai-agent-eval.ts"
   },
   "devDependencies": {

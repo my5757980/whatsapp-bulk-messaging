@@ -1,6 +1,7 @@
 import { Injectable, Logger, type OnApplicationBootstrap, type OnModuleInit } from '@nestjs/common';
-import { extractTemplateVariables, isQuietAt, type MetaTemplateComponent } from '@wbm/shared';
+import { extractTemplateVariables, isQuietAt, nextSendableAt, type MetaTemplateComponent, type QuietHours } from '@wbm/shared';
 import { v7 as uuidv7 } from 'uuid';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { ProcessorRegistry } from '../../../common/queue/processor.registry.js';
 import { QUEUES } from '../../../common/queue/queue.constants.js';
@@ -60,6 +61,7 @@ export class DripTickProcessor implements OnModuleInit, OnApplicationBootstrap {
     private readonly codes: TrackedLinkCodes,
     private readonly notifications: NotificationsService,
     private readonly events: DripEvents,
+    private readonly metrics: MetricsService,
   ) {}
 
   onModuleInit(): void {
@@ -84,9 +86,10 @@ export class DripTickProcessor implements OnModuleInit, OnApplicationBootstrap {
     });
     for (const drip of drips) {
       // Steps due in quiet hours wait until sending may start, in their order (FR-021).
-      if (isQuietAt(quietHoursOf(drip), timezone, new Date())) continue;
+      const quiet = quietHoursOf(drip);
+      if (isQuietAt(quiet, timezone, new Date())) continue;
       for (let batch = 0; batch < MAX_BATCHES; batch += 1) {
-        const outcome = await this.runBatch(drip, summary);
+        const outcome = await this.runBatch(drip, summary, { quiet, timezone });
         if (outcome === 'paused') {
           summary.paused += 1;
           break;
@@ -98,13 +101,16 @@ export class DripTickProcessor implements OnModuleInit, OnApplicationBootstrap {
   }
 
   /** Claims and handles up to one batch of due enrolments. Returns how many were claimed, or 'paused'. */
-  private async runBatch(drip: DripWithSteps, summary: DripTickSummary): Promise<number | 'paused'> {
+  private async runBatch(drip: DripWithSteps, summary: DripTickSummary, clock: { quiet: QuietHours | null; timezone: string }): Promise<number | 'paused'> {
     const queued: string[] = [];
+    /** Seconds from each queued step falling due (moved past quiet hours) to now (research R13). */
+    const lags: number[] = [];
+    let skipped = 0;
     const state: { pause: PauseReason | null } = { pause: null };
     const claimed = await this.prisma.$transaction(
       async (tx) => {
-        const due = await tx.$queryRaw<Array<{ id: string; contact_id: string | null; current_position: number }>>`
-          SELECT id, contact_id, current_position FROM drip_enrolments
+        const due = await tx.$queryRaw<Array<{ id: string; contact_id: string | null; current_position: number; next_due_at: Date }>>`
+          SELECT id, contact_id, current_position, next_due_at FROM drip_enrolments
            WHERE drip_id = ${drip.id}::uuid AND status = 'ACTIVE' AND next_due_at <= now()
            ORDER BY next_due_at
            LIMIT ${BATCH}
@@ -148,8 +154,11 @@ export class DripTickProcessor implements OnModuleInit, OnApplicationBootstrap {
           if (skipReason) {
             await tx.dripStepSend.create({ data: { enrolmentId: enrolment.id, stepId: step.id, outcome: 'SKIPPED', skipReason } });
             summary.skipped += 1;
+            skipped += 1;
           } else {
             summary.sent += 1;
+            const sendable = nextSendableAt(clock.quiet, clock.timezone, enrolment.next_due_at);
+            lags.push(Math.max(0, (now.getTime() - sendable.getTime()) / 1000));
           }
           // Move on: the next live step after its wait, or finished.
           const next = drip.steps.find((s) => s.position === enrolment.current_position + 1);
@@ -171,6 +180,9 @@ export class DripTickProcessor implements OnModuleInit, OnApplicationBootstrap {
       { timeout: 120_000, maxWait: 10_000 },
     );
 
+    if (queued.length) this.metrics.dripStepsTotal.inc({ result: 'queued' }, queued.length);
+    if (skipped) this.metrics.dripStepsTotal.inc({ result: 'skipped' }, skipped);
+    for (const lag of lags) this.metrics.dripDueLag.observe(lag);
     for (const messageId of queued) await this.enqueue(drip.numberId, messageId);
     if (state.pause) {
       await this.alertPaused(drip, state.pause);

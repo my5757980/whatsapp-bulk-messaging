@@ -6,21 +6,8 @@ import { AUDIT_ACTIONS } from '../../src/modules/audit/audit-actions.js';
 
 // T175: every audited action of data-model.md §1 is recorded somewhere in the code base.
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
-/** Actions listed before the code that records them exists (feature 005 T012; emptied by T063). */
-const PENDING = new Set<string>([
-  'campaign.retry_plan_changed',
-  'campaign.retry_round_cancelled',
-  'tracked_link.destination_changed',
-  'drip.created',
-  'drip.updated',
-  'drip.activated',
-  'drip.paused',
-  'drip.resumed',
-  'drip.archived',
-  'drip.deleted',
-  'drip.contacts_enrolled',
-  'drip.contact_removed',
-]);
+/** Actions listed before the code that records them exists (empty: every 005 action is recorded, T063). */
+const PENDING = new Set<string>();
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

@@ -46,6 +46,10 @@ describe('alert rules', () => {
     expect(rule('WbmAiFailing')).toMatch(/wbm_ai_turns_total\{result="failed"\}\[15m\][\s\S]*wbm_ai_turns_total\{result=~"[^"]*failed[^"]*"\}\[15m\][\s\S]*> 0\.20[\s\S]*>= 10/);
   });
 
+  it('warn when drips run late (005 T060): due lag p95 over 5 minutes for 15 minutes', () => {
+    expect(rule('WbmDripLagging')).toMatch(/histogram_quantile\(0\.95[\s\S]*wbm_drip_due_lag_seconds_bucket[\s\S]*> 300\n\s*for: 15m/);
+  });
+
   it('give every alert a severity and a summary', () => {
     const names = [...ALERTS.matchAll(/- alert: (\w+)/g)].map((m) => m[1]!);
     expect(names.length).toBeGreaterThanOrEqual(5);

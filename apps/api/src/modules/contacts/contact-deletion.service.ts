@@ -17,6 +17,10 @@ import { AuditService, type AuditActor } from '../audit/audit.service.js';
  *
  * AI agent (004 FR-051): AI conversations lose the contact, summary and pending confirmation, the
  * customer's unanswered asks are deleted; AI reply records keep only counts and sources.
+ *
+ * Campaign growth (005 FR-040): the contact leaves every drip with the reason DELETED; enrolments,
+ * clicks and tracked links lose the contact (foreign keys set it to null) and stay as anonymous
+ * counts; starting events not consumed yet are deleted.
  */
 @Injectable()
 export class ContactDeletionService {
@@ -70,6 +74,7 @@ export class ContactDeletionService {
       this.prisma.$executeRaw`
         UPDATE drip_enrolments SET status = 'LEFT', left_reason = 'DELETED', ended_at = now(), next_due_at = NULL
          WHERE contact_id = ${contactId}::uuid AND status = 'ACTIVE'`,
+      this.prisma.dripEvent.deleteMany({ where: { contactId } }),
       this.prisma.contact.delete({ where: { id: contactId } }),
     ]);
     // Files after the commit; one that cannot be deleted now is left for the retention job.

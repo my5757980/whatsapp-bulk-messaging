@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { MetricsService } from '../../../src/common/metrics/metrics.service.js';
 import { LinkRateLimiter } from '../../../src/modules/growth/links/link-rate-limiter.js';
 import { LinkRedirectService, type LinkRequest } from '../../../src/modules/growth/links/link-redirect.service.js';
 import { finalDestination, type ResolvedLink } from '../../../src/modules/growth/links/link-resolver.js';
@@ -26,8 +27,9 @@ function setup(options: { found?: ResolvedLink | null; allow?: boolean; recordFa
     }),
   };
   const limiter = { allow: vi.fn(async () => options.allow ?? true) };
-  const service = new LinkRedirectService(resolver as never, recorder as never, limiter as never);
-  return { service, resolver, recorder, limiter };
+  const metrics = new MetricsService();
+  const service = new LinkRedirectService(resolver as never, recorder as never, limiter as never, metrics);
+  return { service, resolver, recorder, limiter, metrics };
 }
 
 const request = (overrides: Partial<LinkRequest> = {}): LinkRequest => ({ method: 'GET', userAgent: PHONE, ip: '203.0.113.7', ...overrides });
@@ -75,6 +77,22 @@ describe('LinkRedirectService', () => {
     expect(res.headers.Location).toBeUndefined();
     expect(res.headers['Retry-After']).toBeDefined();
     expect(resolver.resolve).not.toHaveBeenCalled();
+  });
+
+  it('counts link opens by kind and times every answer (T060, research R13)', async () => {
+    const counts = async (m: MetricsService) => Object.fromEntries((await m.linkClicksTotal.get()).values.map((v) => [v.labels.kind, v.value]));
+    const { service, metrics } = setup();
+    await service.open('AbCdEf1234', request());
+    await service.open('AbCdEf1234', request({ method: 'HEAD' }));
+    expect(await counts(metrics)).toEqual({ click: 1, preview: 1 });
+    const unknown = setup({ found: null });
+    await unknown.service.open('ZZZZZZZZZZ', request());
+    expect(await counts(unknown.metrics)).toEqual({ unknown: 1 });
+    const limited = setup({ allow: false });
+    await limited.service.open('AbCdEf1234', request());
+    expect(await counts(limited.metrics)).toEqual({ limited: 1 });
+    const timed = (await metrics.linkRedirectDuration.get()).values.find((v) => v.metricName === 'wbm_link_redirect_seconds_count');
+    expect(timed?.value).toBe(2);
   });
 
   it('still sends the visitor on when recording the click fails', async () => {

@@ -37,8 +37,8 @@ curl -s -o NUL -w "%{http_code}\n" -A "WhatsApp/2.24.20.72 A" http://localhost:4
 npm run mock:inbound -- --from +971500000001 --name "Sara" --text "interested, tell me more"
 ```
 
-Each recipient's code is listed in the campaign's **Messages** tab (admin) and in the mock-meta sent
-log (`GET http://localhost:4010/mock/sent`, button parameters).
+Each recipient's code is in the mock-meta sent log (`GET http://localhost:4010/mock/sent`, the button
+parameter). The dashboard never shows codes: a code opens its recipient's link and counts a click.
 
 ## 3. Validate each user story
 

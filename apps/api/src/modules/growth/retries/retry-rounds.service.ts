@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { isWithinRetryWindow, retryRoundDueAt } from '@wbm/shared';
 import { AppError } from '../../../common/errors/app-error.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QUEUES } from '../../../common/queue/queue.constants.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
@@ -72,6 +73,7 @@ export class RetryRoundsService {
     private readonly queues: QueueRegistry,
     private readonly dispatch: DispatchScheduler,
     private readonly audit: AuditService,
+    private readonly metrics: MetricsService,
   ) {}
 
   /**
@@ -155,6 +157,7 @@ export class RetryRoundsService {
       return reset.length;
     });
     if (recipients === null) return 'ignored';
+    if (recipients) this.metrics.campaignRetryMessagesTotal.inc({ outcome: 'requeued' }, recipients);
     await this.dispatch.schedule(campaignId);
     this.logger.log({ campaignId, round, recipients }, 'Retry round started');
     return 'started';
@@ -226,7 +229,8 @@ export class RetryRoundsService {
     const [{ recovered } = { recovered: 0 }] = await this.prisma.$queryRaw<Array<{ recovered: number }>>`
       SELECT COUNT(*)::int AS recovered FROM messages
        WHERE campaign_id = ${campaignId}::uuid AND retry_round = ${round} AND status IN ('SENT', 'DELIVERED', 'READ')`;
-    await this.prisma.campaignRetryRound.updateMany({ where: { campaignId, round, status: 'RUNNING' }, data: { status: 'DONE', finishedAt: new Date(), recovered } });
+    const done = await this.prisma.campaignRetryRound.updateMany({ where: { campaignId, round, status: 'RUNNING' }, data: { status: 'DONE', finishedAt: new Date(), recovered } });
+    if (done.count && recovered) this.metrics.campaignRetryMessagesTotal.inc({ outcome: 'recovered' }, recovered);
     this.logger.log({ campaignId, round, recovered }, 'Retry round finished');
   }
 
