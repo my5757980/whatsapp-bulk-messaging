@@ -223,7 +223,7 @@ step 1; the one who replies leaves; a step due in quiet hours waits.
 
 ### Tests for User Story 4 (REQUIRED) ⚠️
 
-- [ ] T041 [P] [US4] Integration test apps/api/test/integration/growth-drips.int-spec.ts:
+- [X] T041 [P] [US4] Integration test apps/api/test/integration/growth-drips.int-spec.ts:
   - **building:** names unique among drips that are not archived; step validation; the activation problems of FR-022
   - **manual enrolment:** preview and enrol, with opted-out contacts and contacts already in the drip counted and skipped
   - **the tick:** it sends step 1 after its wait (move `next_due_at` back); a step due in quiet hours waits
@@ -239,15 +239,15 @@ step 1; the one who replies leaves; a step due in quiet hours waits.
     - archive (enrolments leave with `ARCHIVED`)
     - the rejoin rule
   - **live chat:** drip messages show in the chat timeline as automatic with the drip label, and `DRIP_JOINED`/`DRIP_LEFT` journey entries are written
-- [ ] T042 [P] [US4] Contract cases in apps/api/test/contract/growth.contract-spec.ts for `GET/POST /drips`, `GET/PATCH/DELETE /drips/{id}`, `PUT /drips/{id}/steps`, `POST /drips/{id}/activate`, `/pause`, `/archive`, `GET/POST /drips/{id}/enrolments`, `POST /drips/{id}/enrolments/preview` and `DELETE /drips/{id}/enrolments/{enrolmentId}`
-- [ ] T043 [P] [US4] Playwright e2e apps/web/e2e/growth-us4-drips.spec.ts:
+- [X] T042 [P] [US4] Contract cases in apps/api/test/contract/growth.contract-spec.ts for `GET/POST /drips`, `GET/PATCH/DELETE /drips/{id}`, `PUT /drips/{id}/steps`, `POST /drips/{id}/activate`, `/pause`, `/archive`, `GET/POST /drips/{id}/enrolments`, `POST /drips/{id}/enrolments/preview` and `DELETE /drips/{id}/enrolments/{enrolmentId}`
+- [X] T043 [P] [US4] Playwright e2e apps/web/e2e/growth-us4-drips.spec.ts:
   - build a 2-step drip (step 1 right away, step 2 after 10 minutes) and activate it
   - enrol two contacts by hand: both get step 1
   - one replies and shows "Left: replied"; the drip message shows in live chat as automatic
 
 ### Implementation for User Story 4
 
-- [ ] T044 [US4] Implement apps/api/src/modules/growth/drips/drips.service.ts and drips.controller.ts:
+- [X] T044 [US4] Implement apps/api/src/modules/growth/drips/drips.service.ts and drips.controller.ts:
   - CRUD and settings
   - steps, with tracked links reusing the US1 targets on `drip_step_id`, and soft delete of removed steps
   - starting events stored as `drip_triggers`
@@ -255,28 +255,28 @@ step 1; the one who replies leaves; a step due in quiet hours waits.
   - pause, resume, archive and delete
   - the limit of 20 active drips
   - audit
-- [ ] T045 [US4] Implement apps/api/src/modules/growth/drips/enrolments.service.ts:
+- [X] T045 [US4] Implement apps/api/src/modules/growth/drips/enrolments.service.ts:
   - manual enrolment by ids or a filter through apps/api/src/modules/contacts/audience-query.builder.ts, in batches of 1,000, with its preview
   - removal, and the rejoin rule
   - `leave(tx, contact, reason, scope)`, used by the leaving hooks
-- [ ] T046 [US4] Implement apps/api/src/modules/growth/drips/drip-tick.processor.ts:
+- [X] T046 [US4] Implement apps/api/src/modules/growth/drips/drip-tick.processor.ts:
   - a repeatable 30-second job on `drips`
   - claim due enrolments of active drips outside quiet hours with `FOR UPDATE SKIP LOCKED` in batches of 500
   - check consent, blocking and state again
   - write the `messages` row (origin `DRIP`, resolved params, tracked codes) and the `drip_step_sends` row, then advance or finish
   - hand the messages to the dispatcher after commit
   - self-pause and alert through apps/api/src/modules/notifications/notifications.service.ts
-- [ ] T047 [US4] Add the leaving hooks in the same transaction as each event:
+- [X] T047 [US4] Add the leaving hooks in the same transaction as each event:
   - a reply: apps/api/src/modules/inbox/inbound/inbound-chat.handler.ts
   - an opt-out: apps/api/src/modules/contacts/consent.service.ts
   - a block: apps/api/src/modules/inbox/conversations/chat-contact.service.ts
   - a deletion: apps/api/src/modules/contacts/contact-deletion.service.ts
   - an invalid number on a drip message: apps/api/src/modules/webhooks/handlers/status.handler.ts
-- [ ] T048 [US4] Show drip messages in live chat and the journey:
+- [X] T048 [US4] Show drip messages in live chat and the journey:
   - `DRIP` → `AUTOMATIC` with the "Drip <name> · step n" label in apps/api/src/modules/inbox/messages/chat-timeline.service.ts
   - `DRIP_JOINED`/`DRIP_LEFT` entries in apps/api/src/modules/inbox/journey/journey.service.ts
   - their wording in apps/web/src/components/inbox/journey-list.tsx, with cases in apps/web/tests/journey-list.test.ts
-- [ ] T049 [P] [US4] Add the web pages apps/web/src/app/(dashboard)/drips/page.tsx (list and create) and apps/web/src/app/(dashboard)/drips/[id]/page.tsx:
+- [X] T049 [P] [US4] Add the web pages apps/web/src/app/(dashboard)/drips/page.tsx (list and create) and apps/web/src/app/(dashboard)/drips/[id]/page.tsx:
   - steps with a template picker, the 001 variable mapping component, tracked links and waits
   - quiet hours, the leaving rules and stop tags
   - activate, pause and archive, with the problems listed
@@ -297,7 +297,7 @@ contact and a clicker join once; a contact already in the drip is not enrolled a
 
 ### Tests for User Story 5 (REQUIRED) ⚠️
 
-- [ ] T050 [P] [US5] Integration test apps/api/test/integration/growth-drip-events.int-spec.ts:
+- [X] T050 [P] [US5] Integration test apps/api/test/integration/growth-drip-events.int-spec.ts:
   - a tag added by a member, by bulk tagging, by the 003 flow tags step or by an import enrols once
   - an opt-in enrols
   - a contact new from an import or from the public API enrols; an existing contact does not
@@ -305,21 +305,21 @@ contact and a clicker join once; a contact already in the drip is not enrolled a
   - a draft or paused drip enrols nobody, and events are not replayed after activation
   - a stop tag added later makes the contact leave; the leave-on-click rule works
   - a rolled-back transaction writes no event
-- [ ] T051 [P] [US5] Playwright e2e apps/web/e2e/growth-us5-starting-events.spec.ts: set the tag and click events on a drip, tag one contact and click as another, and both show in the drip's enrolments once
+- [X] T051 [P] [US5] Playwright e2e apps/web/e2e/growth-us5-starting-events.spec.ts: set the tag and click events on a drip, tag one contact and click as another, and both show in the drip's enrolments once
 
 ### Implementation for User Story 5
 
-- [ ] T052 [US5] Implement apps/api/src/modules/growth/drips/drip-events.ts:
+- [X] T052 [US5] Implement apps/api/src/modules/growth/drips/drip-events.ts:
   - outbox writers `recordTagsAdded`, `recordOptIn`, `recordCreated` and `recordClick`, which write only when an active drip listens to the kind
   - consuming events in the tick before due steps: enrol by matching triggers with `ON CONFLICT DO NOTHING` and the rejoin rule, then delete the event
-- [ ] T053 [US5] Call the outbox writers and the stop-tag leaving rule from:
+- [X] T053 [US5] Call the outbox writers and the stop-tag leaving rule from:
   - apps/api/src/modules/contacts/contacts.service.ts (create, update and bulk tags)
   - apps/api/src/modules/flows/engine/session.service.ts (tags step)
   - apps/api/src/modules/imports/import.processor.ts (new contacts and tags)
   - apps/api/src/modules/public-api/public-api.service.ts (new contacts)
   - apps/api/src/modules/contacts/consent.service.ts (`OPTED_IN`)
   - apps/api/src/modules/growth/links/click-recorder.ts (clicks, and leave on click)
-- [ ] T054 [P] [US5] Add the starting events editor (tag picker, opt-in, import, public API, a campaign picker or "any campaign" for clicks) to apps/web/src/app/(dashboard)/drips/[id]/page.tsx
+- [X] T054 [P] [US5] Add the starting events editor (tag picker, opt-in, import, public API, a campaign picker or "any campaign" for clicks) to apps/web/src/app/(dashboard)/drips/[id]/page.tsx
 
 **Checkpoint**: drips enrol automatically and exactly once.
 
@@ -334,13 +334,13 @@ left (replied) and 1 still in the drip, matching the listed contacts.
 
 ### Tests for User Story 6 (REQUIRED) ⚠️
 
-- [ ] T055 [P] [US6] Integration test apps/api/test/integration/growth-drip-results.int-spec.ts: per-step sent, delivered, read, clicked, replied, failed and skipped, and in, finished and left by reason, all equal the records; the contacts behind each metric; the CSV export
-- [ ] T056 [P] [US6] Contract cases in apps/api/test/contract/growth.contract-spec.ts for `GET /drips/{id}/results`, `GET /drips/{id}/results/contacts` and `GET /drips/{id}/results/export`
+- [X] T055 [P] [US6] Integration test apps/api/test/integration/growth-drip-results.int-spec.ts: per-step sent, delivered, read, clicked, replied, failed and skipped, and in, finished and left by reason, all equal the records; the contacts behind each metric; the CSV export
+- [X] T056 [P] [US6] Contract cases in apps/api/test/contract/growth.contract-spec.ts for `GET /drips/{id}/results`, `GET /drips/{id}/results/contacts` and `GET /drips/{id}/results/export`
 - [ ] T057 [P] [US6] Playwright e2e apps/web/e2e/growth-us6-drip-results.spec.ts: open a drip's **Results**, select a count, and see its contacts and export
 
 ### Implementation for User Story 6
 
-- [ ] T058 [US6] Implement apps/api/src/modules/growth/drips/drip-results.service.ts and its routes in drips.controller.ts (research R11 queries, masked phones by role, streamed CSV with `data.export`)
+- [X] T058 [US6] Implement apps/api/src/modules/growth/drips/drip-results.service.ts and its routes in drips.controller.ts (research R11 queries, masked phones by role, streamed CSV with `data.export`)
 - [ ] T059 [P] [US6] Add the results tab (summary, per-step table, contacts per count, export) to apps/web/src/app/(dashboard)/drips/[id]/page.tsx
 
 **Checkpoint**: every story works on its own.
@@ -349,19 +349,19 @@ left (replied) and 1 still in the drip, matching the listed contacts.
 
 ## Phase 9: Polish & Cross-Cutting Concerns
 
-- [ ] T060 [P] Add the metrics `wbm_link_clicks_total{kind}`, `wbm_link_redirect_seconds`, `wbm_campaign_retry_messages_total{outcome}`, `wbm_drip_steps_total{result}`, `wbm_drip_enrolments_total{via}` and `wbm_drip_due_lag_seconds` in apps/api/src/common/metrics/metrics.service.ts with their instrumentation points, and the alert `WbmDripLagging` (due lag p95 over 5 minutes for 15 minutes) in ops/alerts.yml and apps/api/test/unit/alerts.spec.ts
-- [ ] T061 [P] Extend retention and erasure, tests first:
+- [X] T060 [P] Add the metrics `wbm_link_clicks_total{kind}`, `wbm_link_redirect_seconds`, `wbm_campaign_retry_messages_total{outcome}`, `wbm_drip_steps_total{result}`, `wbm_drip_enrolments_total{via}` and `wbm_drip_due_lag_seconds` in apps/api/src/common/metrics/metrics.service.ts with their instrumentation points, and the alert `WbmDripLagging` (due lag p95 over 5 minutes for 15 minutes) in ops/alerts.yml and apps/api/test/unit/alerts.spec.ts
+- [X] T061 [P] Extend retention and erasure, tests first:
   - in apps/api/test/integration/retention.int-spec.ts and apps/api/src/modules/maintenance/retention.processor.ts:
     - `link_clicks` older than 12 months
     - enrolments 12 months after they ended
     - stale `drip_events`
     - tracked links going with purged messages
   - in apps/api/test/integration/contact-deletion.int-spec.ts and apps/api/src/modules/contacts/contact-deletion.service.ts: contact links cleared on clicks, enrolments and tracked links
-- [ ] T062 [P] Add tracked-link codes and destinations to the log redaction list in apps/api/src/common/logging/redaction.ts, with cases in apps/api/test/unit/logging-redaction.spec.ts
-- [ ] T063 [P] Empty the 005 `PENDING` list in apps/api/test/unit/audit-coverage.spec.ts once every action is recorded
-- [ ] T064 [P] Add contracts/growth-api.openapi.yaml to the contracts read by apps/api/test/integration/rbac.int-spec.ts (skip the public `/l/{code}` operation) and fix any permission mismatch
-- [ ] T065 [P] Add the performance check tools/perf/drips-latency.ts (SC-005: 10,000 enrolled contacts with steps falling due; p95 from due to queued, with the api and the worker running) and the root script `perf:drips`
-- [ ] T066 [P] Docs:
+- [X] T062 [P] Add tracked-link codes and destinations to the log redaction list in apps/api/src/common/logging/redaction.ts, with cases in apps/api/test/unit/logging-redaction.spec.ts
+- [X] T063 [P] Empty the 005 `PENDING` list in apps/api/test/unit/audit-coverage.spec.ts once every action is recorded
+- [X] T064 [P] Add contracts/growth-api.openapi.yaml to the contracts read by apps/api/test/integration/rbac.int-spec.ts (skip the public `/l/{code}` operation) and fix any permission mismatch
+- [X] T065 [P] Add the performance check tools/perf/drips-latency.ts (SC-005: 10,000 enrolled contacts with steps falling due; p95 from due to queued, with the api and the worker running) and the root script `perf:drips`
+- [X] T066 [P] Docs:
   - a campaign growth section in README.md (tracked links and `PUBLIC_LINK_BASE_URL`, retarget groups, retries and the held-back rule, drips). Say that when the base address has no `/l` path, the reverse proxy must send `/{code}` to the api's `/l/{code}`
   - update specs/005-campaign-growth/quickstart.md if steps changed
   - mark items 5.5, 5.7, 5.8 and 5.12 in docs/research/aisensy/feature-inventory-2026-11-19.md
