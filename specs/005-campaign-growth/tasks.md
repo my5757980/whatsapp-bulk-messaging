@@ -336,12 +336,12 @@ left (replied) and 1 still in the drip, matching the listed contacts.
 
 - [X] T055 [P] [US6] Integration test apps/api/test/integration/growth-drip-results.int-spec.ts: per-step sent, delivered, read, clicked, replied, failed and skipped, and in, finished and left by reason, all equal the records; the contacts behind each metric; the CSV export
 - [X] T056 [P] [US6] Contract cases in apps/api/test/contract/growth.contract-spec.ts for `GET /drips/{id}/results`, `GET /drips/{id}/results/contacts` and `GET /drips/{id}/results/export`
-- [ ] T057 [P] [US6] Playwright e2e apps/web/e2e/growth-us6-drip-results.spec.ts: open a drip's **Results**, select a count, and see its contacts and export
+- [X] T057 [P] [US6] Playwright e2e apps/web/e2e/growth-us6-drip-results.spec.ts: open a drip's **Results**, select a count, and see its contacts and export
 
 ### Implementation for User Story 6
 
 - [X] T058 [US6] Implement apps/api/src/modules/growth/drips/drip-results.service.ts and its routes in drips.controller.ts (research R11 queries, masked phones by role, streamed CSV with `data.export`)
-- [ ] T059 [P] [US6] Add the results tab (summary, per-step table, contacts per count, export) to apps/web/src/app/(dashboard)/drips/[id]/page.tsx
+- [X] T059 [P] [US6] Add the results tab (summary, per-step table, contacts per count, export) to apps/web/src/app/(dashboard)/drips/[id]/page.tsx
 
 **Checkpoint**: every story works on its own.
 
@@ -365,7 +365,7 @@ left (replied) and 1 still in the drip, matching the listed contacts.
   - a campaign growth section in README.md (tracked links and `PUBLIC_LINK_BASE_URL`, retarget groups, retries and the held-back rule, drips). Say that when the base address has no `/l` path, the reverse proxy must send `/{code}` to the api's `/l/{code}`
   - update specs/005-campaign-growth/quickstart.md if steps changed
   - mark items 5.5, 5.7, 5.8 and 5.12 in docs/research/aisensy/feature-inventory-2026-11-19.md
-- [ ] T067 Run every quickstart row end to end (in CI where the machine's memory does not allow it) and record the results in specs/005-campaign-growth/checklists/release.md, with the pre-release items:
+- [X] T067 Run every quickstart row end to end (in CI where the machine's memory does not allow it) and record the results in specs/005-campaign-growth/checklists/release.md, with the pre-release items:
   - the public HTTPS link address on the company's own domain
   - Meta approval of a template with a tracked link button
   - the reply window and drip limits confirmed

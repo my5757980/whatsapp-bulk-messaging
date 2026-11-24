@@ -8,9 +8,8 @@
   dependency audit, alert rules and the secret scan. Clicks, replies and Meta statuses in CI come
   from mock-meta and test requests, never from real phones.
 
-**Status**: Waiting for the last browser test run (a10eabe). Every other automated gate passes in
-CI, and every quickstart row is covered by integration tests and a Playwright e2e spec. Still open
-before release (section 4):
+**Status**: Ready for review. All automated gates pass in CI (a10eabe), and every quickstart row is
+covered by integration tests and a Playwright e2e spec. Still open before release (section 4):
 - the public link address on the company's domain
 - Meta approval of a tracked link template
 - confirming the reply window and drip limits
@@ -34,7 +33,7 @@ before release (section 4):
 | `npm audit --audit-level=high` | ✅ PASS | CI `build-test` step |
 | gitleaks (history) | ✅ PASS | CI `secret-scan` (after the narrow allowlist in section 3) |
 | Docker images | ✅ PASS | CI `docker-images`: the api, migration and web images build, and the 002 live event smoke test still passes |
-| Playwright e2e | 🟡 PENDING | CI `e2e-smoke`: 39 specs, including `growth-us1-clicks` … `growth-us6-drip-results`. US1–US5 passed on all four jobs. The US6 spec failed once on a race (section 3); the fix (a10eabe) is running |
+| Playwright e2e | ✅ PASS | CI `e2e-smoke` (a10eabe): 39/39 specs in 8.4 minutes, including `growth-us1-clicks` … `growth-us6-drip-results`. The US6 spec failed once on a race (section 3) before its fix |
 | Performance SC-005 | 🟡 NOT RUN | `npm run perf:drips` is ready (T065). It imports 10,000 opted-in contacts with their own tag, builds a one-step drip with no wait and enrols them all at once, so every step falls due at the same moment. It then reads each contact's time from joining to being queued (limit 5 minutes at p95). It needs the api, the worker and the Docker services; run it on staging hardware |
 
 CI per story (all four jobs: build-test, e2e-smoke, docker-images, secret-scan):
@@ -46,8 +45,8 @@ CI per story (all four jobs: build-test, e2e-smoke, docker-images, secret-scan):
 | US3 | c4e1807 | c4e1807 |
 | US4 | 7731922 (with the tests-first commit b9a364b) | 7731922 |
 | US5 | 7b001fb | 7b001fb |
-| US6 | 2087234 (failure: the e2e read the template list before its account's sync) | pending: a10eabe |
-| Polish | 2c3356e (build-test, docker-images and secret-scan passed) | pending: a10eabe |
+| US6 | 2087234 (failure: the e2e read the template list before its account's sync) | a10eabe |
+| Polish | 2c3356e (build-test, docker-images and secret-scan passed) | a10eabe |
 
 ## 2. Quickstart validation rows (§3)
 
@@ -58,7 +57,7 @@ CI per story (all four jobs: build-test, e2e-smoke, docker-images, secret-scan):
 | US3 Retries | ✅ | Unit `retryable`; shared `retries`. Integration `growth-retries`: plans of up to 3 rounds within 24 hours; only failures that may pass are re-sent, never twice; rounds held while paused; one or all rounds cancelled, and rounds cancelled with the campaign; skipped past 24 hours or with a paused template. Contract US3. E2e `growth-us3-retries` | — |
 | US4 Drip | ✅ | Shared `quiet-hours` and `drips`. Integration `growth-drips`: building, enrolling by hand, steps sent when due and after quiet hours; leaving at once on a reply, opt-out, block, deletion or removal; marketing steps without an opt-in skipped; pausing itself with an alert; edits, pause, archive and rejoining; the 21st active drip refused; drip messages in live chat and the journey. Contract US4. E2e `growth-us4-drips` | — |
 | US5 Starting events | ✅ | Integration `growth-drip-events`: tags from members, bulk actions and imports; opt-ins; new contacts from imports and the API; campaign clicks; nothing for draft or paused drips; stop tags, drip clicks and rolled-back changes. E2e `growth-us5-starting-events` | — |
-| US6 Results | 🟡 | Integration `growth-drip-results`: counts equal the records, the contacts behind each count with masked phones, and the export (`data.export`, audited). Contract US6. E2e `growth-us6-drip-results` is waiting for the fixed run | — |
+| US6 Results | ✅ | Integration `growth-drip-results`: counts equal the records, the contacts behind each count with masked phones, and the export (`data.export`, audited). Contract US6. E2e `growth-us6-drip-results` | — |
 
 ## 3. Gaps found and fixed during implementation
 
