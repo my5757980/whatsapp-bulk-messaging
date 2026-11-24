@@ -157,6 +157,18 @@ export class PlatformEvents {
     );
   }
 
+  /** A store order notification, COD question or cart reminder was queued (feature 006 US4 - US6). */
+  storeNotificationSent(
+    db: Db,
+    input: { store: { id: string; name: string; platform: string }; order: { id: string; number: string }; kind: string; contactId: string; messageId: string },
+  ): Promise<void> {
+    return this.when(
+      'store.notification_sent',
+      async () => ({ store: input.store, order: input.order, kind: input.kind, contact: await this.contact(db, input.contactId), messageId: input.messageId }),
+      db,
+    );
+  }
+
   linkClicked(db: Db, input: { contactId: string | null; campaignId: string | null; dripId: string | null; destination: string; device: string; at: Date }): Promise<void> {
     return this.when(
       'link.clicked',

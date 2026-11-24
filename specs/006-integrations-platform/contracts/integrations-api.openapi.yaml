@@ -1006,13 +1006,15 @@ components:
             finalMinutes: { type: integer, minimum: 60, maximum: 4320, default: 1440 }
             autoCancel: { type: boolean, default: false }
     StoreAutomation:
-      allOf:
-        - $ref: '#/components/schemas/StoreAutomationInput'
-        - type: object
-          required: [kind, problems]
-          properties:
-            kind: { $ref: '#/components/schemas/StoreAutomationKind' }
-            problems: { type: array, items: { type: object, required: [code, message], properties: { code: { type: string }, message: { type: string } } } }
+      description: An automation as saved; one that was never saved has no steps and is off
+      type: object
+      required: [kind, enabled, steps, problems]
+      properties:
+        kind: { $ref: '#/components/schemas/StoreAutomationKind' }
+        enabled: { type: boolean }
+        steps: { type: array, maxItems: 3, items: { $ref: '#/components/schemas/AutomationStep' } }
+        settings: { $ref: '#/components/schemas/StoreAutomationInput/properties/settings' }
+        problems: { type: array, items: { type: object, required: [code, message], properties: { code: { type: string }, message: { type: string } } } }
     StoreAutomationResults:
       type: object
       required: [kind, counts, skipReasons]

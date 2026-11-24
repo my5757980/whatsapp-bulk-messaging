@@ -58,6 +58,11 @@ export class DripEvents {
     await this.record(db, via, contactIds);
   }
 
+  /** A store order was placed or delivered (feature 006, FR-028). */
+  async recordOrderEvent(db: Db, kind: 'ORDER_PLACED' | 'ORDER_DELIVERED', contactIds: readonly string[]): Promise<void> {
+    await this.record(db, kind, contactIds);
+  }
+
   /** A real click on a tracked link: starting events of campaigns, and leaving a drip on its own links. */
   async recordClick(db: Db, contactId: string, link: { campaignId: string | null; dripId: string | null }): Promise<void> {
     if (link.dripId) await this.leaving.onEvent(contactId, { kind: 'CLICKED', dripId: link.dripId }, db);
@@ -111,7 +116,7 @@ export class DripEvents {
     return enrolled;
   }
 
-  private async record(db: Db, kind: 'OPTED_IN' | 'IMPORTED' | 'API_CREATED', contactIds: readonly string[]): Promise<void> {
+  private async record(db: Db, kind: 'OPTED_IN' | 'IMPORTED' | 'API_CREATED' | 'ORDER_PLACED' | 'ORDER_DELIVERED', contactIds: readonly string[]): Promise<void> {
     if (!contactIds.length || !(await this.listens(db, kind))) return;
     await db.dripEvent.createMany({ data: contactIds.map((contactId) => ({ kind, contactId })) });
   }

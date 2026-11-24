@@ -198,7 +198,7 @@ export class ContactsService {
   }
 
   /** `source` is what webhook events report; 'api' also raises the drips' API_CREATED starting event (005). */
-  async create(input: ContactInput & { phone: string }, actorUserId: string | null, source: 'dashboard' | 'api' = 'dashboard') {
+  async create(input: ContactInput & { phone: string }, actorUserId: string | null, source: 'dashboard' | 'api' | 'store' = 'dashboard') {
     const phone = await this.normalise(input.phone);
     const attributes = await this.checkAttributes(input.attributes ?? {}, false);
     this.requireNoteForOptIn(input);
@@ -212,7 +212,7 @@ export class ContactsService {
             countryCode: phone.country,
             name: input.name ?? null,
             attributes: attributes as Prisma.InputJsonValue,
-            ...(source === 'api' ? { leadSource: 'API' } : {}),
+            ...(source === 'api' ? { leadSource: 'API' } : source === 'store' ? { leadSource: 'STORE' } : {}),
             ...(status ? { consentStatus: status, consentSource: 'MANUAL' as const, consentSourceNote: input.consentSourceNote ?? null, consentAt: now } : {}),
           },
         });

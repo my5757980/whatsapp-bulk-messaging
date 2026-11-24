@@ -2,6 +2,15 @@ import { Global, Module, type Provider, type Type } from '@nestjs/common';
 import { ApiCampaignPauser } from './api-campaigns/api-campaign-pauser.js';
 import { ApiCampaignsController } from './api-campaigns/api-campaigns.controller.js';
 import { ApiCampaignsService } from './api-campaigns/api-campaigns.service.js';
+import { ShopifyClient } from './stores/shopify/shopify.client.js';
+import { StoreAutomationsService } from './stores/store-automations.service.js';
+import { StoreConnectionsService } from './stores/store-connections.service.js';
+import { StoreEventsInbox } from './stores/store-events-inbox.js';
+import { StoreHttp } from './stores/store-http.js';
+import { StoreMessages } from './stores/store-messages.js';
+import { StoreWebhooksController } from './stores/store-webhooks.controller.js';
+import { StoresController } from './stores/stores.controller.js';
+import { WooClient } from './stores/woocommerce/woo.client.js';
 import { OutboundEvents } from './webhooks/outbound-events.js';
 import { PlatformEvents } from './webhooks/platform-events.js';
 import { WebhookDeliveries } from './webhooks/webhook-deliveries.service.js';
@@ -15,15 +24,16 @@ import { WebhookEndpointsService } from './webhooks/webhook-endpoints.service.js
 // and the queue processors in WorkerFeaturesModule. Each story adds its providers here.
 
 // The API campaign pauser runs from template webhooks and number disconnects (US3, FR-021).
-const DOMAIN: Provider[] = [OutboundEvents, WebhookDeliveries, PlatformEvents, ApiCampaignPauser];
+// Store clients, the raw event store and store messages are used by receivers, processors and the COD and cart ticks (US4 - US6).
+const DOMAIN: Provider[] = [OutboundEvents, WebhookDeliveries, PlatformEvents, ApiCampaignPauser, StoreHttp, ShopifyClient, WooClient, StoreEventsInbox, StoreMessages];
 
 /** Integration services shared by the HTTP app and the worker. */
 @Global()
 @Module({ providers: DOMAIN, exports: DOMAIN })
 export class IntegrationsDomainModule {}
 
-const API_PROVIDERS: Provider[] = [WebhookEndpointsService, ApiCampaignsService];
-const CONTROLLERS: Type[] = [WebhookEndpointsController, ApiCampaignsController];
+const API_PROVIDERS: Provider[] = [WebhookEndpointsService, ApiCampaignsService, StoreConnectionsService, StoreAutomationsService];
+const CONTROLLERS: Type[] = [WebhookEndpointsController, ApiCampaignsController, StoresController, StoreWebhooksController];
 
 /** Webhook endpoint, API campaign, store, chat link and number wizard endpoints (HTTP app only). */
 @Module({

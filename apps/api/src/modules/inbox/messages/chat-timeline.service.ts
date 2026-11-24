@@ -9,6 +9,7 @@ const REF_ORIGIN_SQL = Prisma.sql`CASE m.origin
   WHEN 'API' THEN 'API'::"ChatOrigin"
   WHEN 'INBOX' THEN (CASE WHEN m.automatic THEN 'AUTOMATIC' ELSE 'MEMBER' END)::"ChatOrigin"
   WHEN 'DRIP' THEN 'AUTOMATIC'::"ChatOrigin"
+  WHEN 'STORE' THEN 'AUTOMATIC'::"ChatOrigin"
   ELSE 'CAMPAIGN'::"ChatOrigin" END`;
 
 /**

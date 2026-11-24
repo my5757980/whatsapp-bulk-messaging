@@ -16,6 +16,8 @@ import { InboundMediaProcessor } from './modules/inbox/inbound/inbound-media.pro
 import { FlowsDomainModule } from './modules/flows/flows.module.js';
 import { GrowthDomainModule } from './modules/growth/growth.module.js';
 import { IntegrationsDomainModule } from './modules/integrations/integrations.module.js';
+import { StoreEventsProcessor } from './modules/integrations/stores/store-events.processor.js';
+import { StoreReconcilerProcessor } from './modules/integrations/stores/store-reconciler.processor.js';
 import { WebhookDeliveryProcessor } from './modules/integrations/webhooks/webhook-delivery.processor.js';
 import { WebhookSweepProcessor } from './modules/integrations/webhooks/webhook-sweep.processor.js';
 import { DripTickProcessor } from './modules/growth/drips/drip-tick.processor.js';
@@ -92,6 +94,8 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     DripTickProcessor,
     WebhookDeliveryProcessor,
     WebhookSweepProcessor,
+    StoreEventsProcessor,
+    StoreReconcilerProcessor,
   ],
 })
 export class WorkerFeaturesModule {}
