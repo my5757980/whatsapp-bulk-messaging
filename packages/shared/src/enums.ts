@@ -18,6 +18,8 @@ export const ConsentSource = {
   MANUAL: 'MANUAL',
   // Feature 004: a customer asked the AI agent, in their own words, not to be messaged (FR-027).
   AI_AGENT: 'AI_AGENT',
+  // Feature 006: a store checkout consent the admin confirmed names WhatsApp (FR-027).
+  STORE: 'STORE',
 } as const;
 export type ConsentSource = (typeof ConsentSource)[keyof typeof ConsentSource];
 

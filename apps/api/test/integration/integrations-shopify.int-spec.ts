@@ -77,7 +77,7 @@ function fakeShop(host: string): FakeShop {
   nock(host)
     .persist()
     .post('/admin/oauth/access_token')
-    .reply((_uri, body) => {
+    .reply((_uri: string, body: nock.Body) => {
       const b = (typeof body === 'string' ? JSON.parse(body) : body) as Json;
       if (shop.down || b.client_secret !== SECRET || b.grant_type !== 'client_credentials') return [401, { error: 'invalid_client' }];
       shop.tokens += 1;
@@ -86,7 +86,7 @@ function fakeShop(host: string): FakeShop {
   nock(host)
     .persist()
     .post(`/admin/api/${VERSION}/graphql.json`)
-    .reply((_uri, body) => {
+    .reply((_uri: string, body: nock.Body) => {
       if (shop.down) return [401, { errors: '[API] Invalid API key or access token (unrecognized login or wrong password)' }];
       const { query, variables = {} } = (typeof body === 'string' ? JSON.parse(body) : body) as { query: string; variables?: Json };
       if (query.includes('webhookSubscriptionCreate')) {

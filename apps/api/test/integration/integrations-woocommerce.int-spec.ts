@@ -49,7 +49,7 @@ function fakeSite(host: string): FakeSite {
     .persist()
     .get('/wp-json/wc/v3/orders')
     .query(true)
-    .reply(function (uri) {
+    .reply(function (this: { req: { headers: Record<string, unknown> } }, uri: string) {
       if (!authorised(this.req.headers.authorization as string | undefined)) return [401, { code: 'woocommerce_rest_cannot_view' }];
       const after = new URL(uri, host).searchParams.get('modified_after');
       if (after) site.modifiedAfter.push(after);
@@ -63,7 +63,7 @@ function fakeSite(host: string): FakeSite {
   nock(host)
     .persist()
     .post('/wp-json/wc/v3/webhooks')
-    .reply((_uri, body) => {
+    .reply((_uri: string, body: nock.Body) => {
       const b = (typeof body === 'string' ? JSON.parse(body) : body) as Json;
       const hook = { id: site.webhooks.length + 1, topic: String(b.topic), delivery_url: String(b.delivery_url), secret: String(b.secret), status: String(b.status ?? 'active') };
       site.webhooks.push(hook);
@@ -72,7 +72,7 @@ function fakeSite(host: string): FakeSite {
   nock(host)
     .persist()
     .put(/\/wp-json\/wc\/v3\/webhooks\/\d+/)
-    .reply((uri, body) => {
+    .reply((uri: string, body: nock.Body) => {
       const hook = site.webhooks.find((w) => w.id === Number(uri.split('/').pop()));
       if (hook) hook.status = String(((typeof body === 'string' ? JSON.parse(body) : body) as Json).status ?? hook.status);
       return [200, hook ?? {}];
@@ -81,7 +81,7 @@ function fakeSite(host: string): FakeSite {
     .persist()
     .delete(/\/wp-json\/wc\/v3\/webhooks\/\d+/)
     .query(true)
-    .reply((uri) => {
+    .reply((uri: string) => {
       const id = Number(new URL(uri, host).pathname.split('/').pop());
       site.webhooks = site.webhooks.filter((w) => w.id !== id);
       return [200, { id }];
