@@ -16,9 +16,13 @@ test('US6: drip results and the contacts behind a count', async ({ page }) => {
 
   const numbers = (await (await page.request.get('/api/numbers')).json()) as Array<{ id: string; phoneNumberId: string }>;
   const numberId = numbers.find((n) => n.phoneNumberId === number.phoneNumberId)!.id;
-  const template = ((await (await page.request.get('/api/templates?status=APPROVED')).json()) as Array<{ id: string; name: string; wabaId: string }>).find(
-    (t) => t.name === 'order_confirmation' && t.wabaId === number.wabaId,
-  )!;
+  // Earlier specs' accounts have the same template; wait until this account's own copy is synced.
+  let template: { id: string; name: string } | undefined;
+  await expect(async () => {
+    const list = (await (await page.request.get(`/api/templates?wabaId=${number.wabaId}&status=APPROVED`)).json()) as Array<{ id: string; name: string }>;
+    template = list.find((t) => t.name === 'order_confirmation');
+    expect(template).toBeDefined();
+  }).toPass({ timeout: 45_000 });
   const contactIds: string[] = [];
   for (const [i, phone] of people.entries()) {
     const res = await page.request.post('/api/contacts', {
@@ -33,7 +37,7 @@ test('US6: drip results and the contacts behind a count', async ({ page }) => {
   expect(
     (
       await page.request.put(`/api/drips/${dripId}/steps`, {
-        data: { steps: [{ templateId: template.id, variableMapping: mapping, waitMinutes: 0 }, { templateId: template.id, variableMapping: mapping, waitMinutes: 60 }] },
+        data: { steps: [{ templateId: template!.id, variableMapping: mapping, waitMinutes: 0 }, { templateId: template!.id, variableMapping: mapping, waitMinutes: 60 }] },
         headers: await csrfHeaders(page),
       })
     ).status(),
