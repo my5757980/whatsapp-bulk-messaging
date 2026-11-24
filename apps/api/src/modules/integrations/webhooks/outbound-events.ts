@@ -43,6 +43,10 @@ interface Subscriber {
 export class OutboundEvents {
   private readonly logger = new Logger(OutboundEvents.name);
   private cache: { at: number; byType: Map<string, Subscriber[]> } | null = null;
+  /** One shared load for callers outside a transaction. */
+  private loading: Promise<Map<string, Subscriber[]>> | null = null;
+  /** Bumped by invalidate(), so a load that started before a change is not cached. */
+  private generation = 0;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -52,11 +56,16 @@ export class OutboundEvents {
   /** Forgets the cached subscriptions (called when endpoints are added, changed or deleted). */
   invalidate(): void {
     this.cache = null;
+    this.loading = null;
+    this.generation += 1;
   }
 
-  /** True when at least one endpoint chose the type, so callers can skip building a payload. */
-  async listens(type: EventType): Promise<boolean> {
-    return (await this.subscribers(type)).length > 0;
+  /**
+   * True when at least one endpoint chose the type, so callers can skip building a payload. Pass the
+   * caller's transaction: a cold cache is then read on it, never on a second pool connection.
+   */
+  async listens(type: EventType, db?: Db): Promise<boolean> {
+    return (await this.subscribers(type, db)).length > 0;
   }
 
   /**
@@ -64,7 +73,7 @@ export class OutboundEvents {
    * the ids of deliveries due now (endpoints that are not paused).
    */
   async record(db: Db, type: EventType, data: Record<string, unknown>, occurredAt = new Date()): Promise<string[]> {
-    const subscribers = await this.subscribers(type);
+    const subscribers = await this.subscribers(type, db);
     if (!subscribers.length) return [];
     // Content is kept only when at least one endpoint wants it (FR-009).
     const stored = buildEvent(type, data, subscribers.some((s) => s.includeContent));
@@ -93,15 +102,27 @@ export class OutboundEvents {
       .catch((error: unknown) => this.logger.warn({ err: error, deliveryId }, 'Could not queue a webhook delivery; the sweep will retry'));
   }
 
-  private async subscribers(type: EventType): Promise<Subscriber[]> {
-    if (!this.cache || Date.now() - this.cache.at > CACHE_MS) {
-      const endpoints = await this.prisma.webhookEndpoint.findMany({ select: { id: true, eventTypes: true, includeContent: true } });
-      const byType = new Map<string, Subscriber[]>();
-      for (const endpoint of endpoints) {
-        for (const t of endpoint.eventTypes) byType.set(t, [...(byType.get(t) ?? []), { id: endpoint.id, includeContent: endpoint.includeContent }]);
-      }
-      this.cache = { at: Date.now(), byType };
+  private async subscribers(type: EventType, db?: Db): Promise<Subscriber[]> {
+    if (this.cache && Date.now() - this.cache.at <= CACHE_MS) return this.cache.byType.get(type) ?? [];
+    // Inside a transaction the read uses its connection: waiting for another one from a busy pool
+    // could hold the transaction until it times out.
+    const byType =
+      db && db !== this.prisma
+        ? await this.load(db)
+        : await (this.loading ??= this.load(this.prisma).finally(() => {
+            this.loading = null;
+          }));
+    return byType.get(type) ?? [];
+  }
+
+  private async load(db: Db): Promise<Map<string, Subscriber[]>> {
+    const generation = this.generation;
+    const endpoints = await db.webhookEndpoint.findMany({ select: { id: true, eventTypes: true, includeContent: true } });
+    const byType = new Map<string, Subscriber[]>();
+    for (const endpoint of endpoints) {
+      for (const t of endpoint.eventTypes) byType.set(t, [...(byType.get(t) ?? []), { id: endpoint.id, includeContent: endpoint.includeContent }]);
     }
-    return this.cache.byType.get(type) ?? [];
+    if (generation === this.generation) this.cache = { at: Date.now(), byType };
+    return byType;
   }
 }

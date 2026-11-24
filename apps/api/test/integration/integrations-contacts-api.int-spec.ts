@@ -118,7 +118,7 @@ describe('Contacts through the public API (006 US2)', () => {
 
   it('needs a source note for an opt-in, always takes an opt-out, and shows the key in the journey', async () => {
     const number = await seedNumber(ctx);
-    const contact = await seedContact(ctx, uaePhone());
+    const contact = await seedContact(ctx, uaePhone(), { consentStatus: 'UNKNOWN', consentSource: null });
     await ctx.prisma.conversation.create({ data: { contactId: contact.id, numberId: number.id } });
     expect((await v1(fullKey, 'post', `/contacts/${contact.id}/opt-in`, {})).status).toBe(422);
     const optedIn = await v1(fullKey, 'post', `/contacts/${contact.id}/opt-in`, { sourceNote: 'CRM signup form' });
@@ -170,6 +170,8 @@ describe('Contacts through the public API (006 US2)', () => {
     expect((await v1(fullKey, 'delete', `/drips/${drip.id}/enrolments/${contact.id}`)).status).toBe(204);
     expect(await ctx.prisma.dripEnrolment.findFirst({ where: { dripId: drip.id, contactId: contact.id } })).toMatchObject({ status: 'LEFT', leftReason: 'REMOVED' });
     expect((await v1(fullKey, 'delete', `/drips/${drip.id}/enrolments/${contact.id}`)).status).toBe(404);
+    // At most 20 drips may be active; leave room for the other test files.
+    await ctx.prisma.drip.update({ where: { id: drip.id }, data: { status: 'ARCHIVED' } });
 
     // Changes through the API raise the same events as the dashboard (FR-016).
     const hook = await dashboard('post', '/webhook-endpoints', { name: uniq('API events '), url: `https://${uniq('api')}.example.test/hooks`, eventTypes: ['contact.created', 'contact.tags_changed'] });

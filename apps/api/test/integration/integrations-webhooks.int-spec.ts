@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto';
 import nock from 'nock';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { verifyWebhook, type Hmac } from '@wbm/shared';
 import { OutboundEvents } from '../../src/modules/integrations/webhooks/outbound-events.js';
 import { WebhookDeliveryProcessor } from '../../src/modules/integrations/webhooks/webhook-delivery.processor.js';
@@ -45,11 +45,22 @@ describe('Outbound webhooks (006 US1)', () => {
     return delayMs ? scope.delay(delayMs).reply(status, 'ok') : scope.reply(status, 'ok');
   }
 
+  // Endpoints made by a test are removed after it, so later tests (and other test files sharing the
+  // database) never fan out to them.
+  const made: string[] = [];
   async function createEndpoint(eventTypes: string[], extra: Record<string, unknown> = {}) {
     const host = endpointHost();
     const res = await api(admin, 'post', '/webhook-endpoints', { name: uniq('Endpoint '), url: `${host}/hooks`, eventTypes, ...extra });
     expect(res.status, JSON.stringify(res.body)).toBe(201);
+    made.push(res.body.id as string);
     return { id: res.body.id as string, secret: res.body.secret as string, host };
+  }
+
+  /** Records an event and returns only this endpoint's deliveries that are due now. */
+  async function recordFor(endpoint: { id: string }, type: Parameters<OutboundEvents['record']>[1], data: Record<string, unknown>): Promise<string[]> {
+    const due = await events.record(ctx.prisma, type, data);
+    const own = await ctx.prisma.webhookDelivery.findMany({ where: { id: { in: due }, endpointId: endpoint.id }, select: { id: true } });
+    return due.filter((id) => own.some((d) => d.id === id));
   }
 
   const deliveriesOf = (endpointId: string) =>
@@ -74,6 +85,12 @@ describe('Outbound webhooks (006 US1)', () => {
     events = ctx.app.get(OutboundEvents);
     processor = ctx.app.get(WebhookDeliveryProcessor);
     processor.timeoutMs = 300;
+  });
+
+  afterEach(async () => {
+    if (made.length) await ctx.prisma.webhookEndpoint.deleteMany({ where: { id: { in: made.splice(0) } } });
+    events.invalidate();
+    nock.cleanAll();
   });
 
   afterAll(async () => {
@@ -158,8 +175,8 @@ describe('Outbound webhooks (006 US1)', () => {
   it('retries a failure with the research waits, and a success makes waiting deliveries due at once', async () => {
     const endpoint = await createEndpoint(['contact.opted_out']);
     const contact = await seedContact(ctx, uaePhone());
-    const [first] = await events.record(ctx.prisma, 'contact.opted_out', { contact: { id: contact.id, phone: contact.phoneE164, name: null }, source: 'MANUAL' });
-    const [second] = await events.record(ctx.prisma, 'contact.opted_out', { contact: { id: contact.id, phone: contact.phoneE164, name: null }, source: 'API' });
+    const [first] = await recordFor(endpoint, 'contact.opted_out', { contact: { id: contact.id, phone: contact.phoneE164, name: null }, source: 'MANUAL' });
+    const [second] = await recordFor(endpoint, 'contact.opted_out', { contact: { id: contact.id, phone: contact.phoneE164, name: null }, source: 'API' });
     nock(endpoint.host).post('/hooks').reply(500, 'down');
     const before = Date.now();
     expect(await processor.deliver(first!)).toBe('retry');
@@ -194,22 +211,24 @@ describe('Outbound webhooks (006 US1)', () => {
     const contact = await seedContact(ctx, uaePhone());
     const data = { contact: { id: contact.id, phone: contact.phoneE164, name: null }, source: 'MANUAL' };
     await ctx.prisma.webhookEndpoint.update({ where: { id: endpoint.id }, data: { failingSince: new Date(Date.now() - 25 * HOUR), consecutiveFailures: 9 } });
-    const [failing] = await events.record(ctx.prisma, 'contact.opted_out', data);
+    const [failing] = await recordFor(endpoint, 'contact.opted_out', data);
     nock(endpoint.host).post('/hooks').reply(502, 'gateway');
     expect(await processor.deliver(failing!)).toBe('retry');
     expect((await ctx.prisma.webhookEndpoint.findUniqueOrThrow({ where: { id: endpoint.id } })).status).toBe('FAILING');
     expect(await ctx.prisma.notification.count({ where: { type: 'WEBHOOK_ENDPOINT_FAILING', userId: admin.userId, link: `/settings/webhooks/${endpoint.id}` } })).toBe(1);
 
     // Events keep queuing while it is paused, and nothing is sent.
-    const [queued] = await events.record(ctx.prisma, 'contact.opted_out', data);
-    expect((await ctx.prisma.webhookDelivery.findUniqueOrThrow({ where: { id: queued! } })).nextAttemptAt).toBeNull();
-    expect(await processor.deliver(queued!)).toBe('paused');
+    // A paused endpoint's delivery is not due, so record() does not return it.
+    expect(await recordFor(endpoint, 'contact.opted_out', data)).toEqual([]);
+    const queued = (await ctx.prisma.webhookDelivery.findFirstOrThrow({ where: { endpointId: endpoint.id, id: { not: failing! } }, orderBy: { createdAt: 'desc' } })).id;
+    expect((await ctx.prisma.webhookDelivery.findUniqueOrThrow({ where: { id: queued } })).nextAttemptAt).toBeNull();
+    expect(await processor.deliver(queued)).toBe('paused');
 
     const resumed = await api(admin, 'post', `/webhook-endpoints/${endpoint.id}/resume`);
     expect(resumed.body).toMatchObject({ status: 'ACTIVE' });
     const caught: Caught[] = [];
     catching(endpoint.host, '/hooks', 200, 2, caught);
-    for (const id of [failing!, queued!]) {
+    for (const id of [failing!, queued]) {
       expect((await ctx.prisma.webhookDelivery.findUniqueOrThrow({ where: { id } })).nextAttemptAt!.getTime()).toBeLessThanOrEqual(Date.now());
       expect(await processor.deliver(id)).toBe('delivered');
     }
@@ -221,7 +240,7 @@ describe('Outbound webhooks (006 US1)', () => {
     const endpoint = await createEndpoint(['contact.opted_out']);
     const contact = await seedContact(ctx, uaePhone());
     const data = { contact: { id: contact.id, phone: contact.phoneE164, name: null }, source: 'MANUAL' };
-    const [id] = await events.record(ctx.prisma, 'contact.opted_out', data);
+    const [id] = await recordFor(endpoint, 'contact.opted_out', data);
     const caught: Caught[] = [];
     catching(endpoint.host, '/hooks', 200, 2, caught);
     expect(await processor.deliver(id!)).toBe('delivered');
@@ -235,7 +254,7 @@ describe('Outbound webhooks (006 US1)', () => {
     expect(log.body.total).toBe(1);
     expect(log.body.items[0]).toMatchObject({ id, type: 'contact.opted_out', status: 'DELIVERED', attempts: 2, lastStatusCode: 200 });
 
-    const [waiting] = await events.record(ctx.prisma, 'contact.opted_out', data);
+    const [waiting] = await recordFor(endpoint, 'contact.opted_out', data);
     expect((await api(admin, 'delete', `/webhook-endpoints/${endpoint.id}`)).status).toBe(204);
     expect(await ctx.prisma.webhookDelivery.count({ where: { id: waiting! } })).toBe(0);
     expect(await processor.deliver(waiting!)).toBe('skipped');
@@ -247,8 +266,8 @@ describe('Outbound webhooks (006 US1)', () => {
     const contact = await seedContact(ctx, uaePhone());
     const person = { contact: { id: contact.id, phone: contact.phoneE164, name: null }, source: 'MANUAL' };
     const slowIds: string[] = [];
-    for (let i = 0; i < 6; i += 1) slowIds.push(...(await events.record(ctx.prisma, 'contact.opted_out', person)));
-    const [fastId] = await events.record(ctx.prisma, 'contact.opted_in', { ...person, note: 'web form' });
+    for (let i = 0; i < 6; i += 1) slowIds.push(...(await recordFor(slow, 'contact.opted_out', person)));
+    const [fastId] = await recordFor(fast, 'contact.opted_in', { ...person, note: 'web form' });
     catching(slow.host, '/hooks', 200, 6, [], 250);
     catching(fast.host, '/hooks', 200, 1, []);
 

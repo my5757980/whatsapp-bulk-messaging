@@ -72,6 +72,8 @@ describe('Public API v1 (006) contract', () => {
     await check('post', '/drips/{drip}/enrolments', await call(key, 'post', `/drips/${paused.id}/enrolments`, { contactId: member.id }), 409);
     await check('delete', '/drips/{drip}/enrolments/{contactId}', await call(key, 'delete', `/drips/${drip.id}/enrolments/${member.id}`), 204);
     await check('delete', '/drips/{drip}/enrolments/{contactId}', await call(key, 'delete', `/drips/${drip.id}/enrolments/${member.id}`), 404);
+    // At most 20 drips may be active; leave room for the other test files.
+    await ctx.prisma.drip.updateMany({ where: { id: { in: [drip.id, paused.id] } }, data: { status: 'ARCHIVED' } });
   });
 
   it('US3: triggering an API campaign', async () => {

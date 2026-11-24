@@ -28,7 +28,7 @@ export class PlatformEvents {
   }
 
   private async when(type: EventType, build: () => Promise<Record<string, unknown> | null>, db: Db, occurredAt?: Date): Promise<void> {
-    if (!(await this.events.listens(type))) return;
+    if (!(await this.events.listens(type, db))) return;
     const data = await build();
     if (data) await this.events.record(db, type, data, occurredAt);
   }
@@ -156,7 +156,7 @@ export class PlatformEvents {
 
   /** Contacts that joined a drip, in bulk (enrolling by hand or from starting events). */
   async dripJoined(db: Db, dripId: string, joins: Array<{ contactId: string | null; via: string }>): Promise<void> {
-    if (!joins.length || !(await this.events.listens('drip.joined'))) return;
+    if (!joins.length || !(await this.events.listens('drip.joined', db))) return;
     const drip = await db.drip.findUnique({ where: { id: dripId }, select: { id: true, name: true } });
     if (!drip) return;
     const contacts = await this.contactsById(db, joins.flatMap((j) => (j.contactId ? [j.contactId] : [])));
@@ -212,20 +212,20 @@ export class PlatformEvents {
   }
 
   async contactsCreated(db: Db, contactIds: readonly string[], source: string): Promise<void> {
-    if (!contactIds.length || !(await this.events.listens('contact.created'))) return;
+    if (!contactIds.length || !(await this.events.listens('contact.created', db))) return;
     const contacts = await this.contactsById(db, contactIds);
     for (const id of contactIds) await this.events.record(db, 'contact.created', { contact: contacts.get(id) ?? { id, phone: null, name: null }, source, tags: [], attributes: {} });
   }
 
   async contactsUpdated(db: Db, contactIds: readonly string[], changed: string[]): Promise<void> {
-    if (!contactIds.length || !changed.length || !(await this.events.listens('contact.updated'))) return;
+    if (!contactIds.length || !changed.length || !(await this.events.listens('contact.updated', db))) return;
     const contacts = await this.contactsById(db, contactIds);
     for (const id of contactIds) await this.events.record(db, 'contact.updated', { contact: contacts.get(id) ?? { id, phone: null, name: null }, changed });
   }
 
   /** Tag links added or removed, by tag id, for many contacts (one event per contact). */
   async tagLinksChanged(db: Db, added: ReadonlyArray<{ contactId: string; tagId: string }>, removed: ReadonlyArray<{ contactId: string; tagId: string }> = []): Promise<void> {
-    if ((!added.length && !removed.length) || !(await this.events.listens('contact.tags_changed'))) return;
+    if ((!added.length && !removed.length) || !(await this.events.listens('contact.tags_changed', db))) return;
     const tagIds = [...new Set([...added, ...removed].map((l) => l.tagId))];
     const names = new Map((await db.tag.findMany({ where: { id: { in: tagIds } }, select: { id: true, name: true } })).map((t) => [t.id, t.name]));
     const byContact = new Map<string, { added: string[]; removed: string[] }>();
@@ -244,7 +244,7 @@ export class PlatformEvents {
   }
 
   async optedInMany(db: Db, items: ReadonlyArray<{ contactId: string; note: string | null }>, source: string): Promise<void> {
-    if (!items.length || !(await this.events.listens('contact.opted_in'))) return;
+    if (!items.length || !(await this.events.listens('contact.opted_in', db))) return;
     const contacts = await this.contactsById(db, items.map((i) => i.contactId));
     for (const item of items) await this.events.record(db, 'contact.opted_in', { contact: contacts.get(item.contactId) ?? null, source, note: item.note });
   }
