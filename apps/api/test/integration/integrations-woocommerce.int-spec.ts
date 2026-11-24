@@ -139,8 +139,10 @@ describe('WooCommerce stores (006 US4)', () => {
     reconciler = ctx.app.get(StoreReconcilerProcessor);
   });
 
-  afterEach(() => {
+  // At most 5 stores may be connected: each test's stores are set aside after it.
+  afterEach(async () => {
     nock.cleanAll();
+    await ctx.prisma.storeConnection.updateMany({ where: { id: { in: made } }, data: { status: 'DISCONNECTED' } });
   });
 
   afterAll(async () => {
