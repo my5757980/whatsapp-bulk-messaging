@@ -64,7 +64,7 @@ describe('Contacts through the public API (006 US2)', () => {
   });
 
   it('creates or updates by phone without duplicates, reading local numbers with the default country', async () => {
-    const local = `05${String(Date.now()).slice(-8)}`;
+    const local = `050${String(Date.now()).slice(-7)}`;
     const created = await v1(fullKey, 'post', '/contacts', { phone: local, name: 'Sara', tags: ['crm', 'vip'], attributes: {} });
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     expect(created.body).toMatchObject({ phone: `+971${local.slice(1)}`, name: 'Sara', tags: expect.arrayContaining(['crm', 'vip']), consentStatus: 'UNKNOWN' });

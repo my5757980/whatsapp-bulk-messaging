@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { connectNumber, csrfHeaders, signInAsAdmin } from './growth-helpers';
+import { csrfHeaders, signInAsAdmin } from './growth-helpers';
 
 // T028 (feature 006, quickstart US2 row): a key gets the contact permissions on the API keys page,
 // changes a contact through the API, and the dashboard shows the contact, its tags and its consent.
@@ -7,10 +7,9 @@ import { connectNumber, csrfHeaders, signInAsAdmin } from './growth-helpers';
 test('US2: manage contacts through the API with a scoped key', async ({ page, playwright, baseURL }) => {
   test.setTimeout(180_000);
   const suffix = Date.now().toString().slice(-6);
-  const phone = `+97153${suffix}1`;
+  const phone = `+97158${suffix}1`;
 
   await signInAsAdmin(page);
-  await connectNumber(page, 'Contacts', suffix);
 
   // 1. A key, then its permissions on the API keys page.
   const created = await (await page.request.post('/api/api-keys', { data: { name: `CRM ${suffix}` }, headers: await csrfHeaders(page) })).json();

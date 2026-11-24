@@ -8,7 +8,6 @@ import { AUDIT_ACTIONS } from '../../src/modules/audit/audit-actions.js';
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
 /** Actions listed before the code that records them exists (feature 006 T014; each story removes its own). */
 const PENDING = new Set<string>([
-  'api_key.scopes_changed',
   'store.connected',
   'store.updated',
   'store.disconnected',
