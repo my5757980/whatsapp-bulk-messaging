@@ -253,7 +253,7 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/InsufficientScope' }
         '404': { $ref: '#/components/responses/NotFound' }
-        '409': { description: 'NOT_LIVE (paused or stopped), DAILY_LIMIT, or NOT_SENT with reason opted_out, no_opt_in or blocked', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: 'NOT_LIVE (paused, stopped or draft), DAILY_LIMIT, or NOT_SENT with reason opted_out, no_opt_in, blocked, not_a_contact or number_unavailable', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '422': { description: VALIDATION_FAILED or MISSING_VALUE naming the value, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 

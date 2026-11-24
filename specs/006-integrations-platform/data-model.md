@@ -100,7 +100,7 @@ Every call to an API campaign (FR-019, FR-022).
 | contact_id | uuid? FK contacts `SET NULL` | |
 | phone_e164 | varchar(16)? | null after erasure |
 | outcome | `TriggerOutcome` | `QUEUED`, `NOT_SENT` |
-| reason | varchar(40)? | `opted_out`, `no_opt_in`, `missing_value`, `daily_limit`, `not_live`, `invalid_phone`, `blocked` |
+| reason | varchar(40)? | `opted_out`, `no_opt_in`, `missing_value`, `daily_limit`, `not_live`, `invalid_phone`, `blocked`, `not_a_contact` (new numbers are not made contacts), `invalid_value` (an attribute value did not fit its type), `number_unavailable` (sending is off for the number) |
 | message_id | uuid? FK messages `SET NULL` | |
 | created_at | timestamptz | |
 

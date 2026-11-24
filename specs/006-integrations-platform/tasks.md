@@ -233,13 +233,13 @@ show 3 triggers.
 
 ### Tests for User Story 3 (write first, must fail)
 
-- [ ] T034 [P] [US3] Unit tests packages/shared/src/integrations/api-campaigns.test.ts:
+- [X] T034 [P] [US3] Unit tests packages/shared/src/integrations/api-campaigns.test.ts:
   - `api_name` rules
   - value resolution from a call value, a contact field or fixed text
   - a missing call value names its key
   - attribute values taken from call values
   - the daily limit's day in the company time zone
-- [ ] T035 [P] [US3] Integration test apps/api/test/integration/integrations-api-campaigns.int-spec.ts:
+- [X] T035 [P] [US3] Integration test apps/api/test/integration/integrations-api-campaigns.int-spec.ts:
   - **Setup:** build; going live is refused with problems; go live
   - **Triggers:**
     - a new phone creates a contact with the tags and attributes (or does not, by setting)
@@ -250,8 +250,8 @@ show 3 triggers.
     - paused or stopped gives 409 `NOT_LIVE`; the daily limit gives 409 `DAILY_LIMIT`
   - **Self-pause:** a paused template (template status webhook) or a disconnected number pauses the campaign and notifies managers
   - **Results and export:** results equal the records per day, the export matches, and the `api_campaign.triggered` events are raised
-- [ ] T036 [P] [US3] Contract cases for the `/api-campaigns*` routes in apps/api/test/contract/integrations.contract-spec.ts, and for `/api-campaigns/{apiName}/messages` in apps/api/test/contract/public-api-v1.contract-spec.ts
-- [ ] T037 [P] [US3] Playwright e2e apps/web/e2e/integrations-us3-api-campaigns.spec.ts:
+- [X] T036 [P] [US3] Contract cases for the `/api-campaigns*` routes in apps/api/test/contract/integrations.contract-spec.ts, and for `/api-campaigns/{apiName}/messages` in apps/api/test/contract/public-api-v1.contract-spec.ts
+- [X] T037 [P] [US3] Playwright e2e apps/web/e2e/integrations-us3-api-campaigns.spec.ts:
   - build "Order feedback" in the UI and set it live
   - trigger it three times with `page.request`
   - pause it and trigger it again
@@ -259,20 +259,20 @@ show 3 triggers.
 
 ### Implementation for User Story 3
 
-- [ ] T038 [US3] Implement apps/api/src/modules/integrations/api-campaigns/api-campaigns.service.ts and api-campaigns.controller.ts:
+- [X] T038 [US3] Implement apps/api/src/modules/integrations/api-campaigns/api-campaigns.service.ts and api-campaigns.controller.ts:
   - CRUD, with `api_name` fixed after the first go-live
   - go-live checks: every variable has a source, the template is approved, the number is connected
   - pause, resume and stop
   - results per day from `api_campaign_triggers` and `messages`, and the CSV export
   - audit entries
-- [ ] T039 [US3] Implement apps/api/src/modules/integrations/api-campaigns/api-campaign-trigger.service.ts and the route `POST /v1/api-campaigns/{apiName}/messages` in apps/api/src/modules/public-api/public-api-campaigns.controller.ts (scope `campaigns.trigger`):
+- [X] T039 [US3] Implement apps/api/src/modules/integrations/api-campaigns/api-campaign-trigger.service.ts and the route `POST /v1/api-campaigns/{apiName}/messages` in apps/api/src/modules/public-api/public-api-campaigns.controller.ts (scope `campaigns.trigger`):
   - resolve values; upsert the contact with tags, attributes and an optional opt-in
   - check consent and blocking, and the daily limit (company time zone)
   - write the message through the 001 public send path with `api_campaign_id`
   - record the trigger with its outcome and raise `api_campaign.triggered`
   - idempotency
-- [ ] T040 [US3] Pause live API campaigns from apps/api/src/modules/webhooks/handlers/template-status.handler.ts and from the number disconnect paths in apps/api/src/modules/numbers/numbers.service.ts, with the `API_CAMPAIGN_PAUSED` notification to managers
-- [ ] T041 [P] [US3] Add the web pages apps/web/src/app/(dashboard)/campaigns/api/page.tsx and apps/web/src/app/(dashboard)/campaigns/api/[id]/page.tsx:
+- [X] T040 [US3] Pause live API campaigns from apps/api/src/modules/webhooks/handlers/template-status.handler.ts and from the number disconnect paths in apps/api/src/modules/numbers/numbers.service.ts, with the `API_CAMPAIGN_PAUSED` notification to managers
+- [X] T041 [P] [US3] Add the web pages apps/web/src/app/(dashboard)/campaigns/api/page.tsx and apps/web/src/app/(dashboard)/campaigns/api/[id]/page.tsx:
   - the list
   - the editor: template, a mapping that offers call values, header media, tags, attributes, the new-contact rule and the daily limit
   - go live, pause and stop
