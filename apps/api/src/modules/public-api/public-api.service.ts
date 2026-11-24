@@ -13,6 +13,7 @@ import { assertConsent, assertTemplateApproved, assertTemplateParams, refuse } f
 import { SettingsService } from '../settings/settings.service.js';
 import type { ApiKeyContext } from './api-key.guard.js';
 import { DripEvents } from '../growth/drips/drip-events.js';
+import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
 import { IdempotencyService, requestHash } from './idempotency.service.js';
 
 // POST /api/v1/messages and GET /api/v1/messages/{id} (FR-033-FR-036, T189).
@@ -72,6 +73,7 @@ export class PublicApiService {
     private readonly settings: SettingsService,
     private readonly idempotency: IdempotencyService,
     private readonly dripEvents: DripEvents,
+    private readonly platformEvents: PlatformEvents,
   ) {}
 
   private async sendingNumber(numberId: string | undefined): Promise<WhatsAppNumber> {
@@ -131,9 +133,12 @@ export class PublicApiService {
           await tx.contact.update({ where: { id: contact.id }, data: { consentStatus: 'OPTED_IN', consentSource: 'API', consentSourceNote: note, consentAt: now } });
           await tx.consentEvent.create({ data: { contactId: contact.id, status: 'OPTED_IN', source: 'API', note: note ?? null, createdAt: now } });
           await this.dripEvents.recordOptIns(tx, [contact.id]);
+          await this.platformEvents.optedIn(tx, contact.id, 'API', note ?? null);
         }
         // A contact new from the API can start drips (feature 005, FR-024).
         if (!existing) await this.dripEvents.recordCreated(tx, 'API_CREATED', [contact.id]);
+        // Outbound webhooks (feature 006, FR-002).
+        if (!existing) await this.platformEvents.contactCreated(tx, contact.id, 'api');
         const created = await tx.message.create({
           data: {
             origin: 'API',

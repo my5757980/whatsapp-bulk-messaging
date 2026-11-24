@@ -4,6 +4,7 @@ import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { StorageService } from '../../common/storage/storage.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { AuditService, type AuditActor } from '../audit/audit.service.js';
+import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
 
 /**
  * Deletes a contact's personal data (FR-015, T103): the contact, its tags, consent events and
@@ -28,6 +29,7 @@ export class ContactDeletionService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly storage: StorageService,
+    private readonly platformEvents: PlatformEvents,
   ) {}
 
   async delete(contactId: string, actor: AuditActor): Promise<void> {
@@ -77,6 +79,16 @@ export class ContactDeletionService {
       this.prisma.dripEvent.deleteMany({ where: { contactId } }),
       this.prisma.contact.delete({ where: { id: contactId } }),
     ]);
+    // Outbound webhooks (feature 006, FR-060): waiting events about them are cancelled, stored events
+    // keep only their id, and endpoints are told the contact was deleted (with the id only).
+    await this.prisma.$executeRaw`
+      UPDATE webhook_deliveries SET status = 'CANCELLED', next_attempt_at = NULL, updated_at = now()
+       WHERE status = 'PENDING' AND event_id IN (SELECT id FROM outbound_events WHERE data->'contact'->>'id' = ${contactId})`;
+    await this.prisma.$executeRaw`
+      UPDATE outbound_events
+         SET data = (data - 'text' - 'caption' - 'buttonPayload') || jsonb_build_object('contact', jsonb_build_object('id', ${contactId}::text))
+       WHERE data->'contact'->>'id' = ${contactId}`;
+    await this.platformEvents.contactDeleted(this.prisma, contactId);
     // Files after the commit; one that cannot be deleted now is left for the retention job.
     for (const media of customerMedia) await this.storage.delete(media.storageKey).catch(() => undefined);
     await this.audit.record(actor, 'contact.deleted', { type: 'contact', id: contactId }, {

@@ -16,6 +16,8 @@ import { InboundMediaProcessor } from './modules/inbox/inbound/inbound-media.pro
 import { FlowsDomainModule } from './modules/flows/flows.module.js';
 import { GrowthDomainModule } from './modules/growth/growth.module.js';
 import { IntegrationsDomainModule } from './modules/integrations/integrations.module.js';
+import { WebhookDeliveryProcessor } from './modules/integrations/webhooks/webhook-delivery.processor.js';
+import { WebhookSweepProcessor } from './modules/integrations/webhooks/webhook-sweep.processor.js';
 import { DripTickProcessor } from './modules/growth/drips/drip-tick.processor.js';
 import { RetryRoundProcessor } from './modules/growth/retries/retry-round.processor.js';
 import { FlowApiProcessor } from './modules/flows/steps/api-step.processor.js';
@@ -88,6 +90,8 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     // Campaign growth (feature 005)
     RetryRoundProcessor,
     DripTickProcessor,
+    WebhookDeliveryProcessor,
+    WebhookSweepProcessor,
   ],
 })
 export class WorkerFeaturesModule {}

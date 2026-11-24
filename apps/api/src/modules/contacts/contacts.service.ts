@@ -10,6 +10,7 @@ import { SettingsService } from '../settings/settings.service.js';
 import { validateAttributeValue, type AttributeType, type AttributeValue } from './attribute-validator.js';
 import { AudienceFilterSchema, AudienceQueryBuilder } from './audience-query.builder.js';
 import { DripEvents } from '../growth/drips/drip-events.js';
+import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
 import { ConsentService } from './consent.service.js';
 import { normaliseTag } from './tags.controller.js';
 
@@ -92,6 +93,7 @@ export class ContactsService {
     private readonly consent: ConsentService,
     private readonly audience: AudienceQueryBuilder,
     private readonly dripEvents: DripEvents,
+    private readonly platformEvents: PlatformEvents,
   ) {}
 
   private async attributeTypes(): Promise<Map<string, AttributeType>> {
@@ -141,11 +143,17 @@ export class ContactsService {
       await tx.tag.createMany({ data: wanted.map((name) => ({ name })), skipDuplicates: true });
     }
     const tags = wanted.length ? await tx.tag.findMany({ where: { name: { in: wanted } }, select: { id: true } }) : [];
+    // Removed tags are noted only when a webhook endpoint listens (feature 006, FR-002).
+    const removed = (await this.platformEvents.listens('contact.tags_changed'))
+      ? await tx.contactTag.findMany({ where: { contactId, tagId: { notIn: tags.map((t) => t.id) } }, select: { contactId: true, tagId: true } })
+      : [];
     await tx.contactTag.deleteMany({ where: { contactId, tagId: { notIn: tags.map((t) => t.id) } } });
-    if (!tags.length) return;
-    const added = await tx.contactTag.createManyAndReturn({ data: tags.map((t) => ({ contactId, tagId: t.id })), skipDuplicates: true, select: { tagId: true } });
+    const added = tags.length
+      ? await tx.contactTag.createManyAndReturn({ data: tags.map((t) => ({ contactId, tagId: t.id })), skipDuplicates: true, select: { contactId: true, tagId: true } })
+      : [];
     // Tags newly added can start drips and apply their stop tags (feature 005, FR-024, FR-028).
-    await this.dripEvents.recordTagsAdded(tx, contactId, added.map((a) => a.tagId));
+    if (added.length) await this.dripEvents.recordTagsAdded(tx, contactId, added.map((a) => a.tagId));
+    await this.platformEvents.tagLinksChanged(tx, added, removed);
   }
 
   async get(id: string) {
@@ -212,6 +220,10 @@ export class ContactsService {
           });
           if (status === 'OPTED_IN') await this.dripEvents.recordOptIns(tx, [contact.id]);
         }
+        // Outbound webhooks (feature 006, FR-002): created first, then its consent and tags.
+        await this.platformEvents.contactCreated(tx, contact.id, 'dashboard', { attributes });
+        if (status === 'OPTED_IN') await this.platformEvents.optedIn(tx, contact.id, 'MANUAL', input.consentSourceNote ?? null);
+        if (status === 'OPTED_OUT') await this.platformEvents.optedOut(tx, contact.id, 'MANUAL');
         if (input.tags?.length) await this.setTags(tx, contact.id, input.tags);
         return contact.id;
       });
@@ -243,6 +255,11 @@ export class ContactsService {
           data.attributes = merged as Prisma.InputJsonValue;
         }
         if (Object.keys(data).length) await tx.contact.update({ where: { id }, data });
+        await this.platformEvents.contactUpdated(tx, id, [
+          ...(phone ? ['phone'] : []),
+          ...(input.name !== undefined ? ['name'] : []),
+          ...Object.keys(changes ?? {}).map((key) => `attributes.${key}`),
+        ]);
         if (input.tags) await this.setTags(tx, id, input.tags);
       });
     } catch (error) {
@@ -268,13 +285,18 @@ export class ContactsService {
         const added = await this.prisma.$transaction(async (tx) => {
           const links = await tx.contactTag.createManyAndReturn({ data: ids.map((contactId) => ({ contactId, tagId: tag.id })), skipDuplicates: true, select: { contactId: true, tagId: true } });
           await this.dripEvents.recordTagAddedToMany(tx, links);
+          await this.platformEvents.tagLinksChanged(tx, links);
           return links.length;
         });
         return { updated: added };
       }
       const tag = await this.prisma.tag.findUnique({ where: { name } });
       if (!tag) return { updated: 0 };
+      const removed = (await this.platformEvents.listens('contact.tags_changed'))
+        ? await this.prisma.contactTag.findMany({ where: { tagId: tag.id, contactId: { in: ids } }, select: { contactId: true, tagId: true } })
+        : [];
       const { count } = await this.prisma.contactTag.deleteMany({ where: { tagId: tag.id, contactId: { in: ids } } });
+      await this.platformEvents.tagLinksChanged(this.prisma, [], removed);
       return { updated: count };
     }
 
@@ -285,6 +307,7 @@ export class ContactsService {
       value === null || value === undefined
         ? await this.prisma.$executeRaw`UPDATE contacts SET attributes = attributes - ${key}, updated_at = now() WHERE id IN (${idList}) AND (attributes -> ${key}) IS NOT NULL`
         : await this.prisma.$executeRaw`UPDATE contacts SET attributes = jsonb_set(attributes, ARRAY[${key}]::text[], ${JSON.stringify(value)}::jsonb, true), updated_at = now() WHERE id IN (${idList})`;
+    if (updated) await this.platformEvents.contactsUpdated(this.prisma, ids, [`attributes.${key}`]);
     return { updated };
   }
 

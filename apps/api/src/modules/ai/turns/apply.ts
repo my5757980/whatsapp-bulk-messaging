@@ -14,6 +14,7 @@ import { requestSendWorkerSync, sessionSendJob } from '../../sending/send-jobs.j
 import type { KnowledgeItem } from '../claude/prompt.js';
 import type { PendingConfirmation, SkillCallRecord } from '../claude/skills.js';
 import { UnansweredRecorder } from '../knowledge/unanswered-recorder.js';
+import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 import { AiUsageService, type UsageSettings } from '../usage/usage.service.js';
 import type { SelectedAgent } from './agent-selector.js';
 import { aiConversationLock, AiConversationsService } from './ai-conversations.service.js';
@@ -110,6 +111,7 @@ export class TurnApplier {
     private readonly usage: AiUsageService,
     private readonly unanswered: UnansweredRecorder,
     private readonly flows: FlowSessionService,
+    private readonly platformEvents: PlatformEvents,
   ) {}
 
   async apply(input: ApplyInput): Promise<ApplyOutcome> {
@@ -216,6 +218,7 @@ export class TurnApplier {
         // like card, bank or ID numbers are never saved.
         const remembered = Object.fromEntries((input.reply.remember ?? []).filter((r) => !looksSensitive(r.value)).map((r) => [r.key, r.value]));
         const changed = await writeAttributes(tx, input.contactId, remembered, { type: 'AI_AGENT', agentId: input.agent.agentId, agentName: input.agent.agentName });
+        await this.platformEvents.contactUpdated(tx, input.contactId, changed.map((key) => `attributes.${key}`));
 
         let after: AfterCommit = { itemIds, noteId: null, requested: false, contactChanged: changed.length > 0 };
         if (handOver) {

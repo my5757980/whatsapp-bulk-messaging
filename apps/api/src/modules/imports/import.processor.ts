@@ -16,6 +16,7 @@ import { normaliseTag } from '../contacts/tags.controller.js';
 import { SettingsService } from '../settings/settings.service.js';
 import type { ImportJobData, StoredImportMapping } from './imports.service.js';
 import { DripEvents } from '../growth/drips/drip-events.js';
+import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
 
 const BATCH_SIZE = 1000;
 
@@ -51,6 +52,7 @@ export class ImportProcessor implements OnModuleInit {
     private readonly settings: SettingsService,
     private readonly consent: ConsentService,
     private readonly dripEvents: DripEvents,
+    private readonly platformEvents: PlatformEvents,
   ) {}
 
   onModuleInit(): void {
@@ -193,6 +195,8 @@ export class ImportProcessor implements OnModuleInit {
         await this.consent.recordImportOptIns(tx, createdOptIns, existingOptIns, actorUserId, now);
         // Contacts new from this import can start drips (feature 005, FR-024).
         await this.dripEvents.recordCreated(tx, 'IMPORTED', upserted.filter((u) => u.inserted).map((u) => u.id));
+        // Outbound webhooks (feature 006, FR-002).
+        await this.platformEvents.contactsCreated(tx, upserted.filter((u) => u.inserted).map((u) => u.id), 'import');
 
         const tagNames = [...new Set(rows.flatMap((r) => r.tags))];
         if (tagNames.length) {
@@ -205,6 +209,7 @@ export class ImportProcessor implements OnModuleInit {
           if (links.length) {
             const added = await tx.contactTag.createManyAndReturn({ data: links, skipDuplicates: true, select: { contactId: true, tagId: true } });
             await this.dripEvents.recordTagAddedToMany(tx, added);
+            await this.platformEvents.tagLinksChanged(tx, added);
           }
         }
 

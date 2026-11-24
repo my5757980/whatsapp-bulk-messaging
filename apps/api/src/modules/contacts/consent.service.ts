@@ -4,6 +4,7 @@ import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { DripEvents } from '../growth/drips/drip-events.js';
 import { DripLeaving } from '../growth/drips/drip-leaving.js';
+import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
 
 // Consent changes (FR-012-FR-014, T092). Every status change and its consent_events row are
 // written in one transaction, and an opt-out can only be undone by the contact (keyword) or an
@@ -32,6 +33,7 @@ export class ConsentService {
     private readonly prisma: PrismaService,
     private readonly drips: DripLeaving,
     private readonly dripEvents: DripEvents,
+    private readonly platformEvents: PlatformEvents,
   ) {}
 
   async setStatus(
@@ -62,6 +64,9 @@ export class ConsentService {
       if (status === 'OPTED_OUT') await this.drips.onEvent(contactId, { kind: 'OPTED_OUT' }, tx);
       // An opt-in can start drips (feature 005, FR-024).
       if (status === 'OPTED_IN') await this.dripEvents.recordOptIns(tx, [contactId]);
+      // Outbound webhooks (feature 006, FR-002).
+      if (status === 'OPTED_IN') await this.platformEvents.optedIn(tx, contactId, source, opts.note ?? null);
+      if (status === 'OPTED_OUT') await this.platformEvents.optedOut(tx, contactId, source);
       return 'changed';
     });
   }
@@ -97,6 +102,7 @@ export class ConsentService {
     }));
     if (events.length) await tx.consentEvent.createMany({ data: events });
     await this.dripEvents.recordOptIns(tx, events.map((e) => e.contactId));
+    await this.platformEvents.optedInMany(tx, events.map((e) => ({ contactId: e.contactId, note: e.note })), 'IMPORT');
   }
 
   /**
@@ -154,6 +160,7 @@ export class ConsentService {
         }));
         if (events.length) await tx.consentEvent.createMany({ data: events });
         await this.dripEvents.recordOptIns(tx, events.map((e) => e.contactId));
+        await this.platformEvents.optedInMany(tx, events.map((e) => ({ contactId: e.contactId, note })), 'UPLOAD_CONFIRMATION');
 
         const named = rows.filter((r) => r.name && byPhone.has(r.phoneE164) && !byPhone.get(r.phoneE164)?.name);
         for (const row of named) {
