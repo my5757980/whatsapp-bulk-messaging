@@ -283,6 +283,8 @@ enum JourneyActor {
   SYSTEM
   FLOW
   AI_AGENT
+  /// A public API key (feature 006, FR-016).
+  API_KEY
 }
 
 enum AgentRuleKind {
@@ -863,6 +865,8 @@ model ApiKey {
   /// What the key may do (feature 006, FR-010); keys made before 006 can only send messages.
   scopes              String[]             @default(["messages.send"])
   apiCampaignTriggers ApiCampaignTrigger[]
+
+  idempotentResponses ApiIdempotentResponse[]
 
   @@index([prefix])
   @@map("api_keys")
@@ -2578,4 +2582,21 @@ model NumberConnectionCheck {
   @@index([numberId])
   @@index([createdAt])
   @@map("number_connection_checks")
+}
+
+/// Saved answers of changing public API calls sent with an Idempotency-Key (feature 006, FR-015).
+model ApiIdempotentResponse {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  apiKeyId    String   @map("api_key_id") @db.Uuid
+  apiKey      ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  key         String   @db.VarChar(255)
+  requestHash String   @map("request_hash")
+  status      Int      @db.SmallInt
+  body        Json
+  expiresAt   DateTime @map("expires_at") @db.Timestamptz
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@unique([apiKeyId, key])
+  @@index([expiresAt])
+  @@map("api_idempotent_responses")
 }

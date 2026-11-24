@@ -72,6 +72,9 @@ ALTER TYPE "JourneyEventType" ADD VALUE 'ORDER_PLACED';
 ALTER TYPE "JourneyEventType" ADD VALUE 'COD_ANSWERED';
 
 -- AlterEnum
+ALTER TYPE "JourneyActor" ADD VALUE 'API_KEY';
+
+-- AlterEnum
 -- This migration adds more than one value to an enum.
 -- With PostgreSQL versions 11 and earlier, this is not possible
 -- in a single migration. This can be worked around by creating
@@ -385,6 +388,20 @@ CREATE TABLE "number_connection_checks" (
     CONSTRAINT "number_connection_checks_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "api_idempotent_responses" (
+    "id" UUID NOT NULL,
+    "api_key_id" UUID NOT NULL,
+    "key" VARCHAR(255) NOT NULL,
+    "request_hash" TEXT NOT NULL,
+    "status" SMALLINT NOT NULL,
+    "body" JSONB NOT NULL,
+    "expires_at" TIMESTAMPTZ NOT NULL,
+    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "api_idempotent_responses_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "webhook_endpoints_name_key" ON "webhook_endpoints"("name");
 
@@ -527,6 +544,12 @@ CREATE INDEX "number_connection_checks_number_id_idx" ON "number_connection_chec
 CREATE INDEX "number_connection_checks_created_at_idx" ON "number_connection_checks"("created_at");
 
 -- CreateIndex
+CREATE INDEX "api_idempotent_responses_expires_at_idx" ON "api_idempotent_responses"("expires_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "api_idempotent_responses_api_key_id_key_key" ON "api_idempotent_responses"("api_key_id", "key");
+
+-- CreateIndex
 CREATE INDEX "messages_api_campaign_id_idx" ON "messages"("api_campaign_id");
 
 -- CreateIndex
@@ -651,6 +674,9 @@ ALTER TABLE "number_connection_checks" ADD CONSTRAINT "number_connection_checks_
 
 -- AddForeignKey
 ALTER TABLE "number_connection_checks" ADD CONSTRAINT "number_connection_checks_run_by_id_fkey" FOREIGN KEY ("run_by_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "api_idempotent_responses" ADD CONSTRAINT "api_idempotent_responses_api_key_id_fkey" FOREIGN KEY ("api_key_id") REFERENCES "api_keys"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 
 -- ---------- Hand-written (data-model.md §1 and §4) ----------

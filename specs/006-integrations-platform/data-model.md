@@ -290,6 +290,22 @@ Index `(chat_link_id, opened_at)`. No IP is stored.
 Index `(chat_link_id, started_at)`. Unique `(chat_link_id, contact_id, started_at::date)` counts a
 contact once a day.
 
+### api_idempotent_responses
+
+Saved answers of changing public API calls sent with an  (FR-015). The 001
+ table keeps message sends; this one keeps any other answer.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | uuid PK | |
+| api_key_id | uuid FK api_keys  | |
+| key | varchar(255) | the header value |
+| request_hash | text | method, path and body; a different request with the same key gets 409 |
+| status / body | smallint / jsonb | the first answer, returned again |
+| expires_at / created_at | timestamptz | 24 hours, cleaned hourly with the 001 records |
+
+Unique .
+
 ### number_connection_checks
 
 One wizard run (FR-051 – FR-055).
@@ -315,6 +331,7 @@ One wizard run (FR-051 – FR-055).
 - `DripTriggerKind` + `ORDER_PLACED` and `ORDER_DELIVERED`, so drips can start on store events
   (FR-028). `DripJoinVia` gets the same values.
 - `JourneyEventType` + `CHAT_LINK_STARTED`, `ORDER_PLACED` and `COD_ANSWERED`.
+- `JourneyActor` + `API_KEY`: changes made through the public API show the key in the journey (FR-016).
 - `NotificationType`:
   - `WEBHOOK_ENDPOINT_FAILING`
   - `STORE_CONNECTION_ERROR`
