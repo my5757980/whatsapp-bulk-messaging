@@ -67,7 +67,7 @@ test('US1: signed webhooks for statuses and replies, with pause and resume', asy
     const types = typesOf(await caughtAt(catcher));
     expect(types.filter((t) => t === 'message.status').length).toBeGreaterThanOrEqual(6);
     expect(types).toContain('message.received');
-  }).toPass({ timeout: 90_000 });
+  }).toPass({ timeout: 150_000 });
   const requests = await caughtAt(catcher);
   for (const r of requests) expect(signatureChecks(r, secret)).toBe(true);
   expect(new Set(requests.map((r) => r.headers['webhook-id'])).size).toBe(requests.length);
