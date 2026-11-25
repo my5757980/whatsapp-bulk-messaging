@@ -130,3 +130,97 @@ describe('MetaGraphClient network failures', () => {
     expect((error as MetaNetworkError).phase).toBe('ambiguous');
   });
 });
+
+describe('MetaGraphClient: number wizard calls (006 US8)', () => {
+  it('debugs a token with the app token and reads scopes, granular scopes and expiry', async () => {
+    nock(BASE)
+      .get('/v27.0/debug_token')
+      .query({ input_token: 'pasted-token' })
+      .matchHeader('authorization', 'Bearer 123|secret')
+      .reply(200, {
+        data: {
+          app_id: '123',
+          type: 'SYSTEM_USER',
+          is_valid: true,
+          expires_at: 0,
+          scopes: ['whatsapp_business_management', 'whatsapp_business_messaging'],
+          granular_scopes: [{ scope: 'whatsapp_business_management', target_ids: ['WABA1'] }, { scope: 'business_management' }],
+        },
+      });
+    expect(await client.debugToken('pasted-token', '123|secret')).toEqual({
+      isValid: true,
+      appId: '123',
+      type: 'SYSTEM_USER',
+      expiresAt: 0,
+      scopes: ['whatsapp_business_management', 'whatsapp_business_messaging'],
+      granularScopes: [
+        { scope: 'whatsapp_business_management', targetIds: ['WABA1'] },
+        { scope: 'business_management', targetIds: [] },
+      ],
+      error: null,
+    });
+    nock(BASE).get('/v27.0/debug_token').query(true).reply(200, { data: { is_valid: false, error: { code: 190, message: 'Session has expired' } } });
+    expect(await client.debugToken('old', 'old')).toMatchObject({ isValid: false, error: 'Session has expired' });
+  });
+
+  it('lists accounts and numbers with the fields the checks need', async () => {
+    nock(BASE).get('/v27.0/WABA1').query({ fields: 'name,currency,timezone_id' }).reply(200, { id: 'WABA1', name: 'Acme', currency: 'AED', timezone_id: '102' });
+    expect(await client.listWabas('tok', ['WABA1'])).toEqual([{ id: 'WABA1', name: 'Acme', currency: 'AED', timezoneId: '102' }]);
+    nock(BASE)
+      .get('/v27.0/WABA1/phone_numbers')
+      .query((q) => String(q.fields).includes('platform_type') && String(q.fields).includes('whatsapp_business_manager_messaging_limit'))
+      .reply(200, {
+        data: [
+          {
+            id: '111',
+            display_phone_number: '+971 50 123 4567',
+            verified_name: 'Acme',
+            name_status: 'APPROVED',
+            code_verification_status: 'VERIFIED',
+            quality_rating: 'GREEN',
+            platform_type: 'NOT_APPLICABLE',
+            throughput: { level: 'STANDARD' },
+            whatsapp_business_manager_messaging_limit: 'TIER_1K',
+          },
+        ],
+      });
+    expect(await client.listPhoneNumbers('tok', 'WABA1')).toEqual([
+      {
+        id: '111',
+        displayPhoneNumber: '+971 50 123 4567',
+        verifiedName: 'Acme',
+        nameStatus: 'APPROVED',
+        status: null,
+        codeVerificationStatus: 'VERIFIED',
+        qualityRating: 'GREEN',
+        platformType: 'NOT_APPLICABLE',
+        throughputLevel: 'STANDARD',
+        messagingLimit: 'TIER_1K',
+      },
+    ]);
+    nock(BASE).get('/v27.0/111').query(true).reply(200, { id: '111', display_phone_number: '+1', platform_type: 'CLOUD_API', whatsapp_business_manager_messaging_limit: { tier: 'TIER_10K' } });
+    expect(await client.phoneNumberDetails('tok', '111')).toMatchObject({ platformType: 'CLOUD_API', messagingLimit: 'TIER_10K' });
+  });
+
+  it('registers with the PIN, reads and adds app subscriptions, and reads the app webhook', async () => {
+    nock(BASE)
+      .post('/v27.0/111/register', { messaging_product: 'whatsapp', pin: '123456' })
+      .reply(200, { success: true });
+    await client.registerNumber('tok', '111', '123456');
+    nock(BASE).post('/v27.0/111/register').reply(400, { error: { message: 'Two step verification PIN Mismatch', code: 133005 } });
+    await expect(client.registerNumber('tok', '111', '000000')).rejects.toMatchObject({ code: 133005 });
+
+    nock(BASE).get('/v27.0/WABA1/subscribed_apps').reply(200, { data: [{ whatsapp_business_api_data: { id: '123', name: 'Company app', link: 'https://x' } }] });
+    expect(await client.getSubscribedApps('tok', 'WABA1')).toEqual([{ id: '123', name: 'Company app' }]);
+    nock(BASE).post('/v27.0/WABA1/subscribed_apps').reply(200, { success: true });
+    await client.subscribeApp('tok', 'WABA1');
+
+    nock(BASE)
+      .get('/v27.0/123/subscriptions')
+      .matchHeader('authorization', 'Bearer 123|secret')
+      .reply(200, { data: [{ object: 'whatsapp_business_account', callback_url: 'https://wbm.example/api/webhooks/meta', active: true, fields: [{ name: 'messages', version: 'v27.0' }] }] });
+    expect(await client.getAppSubscriptions('123|secret', '123')).toEqual([
+      { object: 'whatsapp_business_account', callbackUrl: 'https://wbm.example/api/webhooks/meta', active: true, fields: ['messages'] },
+    ]);
+  });
+});
