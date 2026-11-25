@@ -34,6 +34,8 @@
     "perf:flows": "tsx tools/perf/flows-latency.ts",
     "perf:ai": "tsx tools/perf/ai-latency.ts",
     "perf:drips": "tsx tools/perf/drips-latency.ts",
+    "perf:webhooks": "tsx tools/perf/webhooks-latency.ts",
+    "perf:stores": "tsx tools/perf/stores-latency.ts",
     "eval:ai": "tsx tools/eval/ai-agent-eval.ts"
   },
   "devDependencies": {
