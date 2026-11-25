@@ -1858,23 +1858,27 @@ enum StepOutcome {
 /// One tracked button or link variable of a campaign or a drip step (FR-001, FR-006, FR-007).
 /// Exactly one owner (check constraint in the migration).
 model TrackedLinkTarget {
-  id              String    @id @default(uuid(7)) @db.Uuid
-  campaignId      String?   @map("campaign_id") @db.Uuid
-  campaign        Campaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  dripStepId      String?   @map("drip_step_id") @db.Uuid
-  dripStep        DripStep? @relation(fields: [dripStepId], references: [id], onDelete: Cascade)
+  id              String     @id @default(uuid(7)) @db.Uuid
+  campaignId      String?    @map("campaign_id") @db.Uuid
+  campaign        Campaign?  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  dripStepId      String?    @map("drip_step_id") @db.Uuid
+  dripStep        DripStep?  @relation(fields: [dripStepId], references: [id], onDelete: Cascade)
+  /// A store cart reminder's cart link (feature 006 US6); a target has exactly one owner.
+  storeCartId     String?    @map("store_cart_id") @db.Uuid
+  storeCart       StoreCart? @relation(fields: [storeCartId], references: [id], onDelete: Cascade)
   /// 001 variable key, for example BUTTON.0.1 or BODY.2.
-  variableKey     String    @map("variable_key") @db.VarChar(20)
-  destination     String    @db.VarChar(2000)
+  variableKey     String     @map("variable_key") @db.VarChar(20)
+  destination     String     @db.VarChar(2000)
   /// Adds utm_source=whatsapp, utm_medium=message and utm_campaign=<name> (FR-007).
-  addCampaignTags Boolean   @default(false) @map("add_campaign_tags")
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+  addCampaignTags Boolean    @default(false) @map("add_campaign_tags")
+  createdAt       DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime   @updatedAt @map("updated_at") @db.Timestamptz
 
   links TrackedLink[]
 
   @@unique([campaignId, variableKey])
   @@unique([dripStepId, variableKey])
+  @@index([storeCartId])
   @@map("tracked_link_targets")
 }
 
@@ -2481,6 +2485,7 @@ model StoreCart {
 
   reminders    StoreCartReminder[]
   sentMessages Message[]
+  linkTargets  TrackedLinkTarget[]
 
   @@unique([storeId, externalId])
   @@index([status, nextAt])

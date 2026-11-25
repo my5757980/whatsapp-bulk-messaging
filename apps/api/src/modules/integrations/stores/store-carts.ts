@@ -218,7 +218,7 @@ export class StoreCarts {
         await tx.storeCartReminder.create({ data: { cartId: cart.id, step: cart.nextStep, outcome: 'QUEUED', messageId: null } });
         let plan: ReturnType<TrackedLinkCodes['plan']> | null = null;
         if (linkKey && destination && this.config.PUBLIC_LINK_BASE_URL) {
-          target = await tx.trackedLinkTarget.create({ data: { variableKey: linkKey, destination }, select: { id: true, variableKey: true } });
+          target = await tx.trackedLinkTarget.create({ data: { variableKey: linkKey, destination, storeCartId: cart.id }, select: { id: true, variableKey: true } });
           plan = this.codes.plan([{ id: messageId, contactId: contact.id }], [target]);
           Object.assign(params, plan.params.get(messageId) ?? {});
         }

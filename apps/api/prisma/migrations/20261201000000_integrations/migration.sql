@@ -104,6 +104,9 @@ ADD COLUMN     "store_order_id" UUID;
 -- AlterTable
 ALTER TABLE "api_keys" ADD COLUMN     "scopes" TEXT[] DEFAULT ARRAY['messages.send']::TEXT[];
 
+-- AlterTable
+ALTER TABLE "tracked_link_targets" ADD COLUMN     "store_cart_id" UUID;
+
 -- CreateTable
 CREATE TABLE "webhook_endpoints" (
     "id" UUID NOT NULL,
@@ -558,6 +561,9 @@ CREATE INDEX "messages_store_order_id_idx" ON "messages"("store_order_id");
 -- CreateIndex
 CREATE INDEX "messages_store_cart_id_idx" ON "messages"("store_cart_id");
 
+-- CreateIndex
+CREATE INDEX "tracked_link_targets_store_cart_id_idx" ON "tracked_link_targets"("store_cart_id");
+
 -- AddForeignKey
 ALTER TABLE "messages" ADD CONSTRAINT "messages_api_campaign_id_fkey" FOREIGN KEY ("api_campaign_id") REFERENCES "api_campaigns"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
@@ -566,6 +572,9 @@ ALTER TABLE "messages" ADD CONSTRAINT "messages_store_order_id_fkey" FOREIGN KEY
 
 -- AddForeignKey
 ALTER TABLE "messages" ADD CONSTRAINT "messages_store_cart_id_fkey" FOREIGN KEY ("store_cart_id") REFERENCES "store_carts"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "tracked_link_targets" ADD CONSTRAINT "tracked_link_targets_store_cart_id_fkey" FOREIGN KEY ("store_cart_id") REFERENCES "store_carts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "webhook_endpoints" ADD CONSTRAINT "webhook_endpoints_created_by_id_fkey" FOREIGN KEY ("created_by_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -700,3 +709,6 @@ ALTER TABLE "store_carts" ADD CONSTRAINT "store_carts_next_step_check" CHECK ("n
 ALTER TABLE "store_connections" ADD CONSTRAINT "store_connections_base_url_check" CHECK ("base_url" ~ '^https?://');
 ALTER TABLE "webhook_endpoints" ADD CONSTRAINT "webhook_endpoints_event_types_check" CHECK (cardinality("event_types") >= 1);
 ALTER TABLE "chat_links" ADD CONSTRAINT "chat_links_ref_check" CHECK ("ref" ~ '^[A-Z0-9]{6}$');
+-- Tracked links of cart reminders (US6): a target belongs to a campaign, a drip step or a store cart.
+ALTER TABLE "tracked_link_targets" DROP CONSTRAINT "tracked_link_targets_one_owner";
+ALTER TABLE "tracked_link_targets" ADD CONSTRAINT "tracked_link_targets_one_owner" CHECK (num_nonnulls("campaign_id", "drip_step_id", "store_cart_id") = 1);

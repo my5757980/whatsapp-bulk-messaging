@@ -326,6 +326,7 @@ One wizard run (FR-051 – FR-055).
   - `api_campaign_id uuid? FK api_campaigns SET NULL`, indexed
   - `store_order_id uuid? FK store_orders SET NULL`, indexed
   - `store_cart_id uuid? FK store_carts SET NULL`, indexed
+- `tracked_link_targets` (005): `store_cart_id uuid? FK store_carts CASCADE`, indexed, for the cart link of a cart reminder. The one-owner check becomes `num_nonnulls(campaign_id, drip_step_id, store_cart_id) = 1`.
 - `MessageOrigin` + `STORE` (shown as automatic in live chat, like `DRIP`).
 - `ConsentSource` + `STORE`.
 - `DripTriggerKind` + `ORDER_PLACED` and `ORDER_DELIVERED`, so drips can start on store events
