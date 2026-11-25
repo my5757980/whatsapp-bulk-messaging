@@ -37,6 +37,11 @@ function messageText(message: Record<string, unknown>): string | undefined {
   }
 }
 
+/** Set when a customer message created its sender's contact (read by the 006 chat link matcher). */
+export function newContactKey(waMessageId: string): string {
+  return `wbm:inbound:${waMessageId}:new-contact`;
+}
+
 /**
  * Inbound customer messages (T102, contracts/meta-webhooks.md §4): exact keyword matches change
  * consent with source KEYWORD; unknown senders become contacts. Only the consent outcome is
@@ -87,13 +92,18 @@ export class InboundHandler implements WebhookChangeHandler, OnModuleInit {
         : settings.optInKeywords.includes(keyword)
           ? 'OPTED_IN'
           : null;
-      const contact = await this.prisma.contact.upsert({
-        where: { phoneE164: phone.e164 },
-        // A contact first seen through their own message came organically (002 FR-033).
-        create: { phoneE164: phone.e164, countryCode: phone.country, name: profiles.get(from)?.slice(0, 120) ?? null, leadSource: 'Organic' },
-        update: {},
-        select: { id: true },
-      });
+      const known = await this.prisma.contact.findUnique({ where: { phoneE164: phone.e164 }, select: { id: true } });
+      const contact =
+        known ??
+        (await this.prisma.contact.upsert({
+          where: { phoneE164: phone.e164 },
+          // A contact first seen through their own message came organically (002 FR-033).
+          create: { phoneE164: phone.e164, countryCode: phone.country, name: profiles.get(from)?.slice(0, 120) ?? null, leadSource: 'Organic' },
+          update: {},
+          select: { id: true },
+        }));
+      // Chat links count new contacts (feature 006 US7, FR-049).
+      if (!known) await this.redis.set(newContactKey(id), '1', 'EX', DEDUPE_TTL_SECONDS);
       if (status) {
         const before = await this.prisma.contact.findUnique({ where: { id: contact.id }, select: { consentStatus: true } });
         await this.consent.setStatus(contact.id, status, 'KEYWORD', { note: `Replied "${keyword}"` });

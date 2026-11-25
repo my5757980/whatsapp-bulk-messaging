@@ -1,18 +1,21 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { findChatRef } from '@wbm/shared';
+import type { Redis } from 'ioredis';
 import { v7 as uuidv7 } from 'uuid';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
+import { REDIS_CLIENT } from '../../../common/queue/queue.module.js';
 import { FlowSessionService } from '../../flows/engine/session.service.js';
 import { DripEvents } from '../../growth/drips/drip-events.js';
 import { JourneyService } from '../../inbox/journey/journey.service.js';
+import { newContactKey } from '../../webhooks/handlers/inbound.handler.js';
 import { PlatformEvents } from '../webhooks/platform-events.js';
 
 export interface ChatLinkMessage {
   numberId: string;
   conversationId: string;
   contactId: string;
-  /** The contact was created by this message. */
-  newContact: boolean;
+  /** The message id; the 001 inbound handler flags messages that created their contact. */
+  waMessageId: string;
   /** The chat's state after this message (002: ACTIVE = Open). */
   chatState: 'ACTIVE' | 'REQUESTING' | 'INTERVENED';
   text: string | null;
@@ -35,6 +38,7 @@ export class ChatLinkMatcher {
     private readonly journey: JourneyService,
     private readonly dripEvents: DripEvents,
     private readonly platformEvents: PlatformEvents,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
   /** True when the link's flow started and so answered the message. */
@@ -56,11 +60,12 @@ export class ChatLinkMatcher {
         },
       });
       if (!link || link.deletedAt || link.status !== 'ACTIVE' || link.numberId !== msg.numberId) return false;
+      const newContact = (await this.redis.exists(newContactKey(msg.waMessageId)).catch(() => 0)) > 0;
 
       const counted = await this.prisma.$transaction(async (tx) => {
         const inserted = await tx.$executeRaw`
           INSERT INTO chat_link_starts (id, chat_link_id, contact_id, conversation_id, new_contact, started_at)
-          VALUES (${uuidv7()}::uuid, ${link.id}::uuid, ${msg.contactId}::uuid, ${msg.conversationId}::uuid, ${msg.newContact}, now())
+          VALUES (${uuidv7()}::uuid, ${link.id}::uuid, ${msg.contactId}::uuid, ${msg.conversationId}::uuid, ${newContact}, now())
           ON CONFLICT DO NOTHING`;
         if (link.tagId && link.tag) {
           const added = await tx.contactTag.createManyAndReturn({ data: [{ contactId: msg.contactId, tagId: link.tagId }], skipDuplicates: true, select: { contactId: true, tagId: true } });
@@ -75,7 +80,7 @@ export class ChatLinkMatcher {
         return inserted > 0;
       });
       if (counted) {
-        await this.journey.recordForContact(msg.contactId, { type: 'CHAT_LINK_STARTED', actorType: 'CUSTOMER', data: { chatLinkId: link.id, chatLinkName: link.name, newContact: msg.newContact } });
+        await this.journey.recordForContact(msg.contactId, { type: 'CHAT_LINK_STARTED', actorType: 'CUSTOMER', data: { chatLinkId: link.id, chatLinkName: link.name, newContact } });
       }
 
       const flow = link.flow;

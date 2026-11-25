@@ -106,16 +106,12 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
       this.logger.warn({ numberId }, 'Customer message from a number that cannot be normalised; not added to live chat');
       return;
     }
-    // Chat links count new contacts (feature 006 US7, FR-049): the contact is new when this message creates it.
-    const known = await this.prisma.contact.findUnique({ where: { phoneE164: phone.e164 }, select: { id: true, blockedAt: true } });
-    const contact =
-      known ??
-      (await this.prisma.contact.upsert({
-        where: { phoneE164: phone.e164 },
-        create: { phoneE164: phone.e164, countryCode: phone.country, name: msg.profileName?.slice(0, 120) ?? null, leadSource: 'Organic' },
-        update: {},
-        select: { id: true, blockedAt: true },
-      }));
+    const contact = await this.prisma.contact.upsert({
+      where: { phoneE164: phone.e164 },
+      create: { phoneE164: phone.e164, countryCode: phone.country, name: msg.profileName?.slice(0, 120) ?? null, leadSource: 'Organic' },
+      update: {},
+      select: { id: true, blockedAt: true },
+    });
 
     const itemId = uuidv7();
     const outcome = await this.prisma.$transaction(async (tx) => {
@@ -212,7 +208,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
         numberId,
         conversationId: outcome.conversationId,
         contactId: contact.id,
-        newContact: !known,
+        waMessageId: msg.waMessageId,
         chatState: outcome.state,
         text: msg.text,
       })

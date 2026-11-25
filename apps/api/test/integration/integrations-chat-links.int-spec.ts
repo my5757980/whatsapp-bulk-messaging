@@ -164,7 +164,7 @@ describe('Chat links and QR codes (006 US7)', () => {
   });
 
   it('never interrupts a running flow or a member chat, but still counts and tags', async () => {
-    await flow('Quiz', { version: 1, start: 'q', triggers: keyword(`quiz${suffix}`, 'EXACT'), steps: [{ id: 'q', type: 'question', text: 'What is your name?', next: 'done' }, { id: 'done', type: 'message', text: 'Thanks!', next: null }] });
+    await flow('Quiz', { version: 1, start: 'q', triggers: keyword(`quiz${suffix}`, 'EXACT'), steps: [{ id: 'q', type: 'question', text: 'What is your name?', answerName: 'name', next: 'done' }, { id: 'done', type: 'message', text: 'Thanks!', next: null }] });
     const quiz = await send(phones.quiz, `quiz${suffix}`);
     expect(await replies(quiz.id)).toEqual(['What is your name?']);
     await send(phones.quiz, prefilled(link));
