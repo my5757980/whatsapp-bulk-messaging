@@ -17,6 +17,7 @@ WhatsApp Cloud API. One company, a small team, prices in USD.
 | Chatbot flows (feature 003) | Automatic conversations built on a canvas: buttons, lists, questions that save answers to contacts, conditions, delays, safe API calls, hand-over to live chat, test numbers, versions, analytics and starter flows. See [Chatbot flows](#chatbot-flows). |
 | AI agents (feature 004) | AI agents that answer customers from your own knowledge with Claude, hand over to the team when needed, use safe API skills and flows, stay within a monthly limit, and a team assistant that drafts templates, flows and campaigns. See [AI agents](#ai-agents). |
 | Campaign growth (feature 005) | Tracked links with a click count for each recipient, retargeting by clicked, replied and held back, retry rounds for failures that may pass, and drips: timed template steps that contacts join by hand or on events and leave when they reply. See [Campaign growth](#campaign-growth). |
+| Integrations (feature 006) | Signed webhooks for other systems, API key permissions and a contacts API, API campaigns, Shopify and WooCommerce order notifications, COD confirmation and cart reminders, QR chat links, and a guided number connection wizard. See [Integrations](#integrations). |
 
 ## Architecture
 
@@ -222,6 +223,74 @@ Feature 005 ([spec](specs/005-campaign-growth/spec.md), [quickstart](specs/005-c
 Check: `PERF_NUMBER_ID=<id> npm run perf:drips` (SC-005: 95% of drip steps queued within 5 minutes
 of falling due, with 10,000 contacts in a drip).
 
+## Integrations
+
+Feature 006 ([spec](specs/006-integrations-platform/spec.md), [quickstart](specs/006-integrations-platform/quickstart.md)).
+
+- **Outbound webhooks:** *Settings → Webhooks* adds endpoints that receive chosen events (message
+  statuses, customer messages, contact and tag changes, opt-ins and opt-outs, API campaign calls,
+  store notifications, COD answers and recovered carts). Deliveries follow the Standard Webhooks
+  format: headers `webhook-id`, `webhook-timestamp` (Unix seconds) and `webhook-signature`, which
+  is `v1,<base64 HMAC-SHA256>` of `{id}.{timestamp}.{raw body}` keyed with the endpoint's secret
+  (`whsec_…`, shown once). Receivers should accept timestamps within 5 minutes and ignore ids they
+  have seen. After a secret is renewed, both secrets sign for 24 hours. Failed deliveries are
+  retried with growing waits; an endpoint that keeps failing is paused and admins are alerted. The
+  delivery log shows each attempt and can send one again.
+- **API key permissions:** each key has permissions: `messages.send` (keys made before 006 keep only
+  this one), `contacts.read`, `contacts.write`, `campaigns.trigger` and `drips.enrol`. A call
+  without the permission gets 403 `insufficient_scope`. The contacts API (`/api/v1/contacts`) finds,
+  creates, updates and tags contacts and records consent; changes show in the journey as the key's.
+- **API campaigns:** *Campaigns → API campaigns* saves a template, its variable mapping, tags,
+  attributes and a daily limit under an API name. Other systems send it with one call to
+  `POST /api/v1/api-campaigns/{apiName}/messages` (a phone number and a few values). A campaign
+  pauses itself when its template is no longer approved or its number disconnects.
+- **Shopify:** since 2026 a store owner's own app is made in Shopify's Dev Dashboard. Give it the
+  scopes `read_orders`, `write_orders` and `read_customers`, and declare protected customer data
+  (name, email, phone and address). In *Integrations → Stores* connect the store with the app's
+  client id and secret: the platform gets 24-hour tokens with the client credentials grant and makes
+  its own webhook subscriptions (orders, fulfillments and checkouts) to
+  `${APP_URL}/api/integrations/shopify/{storeId}/webhooks`. Each delivery is checked with
+  `X-Shopify-Hmac-Sha256` and counted once by its webhook id. `SHOPIFY_API_VERSION` pins the
+  GraphQL Admin API version.
+- **WooCommerce:** make Read/Write REST API keys in *WooCommerce → Settings → Advanced → REST API*;
+  the store must use https. The platform makes its own `order.created` and `order.updated` webhooks
+  with a secret per store and checks `X-WC-Webhook-Signature`.
+- **Store automations:** order confirmed, shipped, delivered and cancelled notifications (utility
+  templates), cash on delivery confirmation with quick-reply buttons (the first answer wins; the
+  order is tagged in the store, and cancelled there when automatic cancel is on), and up to three
+  cart reminders (marketing templates, only to contacts who opted in; Shopify checkouts, and
+  WooCommerce orders left unpaid). The store's checkout consent counts as a WhatsApp opt-in only
+  after an admin confirms that its text names WhatsApp. A 15-minute check repairs webhooks and
+  fetches orders that were missed.
+- **Chat links and QR codes:** *Campaigns → Chat links* makes a short link on
+  `PUBLIC_LINK_BASE_URL` (`<address>/c/<code>`, answered by the api at `/l/c/<code>`), QR codes as
+  PNG and SVG and a printable poster. Opening the link opens WhatsApp with the pre-filled message,
+  which ends with a short reference such as `(ref K7QX2M)`. When the customer sends it, the chat
+  counts as started for the link, the contact gets the link's tag and the link's flow starts (never
+  over a running flow or a member's chat). A turned-off or deleted link shows a "no longer in use"
+  page.
+- **Number connection wizard:** *Settings → WhatsApp numbers → Connect with checks* takes a
+  system user token, lists the WhatsApp accounts and numbers it reaches, and checks the token's
+  permissions and expiry, the number's registration and two-step PIN, the display name, quality,
+  messaging limit, the app subscription and the app's webhook address (with `META_APP_ID` set),
+  each with a fix. It can register the number with its PIN and subscribe the app when the admin
+  asks, then sends a test template to the admin's phone and waits for its delivered status. The
+  pasted token is kept encrypted for 30 minutes only. *Run checks* runs the same checks on a
+  connected number without changing it.
+- **Permissions:** only admins manage webhook endpoints, key permissions, stores and the wizard
+  (`integrations.manage`, `numbers.manage`); managers and admins run API campaigns, store
+  automations and chat links (`campaigns.manage`); exports need `data.export`.
+- **Data handling:** outbound events and their deliveries, and raw store events, are kept 30 days;
+  API campaign calls, store orders and their messages, carts and reminders, chat link openings and
+  starts, and wizard check results 12 months. Deleting a contact stops their cart reminders, closes
+  their COD questions, keeps orders, calls and chat starts without their details, and cancels
+  waiting webhook deliveries that name them. Tokens, keys and secrets are stored encrypted and never
+  sent in events or logs.
+
+Checks: `npm run perf:webhooks` (SC-001: 99% of events delivered within 10 seconds) and
+`PERF_NUMBER_ID=<id> npm run perf:stores` (SC-004: 500 store events with 100 repeats, exactly one
+notification per order, 95% within a minute).
+
 ## Getting started
 
 Prerequisites: Node.js 26, npm 11 and Docker Desktop. The full walkthrough, including how to
@@ -254,6 +323,8 @@ npm run perf:inbox          # live chat SC-006 list/open times and SC-001 event 
 npm run perf:flows          # chatbot flows SC-001 (PERF_NUMBER_ID set)
 npm run perf:ai             # AI agents SC-001 against the fake model (PERF_NUMBER_ID set)
 npm run perf:drips          # drips SC-005 with 10,000 contacts (PERF_NUMBER_ID set)
+npm run perf:webhooks       # webhooks SC-001: 99% of events delivered within 10 s
+npm run perf:stores         # stores SC-004: 500 events, 100 repeats, one notification each (PERF_NUMBER_ID set)
 npm run eval:ai             # AI answer quality with the real model: by hand only, EVAL_CONFIRM=yes
 ```
 
@@ -279,8 +350,9 @@ the web proxy.
   messages, journey entries and openings after 12 months (with unused customer media), and webhook
   events and uploaded files after 30 days. AI conversations, AI reply records, unanswered-question
   occurrences and assistant requests also go after 12 months, and so do link clicks and drip
-  enrolments (12 months after they end). Audit logs are kept. Deleting a contact erases its chat
-  content and AI conversation details but keeps anonymous counts.
+  enrolments (12 months after they end). Integration records follow the rules in
+  [Integrations](#integrations). Audit logs are kept. Deleting a contact erases its chat content and
+  AI conversation details but keeps anonymous counts.
 - **AI service:** set `ANTHROPIC_API_KEY` from the company's Anthropic account (leave
   `ANTHROPIC_BASE_URL` empty in production). The `WbmAiFailing` alert fires when more than 20% of AI
   turns fail in 15 minutes.
@@ -290,8 +362,13 @@ the web proxy.
   has no `/l` path, the reverse proxy sends `/<code>` to the api's `/l/<code>`. The
   `WbmDripLagging` alert fires when drip steps are queued more than 5 minutes after falling due
   (p95, for 15 minutes).
-- **Real numbers:** to connect a real WhatsApp number, follow quickstart §5. Check each step
-  against Meta's current documentation.
+- **Integrations:** `APP_URL` must be the public https address that Shopify, WooCommerce and Meta
+  reach. The `WbmWebhookBacklog` alert fires when deliveries to active endpoints stay due for more
+  than 5 minutes (for 15 minutes), and `WbmStoreEventsFailing` when over 20% of store events fail
+  in 15 minutes. Before go-live, work through
+  [the 006 release checklist](specs/006-integrations-platform/checklists/release.md).
+- **Real numbers:** to connect a real WhatsApp number, use *Connect with checks* or follow
+  quickstart §5. Check each step against Meta's current documentation.
 
 ## Documentation
 
@@ -331,6 +408,14 @@ the web proxy.
   [growth API](specs/005-campaign-growth/contracts/growth-api.openapi.yaml),
   [quickstart](specs/005-campaign-growth/quickstart.md), [tasks](specs/005-campaign-growth/tasks.md) and
   [release checklist](specs/005-campaign-growth/checklists/release.md)
+- Integrations (feature 006): [spec](specs/006-integrations-platform/spec.md),
+  [plan](specs/006-integrations-platform/plan.md), [research](specs/006-integrations-platform/research.md),
+  [data model](specs/006-integrations-platform/data-model.md),
+  [integrations API](specs/006-integrations-platform/contracts/integrations-api.openapi.yaml),
+  [public API v1](specs/006-integrations-platform/contracts/public-api-v1.openapi.yaml),
+  [webhook events](specs/006-integrations-platform/contracts/webhook-events.md),
+  [quickstart](specs/006-integrations-platform/quickstart.md), [tasks](specs/006-integrations-platform/tasks.md) and
+  [release checklist](specs/006-integrations-platform/checklists/release.md)
 - Architecture decisions:
   - [ADR-0001 Frontend stack](history/adr/0001-frontend-stack.md)
   - [ADR-0002 Backend runtime, process model and monorepo](history/adr/0002-backend-runtime-process-model-and-monorepo.md)
