@@ -437,7 +437,7 @@ the order, the cart counted as recovered with its value, and a cart without cons
   - stop decisions per event
   - the 7-day recovery window
   - expiry
-- [ ] T064 [P] [US6] Integration test apps/api/test/integration/integrations-carts.int-spec.ts:
+- [X] T064 [P] [US6] Integration test apps/api/test/integration/integrations-carts.int-spec.ts:
   - **Reminder:** a Shopify checkout gives a cart; at the due time it is fetched again (`abandonedCheckouts`) and reminder 1 is sent with a 005 tracked link to the recovery URL
   - **Consent:** no consent means skipped; store consent counts only after confirmation
   - **Stopping:**
@@ -447,7 +447,7 @@ the order, the cart counted as recovered with its value, and a cart without cons
   - **Once:** each step is sent once, even when the checkout is updated
   - **WooCommerce:** a `pending` order gives a cart with `payment_url`
   - **Expiry and results:** carts expire after 7 days; results include clicks
-- [ ] T065 [P] [US6] Playwright e2e apps/web/e2e/integrations-us6-carts.spec.ts:
+- [X] T065 [P] [US6] Playwright e2e apps/web/e2e/integrations-us6-carts.spec.ts:
   - turn on reminders
   - start checkouts with `mock:store`
   - move the test clock through the mock (or short waits)
@@ -455,17 +455,17 @@ the order, the cart counted as recovered with its value, and a cart without cons
 
 ### Implementation for User Story 6
 
-- [ ] T066 [US6] Track carts in apps/api/src/modules/integrations/stores/store-events.processor.ts:
+- [X] T066 [US6] Track carts in apps/api/src/modules/integrations/stores/store-events.processor.ts:
   - Shopify `checkouts/create` and `checkouts/update`, and WooCommerce `pending` orders
   - the cart is closed or recovered when the matching order arrives
   - recovered carts raise `store.cart_recovered`
-- [ ] T067 [US6] Add cart reminders to apps/api/src/modules/integrations/stores/store-tick.processor.ts:
+- [X] T067 [US6] Add cart reminders to apps/api/src/modules/integrations/stores/store-tick.processor.ts:
   - each step fetches the cart again, checks marketing consent, writes the reminder with a 005 tracked link, and moves to the next step or expires
   - `StoreCartStops` (apps/api/src/modules/integrations/stores/store-cart-stops.ts) is called in the transaction of:
     - opt-outs (apps/api/src/modules/contacts/consent.service.ts)
     - blocks (apps/api/src/modules/inbox/conversations/chat-contact.service.ts)
     - inbound messages on the store's number (apps/api/src/modules/inbox/inbound/inbound-chat.handler.ts)
-- [ ] T068 [P] [US6] Add a cart reminders tab on the store page:
+- [X] T068 [P] [US6] Add a cart reminders tab on the store page:
   - steps with templates and waits, and a note that the templates must be Marketing
   - the consent status of the store
   - the carts list and results (carts, reminders per step, clicks, recovered orders and value, skip reasons)
@@ -484,20 +484,20 @@ matched by reference that start a flow and tag the contact.
 
 ### Tests for User Story 7 (write first, must fail)
 
-- [ ] T069 [P] [US7] Unit tests packages/shared/src/integrations/chat-links.test.ts:
+- [X] T069 [P] [US7] Unit tests packages/shared/src/integrations/chat-links.test.ts:
   - the reference alphabet (no look-alikes) and its length of 6
   - the message with its reference within limits
   - wa.me addresses: digits only, encoded text
   - matching the last `(ref XXXXXX)`; an edited reference matches nothing
-- [ ] T070 [P] [US7] Integration test apps/api/test/integration/integrations-chat-links.int-spec.ts:
+- [X] T070 [P] [US7] Integration test apps/api/test/integration/integrations-chat-links.int-spec.ts:
   - **Create:** a code and a reference
   - **Redirect:** `GET /l/c/:code` gives 302 to `wa.me` with the text; previews and robots are not counted; a turned-off or deleted link gives the 404 page; the rate limit
   - **Chat start:** an inbound first message with the reference counts a start and adds the tag
   - **Flow:** the link's flow starts before keyword flows; an active flow or a member's chat is not interrupted
   - **Results:** per day; the contacts list, tagging and export
   - **QR:** SVG and PNG
-- [ ] T071 [P] [US7] Contract cases for `/chat-links*` and `/l/c/{code}` in apps/api/test/contract/integrations.contract-spec.ts
-- [ ] T072 [P] [US7] Playwright e2e apps/web/e2e/integrations-us7-chat-links.spec.ts:
+- [X] T071 [P] [US7] Contract cases for `/chat-links*` and `/l/c/{code}` in apps/api/test/contract/integrations.contract-spec.ts
+- [X] T072 [P] [US7] Playwright e2e apps/web/e2e/integrations-us7-chat-links.spec.ts:
   - create "Shop counter" with a flow and a tag
   - download the QR and open the poster
   - open the link (one as a preview) and send the pre-filled message with `mock:inbound`
@@ -505,20 +505,20 @@ matched by reference that start a flow and tag the contact.
 
 ### Implementation for User Story 7
 
-- [ ] T073 [US7] Implement apps/api/src/modules/integrations/chat-links/chat-links.service.ts and chat-links.controller.ts:
+- [X] T073 [US7] Implement apps/api/src/modules/integrations/chat-links/chat-links.service.ts and chat-links.controller.ts:
   - CRUD (the code and reference are made once; the flow must be published and on the link's number)
   - turning off and deleting
   - QR images with `qrcode` (SVG and PNG, with a size)
   - results, and the contacts list, tagging and export
   - audit entries
-- [ ] T074 [US7] Implement the redirect apps/api/src/modules/integrations/chat-links/chat-link-redirect.controller.ts at `GET /l/c/:code`:
+- [X] T074 [US7] Implement the redirect apps/api/src/modules/integrations/chat-links/chat-link-redirect.controller.ts at `GET /l/c/:code`:
   - exclude `l/c/:code` from the global prefix in apps/api/src/app.setup.ts
   - reuse the 005 preview and robot rules and the `LinkRateLimiter`
   - record openings; answer 302 to `wa.me` or show the "no longer in use" page
-- [ ] T075 [US7] Implement `ChatLinkMatcher` in apps/api/src/modules/integrations/chat-links/chat-link-matcher.ts, called from the 002 inbound handler on a chat's first message, before the 003 flow router:
+- [X] T075 [US7] Implement `ChatLinkMatcher` in apps/api/src/modules/integrations/chat-links/chat-link-matcher.ts, called from the 002 inbound handler on a chat's first message, before the 003 flow router:
   - match the reference, record the start (new contact or not), add the tag and the `CHAT_LINK_STARTED` journey entry
   - start the link's flow through the 003 session service unless a flow or a member's chat is active
-- [ ] T076 [P] [US7] Add the web pages:
+- [X] T076 [P] [US7] Add the web pages:
   - apps/web/src/app/(dashboard)/campaigns/chat-links/page.tsx and [id]/page.tsx: the editor, the QR preview and downloads, results, and contacts with tag and export
   - apps/web/src/app/(dashboard)/campaigns/chat-links/[id]/poster/page.tsx: a print layout of our own design
   - a link from the campaigns page
@@ -537,19 +537,19 @@ good token goes through every check and the test message, and the number is save
 
 ### Tests for User Story 8 (write first, must fail)
 
-- [ ] T077 [P] [US8] Unit tests apps/api/test/unit/number-wizard-checks.spec.ts for the check rules built from Graph answers:
+- [X] T077 [P] [US8] Unit tests apps/api/test/unit/number-wizard-checks.spec.ts for the check rules built from Graph answers:
   - missing scopes, and `expires_at` (0 means it never expires)
   - `platform_type` `NOT_APPLICABLE` means not registered
   - `name_status`, quality and `whatsapp_business_manager_messaging_limit`
   - `subscribed_apps` contains the app id
   - the app's callback URL
   - plain fix text for each failure
-- [ ] T078 [P] [US8] Add the wizard's Graph routes to mock-meta in tools/mock-meta/src/wizard.ts:
+- [X] T078 [P] [US8] Add the wizard's Graph routes to mock-meta in tools/mock-meta/src/wizard.ts:
   - `debug_token` with the tokens `mock-token-ok`, `mock-token-missing-scope` and `mock-token-expiring`
   - the WABA and phone number fields
   - `register` (PIN 123456), `subscribed_apps` get and post, and the app `subscriptions`
   - a test template whose `delivered` status webhook follows
-- [ ] T079 [P] [US8] Integration test apps/api/test/integration/integrations-number-wizard.int-spec.ts (nock Graph):
+- [X] T079 [P] [US8] Integration test apps/api/test/integration/integrations-number-wizard.int-spec.ts (nock Graph):
   - a session from a token; the accounts list
   - checks; fixes (register with the PIN, subscribe the app)
   - the test message, with its delivered status arriving
@@ -557,16 +557,16 @@ good token goes through every check and the test message, and the number is save
   - the health check on a connected number changes nothing
   - an expired session gives 404
   - audit entries; the token never appears in checks or logs
-- [ ] T080 [P] [US8] Contract cases for `/number-wizard/sessions*` and `/numbers/{id}/health-check` in apps/api/test/contract/integrations.contract-spec.ts
+- [X] T080 [P] [US8] Contract cases for `/number-wizard/sessions*` and `/numbers/{id}/health-check` in apps/api/test/contract/integrations.contract-spec.ts
 - [ ] T081 [P] [US8] Playwright e2e apps/web/e2e/integrations-us8-number-wizard.spec.ts: the missing-scope token, then the good token, picking the mock number, the fixes, the test message, and saving
 
 ### Implementation for User Story 8
 
-- [ ] T082 [US8] Add these methods to apps/api/src/modules/meta/meta-graph.client.ts (Graph v27.0):
+- [X] T082 [US8] Add these methods to apps/api/src/modules/meta/meta-graph.client.ts (Graph v27.0):
   - `debugToken`, `listWabas` (from granular scopes) and `listPhoneNumbers` (with the R13 fields)
   - `registerNumber`, `getSubscribedApps`, `subscribeApp` and `getAppSubscriptions`
   - each with unit cases
-- [ ] T083 [US8] Implement apps/api/src/modules/integrations/number-wizard/number-wizard.service.ts and number-wizard.controller.ts:
+- [X] T083 [US8] Implement apps/api/src/modules/integrations/number-wizard/number-wizard.service.ts and number-wizard.controller.ts:
   - sessions in Redis with the encrypted token and a 30-minute TTL
   - checks, saved to `number_connection_checks` without the token
   - fixes after confirmation
@@ -574,7 +574,7 @@ good token goes through every check and the test message, and the number is save
   - connect through apps/api/src/modules/numbers/numbers.service.ts
   - `POST /numbers/{id}/health-check`
   - audit entries
-- [ ] T084 [P] [US8] Add the wizard apps/web/src/app/(dashboard)/numbers/connect/page.tsx (steps: token, pick, checks with fixes, test message, save), and a **Run checks** button on the numbers settings page
+- [X] T084 [P] [US8] Add the wizard apps/web/src/app/(dashboard)/numbers/connect/page.tsx (steps: token, pick, checks with fixes, test message, save), and a **Run checks** button on the numbers settings page
 
 **Checkpoint**: all stories are done.
 
@@ -582,8 +582,8 @@ good token goes through every check and the test message, and the number is save
 
 ## Phase 11: Polish & Cross-Cutting Concerns
 
-- [ ] T085 [P] Add the R14 metrics to apps/api/src/common/metrics/metrics.service.ts with their instrumentation points: `wbm_webhook_deliveries_total{result}`, `wbm_webhook_delivery_seconds`, `wbm_webhook_backlog`, `wbm_store_events_total{platform,result}`, `wbm_store_messages_total{kind,result}`, `wbm_api_campaign_triggers_total{result}` and `wbm_chat_link_opens_total{kind}`. Add the alerts `WbmWebhookBacklog` and `WbmStoreEventsFailing` to ops/alerts.yml, with cases in apps/api/test/unit/alerts.spec.ts
-- [ ] T086 [P] Extend retention and erasure, tests first:
+- [X] T085 [P] Add the R14 metrics to apps/api/src/common/metrics/metrics.service.ts with their instrumentation points: `wbm_webhook_deliveries_total{result}`, `wbm_webhook_delivery_seconds`, `wbm_webhook_backlog`, `wbm_store_events_total{platform,result}`, `wbm_store_messages_total{kind,result}`, `wbm_api_campaign_triggers_total{result}` and `wbm_chat_link_opens_total{kind}`. Add the alerts `WbmWebhookBacklog` and `WbmStoreEventsFailing` to ops/alerts.yml, with cases in apps/api/test/unit/alerts.spec.ts
+- [X] T086 [P] Extend retention and erasure, tests first:
   - in apps/api/test/integration/retention.int-spec.ts and apps/api/src/modules/maintenance/retention.processor.ts:
     - outbound events, deliveries and store events after 30 days
     - triggers, orders and their messages, carts and reminders, chat link opens and starts, and connection checks after 12 months
@@ -591,12 +591,12 @@ good token goes through every check and the test message, and the number is save
     - waiting reminders stop and COD waits close
     - links are cleared
     - waiting deliveries that name the contact are cancelled
-- [ ] T087 [P] Empty the 006 `PENDING` list in apps/api/test/unit/audit-coverage.spec.ts once every action is recorded
-- [ ] T088 [P] Add contracts/integrations-api.openapi.yaml to apps/api/test/integration/rbac.int-spec.ts, skipping the public receivers and `/l/c/{code}`. Add apps/api/test/integration/public-api-scopes.int-spec.ts, which reads every operation's `x-scope` from contracts/public-api-v1.openapi.yaml and checks that a key without the scope gets 403 and a key with it does not
-- [ ] T089 [P] Add the performance checks with root scripts `perf:webhooks` and `perf:stores`:
+- [X] T087 [P] Empty the 006 `PENDING` list in apps/api/test/unit/audit-coverage.spec.ts once every action is recorded
+- [X] T088 [P] Add contracts/integrations-api.openapi.yaml to apps/api/test/integration/rbac.int-spec.ts, skipping the public receivers and `/l/c/{code}`. Add apps/api/test/integration/public-api-scopes.int-spec.ts, which reads every operation's `x-scope` from contracts/public-api-v1.openapi.yaml and checks that a key without the scope gets 403 and a key with it does not
+- [X] T089 [P] Add the performance checks with root scripts `perf:webhooks` and `perf:stores`:
   - tools/perf/webhooks-latency.ts (SC-001: 99% of events delivered within 10 s to the catcher)
   - tools/perf/stores-latency.ts (SC-004: 500 store events with 100 duplicates; 95% of notifications within 1 minute; exactly once)
-- [ ] T090 [P] Docs:
+- [X] T090 [P] Docs:
   - an integrations section in README.md: webhook verification, API key scopes, the Shopify Dev Dashboard app with its scopes and protected customer data, WooCommerce keys, chat links, the wizard
   - update specs/006-integrations-platform/quickstart.md if steps changed
   - mark items 1.1, 5.9, 5.10, 7.2 (QR) and 11.2–11.7 in docs/research/aisensy/feature-inventory-2026-11-19.md, and update its roadmap
