@@ -30,7 +30,8 @@ Content (exactly one):
 Options:
   --name <profile name>   --caption <text>   --reply-to <wamid> (alias --context)   --wamid <fixed id>
   --at <offset>           message time relative to now, e.g. -25h, -30m, -2d
-  --phone-number-id <id>  (default MOCK_PHONE)    --waba <id> (default MOCK_WABA)`;
+  --phone-number-id <id>  (default MOCK_PHONE)    --waba <id> (default MOCK_WABA)
+  --referral-ad <ad id> [--referral-headline <text>] [--referral-image <url>]   (the message came from a Click-to-WhatsApp ad)`;
 
 const MIME_BY_EXTENSION: Record<string, string> = {
   '.jpg': 'image/jpeg',
@@ -116,6 +117,9 @@ const { values } = parseArgs({
     at: { type: 'string' },
     'phone-number-id': { type: 'string', default: 'MOCK_PHONE' },
     waba: { type: 'string', default: 'MOCK_WABA' },
+    'referral-ad': { type: 'string' },
+    'referral-headline': { type: 'string' },
+    'referral-image': { type: 'string' },
     help: { type: 'boolean', default: false },
   },
 });
@@ -249,6 +253,21 @@ const message = {
   timestamp: String(Math.floor((Date.now() + (values.at ? offsetMs(values.at) : 0)) / 1000)),
   ...content,
   ...((values['reply-to'] ?? values.context) ? { context: { from: '15550100', id: values['reply-to'] ?? values.context } } : {}),
+  // Feature 007: Meta adds the ad's details when the chat starts from a Click-to-WhatsApp ad.
+  ...(values['referral-ad']
+    ? {
+        referral: {
+          source_url: `https://fb.me/mock${values['referral-ad']}`,
+          source_id: values['referral-ad'],
+          source_type: 'ad',
+          headline: values['referral-headline'] ?? 'Mock ad',
+          body: 'Seen in a mock ad',
+          media_type: 'image',
+          image_url: values['referral-image'] ?? 'https://example.com/mock-ad.jpg',
+          ctwa_clid: `mockclid${Date.now()}`,
+        },
+      }
+    : {}),
 } as InboundMessage;
 
 const status = await postSigned(

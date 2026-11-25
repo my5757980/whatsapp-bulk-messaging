@@ -104,6 +104,22 @@ export const AUDIT_ACTIONS = [
   'chat_link.contacts_tagged',
   'number.connected_with_wizard',
   'number.fixed_with_wizard',
+  // Feature 007 (data-model.md §5)
+  'ads.connected',
+  'ads.disconnected',
+  'ads.checks_run',
+  'ads.spend_cap_changed',
+  'ad_campaign.created',
+  'ad_campaign.submitted',
+  'ad_campaign.paused',
+  'ad_campaign.resumed',
+  'ad_campaign.ended',
+  'ad_campaign.budget_changed',
+  'ad_campaign.duplicated',
+  'ad_audience.created',
+  'ad_audience.deleted',
+  'ad_lead_form.created',
+  'ad_leads.exported',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

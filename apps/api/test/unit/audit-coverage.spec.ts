@@ -7,7 +7,24 @@ import { AUDIT_ACTIONS } from '../../src/modules/audit/audit-actions.js';
 // T175: every audited action of data-model.md §1 is recorded somewhere in the code base.
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
 /** Actions listed before the code that records them exists (feature 006 T014; each story removes its own). */
-const PENDING = new Set<string>([]);
+/** Actions listed before the code that records them exists (feature 007 T014; each story removes its own). */
+const PENDING = new Set<string>([
+  'ads.connected',
+  'ads.disconnected',
+  'ads.checks_run',
+  'ads.spend_cap_changed',
+  'ad_campaign.created',
+  'ad_campaign.submitted',
+  'ad_campaign.paused',
+  'ad_campaign.resumed',
+  'ad_campaign.ended',
+  'ad_campaign.budget_changed',
+  'ad_campaign.duplicated',
+  'ad_audience.created',
+  'ad_audience.deleted',
+  'ad_lead_form.created',
+  'ad_leads.exported',
+]);
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -118,6 +135,21 @@ describe('audit coverage', () => {
       'chat_link.contacts_tagged',
       'number.connected_with_wizard',
       'number.fixed_with_wizard',
+      'ads.connected',
+      'ads.disconnected',
+      'ads.checks_run',
+      'ads.spend_cap_changed',
+      'ad_campaign.created',
+      'ad_campaign.submitted',
+      'ad_campaign.paused',
+      'ad_campaign.resumed',
+      'ad_campaign.ended',
+      'ad_campaign.budget_changed',
+      'ad_campaign.duplicated',
+      'ad_audience.created',
+      'ad_audience.deleted',
+      'ad_lead_form.created',
+      'ad_leads.exported',
     ]);
   });
 
