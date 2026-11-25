@@ -57,6 +57,12 @@ const NOTES = {
 
 export const retryRoundJobId = (campaignId: string, round: number) => `retry-round-${campaignId}-${round}`;
 
+/**
+ * Failure statuses arrive as webhooks a moment after a message is sent. Until this long after the last
+ * send, "nothing to retry" may only mean the failures are not in yet, so the campaign keeps waiting.
+ */
+export const RETRY_SETTLE_MS = 60_000;
+
 /** Messages (alias `m`) a round may send again: FAILED, not yet in this round, and a failure that may pass. */
 export function retryableSql(round: number): Prisma.Sql {
   return Prisma.sql`m.status = 'FAILED' AND m.retry_round < ${round} AND (
@@ -92,7 +98,7 @@ export class RetryRoundsService {
     if (last && (last.status === 'SKIPPED' || last.status === 'CANCELLED')) return false;
     const next = (last?.round ?? 0) + 1;
     if (next > campaign.retryRounds) return false;
-    if (!(await this.retryableCount(campaignId, next))) return false;
+    if (!(await this.retryableCount(campaignId, next))) return this.sentRecently(campaignId);
 
     const dueAt = retryRoundDueAt(new Date(), campaign.retryDelaysMin[next - 1] ?? 30);
     if (!campaign.launchedAt || !isWithinRetryWindow(campaign.launchedAt, dueAt)) {
@@ -244,6 +250,13 @@ export class RetryRoundsService {
       data: [{ campaignId, round, dueAt, status, note, ...(status === 'SKIPPED' ? { finishedAt: new Date() } : {}) }],
       skipDuplicates: true,
     });
+  }
+
+  /** True while a message of the campaign was sent less than RETRY_SETTLE_MS ago. */
+  private async sentRecently(campaignId: string): Promise<boolean> {
+    const [row] = await this.prisma.$queryRaw<Array<{ last: Date | null }>>`
+      SELECT max(sent_at) AS last FROM messages WHERE campaign_id = ${campaignId}::uuid`;
+    return row?.last ? Date.now() - row.last.getTime() < RETRY_SETTLE_MS : false;
   }
 
   private async retryableCount(campaignId: string, round: number): Promise<number> {

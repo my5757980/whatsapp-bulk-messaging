@@ -209,6 +209,26 @@ describe('Retry rounds (005 US3)', () => {
     expect((across.body as Array<{ campaign: { id: string } }>).filter((r) => r.campaign.id === id)).toHaveLength(2);
   });
 
+  it('waits for failure statuses that arrive shortly after sending before deciding there is nothing to retry', async () => {
+    const { id, byName } = await seedCampaign({ rounds: 1, delays: [30] }, [{ name: 'L1', status: 'SENT' }]);
+    // Sent a moment ago: its failure status may still come, so the campaign keeps waiting.
+    await progress();
+    expect((await ctx.prisma.campaign.findUniqueOrThrow({ where: { id } })).state).toBe('RUNNING');
+    expect(await ctx.prisma.campaignRetryRound.count({ where: { campaignId: id } })).toBe(0);
+    // The failure arrives (as its status webhook records it): round 1 is scheduled.
+    await ctx.prisma.message.update({ where: { id: byName.L1!.messageId }, data: { status: 'FAILED', failedAt: new Date(), failureCode: 131016, failureReason: 'failed' } });
+    await progress();
+    expect((await ctx.prisma.campaignRetryRound.findFirstOrThrow({ where: { campaignId: id, round: 1 } })).status).toBe('SCHEDULED');
+    expect((await ctx.prisma.campaign.findUniqueOrThrow({ where: { id } })).state).toBe('RUNNING');
+
+    // Sent over a minute ago with nothing that may be retried: the campaign completes.
+    const settled = await seedCampaign({ rounds: 1, delays: [30] }, [{ name: 'D1', status: 'DELIVERED' }]);
+    await ctx.prisma.message.updateMany({ where: { campaignId: settled.id }, data: { sentAt: new Date(Date.now() - 2 * 60_000) } });
+    await progress();
+    expect((await ctx.prisma.campaign.findUniqueOrThrow({ where: { id: settled.id } })).state).toBe('COMPLETED');
+    expect(await ctx.prisma.campaignRetryRound.count({ where: { campaignId: settled.id } })).toBe(0);
+  });
+
   it('holds rounds while the campaign is paused, and cancels one round on request', async () => {
     const { id } = await seedCampaign({ rounds: 2, delays: [30, 30] }, [
       { name: 'P1', status: 'FAILED', failureCode: 130429 },
