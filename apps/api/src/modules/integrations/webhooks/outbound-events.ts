@@ -26,8 +26,12 @@ export interface DeliverJobData {
 
 /** The first attempt waits this long after the event, so the triggering transaction has committed. */
 export const FIRST_ATTEMPT_DELAY_MS = 1_000;
-/** The endpoint subscriptions are read again after this long (other processes change them too). */
-const CACHE_MS = 15_000;
+/**
+ * How long the cached subscriptions are used before a cheap check of the endpoints table (count and
+ * newest change). Endpoints change in the API process while the worker writes most events, so this
+ * bounds how long another process can miss a new, changed or deleted endpoint (research R2).
+ */
+const CHECK_MS = 1_000;
 
 /** One BullMQ job per attempt; deferrals add a suffix so they never collide with the attempt's job. */
 export function deliverJobId(deliveryId: string, attempt: number, suffix = ''): string {
@@ -42,7 +46,7 @@ interface Subscriber {
 @Injectable()
 export class OutboundEvents {
   private readonly logger = new Logger(OutboundEvents.name);
-  private cache: { at: number; byType: Map<string, Subscriber[]> } | null = null;
+  private cache: { checkedAt: number; version: string; byType: Map<string, Subscriber[]> } | null = null;
   /** One shared load for callers outside a transaction. */
   private loading: Promise<Map<string, Subscriber[]>> | null = null;
   /** Bumped by invalidate(), so a load that started before a change is not cached. */
@@ -103,7 +107,12 @@ export class OutboundEvents {
   }
 
   private async subscribers(type: EventType, db?: Db): Promise<Subscriber[]> {
-    if (this.cache && Date.now() - this.cache.at <= CACHE_MS) return this.cache.byType.get(type) ?? [];
+    const cached = this.cache;
+    if (cached && Date.now() - cached.checkedAt <= CHECK_MS) return cached.byType.get(type) ?? [];
+    if (cached && (await this.version(db ?? this.prisma)) === cached.version) {
+      cached.checkedAt = Date.now();
+      return cached.byType.get(type) ?? [];
+    }
     // Inside a transaction the read uses its connection: waiting for another one from a busy pool
     // could hold the transaction until it times out.
     const byType =
@@ -115,14 +124,22 @@ export class OutboundEvents {
     return byType.get(type) ?? [];
   }
 
+  /** Changes whenever an endpoint is added, changed or deleted. */
+  private async version(db: Db): Promise<string> {
+    const [row] = await db.$queryRaw<Array<{ n: number; at: Date | null }>>`SELECT count(*)::int AS n, max(updated_at) AS at FROM webhook_endpoints`;
+    return `${row?.n ?? 0}:${row?.at?.getTime() ?? 0}`;
+  }
+
   private async load(db: Db): Promise<Map<string, Subscriber[]>> {
     const generation = this.generation;
+    // The version is read first: a change between the two reads only causes one more load later.
+    const version = await this.version(db);
     const endpoints = await db.webhookEndpoint.findMany({ select: { id: true, eventTypes: true, includeContent: true } });
     const byType = new Map<string, Subscriber[]>();
     for (const endpoint of endpoints) {
       for (const t of endpoint.eventTypes) byType.set(t, [...(byType.get(t) ?? []), { id: endpoint.id, includeContent: endpoint.includeContent }]);
     }
-    if (generation === this.generation) this.cache = { at: Date.now(), byType };
+    if (generation === this.generation) this.cache = { checkedAt: Date.now(), version, byType };
     return byType;
   }
 }
