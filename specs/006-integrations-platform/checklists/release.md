@@ -9,8 +9,8 @@
   from mock-meta (the mock Shopify and WooCommerce stores, the request catcher and the wizard
   routes) and from nock, never from real stores, accounts or phones.
 
-**Status**: Ready for review when CI on the last commit is green (section 1). Every quickstart row
-is covered by integration tests and a Playwright e2e spec. Still open before release (section 4):
+**Status**: Ready for review. All automated gates pass in CI (f07ac55), and every quickstart row is
+covered by integration tests and a Playwright e2e spec. Still open before release (section 4):
 - the Shopify app and the WooCommerce keys of the real stores, with test orders
 - the Meta app's webhook address, checked by the wizard
 - Meta approval of the order, COD and cart templates
@@ -25,7 +25,7 @@ is covered by integration tests and a Playwright e2e spec. Still open before rel
 | `npm run lint` | ✅ PASS | eslint over each changed area before every commit; CI `build-test` runs it over the whole repo |
 | `npm run typecheck` | ✅ PASS | api (src and tests), web (with e2e), shared, mock-meta and `tools/perf` |
 | `npm test` (unit) | ✅ PASS | api 488/488 (50 files), shared 247/247 (31 files), web 8/8 (2 files) (2026-11-25, local) |
-| `npm run test:integration` | ✅ PASS | 79 files in CI, 9 of them integrations suites (`integrations-webhooks`, `-contacts-api`, `-api-campaigns`, `-shopify`, `-woocommerce`, `-cod`, `-carts`, `-chat-links`, `-number-wizard`), plus 006 cases in `rbac`, `public-api-scopes`, `retention` and `contact-deletion` |
+| `npm run test:integration` | ✅ PASS | 79 files in CI (f07ac55), 9 of them integrations suites (`integrations-webhooks`, `-contacts-api`, `-api-campaigns`, `-shopify`, `-woocommerce`, `-cod`, `-carts`, `-chat-links`, `-number-wizard`), plus 006 cases in `rbac`, `public-api-scopes`, `retention` and `contact-deletion` |
 | `npm run test:contract` | ✅ PASS | `integrations.contract-spec.ts`: US1, US3, US4 (with the carts list), US7 and US8 against `contracts/integrations-api.openapi.yaml`; `public-api-v1.contract-spec.ts`: the contacts API and API campaign calls |
 | RBAC from all six contracts (T088) | ✅ PASS | `rbac.int-spec.ts` now reads the 001–006 contracts. The 49 integrations operations match the code: 16 `integrations.manage`, 14 `campaigns.view`, 7 `campaigns.manage`, 3 `campaigns.launch`, 6 `numbers.manage`, 2 `data.export` and 1 `apikeys.manage`. The two store receivers and `/l/c/{code}` are public and skipped |
 | Key permissions (T088) | ✅ PASS | `public-api-scopes.int-spec.ts`: each of the 14 public API v1 operations answers 403 `insufficient_scope` to a key without its `x-scope`, and gets past the check with only that permission |
@@ -35,7 +35,7 @@ is covered by integration tests and a Playwright e2e spec. Still open before rel
 | `npm audit --audit-level=high` | ✅ PASS | CI `build-test` step |
 | gitleaks (history) | ✅ PASS | CI `secret-scan`, with the narrow allowlist of test placeholders in `.gitleaks.toml` |
 | Docker images | ✅ PASS | CI `docker-images`: the api, migration and web images build, and the 002 live event smoke test still passes |
-| Playwright e2e | ✅ PASS | CI `e2e-smoke`: 47 specs, including `integrations-us1-webhooks` … `integrations-us8-number-wizard` |
+| Playwright e2e | ✅ PASS | CI `e2e-smoke` (f07ac55): 47/47 specs in 11.2 minutes, including `integrations-us1-webhooks` … `integrations-us8-number-wizard` |
 | Performance SC-001 (webhooks) | 🟡 NOT RUN | `npm run perf:webhooks` is ready (T089): an endpoint on the mock catcher for `contact.created`, 500 contacts made in parallel, each event's time from happening to arriving (limit 10 seconds at p99), and a check that none arrives twice. It needs the api and worker with `OUTBOUND_ALLOW_LOCAL=true`; run it on staging hardware |
 | Performance SC-004 (stores) | 🟡 NOT RUN | `PERF_NUMBER_ID=<id> npm run perf:stores` is ready (T089): a mock Shopify store, 400 signed `orders/create` events and 100 repeats (half the same delivery, half a new delivery for the same order), exactly one confirmation per order, 95% within a minute |
 

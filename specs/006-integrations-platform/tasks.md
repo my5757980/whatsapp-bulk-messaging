@@ -558,7 +558,7 @@ good token goes through every check and the test message, and the number is save
   - an expired session gives 404
   - audit entries; the token never appears in checks or logs
 - [X] T080 [P] [US8] Contract cases for `/number-wizard/sessions*` and `/numbers/{id}/health-check` in apps/api/test/contract/integrations.contract-spec.ts
-- [ ] T081 [P] [US8] Playwright e2e apps/web/e2e/integrations-us8-number-wizard.spec.ts: the missing-scope token, then the good token, picking the mock number, the fixes, the test message, and saving
+- [X] T081 [P] [US8] Playwright e2e apps/web/e2e/integrations-us8-number-wizard.spec.ts: the missing-scope token, then the good token, picking the mock number, the fixes, the test message, and saving
 
 ### Implementation for User Story 8
 
@@ -600,7 +600,7 @@ good token goes through every check and the test message, and the number is save
   - an integrations section in README.md: webhook verification, API key scopes, the Shopify Dev Dashboard app with its scopes and protected customer data, WooCommerce keys, chat links, the wizard
   - update specs/006-integrations-platform/quickstart.md if steps changed
   - mark items 1.1, 5.9, 5.10, 7.2 (QR) and 11.2–11.7 in docs/research/aisensy/feature-inventory-2026-11-19.md, and update its roadmap
-- [ ] T091 Run every quickstart row end to end (in CI where the machine's memory does not allow it) and record the results in specs/006-integrations-platform/checklists/release.md, with the pre-release items:
+- [X] T091 Run every quickstart row end to end (in CI where the machine's memory does not allow it) and record the results in specs/006-integrations-platform/checklists/release.md, with the pre-release items:
   - the Shopify Dev Dashboard app with scopes and protected customer data declared
   - WooCommerce on https with Read/Write keys
   - the Meta app callback check

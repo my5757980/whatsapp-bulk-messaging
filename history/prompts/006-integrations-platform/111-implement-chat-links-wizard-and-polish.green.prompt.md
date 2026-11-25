@@ -30,7 +30,7 @@ files:
  - README.md, docs/research/aisensy/feature-inventory-2026-11-19.md, specs/006-integrations-platform/ (data-model, quickstart, tasks, checklists/release.md)
 tests:
  - unit: api 488/488, shared 247/247, web 8/8 (local)
- - CI on PR #7: build-test green at f07ac55 (integration, contract, RBAC, key permissions); e2e 46/47 at 459d62d and 6c1507f, the US8 fix waiting at f07ac55
+ - CI on PR #7 at f07ac55: every job green (build-test with integration, contract, RBAC and key permissions; e2e 47/47; Docker images; secret scan)
 ---
 
 ## Prompt
@@ -63,12 +63,12 @@ continue
 
 ## Outcome
 
-- ✅ Impact: 89 of 91 tasks done. T081 (the US8 e2e) waits for the CI run at f07ac55; T091 is the
-  release checklist with its open items.
+- ✅ Impact: all 91 tasks of 006 done; every CI job green at f07ac55 (47/47 e2e). The release
+  checklist lists the items that need people before go-live.
 - 🧪 Tests: every API, shared and web unit test passes locally; build-test is green in CI.
 - 📁 Files: see the list above.
-- 🔁 Next prompts: confirm the e2e run; the release items in checklists/release.md; ask before
-  merging PR #7.
+- 🔁 Next prompts: the release items in checklists/release.md; merge PR #7 only after the user
+  says yes.
 - 🧠 Reflection: a cache that is invalidated only in the process that made the change looks right in
   single-process tests and fails only end to end; checking a cheap version stamp keeps the cache and
   makes every process correct within a second.
