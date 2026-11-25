@@ -16,12 +16,20 @@ const CONTRACTS = [
   path.join(SPECS, '003-chatbot-flow-builder/contracts/flows-api.openapi.yaml'),
   path.join(SPECS, '004-ai-agent/contracts/ai-api.openapi.yaml'),
   path.join(SPECS, '005-campaign-growth/contracts/growth-api.openapi.yaml'),
+  path.join(SPECS, '006-integrations-platform/contracts/integrations-api.openapi.yaml'),
 ];
 /**
  * The live event stream never ends, so a plain request would hang (inbox-realtime.int-spec.ts covers
  * it); the public tracked-link route is outside `/api` and has no session (growth-clicks covers it).
  */
-const SKIP = new Set(['get /inbox/events', 'get /l/{code}']);
+const SKIP = new Set([
+  'get /inbox/events',
+  'get /l/{code}',
+  // Feature 006: the store receivers and the chat link route are public; their own tests cover them.
+  'post /integrations/shopify/{storeId}/webhooks',
+  'post /integrations/woocommerce/{storeId}/webhooks',
+  'get /l/c/{code}',
+]);
 const ROLES = ['ADMIN', 'MANAGER', 'AGENT'] as const;
 /** Documented operations that are not implemented yet (none since US7). */
 const NOT_YET = new Set<string>();
@@ -73,6 +81,11 @@ describe('Role permissions on every endpoint', () => {
     expect(operations.some((op) => op.route === '/campaigns/{id}/retry-rounds/cancel')).toBe(true);
     expect(operations.some((op) => op.route === '/drips/{id}/activate' && op.permission === 'campaigns.launch')).toBe(true);
     expect(operations.some((op) => op.route === '/l/{code}')).toBe(false);
+    // And integrations: webhooks, API campaigns, stores, chat links and the number wizard (006 T088).
+    expect(operations.some((op) => op.route === '/webhook-endpoints' && op.method === 'post' && op.permission === 'integrations.manage')).toBe(true);
+    expect(operations.some((op) => op.route === '/chat-links/{id}/contacts/export' && op.permission === 'data.export')).toBe(true);
+    expect(operations.some((op) => op.route === '/number-wizard/sessions' && op.permission === 'numbers.manage')).toBe(true);
+    expect(operations.some((op) => op.route.startsWith('/integrations/') || op.route === '/l/c/{code}')).toBe(false);
   });
 
   it.each(ROLES)('%s gets 403 exactly where the role table says so', async (role) => {
