@@ -1,7 +1,7 @@
 // Feature 007 (T004, T026 and the later stories; contracts/meta-ads-graph.md "mock-meta behaviour"): the
 // Marketing API routes, answered for the ads tokens and the mock page token only, so the routes for
 // "mock-token" are unchanged.
-//   mock-ads-token-ok        every permission, never expires
+//   mock-ads-token-ok-full        every permission, never expires
 //   mock-ads-token-no-leads  no leads_retrieval
 // Ad account act_MOCKADS (AED, Asia/Dubai, active, with a payment method), page MOCKPAGE linked to the
 // mock number. New ads stay PENDING_REVIEW for 3 seconds, then ACTIVE; a version whose text holds
@@ -10,7 +10,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { postSigned } from './webhook-emitter.js';
 
-export const ADS_TOKENS = { ok: 'mock-ads-token-ok', noLeads: 'mock-ads-token-no-leads' } as const;
+export const ADS_TOKENS = { ok: 'mock-ads-token-ok-full', noLeads: 'mock-ads-token-no-leads' } as const;
 export const ADS_ACCOUNT = 'MOCKADS';
 export const ADS_PAGE = 'MOCKPAGE';
 export const ADS_PAGE_TOKEN = 'mock-ads-page-token-0001';

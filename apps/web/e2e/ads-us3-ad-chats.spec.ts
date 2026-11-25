@@ -45,6 +45,7 @@ test('US3: a chat from an ad shows the ad, runs the campaign flow and tags the c
     stdio: 'ignore',
   });
   await page.goto('/inbox');
+  await page.getByRole('tab', { name: /Open/ }).click();
   const row = page.getByTestId('conversation-row').filter({ hasText: `Ad Customer ${suffix}` });
   await expect(row).toBeVisible({ timeout: 30_000 });
   await row.click();

@@ -19,7 +19,7 @@ Settings (`.env`):
 
 ## 2. Mock Meta for ads
 
-- Tokens: `mock-ads-token-ok` (every permission), `mock-ads-token-no-leads` (no `leads_retrieval`).
+- Tokens: `mock-ads-token-ok-full` (every permission), `mock-ads-token-no-leads` (no `leads_retrieval`).
 - Ad account `act_MOCKADS` (AED, Asia/Dubai) and page `MOCKPAGE`, linked to the mock numbers.
 - New ads are in review for 3 seconds, then active. A version whose text contains `reject-me` is
   rejected with a reason.
@@ -33,7 +33,7 @@ Settings (`.env`):
 
 | Story | Steps | Expected |
 |---|---|---|
-| US1 Connection | **Ads → Connect**, paste `mock-ads-token-no-leads`, then `mock-ads-token-ok`. Pick `act_MOCKADS` and `MOCKPAGE`, save. | The first token names the missing `leads_retrieval` with its fix. The second lists the account and page; checks pass (lead terms as a warning if not accepted); the saved connection shows AED and Asia/Dubai and never shows the token. |
+| US1 Connection | **Ads → Connect**, paste `mock-ads-token-no-leads`, then `mock-ads-token-ok-full`. Pick `act_MOCKADS` and `MOCKPAGE`, save. | The first token names the missing `leads_retrieval` with its fix. The second lists the account and page; checks pass (lead terms as a warning if not accepted); the saved connection shows AED and Asia/Dubai and never shows the token. |
 | US2 Launch | **Ads → New ad**: goal *WhatsApp chats*, a mock number, pre-filled message "Hi, I saw your ad", UAE, ages 25–45, automatic placements, budget AED 50 a day, one image version; submit. Then a second campaign with a version containing `reject-me`. | The first shows *In review*, then *Active* within a minute. The second's version shows *Rejected* with the reason; editing the text and resubmitting returns it to review. A budget under Meta's minimum is refused with the minimum. |
 | US3 Ad chats | Choose the flow "Welcome" and the tag `from-ad` on the active campaign. Send a customer message with `--referral-ad <its version's ad id>`, then one with an unknown ad id. | The chat shows the ad's headline and picture and "Free ad window until …" after the first reply; the journey has *Started a chat from an ad*; the contact has `from-ad`; the flow replied. The second chat is listed under *Other ads*. |
 | US4 Results | Open the campaign's results after a few minutes. | Impressions, clicks and spend per day from Meta, chats started 1, new contacts 1, cost per chat = spend ÷ chats. The export lists each day and version. |

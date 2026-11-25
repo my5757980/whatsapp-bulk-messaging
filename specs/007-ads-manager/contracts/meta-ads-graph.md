@@ -90,7 +90,7 @@ In `messages[]` of a WhatsApp `messages` webhook:
 
 ## mock-meta behaviour
 
-- Token `mock-ads-token-ok` (20+ characters) has every permission; `mock-ads-token-no-leads` lacks
+- Token `mock-ads-token-ok-full` (20+ characters) has every permission; `mock-ads-token-no-leads` lacks
   `leads_retrieval`. Ad account `act_MOCKADS` (AED, Asia/Dubai, active), page `MOCKPAGE` linked to
   the mock numbers.
 - New ads stay `PENDING_REVIEW` for 3 seconds, then `ACTIVE`; a version whose primary text contains

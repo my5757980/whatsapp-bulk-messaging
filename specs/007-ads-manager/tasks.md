@@ -88,7 +88,7 @@ the good token lists the account and page; the saved connection shows AED and As
   - the cap set and cleared; disconnect; an expired session gives 404
   - managers get 403; audit entries without tokens
 - [ ] T020 [P] [US1] Contract cases for `/ads/connection*` in apps/api/test/contract/ads.contract-spec.ts
-- [ ] T021 [P] [US1] Playwright e2e apps/web/e2e/ads-us1-connection.spec.ts: `mock-ads-token-no-leads` names the missing permission; `mock-ads-token-ok` lists `act_MOCKADS` and `MOCKPAGE`; save; the connection card shows the currency, the time zone and Run checks
+- [ ] T021 [P] [US1] Playwright e2e apps/web/e2e/ads-us1-connection.spec.ts: `mock-ads-token-no-leads` names the missing permission; `mock-ads-token-ok-full` lists `act_MOCKADS` and `MOCKPAGE`; save; the connection card shows the currency, the time zone and Run checks
 
 ### Implementation for User Story 1
 

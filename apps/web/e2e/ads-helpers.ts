@@ -7,7 +7,7 @@ export const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 
 // Feature 007 e2e helpers on mock-meta (tools/mock-meta/src/ads.ts): the ads tokens, the mock ad
 // account act_MOCKADS (AED, Asia/Dubai) and the page MOCKPAGE.
-export const ADS_TOKEN_OK = 'mock-ads-token-ok';
+export const ADS_TOKEN_OK = 'mock-ads-token-ok-full';
 export const ADS_TOKEN_NO_LEADS = 'mock-ads-token-no-leads';
 
 /** Connects act_MOCKADS and MOCKPAGE through the API unless a working connection is saved. */
