@@ -30,6 +30,8 @@ test('US1: connect, sync, upload, map, send and see 9 delivered/read + 1 failed'
   // Sync templates from mock-meta.
   await page.goto('/templates');
   await page.getByRole('button', { name: /Sync from Meta/ }).click();
+  // The sync reads every connected account one by one; wait for it to finish, not for an older account's row.
+  await expect(page.getByText(/Templates synced/)).toBeVisible({ timeout: 90_000 });
   await expect(page.getByText('order_confirmation').first()).toBeVisible();
 
   // Wizard step 1: basics.

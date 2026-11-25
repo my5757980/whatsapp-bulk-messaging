@@ -15,6 +15,8 @@ test('US3: retry rounds take only failures that may pass', async ({ page }) => {
   const number = await connectNumber(page, 'Retries', suffix);
   await page.goto('/templates');
   await page.getByRole('button', { name: /Sync from Meta/ }).click();
+  // The sync reads every connected account one by one; wait for it to finish, not for an older account's row.
+  await expect(page.getByText(/Templates synced/)).toBeVisible({ timeout: 90_000 });
   await expect(page.getByText('order_confirmation').first()).toBeVisible();
 
   await page.goto('/campaigns/new');

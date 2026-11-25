@@ -22,6 +22,8 @@ test('US4: build a drip, enrol by hand, and leave on reply', async ({ page }) =>
   const number = await connectNumber(page, 'Drips', suffix);
   await page.goto('/templates');
   await page.getByRole('button', { name: /Sync from Meta/ }).click();
+  // The sync reads every connected account one by one; wait for it to finish, not for an older account's row.
+  await expect(page.getByText(/Templates synced/)).toBeVisible({ timeout: 90_000 });
   await expect(page.getByText('order_confirmation').first()).toBeVisible();
   for (const p of people) {
     const res = await page.request.post('/api/contacts', {
