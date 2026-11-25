@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
@@ -15,6 +15,7 @@ import { toast } from '@/components/ui/toaster';
 import { api } from '@/lib/api-client';
 import { errorMessage } from '@/lib/errors';
 import { type WizardCheck, type WizardChecks, type WizardSession } from '@/lib/integrations';
+import { queryKeys } from '@/lib/query';
 
 interface Picked {
   wabaId: string;
@@ -42,6 +43,7 @@ export default function ConnectNumberWizardPage() {
 
 function Wizard() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [token, setToken] = useState('');
   const [session, setSession] = useState<WizardSession | null>(null);
   const [picked, setPicked] = useState<Picked | null>(null);
@@ -88,8 +90,10 @@ function Wizard() {
   });
   const connect = useMutation({
     mutationFn: (withoutTest: boolean) => api<{ id: string }>(`/number-wizard/sessions/${session!.id}/connect`, { method: 'POST', json: { ...ref, label: label.trim(), withoutTest } }),
-    onSuccess: () => {
+    onSuccess: async () => {
       toast.success('Number connected');
+      // The numbers list may be cached from before the wizard.
+      await queryClient.invalidateQueries({ queryKey: queryKeys.numbers });
       router.push('/settings/numbers');
     },
     onError: (e) => setError(errorMessage(e)),

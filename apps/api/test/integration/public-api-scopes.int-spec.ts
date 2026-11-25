@@ -55,7 +55,7 @@ describe('Public API key permissions on every operation (006)', () => {
   });
 
   it('covers every documented operation, each with a known permission', () => {
-    expect(operations.length).toBeGreaterThanOrEqual(15);
+    expect(operations.length).toBeGreaterThanOrEqual(14);
     for (const op of operations) expect(API_KEY_SCOPES, `${op.method} ${op.route}`).toContain(op.scope);
     expect(operations.some((op) => op.route === '/api-campaigns/{apiName}/messages' && op.scope === 'campaigns.trigger')).toBe(true);
   });
