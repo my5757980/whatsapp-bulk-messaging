@@ -4,8 +4,9 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { OutboundEvents } from '../../src/modules/integrations/webhooks/outbound-events.js';
 import { WebhookDeliveryProcessor } from '../../src/modules/integrations/webhooks/webhook-delivery.processor.js';
-import { restoreNetwork, seedContact, seedNumber, seedTemplate, setDefaultCountry, uaePhone, useNockLocalOnly } from '../support/fixtures.js';
-import { createTestContext, signIn, uniq, type SignedInAgent, type TestContext } from '../support/test-context.js';
+import { META_BASE, META_VERSION, digits, restoreNetwork, seedContact, seedNumber, seedTemplate, setDefaultCountry, uaePhone, useNockLocalOnly } from '../support/fixtures.js';
+import { NumberWizardService } from '../../src/modules/integrations/number-wizard/number-wizard.service.js';
+import { createTestContext, postSignedWebhook, signIn, uniq, webhook, type SignedInAgent, type TestContext } from '../support/test-context.js';
 import { expectMatchesContract } from './openapi-validator.js';
 
 // 006 contract tests (T019 and later stories): responses match contracts/integrations-api.openapi.yaml.
@@ -206,5 +207,69 @@ describe('Integrations API contract', () => {
     await check('delete', '/chat-links/{id}', await call('delete', one), 204);
     await check('delete', '/chat-links/{id}', await call('delete', one), 404);
     await check('get', '/l/c/{code}', await request(ctx.server()).get(`/l/c/${code}`), 404);
+  });
+
+  it('US8: wizard sessions, checks, fixes, the test message, connect and the health check', async () => {
+    const token = `EAAGcontract${digits(20)}`;
+    const waba = `WABA${digits(10)}`;
+    const phone = digits(15);
+    const wamid = `wamid.CONTRACT${digits(8)}`;
+    const v = `/${META_VERSION}`;
+    let registered = false;
+    const row = () => ({ id: phone, display_phone_number: '+971 4 555 0100', verified_name: 'Contract', name_status: 'APPROVED', code_verification_status: 'VERIFIED', quality_rating: 'GREEN', platform_type: registered ? 'CLOUD_API' : 'NOT_APPLICABLE', whatsapp_business_manager_messaging_limit: 'TIER_1K' });
+    const scopes = ['whatsapp_business_management', 'whatsapp_business_messaging'];
+    nock(META_BASE)
+      .persist()
+      .get(`${v}/debug_token`)
+      .query(true)
+      .reply(async (request: Request) =>
+        new URL(request.url).searchParams.get('input_token') === token
+          ? [200, { data: { is_valid: true, expires_at: 0, scopes, granular_scopes: [{ scope: scopes[0], target_ids: [waba] }] } }]
+          : [200, { data: { is_valid: false, scopes: [], error: { message: 'Invalid OAuth access token.' } } }],
+      );
+    nock(META_BASE).persist().get(`${v}/${waba}`).query(true).reply(200, { id: waba, name: 'Contract account' });
+    nock(META_BASE).persist().get(`${v}/${waba}/phone_numbers`).query(true).reply(async () => [200, { data: [row()] }]);
+    nock(META_BASE).persist().get(`${v}/${phone}`).query(true).reply(async () => [200, row()]);
+    nock(META_BASE)
+      .persist()
+      .post(`${v}/${phone}/register`)
+      .reply(async (request: Request) => {
+        const body = (await request.json()) as { pin?: string };
+        if (body.pin !== '123456') return [400, { error: { message: 'Two step verification PIN Mismatch', code: 133005 } }];
+        registered = true;
+        return [200, { success: true }];
+      });
+    nock(META_BASE).persist().get(`${v}/${waba}/subscribed_apps`).reply(200, { data: [] });
+    nock(META_BASE).persist().get(/\/subscriptions$/).reply(200, { data: [] });
+    nock(META_BASE).persist().get(`${v}/${waba}/message_templates`).query(true).reply(200, { data: [{ id: 'T1', name: 'hello_world', language: 'en_US', status: 'APPROVED', category: 'UTILITY', components: [] }] });
+    nock(META_BASE).persist().post(`${v}/${phone}/messages`).reply(200, { messages: [{ id: wamid }] });
+    NumberWizardService.deliveryWaitMs = 5_000;
+
+    await check('post', '/number-wizard/sessions', await call('post', '/number-wizard/sessions', { accessToken: `EAAGwrong${digits(20)}` }), 422);
+    const started = await call('post', '/number-wizard/sessions', { accessToken: token });
+    await check('post', '/number-wizard/sessions', started, 201);
+    const id = String(started.body.id);
+    const ref = { wabaId: waba, phoneNumberId: phone };
+    const missing = randomUUID();
+    await check('post', '/number-wizard/sessions/{id}/checks', await call('post', `/number-wizard/sessions/${id}/checks`, ref), 200);
+    await check('post', '/number-wizard/sessions/{id}/checks', await call('post', `/number-wizard/sessions/${missing}/checks`, ref), 404);
+    await check('post', '/number-wizard/sessions/{id}/fixes', await call('post', `/number-wizard/sessions/${id}/fixes`, { ...ref, fix: 'REGISTER_NUMBER', pin: '000000' }), 422);
+    await check('post', '/number-wizard/sessions/{id}/fixes', await call('post', `/number-wizard/sessions/${id}/fixes`, { ...ref, fix: 'REGISTER_NUMBER', pin: '123456' }), 200);
+    await check('post', '/number-wizard/sessions/{id}/fixes', await call('post', `/number-wizard/sessions/${missing}/fixes`, { ...ref, fix: 'SUBSCRIBE_APP' }), 404);
+    const to = uaePhone();
+    const pending = call('post', `/number-wizard/sessions/${id}/test-message`, { ...ref, to }).then((r) => r);
+    await new Promise((resolve) => setTimeout(resolve, 1_500));
+    await postSignedWebhook(ctx, webhook.status(phone, wamid, to.slice(1), 'delivered'));
+    await check('post', '/number-wizard/sessions/{id}/test-message', await pending, 200);
+    await check('post', '/number-wizard/sessions/{id}/test-message', await call('post', `/number-wizard/sessions/${missing}/test-message`, { ...ref, to }), 404);
+    const connected = await call('post', `/number-wizard/sessions/${id}/connect`, { ...ref, label: 'Contract wizard' });
+    await check('post', '/number-wizard/sessions/{id}/connect', connected, 201);
+    await check('post', '/number-wizard/sessions/{id}/connect', await call('post', `/number-wizard/sessions/${id}/connect`, { ...ref, label: 'Again' }), 404);
+    const second = await call('post', '/number-wizard/sessions', { accessToken: token });
+    await check('post', '/number-wizard/sessions/{id}/connect', await call('post', `/number-wizard/sessions/${String(second.body.id)}/connect`, { ...ref, label: 'Again', withoutTest: true }), 409);
+    await check('post', '/numbers/{id}/health-check', await call('post', `/numbers/${String(connected.body.id)}/health-check`), 200);
+    await check('post', '/numbers/{id}/health-check', await call('post', `/numbers/${missing}/health-check`), 404);
+    NumberWizardService.deliveryWaitMs = 60_000;
+    nock.cleanAll();
   });
 });
