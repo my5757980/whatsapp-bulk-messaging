@@ -17,8 +17,8 @@ Settings (`.env`):
   defaults to `https://api.stripe.com`.
 - `STRIPE_API_VERSION=2026-09-30.endive`. It is upgraded on purpose, like `META_GRAPH_API_VERSION`.
 - `PUBLIC_LINK_BASE_URL`: pay links are `${PUBLIC_LINK_BASE_URL}/p/{code}`, as in 005–007.
-- `API_PUBLIC_URL`: the address Stripe posts notifications to, followed by
-  `/api/payments/stripe/webhook`.
+- `APP_URL` (as before): Stripe posts notifications to `${APP_URL}/api/payments/stripe/webhook`,
+  in the same way as the 006 store webhooks.
 - `MOCK_STRIPE_WEBHOOK_URL=http://localhost:3001/api/payments/stripe/webhook`. This is for
   mock-meta only, when the endpoint is registered by hand.
 

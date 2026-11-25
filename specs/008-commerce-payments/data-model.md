@@ -176,7 +176,7 @@ Every Stripe notification as received; 30-day retention. FR-004, R3.
 | source | PaymentEventSource | `WEBHOOK`, `RECONCILE`, `CHECK` |
 | result | PaymentEventResult | `PENDING`, `APPLIED`, `IGNORED`, `DUPLICATE`, `REJECTED`, `FAILED` |
 | paymentRequestId | uuid? → payment_requests | `SET NULL` |
-| body | jsonb? | Raw event (rejected: headers and the first 2 KB only) |
+| body | jsonb? | The event with card and customer details removed by `redactStripeEvent` (`payment_method_details`, `billing_details`, `customer_details`, `shipping_details`, `last_payment_error.payment_method`). Rejected requests keep only the headers and the first 2 KB. |
 | error | varchar(500)? | |
 | stripeCreatedAt | timestamptz? | Event `created` |
 | receivedAt | timestamptz | |

@@ -100,6 +100,10 @@ here copies a competitor's design.
   - **Rejected requests:** these return 400 and are recorded in `payment_events` with `signatureValid=false` (headers and the first 2 KB only). They change nothing (FR-004).
   - **Valid requests:**
     - The row is inserted with a unique `stripe_event_id`. A repeat is answered 200 and ignored (SC-003).
+    - The stored body first goes through the shared `redactStripeEvent`, which removes
+      `payment_method_details`, `billing_details`, `customer_details`, `shipping_details` and
+      `last_payment_error.payment_method`. No card digits, brands or customer details are kept
+      (SC-004).
     - A `payment-event` job goes on the `payments` queue.
     - The response is 200 within milliseconds.
   - **Events handled** (the webhook endpoint subscribes to exactly these):

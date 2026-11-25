@@ -69,7 +69,7 @@ locale=auto
 ### 5. `POST /v1/webhook_endpoints`: automatic registration (R4)
 
 ```text
-url=https://<API_PUBLIC_URL>/api/payments/stripe/webhook
+url=${APP_URL}/api/payments/stripe/webhook
 api_version=2026-09-30.endive
 description=WhatsApp platform payments
 enabled_events[]=checkout.session.completed
