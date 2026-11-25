@@ -12,6 +12,8 @@ test('US6: drip results and the contacts behind a count', async ({ page }) => {
   const number = await connectNumber(page, 'Results', suffix);
   await page.goto('/templates');
   await page.getByRole('button', { name: /Sync from Meta/ }).click();
+  // The sync reads every connected account one by one; wait for it to finish, not for an older account's row.
+  await expect(page.getByText(/Templates synced/)).toBeVisible({ timeout: 90_000 });
   await expect(page.getByText('order_confirmation').first()).toBeVisible();
 
   const numbers = (await (await page.request.get('/api/numbers')).json()) as Array<{ id: string; phoneNumberId: string }>;

@@ -258,7 +258,21 @@ export function answerMessages(path: string, raw: string): AiResponse {
   }
 
   const structured = body.output_config?.format !== undefined;
-  const text = structured ? JSON.stringify({ ...DEFAULT_REPLY, ...(rule?.reply ? rule.reply : defaultReply(body, question)) }) : (rule?.text ?? 'Done.');
+  const system = typeof body.system === 'string' ? body.system : blocks(body.system).map((b) => b.text ?? '').join('\n');
+  // Feature 007: ad texts are asked for as { options: [{ primaryText, headline }] } (research R12).
+  const adTexts = structured && !rule && system.includes('You write short ads');
+  const offer = (question.match(/What the business offers: (.+)/)?.[1] ?? 'our offer').slice(0, 80);
+  const text = adTexts
+    ? JSON.stringify({
+        options: [
+          { primaryText: `${offer} - message us on WhatsApp to order.`, headline: 'Chat with us today' },
+          { primaryText: `Ask us about ${offer} in a quick WhatsApp chat.`, headline: 'Questions? Just ask' },
+          { primaryText: `${offer}. Tap to chat and we will reply soon.`, headline: 'Order on WhatsApp' },
+        ],
+      })
+    : structured
+      ? JSON.stringify({ ...DEFAULT_REPLY, ...(rule?.reply ? rule.reply : defaultReply(body, question)) })
+      : (rule?.text ?? 'Done.');
   const stopReason = rule?.stopReason ?? 'end_turn';
   const content = stopReason === 'refusal' ? [] : [{ type: 'text', text: stopReason === 'max_tokens' ? text.slice(0, Math.max(1, Math.floor(text.length / 2))) : text }];
   return { status: 200, body: { ...base, content, stop_reason: stopReason }, stream };

@@ -8,7 +8,8 @@ import { createTestContext, signIn, type SignedInAgent, type TestContext } from 
 
 // T167, T097, 003 T086, 004 T108, 005 T064: every operation's `x-permission` in the dashboard (001),
 // live chat (002), flows (003), AI (004) and campaign growth (005) contracts is enforced for each
-// role (001 FR-007, 002 FR-041, 003 FR-038, 004 FR-045 and FR-049, 005 FR-037).
+// role (001 FR-007, 002 FR-041, 003 FR-038, 004 FR-045 and FR-049, 005 FR-037), with the 006
+// integrations and 007 ads contracts.
 const SPECS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../specs');
 const CONTRACTS = [
   path.join(SPECS, '001-whatsapp-bulk-messaging/contracts/dashboard-api.openapi.yaml'),
@@ -17,6 +18,7 @@ const CONTRACTS = [
   path.join(SPECS, '004-ai-agent/contracts/ai-api.openapi.yaml'),
   path.join(SPECS, '005-campaign-growth/contracts/growth-api.openapi.yaml'),
   path.join(SPECS, '006-integrations-platform/contracts/integrations-api.openapi.yaml'),
+  path.join(SPECS, '007-ads-manager/contracts/ads-api.openapi.yaml'),
 ];
 /**
  * The live event stream never ends, so a plain request would hang (inbox-realtime.int-spec.ts covers
@@ -29,6 +31,8 @@ const SKIP = new Set([
   'post /integrations/shopify/{storeId}/webhooks',
   'post /integrations/woocommerce/{storeId}/webhooks',
   'get /l/c/{code}',
+  // Feature 007: the website ad link is public; ads-website-ai covers it.
+  'get /l/a/{code}',
 ]);
 const ROLES = ['ADMIN', 'MANAGER', 'AGENT'] as const;
 /** Documented operations that are not implemented yet (none since US7). */
@@ -86,6 +90,11 @@ describe('Role permissions on every endpoint', () => {
     expect(operations.some((op) => op.route === '/chat-links/{id}/contacts/export' && op.permission === 'data.export')).toBe(true);
     expect(operations.some((op) => op.route === '/number-wizard/sessions' && op.permission === 'numbers.manage')).toBe(true);
     expect(operations.some((op) => op.route.startsWith('/integrations/') || op.route === '/l/c/{code}')).toBe(false);
+    // And ads: the connection, campaigns, results, audiences and lead forms (007 T070).
+    expect(operations.some((op) => op.route === '/ads/connection' && op.method === 'post' && op.permission === 'integrations.manage')).toBe(true);
+    expect(operations.some((op) => op.route === '/ads/campaigns/{id}/submit' && op.permission === 'campaigns.launch')).toBe(true);
+    expect(operations.some((op) => op.route === '/ads/lead-forms/{id}/leads/export' && op.permission === 'data.export')).toBe(true);
+    expect(operations.some((op) => op.route === '/l/a/{code}')).toBe(false);
   });
 
   it.each(ROLES)('%s gets 403 exactly where the role table says so', async (role) => {

@@ -55,6 +55,10 @@ describe('alert rules', () => {
     expect(rule('WbmStoreEventsFailing')).toMatch(/wbm_store_events_total\{result="failed"\}\[15m\][\s\S]*> 0\.20[\s\S]*>= 10/);
   });
 
+  it('warn when most reads from Meta\'s ads API fail for 30 minutes (007 T067)', () => {
+    expect(rule('WbmAdsSyncFailing')).toMatch(/wbm_ads_sync_total\{result="failed"\}\[30m\][\s\S]*> 0\.50[\s\S]*for: 30m/);
+  });
+
   it('give every alert a severity and a summary', () => {
     const names = [...ALERTS.matchAll(/- alert: (\w+)/g)].map((m) => m[1]!);
     expect(names.length).toBeGreaterThanOrEqual(5);

@@ -1,0 +1,780 @@
+openapi: 3.1.0
+info:
+  title: WhatsApp Platform - Ads API
+  version: 0.1.0
+  description: >
+    The ads connection, ad campaigns with their versions, results, saved audiences, lead forms and
+    AI ad texts for the Next.js dashboard (feature 007-ads-manager). Same conventions as 001–006:
+    httpOnly session cookie, an X-CSRF-Token header on every mutating request, an x-permission on
+    every operation, and the error shape {code, message, details, requestId}. Permissions (no new
+    ones):
+      integrations.manage  ADMIN                 - the ads connection and the spending cap
+      campaigns.manage     ADMIN, MANAGER        - building ad campaigns, audiences and lead forms
+      campaigns.launch     ADMIN, MANAGER        - submitting, pausing, resuming, ending, budgets
+      campaigns.view       ADMIN, MANAGER, AGENT - ads, results and leads (phones masked for agents)
+      data.export          ADMIN, MANAGER        - CSV exports
+
+    Public route: GET /l/a/{code} (website ads) is served outside /api (servers override), counts a
+    visit unless the request is a preview or a robot, and answers 302 to the ad's web page.
+    Money is in the ad account currency's minor units with its currency code; never converted.
+servers:
+  - url: /api
+security:
+  - sessionCookie: []
+tags:
+  - name: ads-connection
+  - name: ad-campaigns
+  - name: ad-targeting
+  - name: ad-audiences
+  - name: ad-lead-forms
+  - name: public
+paths:
+  /ads/connection:
+    get:
+      tags: [ads-connection]
+      summary: The current connection with its last checks (null when not connected)
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Connection, content: { application/json: { schema: { type: object, required: [connection], properties: { connection: { oneOf: [{ $ref: '#/components/schemas/AdsConnection' }, { type: 'null' }] } } } } } }
+    post:
+      tags: [ads-connection]
+      summary: Save the connection with the chosen ad account and page (FR-001)
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [sessionId, adAccountId, pageId], properties: { sessionId: { type: string, format: uuid }, adAccountId: { type: string }, pageId: { type: string } } }
+      responses:
+        '201': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/AdsConnection' } } } }
+        '404': { description: Session expired or unknown, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [ads-connection]
+      summary: Disconnect; ads keep running at Meta, platform campaigns become read-only
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Disconnected }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /ads/connection/token:
+    post:
+      tags: [ads-connection]
+      summary: Check a pasted token and list the ad accounts and pages it reaches (R2)
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [accessToken], properties: { accessToken: { type: string, minLength: 20 } } } } }
+      responses:
+        '201': { description: Session (token kept encrypted for 30 minutes), content: { application/json: { schema: { $ref: '#/components/schemas/AdsSession' } } } }
+        '422': { description: TOKEN_INVALID with the reason, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ads/connection/checks:
+    post:
+      tags: [ads-connection]
+      summary: Run the checks for a chosen account and page (in a session), or for the saved connection (FR-002)
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { sessionId: { type: string, format: uuid }, adAccountId: { type: string }, pageId: { type: string } } }
+      responses:
+        '200': { description: Results, content: { application/json: { schema: { $ref: '#/components/schemas/AdsChecks' } } } }
+        '404': { description: "Session expired, or nothing connected", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ads/connection/spend-cap:
+    put:
+      tags: [ads-connection]
+      summary: Set or clear the monthly spending cap (FR-018)
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [monthlyCapMinor], properties: { monthlyCapMinor: { type: [integer, 'null'], minimum: 1 } } } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/AdsConnection' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /ads/targeting/locations:
+    get:
+      tags: [ad-targeting]
+      summary: Search countries, regions and cities (Meta's list)
+      x-permission: campaigns.manage
+      parameters: [{ name: q, in: query, required: true, schema: { type: string, minLength: 2, maxLength: 80 } }]
+      responses:
+        '200': { description: Matches, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/TargetingOption' } } } } }
+        '409': { description: NOT_CONNECTED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ads/targeting/interests:
+    get:
+      tags: [ad-targeting]
+      summary: Search interests (Meta's list)
+      x-permission: campaigns.manage
+      parameters: [{ name: q, in: query, required: true, schema: { type: string, minLength: 2, maxLength: 80 } }]
+      responses:
+        '200': { description: Matches, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/TargetingOption' } } } } }
+        '409': { description: NOT_CONNECTED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ads/targeting/estimate:
+    post:
+      tags: [ad-targeting]
+      summary: Audience size estimate and the minimum daily budget for a goal (FR-010)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [goal, targeting], properties: { goal: { $ref: '#/components/schemas/AdGoal' }, targeting: { $ref: '#/components/schemas/Targeting' }, placements: { $ref: '#/components/schemas/Placements' } } } } }
+      responses:
+        '200':
+          description: Estimate
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [currency, minDailyBudgetMinor]
+                properties:
+                  audienceLower: { type: [integer, 'null'] }
+                  audienceUpper: { type: [integer, 'null'] }
+                  currency: { type: string }
+                  minDailyBudgetMinor: { type: integer }
+        '409': { description: NOT_CONNECTED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /ads/ai-text:
+    post:
+      tags: [ad-campaigns]
+      summary: Draft the main text and headline with the 004 AI service (FR-015)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [goal, description], properties: { goal: { $ref: '#/components/schemas/AdGoal' }, description: { type: string, minLength: 10, maxLength: 1000 }, language: { type: string, maxLength: 10 } } } } }
+      responses:
+        '200':
+          description: Up to three drafts within Meta's limits
+          content:
+            application/json:
+              schema: { type: object, required: [options], properties: { options: { type: array, maxItems: 3, items: { type: object, required: [primaryText, headline], properties: { primaryText: { type: string }, headline: { type: string } } } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { description: AI_LIMIT_REACHED (the 004 monthly limit), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ads/campaigns:
+    get:
+      tags: [ad-campaigns]
+      summary: Ad campaigns with status, spend to date and chats or leads (FR-028)
+      x-permission: campaigns.view
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/AdCampaignStatus' } }
+      responses:
+        '200': { description: Campaigns, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AdCampaignSummary' } } } } }
+    post:
+      tags: [ad-campaigns]
+      summary: Create a draft (FR-005, FR-014)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdCampaignInput' } } }
+      responses:
+        '201': { description: Draft, content: { application/json: { schema: { $ref: '#/components/schemas/AdCampaign' } } } }
+        '409': { description: NAME_TAKEN or NOT_CONNECTED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /ads/campaigns/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [ad-campaigns]
+      summary: One campaign with its versions and states
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Campaign, content: { application/json: { schema: { $ref: '#/components/schemas/AdCampaign' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [ad-campaigns]
+      summary: Change a draft, or the daily budget, end date, flow and tag of a submitted campaign (FR-016, FR-024)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdCampaignPatch' } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/AdCampaign' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "SPEND_CAP (a budget change would pass the cap), NOT_EDITABLE or CONNECTION_ERROR", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [ad-campaigns]
+      summary: Delete a draft
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_A_DRAFT, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ads/campaigns/{id}/submit:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [ad-campaigns]
+      summary: Create the campaign at Meta for review (FR-012); also resubmits edited rejected versions (FR-013)
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: In review, content: { application/json: { schema: { $ref: '#/components/schemas/AdCampaign' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "SPEND_CAP, CONNECTION_ERROR or NOT_SUBMITTABLE", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: "VALIDATION_FAILED (problems listed), or META_REFUSED with Meta's message", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ads/campaigns/{id}/pause:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [ad-campaigns]
+      summary: Pause at Meta
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Paused, content: { application/json: { schema: { $ref: '#/components/schemas/AdCampaign' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_RUNNING or CONNECTION_ERROR, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ads/campaigns/{id}/resume:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [ad-campaigns]
+      summary: Resume at Meta (checked against the cap)
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Active again, content: { application/json: { schema: { $ref: '#/components/schemas/AdCampaign' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: "NOT_PAUSED, SPEND_CAP or CONNECTION_ERROR", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ads/campaigns/{id}/end:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [ad-campaigns]
+      summary: End now (the end date becomes now and the campaign pauses at Meta)
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Ended, content: { application/json: { schema: { $ref: '#/components/schemas/AdCampaign' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_RUNNING or CONNECTION_ERROR, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ads/campaigns/{id}/duplicate:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [ad-campaigns]
+      summary: Copy as a new draft
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '201': { description: Draft, content: { application/json: { schema: { $ref: '#/components/schemas/AdCampaign' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /ads/campaigns/{id}/versions/{versionId}:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { name: versionId, in: path, required: true, schema: { type: string, format: uuid } }
+    put:
+      tags: [ad-campaigns]
+      summary: Edit a draft or rejected version (texts, media, button)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdVersionInput' } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/AdCampaign' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_EDITABLE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /ads/campaigns/{id}/versions/{versionId}/pause:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { name: versionId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [ad-campaigns]
+      summary: Pause one version
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Paused, content: { application/json: { schema: { $ref: '#/components/schemas/AdCampaign' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_RUNNING, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ads/campaigns/{id}/versions/{versionId}/resume:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+      - { name: versionId, in: path, required: true, schema: { type: string, format: uuid } }
+    post:
+      tags: [ad-campaigns]
+      summary: Resume one version
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Active again, content: { application/json: { schema: { $ref: '#/components/schemas/AdCampaign' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_PAUSED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ads/campaigns/{id}/results:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [ad-campaigns]
+      summary: Meta's numbers and the platform's own, per day and per version (FR-026)
+      x-permission: campaigns.view
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Results, content: { application/json: { schema: { $ref: '#/components/schemas/AdResults' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /ads/campaigns/{id}/results/export:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [ad-campaigns]
+      summary: Results per day and version as CSV (FR-029)
+      x-permission: data.export
+      responses:
+        '200': { description: CSV file, content: { text/csv: { schema: { type: string } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /ads/campaigns/{id}/chats:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [ad-campaigns]
+      summary: Contacts who started chats from the campaign (phones masked without phones.full)
+      x-permission: campaigns.view
+      parameters: [{ $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' }]
+      responses:
+        '200':
+          description: Page of chat starts
+          content: { application/json: { schema: { type: object, required: [items, total], properties: { items: { type: array, items: { $ref: '#/components/schemas/AdChatStart' } }, total: { type: integer } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /ads/other-chats:
+    get:
+      tags: [ad-campaigns]
+      summary: Chats from ads made outside the platform, grouped by Meta's ad id (FR-022)
+      x-permission: campaigns.view
+      responses:
+        '200':
+          description: Groups
+          content:
+            application/json:
+              schema: { type: array, items: { type: object, required: [metaAdId, chats], properties: { metaAdId: { type: string }, headline: { type: [string, 'null'] }, chats: { type: integer }, newContacts: { type: integer }, lastAt: { type: string, format: date-time } } } }
+  /ads/audiences:
+    get:
+      tags: [ad-audiences]
+      summary: Saved audiences and lookalikes with size and state
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Audiences, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AdAudience' } } } } }
+    post:
+      tags: [ad-audiences]
+      summary: Make a saved audience from a tag, a contact filter or a campaign group (FR-031)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdAudienceInput' } } }
+      responses:
+        '201': { description: Created (syncing), content: { application/json: { schema: { $ref: '#/components/schemas/AdAudience' } } } }
+        '409': { description: "NAME_TAKEN, NOT_CONNECTED or TERMS_NOT_ACCEPTED", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /ads/audiences/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [ad-audiences]
+      summary: One audience
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Audience, content: { application/json: { schema: { $ref: '#/components/schemas/AdAudience' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [ad-audiences]
+      summary: Delete here and at Meta (refused while a running campaign uses it)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: IN_USE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ads/audiences/{id}/lookalikes:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [ad-audiences]
+      summary: Make a lookalike in a country (FR-031)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [country, ratio], properties: { country: { type: string, pattern: '^[A-Z]{2}$' }, ratio: { type: number, minimum: 0.01, maximum: 0.1 }, name: { type: string, maxLength: 80 } } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AdAudience' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: TOO_SMALL (fewer than 100 people), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ads/audiences/{id}/sync:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [ad-audiences]
+      summary: Update at Meta now instead of at the daily update
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '202': { description: Queued }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /ads/lead-forms:
+    get:
+      tags: [ad-lead-forms]
+      summary: Lead forms with lead counts
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Forms, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AdLeadForm' } } } } }
+    post:
+      tags: [ad-lead-forms]
+      summary: Create a lead form at Meta (FR-035)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/AdLeadFormInput' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AdLeadForm' } } } }
+        '409': { description: "NAME_TAKEN, NOT_CONNECTED or TERMS_NOT_ACCEPTED", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /ads/lead-forms/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [ad-lead-forms]
+      summary: One form
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Form, content: { application/json: { schema: { $ref: '#/components/schemas/AdLeadForm' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [ad-lead-forms]
+      summary: Change the tag and the welcome template (the questions are fixed at Meta)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, minProperties: 1, properties: { tagId: { type: [string, 'null'], format: uuid }, welcomeTemplateId: { type: [string, 'null'], format: uuid }, welcomeMapping: { type: object } } } } }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/AdLeadForm' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /ads/lead-forms/{id}/leads:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [ad-lead-forms]
+      summary: The form's leads (phones masked without phones.full)
+      x-permission: campaigns.view
+      parameters: [{ $ref: '#/components/parameters/Page' }, { $ref: '#/components/parameters/PageSize' }]
+      responses:
+        '200':
+          description: Page of leads
+          content: { application/json: { schema: { type: object, required: [items, total], properties: { items: { type: array, items: { $ref: '#/components/schemas/AdLead' } }, total: { type: integer } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /ads/lead-forms/{id}/leads/export:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [ad-lead-forms]
+      summary: The form's leads as CSV (audited)
+      x-permission: data.export
+      responses:
+        '200': { description: CSV file, content: { text/csv: { schema: { type: string } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /l/a/{code}:
+    servers: [{ url: / }]
+    parameters: [{ name: code, in: path, required: true, schema: { type: string } }]
+    get:
+      tags: [public]
+      summary: Website ad link; counts a visit unless a preview or robot, then 302 to the page (R10)
+      x-permission: public
+      security: []
+      responses:
+        '302': { description: To the ad's web page with utm parameters }
+        '404': { description: Unknown or ended link page, content: { text/html: { schema: { type: string } } } }
+        '429': { description: Too many visits from one client }
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: sid }
+    csrfHeader: { type: apiKey, in: header, name: X-CSRF-Token }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+  responses:
+    NotFound:
+      description: Not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationFailed:
+      description: VALIDATION_FAILED, with field details
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [VALIDATION_FAILED, TOKEN_INVALID, NOT_CONNECTED, CONNECTION_ERROR, NAME_TAKEN, SPEND_CAP, META_REFUSED, NOT_EDITABLE, NOT_A_DRAFT, NOT_RUNNING, NOT_PAUSED, NOT_SUBMITTABLE, TERMS_NOT_ACCEPTED, TOO_SMALL, IN_USE, AI_LIMIT_REACHED] }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: object, properties: { field: { type: string }, issue: { type: string } } }
+        requestId: { type: string }
+    AdsCheck:
+      type: object
+      required: [check, result, detail]
+      properties:
+        check: { type: string, enum: [TOKEN_VALID, TOKEN_PERMISSIONS, TOKEN_EXPIRY, AD_ACCOUNT_ACTIVE, AD_ACCOUNT_PAYMENT, AD_ACCOUNT_CURRENCY, PAGE_ADS, PAGE_WHATSAPP_NUMBERS, AUDIENCE_TERMS, LEAD_TERMS] }
+        result: { type: string, enum: [PASSED, FAILED, WARNING] }
+        detail: { type: string }
+        fix: { type: [string, 'null'] }
+    AdsChecks:
+      type: object
+      required: [checks, ready]
+      properties:
+        checks: { type: array, items: { $ref: '#/components/schemas/AdsCheck' } }
+        ready: { type: boolean, description: No FAILED check }
+    AdsSession:
+      type: object
+      required: [id, expiresAt, token, adAccounts, pages]
+      properties:
+        id: { type: string, format: uuid }
+        expiresAt: { type: string, format: date-time }
+        token: { $ref: '#/components/schemas/AdsCheck' }
+        adAccounts:
+          type: array
+          items: { type: object, required: [id, name, currency, active], properties: { id: { type: string }, name: { type: string }, currency: { type: string }, timezone: { type: [string, 'null'] }, active: { type: boolean } } }
+        pages:
+          type: array
+          items: { type: object, required: [id, name], properties: { id: { type: string }, name: { type: string } } }
+    AdsConnection:
+      type: object
+      required: [adAccountId, adAccountName, pageId, pageName, currency, timezone, status, checks]
+      properties:
+        adAccountId: { type: string }
+        adAccountName: { type: string }
+        pageId: { type: string }
+        pageName: { type: string }
+        currency: { type: string }
+        timezone: { type: string }
+        status: { type: string, enum: [CONNECTED, ERROR] }
+        checks: { $ref: '#/components/schemas/AdsChecks' }
+        checkedAt: { type: [string, 'null'], format: date-time }
+        monthlyCapMinor: { type: [integer, 'null'] }
+        monthSpendMinor: { type: integer }
+        linkedNumberIds: { type: array, items: { type: string, format: uuid }, description: Numbers linked to the page; every connected number when Meta does not say }
+        linkedNumbersKnown: { type: boolean, description: False when Meta did not let the token read the linked numbers }
+    AdGoal: { type: string, enum: [CHATS, LEADS, WEBSITE] }
+    AdCampaignStatus: { type: string, enum: [DRAFT, SUBMITTING, IN_REVIEW, ACTIVE, PAUSED, REJECTED, ENDED, ERROR] }
+    TargetingOption:
+      type: object
+      required: [key, name, type]
+      properties:
+        key: { type: string }
+        name: { type: string }
+        type: { type: string, examples: [country, region, city, interest] }
+        countryCode: { type: [string, 'null'] }
+        audienceLower: { type: [integer, 'null'] }
+        audienceUpper: { type: [integer, 'null'] }
+    Targeting:
+      type: object
+      required: [locations]
+      properties:
+        locations: { type: array, minItems: 1, maxItems: 50, items: { $ref: '#/components/schemas/TargetingOption' } }
+        ageMin: { type: integer, minimum: 18, maximum: 65, default: 18 }
+        ageMax: { type: integer, minimum: 18, maximum: 65, default: 65 }
+        genders: { type: string, enum: [ALL, MEN, WOMEN], default: ALL }
+        interests: { type: array, maxItems: 25, items: { $ref: '#/components/schemas/TargetingOption' } }
+        includeAudienceIds: { type: array, maxItems: 10, items: { type: string, format: uuid } }
+        excludeAudienceIds: { type: array, maxItems: 10, items: { type: string, format: uuid } }
+    Placements:
+      type: object
+      required: [auto]
+      properties:
+        auto: { type: boolean }
+        facebook: { type: array, items: { type: string, enum: [feed, story] } }
+        instagram: { type: array, items: { type: string, enum: [stream, story] } }
+        whatsappStatus: { type: boolean, description: Chat ads with one image or video only (R5) }
+    AdVersionInput:
+      type: object
+      required: [mediaAssetId, primaryText, headline, callToAction]
+      properties:
+        mediaAssetId: { type: string, format: uuid }
+        primaryText: { type: string, minLength: 1, maxLength: 2200 }
+        headline: { type: string, minLength: 1, maxLength: 255 }
+        callToAction: { type: string, enum: [WHATSAPP_MESSAGE, SIGN_UP, LEARN_MORE, SHOP_NOW, CONTACT_US] }
+    AdVersion:
+      allOf:
+        - $ref: '#/components/schemas/AdVersionInput'
+        - type: object
+          required: [id, position, status]
+          properties:
+            id: { type: string, format: uuid }
+            position: { type: integer, minimum: 1, maximum: 5 }
+            mediaKind: { type: string, enum: [IMAGE, VIDEO] }
+            status: { type: string, enum: [DRAFT, IN_REVIEW, ACTIVE, PAUSED, REJECTED, ENDED] }
+            reviewFeedback: { type: [string, 'null'] }
+            metaAdId: { type: [string, 'null'] }
+            edited: { type: boolean, description: A rejected version edited since its rejection; the next submit sends it again }
+    AdCampaignInput:
+      type: object
+      required: [name, goal, targeting, placements, dailyBudgetMinor, startAt, versions]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        goal: { $ref: '#/components/schemas/AdGoal' }
+        numberId: { type: [string, 'null'], format: uuid, description: CHATS }
+        prefilledMessage: { type: [string, 'null'], maxLength: 300, description: CHATS }
+        leadFormId: { type: [string, 'null'], format: uuid, description: LEADS }
+        websiteUrl: { type: [string, 'null'], maxLength: 2000, pattern: '^https://', description: WEBSITE }
+        targeting: { $ref: '#/components/schemas/Targeting' }
+        placements: { $ref: '#/components/schemas/Placements' }
+        specialCategory: { type: string, enum: [NONE, CREDIT, EMPLOYMENT, HOUSING, SOCIAL_ISSUES], default: NONE }
+        dailyBudgetMinor: { type: integer, minimum: 1 }
+        startAt: { type: string, format: date-time }
+        endAt: { type: [string, 'null'], format: date-time }
+        flowId: { type: [string, 'null'], format: uuid }
+        tagId: { type: [string, 'null'], format: uuid }
+        versions: { type: array, minItems: 1, maxItems: 5, items: { $ref: '#/components/schemas/AdVersionInput' } }
+    AdCampaignPatch:
+      type: object
+      minProperties: 1
+      description: Drafts accept every field of AdCampaignInput; submitted campaigns only dailyBudgetMinor, endAt, flowId and tagId.
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        targeting: { $ref: '#/components/schemas/Targeting' }
+        placements: { $ref: '#/components/schemas/Placements' }
+        prefilledMessage: { type: [string, 'null'], maxLength: 300 }
+        dailyBudgetMinor: { type: integer, minimum: 1 }
+        startAt: { type: string, format: date-time }
+        endAt: { type: [string, 'null'], format: date-time }
+        flowId: { type: [string, 'null'], format: uuid }
+        tagId: { type: [string, 'null'], format: uuid }
+        versions: { type: array, minItems: 1, maxItems: 5, items: { $ref: '#/components/schemas/AdVersionInput' } }
+    AdCampaignSummary:
+      type: object
+      required: [id, name, goal, status, dailyBudgetMinor, currency, startAt, spendMinor, chatsStarted, leads]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        goal: { $ref: '#/components/schemas/AdGoal' }
+        status: { $ref: '#/components/schemas/AdCampaignStatus' }
+        dailyBudgetMinor: { type: integer }
+        currency: { type: string }
+        startAt: { type: string, format: date-time }
+        endAt: { type: [string, 'null'], format: date-time }
+        spendMinor: { type: integer }
+        chatsStarted: { type: integer }
+        leads: { type: integer }
+    AdCampaign:
+      allOf:
+        - $ref: '#/components/schemas/AdCampaignSummary'
+        - type: object
+          required: [targeting, placements, specialCategory, versions]
+          properties:
+            numberId: { type: [string, 'null'], format: uuid }
+            prefilledMessage: { type: [string, 'null'] }
+            leadFormId: { type: [string, 'null'], format: uuid }
+            websiteUrl: { type: [string, 'null'] }
+            linkUrl: { type: [string, 'null'], description: The counted website link }
+            targeting: { $ref: '#/components/schemas/Targeting' }
+            placements: { $ref: '#/components/schemas/Placements' }
+            specialCategory: { type: string }
+            flowId: { type: [string, 'null'], format: uuid }
+            tagId: { type: [string, 'null'], format: uuid }
+            lastError: { type: [string, 'null'] }
+            syncedAt: { type: [string, 'null'], format: date-time }
+            versions: { type: array, items: { $ref: '#/components/schemas/AdVersion' } }
+    AdResultNumbers:
+      type: object
+      required: [impressions, reach, clicks, spendMinor, chatsStarted, newContacts, replied, leads]
+      properties:
+        impressions: { type: integer }
+        reach: { type: integer, description: "Meta's reach; over several days, the highest day (reach cannot be added up)" }
+        clicks: { type: integer }
+        ctr: { type: [number, 'null'] }
+        cpcMinor: { type: [integer, 'null'] }
+        spendMinor: { type: integer }
+        metaConversations: { type: integer }
+        chatsStarted: { type: integer }
+        newContacts: { type: integer }
+        replied: { type: integer }
+        leads: { type: integer }
+        visits: { type: integer }
+        costPerChatMinor: { type: [integer, 'null'] }
+        costPerLeadMinor: { type: [integer, 'null'] }
+    AdResults:
+      type: object
+      required: [currency, timezone, totals, days, versions]
+      properties:
+        currency: { type: string }
+        timezone: { type: string }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        syncedAt: { type: [string, 'null'], format: date-time }
+        totals: { $ref: '#/components/schemas/AdResultNumbers' }
+        days:
+          type: array
+          items: { allOf: [{ $ref: '#/components/schemas/AdResultNumbers' }, { type: object, required: [date], properties: { date: { type: string, format: date } } }] }
+        versions:
+          type: array
+          items: { allOf: [{ $ref: '#/components/schemas/AdResultNumbers' }, { type: object, required: [versionId], properties: { versionId: { type: string, format: uuid } } }] }
+    AdChatStart:
+      type: object
+      required: [id, startedAt, newContact]
+      properties:
+        id: { type: string, format: uuid }
+        contact: { type: [object, 'null'], properties: { id: { type: string }, name: { type: [string, 'null'] }, phone: { type: [string, 'null'] } } }
+        conversationId: { type: [string, 'null'], format: uuid }
+        newContact: { type: boolean }
+        startedAt: { type: string, format: date-time }
+    AdAudienceInput:
+      type: object
+      required: [name, source]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        source:
+          oneOf:
+            - { type: object, required: [type, tagId], properties: { type: { const: tag }, tagId: { type: string, format: uuid } } }
+            - { type: object, required: [type, filter], properties: { type: { const: filter }, filter: { type: object } } }
+            - { type: object, required: [type, campaignId, group], properties: { type: { const: campaign_group }, campaignId: { type: string, format: uuid }, group: { type: string, examples: [CLICKED, REPLIED, READ] } } }
+    AdAudience:
+      type: object
+      required: [id, name, kind, status, memberCount]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        kind: { type: string, enum: [CUSTOM, LOOKALIKE] }
+        source: { type: [object, 'null'] }
+        originAudienceId: { type: [string, 'null'], format: uuid }
+        lookalikeCountry: { type: [string, 'null'] }
+        lookalikeRatio: { type: [number, 'null'] }
+        status: { type: string, enum: [SYNCING, READY, TOO_SMALL, ERROR] }
+        memberCount: { type: integer }
+        lastError: { type: [string, 'null'] }
+        syncedAt: { type: [string, 'null'], format: date-time }
+    AdLeadFormInput:
+      type: object
+      required: [name, questions, privacyUrl, consentText]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        questions:
+          type: object
+          required: [standard]
+          properties:
+            standard: { type: array, minItems: 1, uniqueItems: true, items: { type: string, enum: [FULL_NAME, PHONE, EMAIL] } }
+            custom: { type: array, maxItems: 3, items: { type: object, required: [key, label], properties: { key: { type: string, pattern: '^[a-z][a-z0-9_]{0,39}$' }, label: { type: string, maxLength: 80 } } } }
+        privacyUrl: { type: string, pattern: '^https://', maxLength: 2000 }
+        consentText: { type: string, minLength: 10, maxLength: 300, description: Must name WhatsApp }
+        tagId: { type: [string, 'null'], format: uuid }
+        welcomeTemplateId: { type: [string, 'null'], format: uuid }
+        welcomeMapping: { type: object }
+    AdLeadForm:
+      allOf:
+        - $ref: '#/components/schemas/AdLeadFormInput'
+        - type: object
+          required: [id, leads]
+          properties:
+            id: { type: string, format: uuid }
+            metaFormId: { type: [string, 'null'] }
+            leads: { type: integer }
+            lastLeadAt: { type: [string, 'null'], format: date-time }
+    AdLead:
+      type: object
+      required: [id, status, consent, submittedAt]
+      properties:
+        id: { type: string, format: uuid }
+        answers: { type: object }
+        phone: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+        consent: { type: boolean }
+        status: { type: string, enum: [PROCESSED, NO_PHONE, INVALID_PHONE, FAILED] }
+        contactId: { type: [string, 'null'], format: uuid }
+        submittedAt: { type: string, format: date-time }

@@ -748,6 +748,28 @@ components:
                   sentAt: { type: [string, 'null'], format: date-time }
                   status: { type: string }
             canReply: { type: boolean, description: "live window open, number usable, and the caller may act on the chat" }
+            adChat:
+              description: "Feature 007: the latest Click-to-WhatsApp ad the chat came from, with Meta's free window (information only); null without an ad"
+              oneOf:
+                - type: 'null'
+                - type: object
+                  required: [metaAdId, startedAt, newContact, freeWindow]
+                  properties:
+                    metaAdId: { type: string }
+                    headline: { type: [string, 'null'] }
+                    body: { type: [string, 'null'] }
+                    mediaUrl: { type: [string, 'null'] }
+                    sourceUrl: { type: [string, 'null'] }
+                    startedAt: { type: string, format: date-time }
+                    newContact: { type: boolean }
+                    adCampaign: { type: [object, 'null'], properties: { id: { type: string, format: uuid }, name: { type: string } } }
+                    freeWindow:
+                      type: object
+                      required: [state]
+                      properties:
+                        state: { type: string, enum: [REPLY_TO_OPEN, OPEN, ENDED, MISSED] }
+                        replyBy: { type: string, format: date-time, description: REPLY_TO_OPEN }
+                        until: { type: string, format: date-time, description: OPEN and ENDED }
     ChatItem:
       type: object
       required: [id, kind, origin, contentType, occurredAt]

@@ -83,6 +83,7 @@ describe('withCampaignTags', () => {
   });
 
   it('keeps tags the address already has', () => {
+    expect(withCampaignTags('https://shop.example/sale', 'Spring ad', 'meta', 'paid')).toBe('https://shop.example/sale?utm_source=meta&utm_medium=paid&utm_campaign=Spring%20ad');
     expect(withCampaignTags('https://shop.example/?utm_campaign=own', 'Eid')).toBe(
       'https://shop.example/?utm_campaign=own&utm_source=whatsapp&utm_medium=message',
     );

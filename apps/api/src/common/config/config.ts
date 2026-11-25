@@ -108,6 +108,11 @@ const EnvSchema = z.object({
    * Outbound requests are otherwise https-only and never reach private addresses. Refused in production.
    */
   OUTBOUND_ALLOW_LOCAL: boolString,
+  /**
+   * Ads (feature 007, research R11): Meta's free entry point window for chats from ads, shown in live
+   * chat as information. It never changes what may be sent.
+   */
+  ADS_FREE_WINDOW_HOURS: z.coerce.number().int().min(1).max(168).default(72),
 }).superRefine((env, ctx) => {
   const pushKeys = [env.WEB_PUSH_PUBLIC_KEY, env.WEB_PUSH_PRIVATE_KEY, env.WEB_PUSH_SUBJECT].filter(Boolean).length;
   if (pushKeys > 0 && pushKeys < 3) {

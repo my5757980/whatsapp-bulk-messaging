@@ -113,6 +113,11 @@ export function describeJourneyEntry(entry: JourneyEntry): string {
         : `${d.answer === 'CONFIRMED' ? 'Confirmed' : 'Cancelled'} cash on delivery order ${String(d.orderNumber ?? '')}`;
     case 'CHAT_LINK_STARTED':
       return `Started a chat from the chat link "${String(d.chatLinkName ?? '')}"${d.newContact ? ' (new contact)' : ''}`;
+    // Feature 007: chats from ads and lead forms.
+    case 'AD_CHAT_STARTED':
+      return `Started a chat from an ad${d.adCampaignName ? ` in "${String(d.adCampaignName)}"` : d.headline ? ` ("${String(d.headline)}")` : ''}${d.newContact ? ' (new contact)' : ''}`;
+    case 'LEAD_RECEIVED':
+      return `Sent a lead form${d.formName ? ` "${String(d.formName)}"` : ''}${d.consent ? ' and agreed to WhatsApp messages' : ''}`;
     default:
       return entry.type;
   }

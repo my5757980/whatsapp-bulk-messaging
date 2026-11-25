@@ -1,5 +1,7 @@
 // Live chat response shapes (specs/002-team-inbox/contracts/inbox-api.openapi.yaml).
 
+import type { AdChat } from './ads';
+
 export type ConversationState = 'ACTIVE' | 'REQUESTING' | 'INTERVENED';
 
 export interface MemberRef {
@@ -54,6 +56,8 @@ export interface ConversationDetail extends ConversationSummary {
   unresolvedRequests: number;
   recentCampaigns: Array<{ campaignId: string; name: string; sentAt: string | null; status: string }>;
   canReply: boolean;
+  /** Feature 007: the latest Click-to-WhatsApp ad the chat came from. */
+  adChat?: AdChat | null;
 }
 
 export type ChatContentType =

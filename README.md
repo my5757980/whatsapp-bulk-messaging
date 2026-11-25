@@ -18,6 +18,7 @@ WhatsApp Cloud API. One company, a small team, prices in USD.
 | AI agents (feature 004) | AI agents that answer customers from your own knowledge with Claude, hand over to the team when needed, use safe API skills and flows, stay within a monthly limit, and a team assistant that drafts templates, flows and campaigns. See [AI agents](#ai-agents). |
 | Campaign growth (feature 005) | Tracked links with a click count for each recipient, retargeting by clicked, replied and held back, retry rounds for failures that may pass, and drips: timed template steps that contacts join by hand or on events and leave when they reply. See [Campaign growth](#campaign-growth). |
 | Integrations (feature 006) | Signed webhooks for other systems, API key permissions and a contacts API, API campaigns, Shopify and WooCommerce order notifications, COD confirmation and cart reminders, QR chat links, and a guided number connection wizard. See [Integrations](#integrations). |
+| Ads (feature 007) | Click-to-WhatsApp, lead form and website ads from the company's own Meta ad account: a connection with checks, a guided builder with AI texts, Meta's review, chats from ads with the free window, flows and tags, hourly results with cost per chat, a monthly spending cap, audiences from contacts and lookalikes, and lead forms that become contacts. See [Ads](#ads). |
 
 ## Architecture
 
@@ -291,6 +292,66 @@ Checks: `npm run perf:webhooks` (SC-001: 99% of events delivered within 10 secon
 `PERF_NUMBER_ID=<id> npm run perf:stores` (SC-004: 500 store events with 100 repeats, exactly one
 notification per order, 95% within a minute).
 
+## Ads
+
+Feature 007 ([spec](specs/007-ads-manager/spec.md), [quickstart](specs/007-ads-manager/quickstart.md)).
+
+- **Meta app and token:** the company's Meta app needs the permissions `ads_management`, `ads_read`,
+  `business_management`, `pages_show_list` and `pages_read_engagement`; lead ads also need
+  `pages_manage_ads`, `pages_manage_metadata` and `leads_retrieval` (which may need Meta's App
+  Review), and the pre-filled chat message needs `whatsapp_business_management`. In Business Settings,
+  give a system user the ad account and the Facebook page and generate a token that never expires.
+- **Connection:** *Ads → Ad account* takes the token (kept encrypted for 30 minutes while you choose),
+  lists the ad accounts and pages it reaches, and checks the token's permissions, the account's status,
+  payment method and currency, the page's ads access and linked WhatsApp numbers, and the custom
+  audience and lead terms, each with a fix. Only one ad account and page are connected; the token and
+  page token are stored encrypted and never returned. A check that fails later sets the connection to
+  *Needs attention*, holds changes at Meta and alerts admins.
+- **Building and launching:** *Ads → New ad* builds a campaign for chats, leads or website visits:
+  the WhatsApp number and pre-filled message (chats), the audience (Meta's places and interests, ages,
+  gender, saved audiences, special ad categories), placements (automatic, or chosen, including
+  WhatsApp Status for chat ads), the daily budget (at least Meta's minimum, in the account's
+  currency), dates, and up to five versions with an image or video from the media library. *Write
+  with AI* drafts the texts. Submitting makes the campaign, one ad set and one ad per version at
+  Meta; a failure part way removes what was made. Meta's review is read right after a submit and
+  every 5 minutes; a rejected version shows Meta's reason and can be edited and submitted again.
+- **Chats from ads:** a customer message from a Click-to-WhatsApp ad carries the ad (Meta's
+  `referral`): live chat shows the ad and Meta's free entry point window ("Free ad window until …",
+  72 hours from the first reply when it comes within 24 hours, `ADS_FREE_WINDOW_HOURS`; information
+  only), the journey records the chat, the contact gets the campaign's tag, and the campaign's flow
+  answers first (never over a running flow or a member's chat). The flow builder's *Ads* card chooses
+  the campaigns of a flow. Chats from ads made in Meta's tools are listed under *Other ads*.
+- **Results and the cap:** Meta's numbers are read every hour (and the last 28 days once a day) per
+  day and version, next to the platform's own: chats started, new contacts, contacts who replied,
+  leads, website visits, and cost per chat and per lead; results export as CSV. A monthly spending cap
+  refuses launches, resumes and budget increases that could pass it, and pauses every platform
+  campaign once when the month's spend reaches it. Pause, resume, end, budget and end date changes
+  and duplicates go to Meta at once; changes made in Meta's tools show at the next read.
+- **Audiences:** *Ads → Audiences* sends contacts from a tag, a contact filter or a campaign group to
+  Meta as SHA-256 hashes of their phone numbers only (opted-out and blocked contacts never), updated
+  once a day with the difference; audiences under 100 people are not offered. Lookalikes take a
+  country and a size (1–10%).
+- **Lead forms:** *Ads → Lead forms* makes forms at Meta with the page token: name, phone, email and
+  up to three own questions, a privacy link and an unticked checkbox that names WhatsApp. Leads arrive
+  as page webhooks on the same signed `/api/webhooks/meta` route (subscribe the app to the page's
+  `leadgen` field; the form does this) and are read again every 15 minutes in case one was missed.
+  Each lead becomes a contact with the form's tag; only a ticked checkbox opts it in (source
+  `LEAD_FORM`) and sends the form's welcome template, once.
+- **Website ads:** the ad links to `<PUBLIC_LINK_BASE_URL>/a/<code>` (answered by the api at
+  `/l/a/<code>`), which counts visits (not previews or robots, with the tracked links' rate limit)
+  and sends the visitor on with `utm_source=meta&utm_medium=paid&utm_campaign=<name>`.
+- **Permissions:** only admins connect the ad account and set the cap (`integrations.manage`);
+  managers and admins build ads, audiences and lead forms (`campaigns.manage`) and submit, pause,
+  resume, end and change budgets (`campaigns.launch`); agents see ads, results and leads with phones
+  masked; exports need `data.export`.
+- **Data handling:** Meta's daily numbers are kept 25 months; leads, chats from ads and website visits
+  12 months. Deleting a contact clears their leads' answers and phone, keeps chats from ads without
+  them, and removes their hash from saved audiences at the next update (queued at once). New events
+  for outbound webhooks: `ad.chat_started` and `ad.lead_received` (lead answers are not sent).
+- **Monitoring:** `wbm_ads_sync_total{job,result}`, `wbm_ad_chat_starts_total{matched}`,
+  `wbm_ad_leads_total{result}` and `wbm_ads_spend_cap_pauses_total`; the alert `WbmAdsSyncFailing`
+  fires when more than half of the reads from Meta fail for 30 minutes.
+
 ## Getting started
 
 Prerequisites: Node.js 26, npm 11 and Docker Desktop. The full walkthrough, including how to
@@ -416,6 +477,12 @@ the web proxy.
   [webhook events](specs/006-integrations-platform/contracts/webhook-events.md),
   [quickstart](specs/006-integrations-platform/quickstart.md), [tasks](specs/006-integrations-platform/tasks.md) and
   [release checklist](specs/006-integrations-platform/checklists/release.md)
+- Ads (feature 007): [spec](specs/007-ads-manager/spec.md), [plan](specs/007-ads-manager/plan.md),
+  [research](specs/007-ads-manager/research.md), [data model](specs/007-ads-manager/data-model.md),
+  [ads API](specs/007-ads-manager/contracts/ads-api.openapi.yaml),
+  [Meta ads Graph calls](specs/007-ads-manager/contracts/meta-ads-graph.md),
+  [quickstart](specs/007-ads-manager/quickstart.md), [tasks](specs/007-ads-manager/tasks.md) and
+  [release checklist](specs/007-ads-manager/checklists/release.md)
 - Architecture decisions:
   - [ADR-0001 Frontend stack](history/adr/0001-frontend-stack.md)
   - [ADR-0002 Backend runtime, process model and monorepo](history/adr/0002-backend-runtime-process-model-and-monorepo.md)

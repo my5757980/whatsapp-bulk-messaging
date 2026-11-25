@@ -4,8 +4,10 @@ import { Injectable, Logger } from '@nestjs/common';
 export interface WebhookChange {
   field: string;
   value: Record<string, unknown>;
-  /** WhatsApp Business Account id (`entry[].id`). */
+  /** WhatsApp Business Account id (`entry[].id`); for page webhooks (feature 007), the page id. */
   wabaId: string | undefined;
+  /** The payload's `object`: `whatsapp_business_account`, or `page` for lead ads (feature 007). */
+  object?: string;
 }
 
 export interface WebhookContext {
@@ -14,6 +16,8 @@ export interface WebhookContext {
 
 export interface WebhookChangeHandler {
   readonly field: string;
+  /** Only payloads of this `object` reach the handler (unset: any object, as before feature 007). */
+  readonly object?: string;
   /** Handlers of one field run in ascending order (default 0); live chat runs after consent. */
   readonly order?: number;
   handle(change: WebhookChange, context: WebhookContext): Promise<void>;
@@ -37,20 +41,21 @@ export class WebhookRouter {
     const entries = Array.isArray((payload as { entry?: unknown })?.entry)
       ? ((payload as { entry: Array<{ id?: unknown; changes?: unknown }> }).entry)
       : [];
+    const object = typeof (payload as { object?: unknown })?.object === 'string' ? (payload as { object: string }).object : undefined;
     let handled = 0;
     const ignored: string[] = [];
     for (const entry of entries) {
       const changes = Array.isArray(entry.changes) ? (entry.changes as Array<{ field?: unknown; value?: unknown }>) : [];
       for (const change of changes) {
         const field = typeof change.field === 'string' ? change.field : '';
-        const handlers = this.handlers.get(field);
+        const handlers = this.handlers.get(field)?.filter((h) => !h.object || h.object === object);
         if (!handlers?.length) {
           ignored.push(field || '(missing field)');
           continue;
         }
         const value = change.value && typeof change.value === 'object' ? (change.value as Record<string, unknown>) : {};
         for (const handler of handlers) {
-          await handler.handle({ field, value, wabaId: typeof entry.id === 'string' ? entry.id : undefined }, context);
+          await handler.handle({ field, value, wabaId: typeof entry.id === 'string' ? entry.id : undefined, object }, context);
           handled++;
         }
       }

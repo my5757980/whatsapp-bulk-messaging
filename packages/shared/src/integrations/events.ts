@@ -22,6 +22,9 @@ export const EVENT_TYPES = [
   'store.notification_sent',
   'store.cod_answered',
   'store.cart_recovered',
+  // Feature 007 ads
+  'ad.chat_started',
+  'ad.lead_received',
   'test.ping',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -29,7 +32,7 @@ export type EventType = (typeof EVENT_TYPES)[number];
 /** Types an endpoint can choose (the test ping is sent on request only). */
 export const SUBSCRIBABLE_EVENT_TYPES = EVENT_TYPES.filter((t) => t !== 'test.ping') as Exclude<EventType, 'test.ping'>[];
 
-export type EventGroup = 'messages' | 'contacts' | 'links' | 'drips' | 'live_chat' | 'api_campaigns' | 'stores' | 'test';
+export type EventGroup = 'messages' | 'contacts' | 'links' | 'drips' | 'live_chat' | 'api_campaigns' | 'stores' | 'ads' | 'test';
 
 export const EVENT_GROUPS: Record<EventType, EventGroup> = {
   'message.status': 'messages',
@@ -50,6 +53,8 @@ export const EVENT_GROUPS: Record<EventType, EventGroup> = {
   'store.notification_sent': 'stores',
   'store.cod_answered': 'stores',
   'store.cart_recovered': 'stores',
+  'ad.chat_started': 'ads',
+  'ad.lead_received': 'ads',
   'test.ping': 'test',
 };
 
@@ -72,6 +77,8 @@ export const EVENT_LABELS: Record<EventType, string> = {
   'store.notification_sent': 'Store message sent',
   'store.cod_answered': 'Cash-on-delivery answer',
   'store.cart_recovered': 'Cart recovered',
+  'ad.chat_started': 'Chat started from an ad',
+  'ad.lead_received': 'Lead received from a lead form',
   'test.ping': 'Test event',
 };
 

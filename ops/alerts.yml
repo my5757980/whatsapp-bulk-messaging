@@ -189,3 +189,22 @@ groups:
             Order notifications, COD questions or cart reminders may be missing. Check Integrations >
             Stores for stores in error, the store API keys, and the worker logs for "Store event
             failed". The 15-minute reconciler fetches missed orders again.
+
+      - alert: WbmAdsSyncFailing
+        expr: |
+          (
+            sum(increase(wbm_ads_sync_total{result="failed"}[30m]))
+              /
+            sum(increase(wbm_ads_sync_total[30m]))
+          ) > 0.50
+          and sum(increase(wbm_ads_sync_total[30m])) >= 4
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than half of the reads from Meta's ads API failed for 30 minutes
+          description: >-
+            Ad states, results, audiences or leads may be out of date. Check Ads > Ad account for a
+            connection in error (token, permissions, payment method) and the worker logs for "Ad
+            campaign status sync failed", "Ad insights sync failed", "Audience sync failed" or "Lead
+            catch-up failed". Missed leads are read again by the 15-minute catch-up.

@@ -1,3 +1,4 @@
+import { parseAdReferral, type AdReferral } from '@wbm/shared';
 import { cutText, PREVIEW_MAX, type ChatContentType } from '../inbox-common.js';
 
 // Turns one entry of a Meta `value.messages[]` webhook into a chat item
@@ -15,6 +16,8 @@ export interface ParsedInbound {
   /** Media still to download from Meta (research R4). */
   media: { metaMediaId: string; mimeType: string | null } | null;
   replyToWaId: string | null;
+  /** The Click-to-WhatsApp ad the chat came from (feature 007); also kept in `payload.referral`. */
+  adReferral: AdReferral | null;
 }
 
 type Content = Pick<ParsedInbound, 'contentType' | 'text' | 'payload' | 'media'>;
@@ -49,13 +52,16 @@ export function parseInboundMessage(message: unknown, contacts: unknown = []): P
   const content = parseContent(type, m);
   if (!content) return null;
   const seconds = num(m.timestamp);
+  const adReferral = parseAdReferral(m.referral);
   return {
     waMessageId,
     waId,
     profileName: profileNameFor(contacts, waId),
     occurredAt: seconds !== null && seconds > 0 ? new Date(seconds * 1000) : new Date(),
     ...content,
+    payload: adReferral ? { ...content.payload, referral: adReferral } : content.payload,
     replyToWaId: str(obj(m.context)?.id),
+    adReferral,
   };
 }
 

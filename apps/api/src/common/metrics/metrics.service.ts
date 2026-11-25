@@ -246,6 +246,34 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  // Feature 007 ads (research R13).
+  readonly adsSyncTotal = new Counter({
+    name: 'wbm_ads_sync_total',
+    help: 'Reads from Meta by job (status, insights, audiences, leads) and result (ok or failed)',
+    labelNames: ['job', 'result'] as const,
+    registers: [this.registry],
+  });
+
+  readonly adChatStartsTotal = new Counter({
+    name: 'wbm_ad_chat_starts_total',
+    help: 'Chats started from Click-to-WhatsApp ads, by whether the ad is one of the platform\'s (matched true or false)',
+    labelNames: ['matched'] as const,
+    registers: [this.registry],
+  });
+
+  readonly adLeadsTotal = new Counter({
+    name: 'wbm_ad_leads_total',
+    help: 'Leads from lead forms, by result: processed, no_phone, invalid_phone or unknown_form',
+    labelNames: ['result'] as const,
+    registers: [this.registry],
+  });
+
+  readonly adsSpendCapPausesTotal = new Counter({
+    name: 'wbm_ads_spend_cap_pauses_total',
+    help: 'Ad campaigns paused because the monthly spending cap was reached',
+    registers: [this.registry],
+  });
+
   constructor() {
     collectDefaultMetrics({ register: this.registry });
   }

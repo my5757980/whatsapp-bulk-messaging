@@ -114,10 +114,11 @@ export const webhook = {
       ],
     };
   },
-  inbound(phoneNumberId: string, from: string, text: string) {
+  /** A customer text message; `extra` adds message fields (e.g. a 007 ad `referral`, or an older `timestamp`). */
+  inbound(phoneNumberId: string, from: string, text: string, extra: Record<string, unknown> = {}) {
     return {
       object: 'whatsapp_business_account',
-      entry: [{ id: 'WABA', changes: [{ field: 'messages', value: { messaging_product: 'whatsapp', metadata: { phone_number_id: phoneNumberId }, contacts: [{ wa_id: from }], messages: [{ from, id: `wamid.in.${randomUUID()}`, timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body: text } }] } }] }],
+      entry: [{ id: 'WABA', changes: [{ field: 'messages', value: { messaging_product: 'whatsapp', metadata: { phone_number_id: phoneNumberId }, contacts: [{ wa_id: from }], messages: [{ from, id: `wamid.in.${randomUUID()}`, timestamp: String(Math.floor(Date.now() / 1000)), type: 'text', text: { body: text }, ...extra }] } }] }],
     };
   },
 };

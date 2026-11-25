@@ -118,4 +118,15 @@ describe('sanitizeLogObject: integrations (feature 006)', () => {
     expect(out.headers).toEqual({ 'webhook-signature': '[REDACTED]', 'x-shopify-hmac-sha256': '[REDACTED]', 'x-wc-webhook-signature': '[REDACTED]', 'webhook-id': 'evt_1' });
     expect(out.webhookEndpoint).toEqual({ id: 'e1', secret: '[REDACTED]' });
   });
+
+  it('removes ads tokens: the one being checked, the page token and the stored ones (feature 007)', () => {
+    const out = sanitizeLogObject({
+      query: { input_token: 'EAAG-secret', fields: 'scopes' },
+      page: { id: 'P1', pageToken: 'p-secret', page_token: 'p-secret' },
+      connection: { adAccountId: '111', tokenEnc: 'v1:abc', pageTokenEnc: 'v1:def' },
+    }) as Record<string, Record<string, unknown>>;
+    expect(out.query).toEqual({ input_token: '[REDACTED]', fields: 'scopes' });
+    expect(out.page).toEqual({ id: 'P1', pageToken: '[REDACTED]', page_token: '[REDACTED]' });
+    expect(out.connection).toEqual({ adAccountId: '111', tokenEnc: '[REDACTED]', pageTokenEnc: '[REDACTED]' });
+  });
 });

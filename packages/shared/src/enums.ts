@@ -20,6 +20,8 @@ export const ConsentSource = {
   AI_AGENT: 'AI_AGENT',
   // Feature 006: a store checkout consent the admin confirmed names WhatsApp (FR-027).
   STORE: 'STORE',
+  // Feature 007: a lead form answer that ticked the WhatsApp consent box (FR-034).
+  LEAD_FORM: 'LEAD_FORM',
 } as const;
 export type ConsentSource = (typeof ConsentSource)[keyof typeof ConsentSource];
 
@@ -100,6 +102,11 @@ export const NotificationType = {
   STORE_CONNECTION_ERROR: 'STORE_CONNECTION_ERROR',
   API_CAMPAIGN_PAUSED: 'API_CAMPAIGN_PAUSED',
   COD_CANCELLED: 'COD_CANCELLED',
+  // Feature 007 ads
+  ADS_CONNECTION_ERROR: 'ADS_CONNECTION_ERROR',
+  AD_REJECTED: 'AD_REJECTED',
+  AD_NOT_DELIVERING: 'AD_NOT_DELIVERING',
+  ADS_SPEND_CAP_REACHED: 'ADS_SPEND_CAP_REACHED',
 } as const;
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
 

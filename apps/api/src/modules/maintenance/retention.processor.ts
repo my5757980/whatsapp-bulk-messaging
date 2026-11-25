@@ -19,10 +19,14 @@ import { Prisma } from '../../generated/prisma/client.js';
 //   finished or left (their step records go with them), and starting events not consumed within a
 //   day. Tracked links go with their messages through a foreign key cascade, so their codes stop
 //   working when the messages are purged.
+// - ads (007 R13): Meta's daily numbers after 25 months; leads, chats from ads and website ad visits
+//   after 12 months.
 // Audit logs are never purged here (the spec keeps them at least 12 months).
 
 const DAY_MS = 24 * 3600 * 1000;
 const CAMPAIGN_MONTHS = 12;
+/** Meta's numbers stay longer so results can be compared year over year (007 R13). */
+const AD_RESULT_MONTHS = 25;
 const SHORT_LIVED_DAYS = 30;
 const UPLOADS_PREFIX = 'uploads/';
 const BATCH = 5_000;
@@ -49,7 +53,19 @@ type PurgeTable =
   | 'store_carts'
   | 'chat_link_opens'
   | 'chat_link_starts'
-  | 'number_connection_checks';
+  | 'number_connection_checks'
+  | 'ad_result_days'
+  | 'ad_leads'
+  | 'ad_chat_starts'
+  | 'ad_link_opens';
+
+/** Ads records removed by one run (007 R13). */
+export interface AdsRetentionResult {
+  adResultDays: number;
+  adLeads: number;
+  adChatStarts: number;
+  adLinkOpens: number;
+}
 
 /** Integration records removed by one run (006 FR-059). */
 export interface IntegrationsRetentionResult {
@@ -85,7 +101,7 @@ export interface LiveChatRetentionResult {
   chatMedia: number;
 }
 
-export interface RetentionResult extends LiveChatRetentionResult, AiRetentionResult, GrowthRetentionResult, IntegrationsRetentionResult {
+export interface RetentionResult extends LiveChatRetentionResult, AiRetentionResult, GrowthRetentionResult, IntegrationsRetentionResult, AdsRetentionResult {
   campaigns: number;
   messages: number;
   webhookEvents: number;
@@ -136,6 +152,10 @@ export class RetentionService {
       chatLinkOpens: 0,
       chatLinkStarts: 0,
       connectionChecks: 0,
+      adResultDays: 0,
+      adLeads: 0,
+      adChatStarts: 0,
+      adLinkOpens: 0,
     };
     const failures: string[] = [];
     const step = async (name: string, fn: () => Promise<void>) => {
@@ -168,6 +188,9 @@ export class RetentionService {
     });
     await step('integrations', async () => {
       Object.assign(result, await this.purgeIntegrations(now));
+    });
+    await step('ads', async () => {
+      Object.assign(result, await this.purgeAds(now));
     });
     this.logger.log({ ...result }, 'Retention run finished');
     if (failures.length) throw new Error(`Retention partly failed: ${failures.join('; ')}`);
@@ -305,6 +328,18 @@ export class RetentionService {
       chatLinkOpens: await this.deleteInBatches('chat_link_opens', Prisma.sql`opened_at < ${cutoff}`),
       chatLinkStarts: await this.deleteInBatches('chat_link_starts', Prisma.sql`started_at < ${cutoff}`),
       connectionChecks: await this.deleteInBatches('number_connection_checks', Prisma.sql`created_at < ${cutoff}`),
+    };
+  }
+
+  /** Ads records (007 R13): Meta's daily numbers after 25 months; leads, ad chats and visits after 12. */
+  async purgeAds(now: Date): Promise<AdsRetentionResult> {
+    const cutoff = monthsBefore(now, CAMPAIGN_MONTHS);
+    const day = monthsBefore(now, AD_RESULT_MONTHS).toISOString().slice(0, 10);
+    return {
+      adResultDays: await this.deleteInBatches('ad_result_days', Prisma.sql`day < ${day}::date`),
+      adLeads: await this.deleteInBatches('ad_leads', Prisma.sql`received_at < ${cutoff}`),
+      adChatStarts: await this.deleteInBatches('ad_chat_starts', Prisma.sql`started_at < ${cutoff}`),
+      adLinkOpens: await this.deleteInBatches('ad_link_opens', Prisma.sql`opened_at < ${cutoff}`),
     };
   }
 

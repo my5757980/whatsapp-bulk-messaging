@@ -321,6 +321,47 @@ describe('Retention', () => {
     await ctx.prisma.webhookEndpoint.delete({ where: { id: endpoint.id } });
   });
 
+  it('purges ads records: Meta\'s numbers after 25 months; leads, ad chats and visits after 12 months (007)', async () => {
+    const recent = new Date(Date.now() - DAY);
+    const old = monthsAgo(13);
+    const media = await ctx.prisma.mediaAsset.create({ data: { storageKey: `library/ret-${randomUUID()}.jpg`, mimeType: 'image/jpeg', sizeBytes: 1_000, purpose: 'LIBRARY' } });
+    const campaign = await ctx.prisma.adCampaign.create({
+      data: {
+        name: `Retention ad ${randomUUID()}`,
+        goal: 'WEBSITE',
+        status: 'ENDED',
+        websiteUrl: 'https://example.com',
+        targeting: { locations: [{ key: 'AE', name: 'United Arab Emirates', type: 'country' }] },
+        placements: { auto: true },
+        dailyBudgetMinor: 5_000n,
+        currency: 'AED',
+        startAt: monthsAgo(30),
+        versions: { create: [{ position: 1, mediaAssetId: media.id, mediaKind: 'IMAGE', primaryText: 'x', headline: 'x', callToAction: 'LEARN_MORE' }] },
+      },
+    });
+    const dayOf = (d: Date) => new Date(`${d.toISOString().slice(0, 10)}T00:00:00Z`);
+    const resultDay = (day: Date) => ctx.prisma.adResultDay.create({ data: { adCampaignId: campaign.id, day: dayOf(day), spendMinor: 100n, readAt: day } });
+    const [veryOldDay, keptDay] = [await resultDay(monthsAgo(26)), await resultDay(monthsAgo(24))];
+    const form = await ctx.prisma.adLeadForm.create({ data: { name: `Retention form ${randomUUID()}`, questions: { standard: ['PHONE'] }, privacyUrl: 'https://example.com/p', consentText: 'WhatsApp offers please' } });
+    const leadAt = (receivedAt: Date) => ctx.prisma.adLead.create({ data: { formId: form.id, metaLeadId: randomUUID(), status: 'NO_PHONE', submittedAt: receivedAt, receivedAt } });
+    const [oldLead, newLead] = [await leadAt(old), await leadAt(recent)];
+    const startAt = (startedAt: Date) => ctx.prisma.adChatStart.create({ data: { metaAdId: randomUUID().slice(0, 20), adCampaignId: campaign.id, newContact: false, startedAt } });
+    const [oldStart, newStart] = [await startAt(old), await startAt(recent)];
+    const visitAt = (openedAt: Date) => ctx.prisma.adLinkOpen.create({ data: { adCampaignId: campaign.id, device: 'MOBILE', openedAt } });
+    const [oldVisit, newVisit] = [await visitAt(old), await visitAt(recent)];
+
+    const result = await retention.purgeAds(new Date());
+    for (const key of ['adResultDays', 'adLeads', 'adChatStarts', 'adLinkOpens'] as const) expect(result[key], key).toBeGreaterThanOrEqual(1);
+    expect(await ctx.prisma.adResultDay.findUnique({ where: { id: veryOldDay.id } })).toBeNull();
+    expect(await ctx.prisma.adResultDay.findUnique({ where: { id: keptDay.id } })).not.toBeNull();
+    expect(await ctx.prisma.adLead.findUnique({ where: { id: oldLead.id } })).toBeNull();
+    expect(await ctx.prisma.adLead.findUnique({ where: { id: newLead.id } })).not.toBeNull();
+    expect(await ctx.prisma.adChatStart.findUnique({ where: { id: oldStart.id } })).toBeNull();
+    expect(await ctx.prisma.adChatStart.findUnique({ where: { id: newStart.id } })).not.toBeNull();
+    expect(await ctx.prisma.adLinkOpen.findUnique({ where: { id: oldVisit.id } })).toBeNull();
+    expect(await ctx.prisma.adLinkOpen.findUnique({ where: { id: newVisit.id } })).not.toBeNull();
+  });
+
   it('runs every step daily on the maintenance queue', async () => {
     expect(await retention.run()).toEqual({
       linkClicks: expect.any(Number),
@@ -347,6 +388,10 @@ describe('Retention', () => {
       chatLinkOpens: expect.any(Number),
       chatLinkStarts: expect.any(Number),
       connectionChecks: expect.any(Number),
+      adResultDays: expect.any(Number),
+      adLeads: expect.any(Number),
+      adChatStarts: expect.any(Number),
+      adLinkOpens: expect.any(Number),
     });
     const scheduler = await ctx.app.get(QueueRegistry).get(QUEUES.MAINTENANCE).getJobScheduler('retention');
     expect(scheduler?.pattern).toBe('15 3 * * *');

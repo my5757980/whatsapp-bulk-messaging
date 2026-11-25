@@ -21,6 +21,7 @@ import { TestPanel } from './test-panel';
 import { VersionsDrawer } from './versions-drawer';
 import { StepForm } from './steps/step-form';
 import { TriggerPanel } from './trigger-panel';
+import { AdsTriggerCard } from './ads-trigger-card';
 import { useDraftAutosave, type SaveStatus } from './use-draft-autosave';
 import { useGraphHistory } from './use-graph-history';
 
@@ -292,6 +293,7 @@ export function FlowEditor({ initial, onReload }: { initial: FlowDetail; onReloa
             <p className="text-xs text-muted-foreground">Drag from a way out on the right of a step to another step to connect them.</p>
           </section>
           <TriggerPanel graph={graph} problems={problems} onChange={change} />
+          <AdsTriggerCard flowId={initial.id} published={initial.status === 'PUBLISHED'} />
           <TestPanel flowId={initial.id} testNumbers={initial.testNumbers} />
           <SecretsPanel flowId={initial.id} secrets={secrets} onChange={setSecrets} />
           <ProblemsPanel problems={problems} onFocusStep={focusStep} />

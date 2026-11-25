@@ -144,16 +144,16 @@
 | 9.4 | AI message metering (1 reply = 1 AI message), with a usage dashboard | ✅ Every AI reply counts against a monthly limit with alerts at 80% and 100%; the AI usage page shows replies, test replies, cost and outcomes (004) | 004 AI agent |
 | 9.5 | **AI Assistant**: dashboard copilot for contacts, templates, broadcasts, ads, flows and reports, with a confirmation preview before sending, spending or deleting | 🟡 The team assistant drafts templates, flows and campaigns, answers campaign report questions, and prepares sends and contact or tag deletions on a preview the member confirms (004); ads not yet | 004 AI agent (ads in Ads) |
 | 9.6 | AI template generator, AI flow generator, AI campaign agent | ✅ The team assistant drafts templates (not submitted), flows (not published) and campaigns (not scheduled) from a prompt (004) | 004 AI agent |
-| 9.7 | AI ads agent, AI ad creative generator, AI video ad generator | ❌ | Ads |
+| 9.7 | AI ads agent, AI ad creative generator, AI video ad generator | 🟡 *Write with AI* drafts the ad's main text and headline within Meta's limits, counted against the AI limit (007); images, videos and an ads agent not yet | 007 Ads manager |
 
 ## 10. Ads manager
 
 | # | Capability | Our status | Planned in |
 |---|---|---|---|
-| 10.1 | Click-to-WhatsApp, website, lead-form and WhatsApp Status ads | ❌ | Ads |
-| 10.2 | Objective, audience (location, age, gender, interests, lookalikes, customer lists, website visitors), placements, daily budget and duration, creative (upload or AI) | ❌ | Ads |
-| 10.3 | Meta approval tracking (about 15–20 min); reporting (impressions, reach, clicks, CTR, CPC, spend) | ❌ | Ads |
-| 10.4 | Free 72-hour messaging window for chats started from CTWA ads; ad-to-flow triggers | ❌ | Ads (with 003 Flow builder) |
+| 10.1 | Click-to-WhatsApp, website, lead-form and WhatsApp Status ads | ✅ Chat, lead form and website ads from the company's own ad account, with WhatsApp Status placements for chat ads (007) | 007 Ads manager |
+| 10.2 | Objective, audience (location, age, gender, interests, lookalikes, customer lists, website visitors), placements, daily budget and duration, creative (upload or AI) | 🟡 Goal, places, ages, gender, interests, saved audiences from contacts with daily updates, lookalikes, special categories, placements, budget with Meta's minimum, dates, up to five versions from the media library and AI texts (007); website visitor audiences (a pixel) not yet | 007 Ads manager |
+| 10.3 | Meta approval tracking (about 15–20 min); reporting (impressions, reach, clicks, CTR, CPC, spend) | ✅ Review read right after a submit and every 5 minutes with Meta's reasons; hourly results per day and version with chats, leads, visits, cost per chat and lead, CSV export, and a monthly spending cap (007) | 007 Ads manager |
+| 10.4 | Free 72-hour messaging window for chats started from CTWA ads; ad-to-flow triggers | ✅ Live chat shows the ad and the free window; the campaign's flow and tag apply to chats from its ads; the flow builder's Ads card (007) | 007 Ads manager |
 | 10.5 | Ad credits sold by AiSensy | ➖ We would pay Meta directly from the company's ad account | – |
 
 ## 11. Developer platform and integrations
@@ -190,9 +190,9 @@
 
 ## Roadmap to full functional parity
 
-Feature numbers follow the order specs are started. 002 to 006 are built; each remaining row gets the
+Feature numbers follow the order specs are started. 002 to 007 are built; each remaining row gets the
 next free number when its spec starts. Agreed order: the AI agent, campaign growth (click tracking
-and drips) and integrations are built; next click-to-WhatsApp ads and payments; the other rows are
+and drips), integrations and click-to-WhatsApp ads are built; next payments; the other rows are
 scheduled around them.
 
 | Feature | Scope | Depends on |
@@ -203,7 +203,7 @@ scheduled around them.
 | **005 Campaign growth** ✅ built | Items 5.5, 5.7, 5.8 and 5.12, and clicked in 5.6: tracked links and clicks, retargeting by clicked, replied and held back, retry rounds, drips with starting events, leaving rules and results | 001, 002 |
 | **006 Integrations and developer platform** ✅ built | Items 1.1 (guided connect), 5.9, 5.10 (chat links and QR codes, also the QR trigger of 7.2) and 11.2–11.7: signed webhooks, key permissions and the contacts API, API campaigns, Shopify and WooCommerce notifications, COD confirmation and cart reminders. Still open: Dialogflow (7.8, optional) and named CRM connectors (11.7) | 002, 003 |
 | **Templates and campaign growth** | Items 4.1, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9 and 4.11; 5.3, 5.6 (replied column), 5.13 and 5.14; 12.1 and 12.2 | 001 |
-| **Ads manager** | Items 9.7 and 10.1–10.4 (click-to-WhatsApp ads start flows) | 003, Integrations |
+| **007 Ads manager** ✅ built | Items 10.1–10.4 and the texts of 9.7: connection with checks, chat, lead form and website ads with Meta's review, chats from ads with the free window, flows and tags, results and a spending cap, audiences and lookalikes, lead forms. Still open: AI images and videos (9.7) and website visitor audiences (10.2) | 003, 006 |
 | **Commerce, forms and payments** | Items 3.13, 4.8, 6.12, 7.4 and 8.1–8.5; 11.8 | 003 |
 | **Contacts, settings and security** | Items 1.3, 1.4, 1.6 and 2.3; 3.2, 3.3, 3.5, 3.8, 3.9 and 3.10 (3.7 first-message tags came with 003); 5.11 (birthday and date automations) | 001 |
 | **Mobile (installable app with push)** | Item 12.4 | 002 |
