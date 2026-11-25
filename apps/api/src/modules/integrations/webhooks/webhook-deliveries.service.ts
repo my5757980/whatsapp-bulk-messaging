@@ -15,6 +15,7 @@ import { APP_CONFIG } from '../../../common/config/config.module.js';
 import type { AppConfig } from '../../../common/config/config.js';
 import { TokenCipher } from '../../../common/crypto/token-cipher.js';
 import { SafeHttpError, safeRequest, type SafeHttpFailure } from '../../../common/http/safe-http.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QUEUES } from '../../../common/queue/queue.constants.js';
 import { QueueRegistry, REDIS_CLIENT } from '../../../common/queue/queue.module.js';
@@ -70,6 +71,7 @@ export class WebhookDeliveries {
     private readonly events: OutboundEvents,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly metrics: MetricsService,
   ) {}
 
   /** Deliveries of one endpoint in flight now (for tests and the health of the counter). */
@@ -104,7 +106,10 @@ export class WebhookDeliveries {
       }
       try {
         const result = await this.send(delivery);
-        return result.ok ? await this.succeeded(delivery, result) : await this.failed(delivery, result);
+        const outcome = result.ok ? await this.succeeded(delivery, result) : await this.failed(delivery, result);
+        this.metrics.webhookDeliveriesTotal.inc({ result: outcome });
+        if (outcome === 'delivered') this.metrics.webhookDeliverySeconds.observe(Math.max(0, Date.now() - delivery.event.occurredAt.getTime()) / 1000);
+        return outcome;
       } finally {
         await this.redis.decr(counter);
       }

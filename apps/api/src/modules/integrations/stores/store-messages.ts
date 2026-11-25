@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { isUniqueViolation } from '../../../common/prisma/prisma-errors.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import type { Prisma, StoreConnection, StoreMessageKind } from '../../../generated/prisma/client.js';
@@ -30,6 +31,7 @@ export class StoreMessages {
     private readonly prisma: PrismaService,
     private readonly queues: QueueRegistry,
     private readonly platformEvents: PlatformEvents,
+    private readonly metrics: MetricsService,
   ) {}
 
   /** True when this kind was already sent or skipped for the order. */
@@ -41,6 +43,7 @@ export class StoreMessages {
   async skip(orderId: string, kind: StoreMessageKind, reason: string): Promise<boolean> {
     try {
       await this.prisma.storeOrderMessage.create({ data: { orderId, kind, outcome: 'SKIPPED', skipReason: reason } });
+      this.metrics.storeMessagesTotal.inc({ kind, result: 'skipped' });
       return true;
     } catch (error) {
       if (isUniqueViolation(error)) return false;
@@ -95,6 +98,7 @@ export class StoreMessages {
       this.logger.error({ err: error, messageId }, 'Could not queue a store message');
       await this.prisma.message.updateMany({ where: { id: messageId, status: 'QUEUED' }, data: { status: 'FAILED', failureReason: 'queue_unavailable', failedAt: new Date() } });
     }
+    this.metrics.storeMessagesTotal.inc({ kind: input.kind, result: 'queued' });
     return messageId;
   }
 }

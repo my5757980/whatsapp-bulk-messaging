@@ -27,6 +27,7 @@ import { StoresController } from './stores/stores.controller.js';
 import { WooClient } from './stores/woocommerce/woo.client.js';
 import { OutboundEvents } from './webhooks/outbound-events.js';
 import { PlatformEvents } from './webhooks/platform-events.js';
+import { WebhookBacklogCollector } from './webhooks/webhook-backlog.collector.js';
 import { WebhookDeliveries } from './webhooks/webhook-deliveries.service.js';
 import { WebhookEndpointsController } from './webhooks/webhook-endpoints.controller.js';
 import { WebhookEndpointsService } from './webhooks/webhook-endpoints.service.js';
@@ -40,7 +41,7 @@ import { WebhookEndpointsService } from './webhooks/webhook-endpoints.service.js
 // The API campaign pauser runs from template webhooks and number disconnects (US3, FR-021).
 // Store clients, the raw event store and store messages are used by receivers, processors and the COD and cart ticks (US4 - US6).
 // The chat link matcher runs from the 002 inbound handler in the worker (US7).
-const DOMAIN: Provider[] = [OutboundEvents, WebhookDeliveries, PlatformEvents, ApiCampaignPauser, StoreHttp, ShopifyClient, WooClient, StoreEventsInbox, StoreMessages, CodService, StoreCarts, ChatLinkMatcher];
+const DOMAIN: Provider[] = [OutboundEvents, WebhookDeliveries, PlatformEvents, ApiCampaignPauser, StoreHttp, ShopifyClient, WooClient, StoreEventsInbox, StoreMessages, CodService, StoreCarts, ChatLinkMatcher, WebhookBacklogCollector];
 
 /** Integration services shared by the HTTP app and the worker. */
 @Global()

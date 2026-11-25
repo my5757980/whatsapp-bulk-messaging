@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { deviceKind, isLinkCode, isPreviewRequest, messageWithRef, waMeUrl } from '@wbm/shared';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { LinkRateLimiter } from '../../growth/links/link-rate-limiter.js';
 import { NOT_AVAILABLE, NO_CACHE, PAGE_HEADERS, TOO_MANY, page, type LinkRequest, type LinkResponse } from '../../growth/links/link-redirect.service.js';
@@ -18,19 +19,31 @@ export class ChatLinkRedirectService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly limiter: LinkRateLimiter,
+    private readonly metrics: MetricsService,
   ) {}
 
   async open(code: string, request: LinkRequest): Promise<LinkResponse> {
-    if (!(await this.limiter.allow(request.ip))) return { status: 429, headers: { ...PAGE_HEADERS, 'Retry-After': '60' }, body: TOO_MANY };
+    if (!(await this.limiter.allow(request.ip))) {
+      this.metrics.chatLinkOpensTotal.inc({ kind: 'limited' });
+      return { status: 429, headers: { ...PAGE_HEADERS, 'Retry-After': '60' }, body: TOO_MANY };
+    }
     const link = isLinkCode(code)
       ? await this.prisma.chatLink.findUnique({
           where: { code },
           select: { id: true, message: true, ref: true, status: true, deletedAt: true, number: { select: { displayPhoneNumber: true } } },
         })
       : null;
-    if (!link) return { status: 404, headers: PAGE_HEADERS, body: NOT_AVAILABLE };
-    if (link.deletedAt || link.status !== 'ACTIVE') return { status: 404, headers: PAGE_HEADERS, body: NO_LONGER_IN_USE };
-    if (!isPreviewRequest(request)) {
+    if (!link) {
+      this.metrics.chatLinkOpensTotal.inc({ kind: 'unknown' });
+      return { status: 404, headers: PAGE_HEADERS, body: NOT_AVAILABLE };
+    }
+    if (link.deletedAt || link.status !== 'ACTIVE') {
+      this.metrics.chatLinkOpensTotal.inc({ kind: 'off' });
+      return { status: 404, headers: PAGE_HEADERS, body: NO_LONGER_IN_USE };
+    }
+    const preview = isPreviewRequest(request);
+    this.metrics.chatLinkOpensTotal.inc({ kind: preview ? 'preview' : 'open' });
+    if (!preview) {
       try {
         await this.prisma.chatLinkOpen.create({ data: { chatLinkId: link.id, device: deviceKind(request.userAgent) } });
       } catch (error) {

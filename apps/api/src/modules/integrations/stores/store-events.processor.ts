@@ -16,6 +16,7 @@ import {
   type StoreOrderFacts,
 } from '@wbm/shared';
 import { normalizePhone } from '../../../common/phone/phone.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { ProcessorRegistry } from '../../../common/queue/processor.registry.js';
 import { QUEUES } from '../../../common/queue/queue.constants.js';
@@ -65,6 +66,7 @@ export class StoreEventsProcessor implements OnModuleInit {
     private readonly messages: StoreMessages,
     private readonly cod: CodService,
     private readonly carts: StoreCarts,
+    private readonly metrics: MetricsService,
   ) {}
 
   onModuleInit(): void {
@@ -81,10 +83,12 @@ export class StoreEventsProcessor implements OnModuleInit {
     try {
       const outcome = await this.handle(event.store, event.topic, event.payload);
       await this.prisma.storeEvent.update({ where: { id }, data: { status: outcome === 'ignored' ? 'IGNORED' : 'PROCESSED', processedAt: new Date() } });
+      this.metrics.storeEventsTotal.inc({ platform: event.store.platform.toLowerCase(), result: outcome });
       return outcome;
     } catch (error) {
       this.logger.warn({ err: error, eventId: id.toString(), storeId: event.storeId }, 'Store event failed');
       await this.prisma.storeEvent.update({ where: { id }, data: { status: 'FAILED', error: plainStoreError(error).slice(0, 200), processedAt: new Date() } });
+      this.metrics.storeEventsTotal.inc({ platform: event.store.platform.toLowerCase(), result: 'failed' });
       return 'failed';
     }
   }

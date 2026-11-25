@@ -3,6 +3,7 @@ import { resolveApiValues, resolveAttributeValues, startOfLocalDay, type ApiVari
 import { z } from 'zod';
 import { AppError } from '../../../common/errors/app-error.js';
 import { normalizePhone } from '../../../common/phone/phone.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import type { ApiCampaign, Prisma } from '../../../generated/prisma/client.js';
@@ -83,6 +84,7 @@ export class ApiCampaignTriggerService {
     private readonly contacts: PublicContactsService,
     private readonly pauser: ApiCampaignPauser,
     private readonly platformEvents: PlatformEvents,
+    private readonly metrics: MetricsService,
   ) {}
 
   async trigger(apiName: string, input: TriggerRequest, key: ApiKeyContext): Promise<Answer<TriggerAccepted>> {
@@ -233,6 +235,7 @@ export class ApiCampaignTriggerService {
     await db.apiCampaignTrigger.create({
       data: { apiCampaignId: campaign.id, apiKeyId: key.id, contactId: t.contactId, phoneE164: t.phone, outcome: t.outcome, reason: t.reason, messageId: t.messageId },
     });
+    this.metrics.apiCampaignTriggersTotal.inc({ result: t.outcome.toLowerCase() });
     // Outbound webhooks (feature 006, FR-002).
     await this.platformEvents.apiCampaignTriggered(db, {
       campaign: { id: campaign.id, name: campaign.name, apiName: campaign.apiName },

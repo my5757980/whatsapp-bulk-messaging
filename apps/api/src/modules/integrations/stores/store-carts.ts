@@ -16,6 +16,7 @@ import { v7 as uuidv7 } from 'uuid';
 import { APP_CONFIG } from '../../../common/config/config.module.js';
 import type { AppConfig } from '../../../common/config/config.js';
 import { isUniqueViolation } from '../../../common/prisma/prisma-errors.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import type { Prisma, StoreConnection } from '../../../generated/prisma/client.js';
@@ -65,6 +66,7 @@ export class StoreCarts {
     private readonly woo: WooClient,
     private readonly platformEvents: PlatformEvents,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly metrics: MetricsService,
   ) {}
 
   async steps(storeId: string): Promise<CartStep[] | null> {
@@ -197,6 +199,7 @@ export class StoreCarts {
     const usable = template && template.status === 'APPROVED' && number && number.connectionStatus === 'CONNECTED' && number.sendingEnabled && number.wabaId === template.wabaId;
     if (!usable || !resolved?.ok) {
       // This reminder is skipped; the next one still comes.
+      this.metrics.storeMessagesTotal.inc({ kind: 'CART_REMINDER', result: 'skipped' });
       await this.prisma.$transaction(async (tx) => {
         await tx.storeCartReminder.create({ data: { cartId: cart.id, step: cart.nextStep, outcome: 'SKIPPED', skipReason: usable ? 'missing_value' : 'template_unavailable' } });
         await tx.storeCart.update({ where: { id: cart.id }, data: { nextStep: cart.nextStep + 1, nextAt } });
@@ -253,6 +256,7 @@ export class StoreCarts {
       if (isUniqueViolation(error)) return;
       throw error;
     }
+    this.metrics.storeMessagesTotal.inc({ kind: 'CART_REMINDER', result: 'queued' });
     await this.queues.sendQueue(cart.store.numberId).add(
       'send',
       { messageId },

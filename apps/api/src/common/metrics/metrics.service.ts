@@ -197,6 +197,55 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  // Integrations (feature 006, research R14).
+  readonly webhookDeliveriesTotal = new Counter({
+    name: 'wbm_webhook_deliveries_total',
+    help: 'Webhook delivery attempts, by result: delivered, retry (failed, tried again later) or failed (gave up)',
+    labelNames: ['result'] as const,
+    registers: [this.registry],
+  });
+
+  readonly webhookDeliverySeconds = new Histogram({
+    name: 'wbm_webhook_delivery_seconds',
+    help: 'Time from an event happening to its delivery to an endpoint',
+    buckets: [1, 2, 5, 10, 30, 60, 300, 1800, 7200],
+    registers: [this.registry],
+  });
+
+  readonly webhookBacklog = new Gauge({
+    name: 'wbm_webhook_backlog',
+    help: 'Deliveries to active endpoints that have been due for more than 5 minutes',
+    registers: [this.registry],
+  });
+
+  readonly storeEventsTotal = new Counter({
+    name: 'wbm_store_events_total',
+    help: 'Store webhook events handled, by platform and result: processed, ignored or failed',
+    labelNames: ['platform', 'result'] as const,
+    registers: [this.registry],
+  });
+
+  readonly storeMessagesTotal = new Counter({
+    name: 'wbm_store_messages_total',
+    help: 'Store notifications, COD questions and cart reminders, by kind and result: queued or skipped',
+    labelNames: ['kind', 'result'] as const,
+    registers: [this.registry],
+  });
+
+  readonly apiCampaignTriggersTotal = new Counter({
+    name: 'wbm_api_campaign_triggers_total',
+    help: 'API campaign calls recorded, by result: queued or not_sent',
+    labelNames: ['result'] as const,
+    registers: [this.registry],
+  });
+
+  readonly chatLinkOpensTotal = new Counter({
+    name: 'wbm_chat_link_opens_total',
+    help: 'Chat links opened, by kind: open (counted), preview (previews and robots), unknown, off (turned off or deleted) or limited',
+    labelNames: ['kind'] as const,
+    registers: [this.registry],
+  });
+
   constructor() {
     collectDefaultMetrics({ register: this.registry });
   }
