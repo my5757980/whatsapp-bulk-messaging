@@ -23,6 +23,7 @@ import { LiveChatSettingsService } from '../settings/live-chat-settings.service.
 import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 import { CodService } from '../../integrations/stores/cod.service.js';
 import { parseInboundMessage, previewOf, type ParsedInbound } from './message-parser.js';
+import { stopContactCarts } from '../../integrations/stores/store-carts.js';
 
 interface LockedChat {
   id: string;
@@ -138,6 +139,8 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
       if (!inserted) return null; // a repeated webhook
       // Writing to a drip's number ends that drip for the contact when its reply rule is on (005 FR-028).
       await this.drips.onEvent(contact.id, { kind: 'REPLIED', numberId }, tx);
+      // A reply on a store's number stops that store's cart reminders for the contact (feature 006, FR-042).
+      await stopContactCarts(tx, contact.id, 'replied', numberId);
       // Outbound webhooks (feature 006, FR-002); text is removed later for endpoints that chose so.
       const buttonPayload = typeof msg.payload.payload === 'string' ? msg.payload.payload : typeof msg.payload.id === 'string' ? msg.payload.id : null;
       await this.platformEvents.messageReceived(tx, {

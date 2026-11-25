@@ -5,6 +5,7 @@ import { Prisma } from '../../generated/prisma/client.js';
 import { DripEvents } from '../growth/drips/drip-events.js';
 import { DripLeaving } from '../growth/drips/drip-leaving.js';
 import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
+import { stopContactCarts } from '../integrations/stores/store-carts.js';
 
 // Consent changes (FR-012-FR-014, T092). Every status change and its consent_events row are
 // written in one transaction, and an opt-out can only be undone by the contact (keyword) or an
@@ -62,6 +63,8 @@ export class ConsentService {
       });
       // An opt-out ends every drip of the contact at once (feature 005, FR-028).
       if (status === 'OPTED_OUT') await this.drips.onEvent(contactId, { kind: 'OPTED_OUT' }, tx);
+      // An opt-out stops cart reminders too (feature 006, FR-042).
+      if (status === 'OPTED_OUT') await stopContactCarts(tx, contactId, 'opted_out');
       // An opt-in can start drips (feature 005, FR-024).
       if (status === 'OPTED_IN') await this.dripEvents.recordOptIns(tx, [contactId]);
       // Outbound webhooks (feature 006, FR-002).

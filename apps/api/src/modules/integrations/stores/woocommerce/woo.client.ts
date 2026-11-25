@@ -74,6 +74,16 @@ export class WooClient {
     }
   }
 
+  /** One order (US6: an unpaid order read again at reminder time); null when it is gone. */
+  async order(store: Pick<StoreConnection, 'baseUrl'>, credentials: WooCredentials, orderId: string): Promise<Json | null> {
+    try {
+      return await this.http.json<Json>({ method: 'GET', url: this.api(store.baseUrl, `/orders/${orderId}`), headers: this.headers(credentials) });
+    } catch (error) {
+      if (error instanceof StoreApiError && error.status === 404) return null;
+      throw error;
+    }
+  }
+
   /** COD answers (US5): a private order note. */
   async addNote(store: Pick<StoreConnection, 'baseUrl'>, credentials: WooCredentials, orderId: string, note: string): Promise<void> {
     await this.http.json({ method: 'POST', url: this.api(store.baseUrl, `/orders/${orderId}/notes`), headers: this.headers(credentials), body: { note, customer_note: false } });

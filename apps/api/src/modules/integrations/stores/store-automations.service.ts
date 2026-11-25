@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ORDER_FIELDS, can, type MetaTemplateComponent, type Role } from '@wbm/shared';
+import { CART_FIELDS, ORDER_FIELDS, STORE_VALUE_FIELDS, can, cartStepProblems, type MetaTemplateComponent, type Role } from '@wbm/shared';
 import { z } from 'zod';
 import { AppError } from '../../../common/errors/app-error.js';
 import { maskPhone } from '../../../common/phone/phone.js';
@@ -14,7 +14,7 @@ import { STORE_AUTOMATION_KINDS } from './store-connections.service.js';
 // results with skip reasons, and the orders list (phones masked without phones.full).
 
 const OrderSourceSchema = z.discriminatedUnion('source', [
-  z.object({ source: z.literal('order'), key: z.enum(ORDER_FIELDS) }).strict(),
+  z.object({ source: z.literal('order'), key: z.enum(STORE_VALUE_FIELDS) }).strict(),
   z.object({ source: z.literal('field'), key: z.enum(['name', 'phone']) }).strict(),
   z.object({ source: z.literal('static'), value: z.string().max(1024) }).strict(),
 ]);
@@ -99,7 +99,9 @@ export class StoreAutomationsService {
   /** Each step's template must be approved, of the store number's account, and fully mapped. */
   private async problems(numberId: string, kind: StoreAutomationKind, steps: Step[]): Promise<Problem[]> {
     const number = await this.prisma.whatsAppNumber.findUnique({ where: { id: numberId }, select: { wabaId: true } });
-    const templates = await this.prisma.template.findMany({ where: { id: { in: steps.map((s) => s.templateId) } }, select: { id: true, name: true, status: true, wabaId: true, variables: true, components: true } });
+    const templates = await this.prisma.template.findMany({ where: { id: { in: steps.map((s) => s.templateId) } }, select: { id: true, name: true, status: true, category: true, wabaId: true, variables: true, components: true } });
+    // Order fields for order messages, cart fields for cart reminders.
+    const fields: readonly string[] = kind === 'CART_REMINDER' ? CART_FIELDS : ORDER_FIELDS;
     const problems: Problem[] = [];
     steps.forEach((step, index) => {
       const label = steps.length > 1 ? `Message ${index + 1}: ` : '';
@@ -119,14 +121,13 @@ export class StoreAutomationsService {
       const variables = ((Array.isArray(template.variables) ? template.variables : []) as Array<{ key: string }>).map((v) => v.key);
       for (const v of variables) if (!step.variableMapping[v]) problems.push({ code: 'MAPPING', message: `${label}${v} has no value source` });
       for (const v of Object.keys(step.variableMapping)) if (!variables.includes(v)) problems.push({ code: 'MAPPING', message: `${label}${v} is not a variable of the template` });
+      for (const [v, source] of Object.entries(step.variableMapping)) {
+        if (source.source === 'order' && !fields.includes(source.key)) problems.push({ code: 'MAPPING', message: `${label}${v}: "${source.key}" is not available here` });
+      }
+      if (kind === 'CART_REMINDER' && template.category !== 'MARKETING') problems.push({ code: 'NOT_MARKETING', message: `${label}cart reminders are marketing messages: use a Marketing template` });
       return undefined;
     });
-    if (kind === 'CART_REMINDER') {
-      steps.forEach((s, i) => {
-        const before = steps[i - 1]?.waitMinutes ?? 0;
-        if (i > 0 && (s.waitMinutes ?? 0) <= before) problems.push({ code: 'WAITS', message: `Message ${i + 1} must wait longer than message ${i}` });
-      });
-    }
+    if (kind === 'CART_REMINDER') for (const message of cartStepProblems(steps)) problems.push({ code: 'WAITS', message });
     return problems;
   }
 

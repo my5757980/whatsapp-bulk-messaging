@@ -3,6 +3,7 @@ import { ProcessorRegistry } from '../../../common/queue/processor.registry.js';
 import { QUEUES } from '../../../common/queue/queue.constants.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import { CodService, STORE_ACTION_JOB, type StoreActionData } from './cod.service.js';
+import { StoreCarts } from './store-carts.js';
 
 // The store tick (feature 006 US5 and US6, research R10 - R11): every 30 seconds it handles the COD
 // reminders and finals that are due (claimed with FOR UPDATE SKIP LOCKED, the 005 drip tick
@@ -19,6 +20,7 @@ export class StoreTickProcessor implements OnModuleInit, OnApplicationBootstrap 
     private readonly registry: ProcessorRegistry,
     private readonly queues: QueueRegistry,
     private readonly cod: CodService,
+    private readonly carts: StoreCarts,
   ) {}
 
   onModuleInit(): void {
@@ -33,7 +35,7 @@ export class StoreTickProcessor implements OnModuleInit, OnApplicationBootstrap 
   }
 
   async tick(now: Date = new Date()): Promise<void> {
-    const handled = await this.cod.tick(now);
-    if (handled) this.logger.debug({ handled }, 'COD reminders and finals handled');
+    const handled = (await this.cod.tick(now)) + (await this.carts.remindDue(now));
+    if (handled) this.logger.debug({ handled }, 'COD and cart reminders handled');
   }
 }

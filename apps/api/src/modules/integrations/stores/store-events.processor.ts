@@ -2,9 +2,11 @@ import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import {
   choosePhone,
   isStale,
+  mapShopifyCheckout,
   mapShopifyFulfillment,
   mapShopifyOrder,
   mapWooOrder,
+  wooCartFacts,
   orderFieldValues,
   orderStages,
   resolveOrderValues,
@@ -25,6 +27,7 @@ import { DripEvents } from '../../growth/drips/drip-events.js';
 import { JourneyService } from '../../inbox/journey/journey.service.js';
 import { headerMediaType } from '../../sending/template-payload.builder.js';
 import { CodService } from './cod.service.js';
+import { StoreCarts } from './store-carts.js';
 import { ShopifyClient } from './shopify/shopify.client.js';
 import { STORE_EVENT_JOB } from './store-events-inbox.js';
 import { StoreMessages } from './store-messages.js';
@@ -61,6 +64,7 @@ export class StoreEventsProcessor implements OnModuleInit {
     private readonly dripEvents: DripEvents,
     private readonly messages: StoreMessages,
     private readonly cod: CodService,
+    private readonly carts: StoreCarts,
   ) {}
 
   onModuleInit(): void {
@@ -88,7 +92,11 @@ export class StoreEventsProcessor implements OnModuleInit {
   private async handle(store: Store, topic: string, payload: unknown): Promise<EventOutcome> {
     if (store.status === 'DISCONNECTED') return 'ignored';
     if (store.platform === 'SHOPIFY') {
-      if (SHOPIFY_ORDER_TOPICS.has(topic)) return this.apply(store, mapShopifyOrder(payload));
+      if (SHOPIFY_ORDER_TOPICS.has(topic)) {
+        const checkoutId = (payload as { checkout_id?: unknown } | null)?.checkout_id;
+        return this.apply(store, mapShopifyOrder(payload), checkoutId === undefined || checkoutId === null ? null : String(checkoutId));
+      }
+      if (topic === 'checkouts/create' || topic === 'checkouts/update') return this.cart(store, mapShopifyCheckout(payload));
       if (SHOPIFY_FULFILLMENT_TOPICS.has(topic)) {
         // Fulfillment webhooks carry only the fulfillment: read the whole order again.
         const fulfillment = mapShopifyFulfillment(payload);
@@ -104,8 +112,18 @@ export class StoreEventsProcessor implements OnModuleInit {
   }
 
   /** Upserts the order and its contact, then sends or skips each stage reached for the first time. */
-  async apply(store: Store, facts: StoreOrderFacts): Promise<EventOutcome> {
+  /** A checkout: the cart and its contact (US6). */
+  private async cart(store: Store, facts: ReturnType<typeof mapShopifyCheckout>): Promise<EventOutcome> {
+    const phone = choosePhone(facts.phones, store.defaultCountry, (raw, country) => normalizePhone(raw, country)?.e164 ?? null);
+    const contact = phone && !facts.completed ? await this.contactFor(store, phone.e164, facts) : null;
+    await this.carts.track(store, facts, contact, phone?.e164 ?? null);
+    return 'processed';
+  }
+
+  async apply(store: Store, facts: StoreOrderFacts, checkoutId: string | null = null): Promise<EventOutcome> {
     if (!facts.externalId) return 'ignored';
+    // WooCommerce orders left unpaid are carts (US6, research R8).
+    if (store.platform === 'WOOCOMMERCE' && facts.status === 'pending' && facts.paymentKind !== 'COD') return this.cart(store, wooCartFacts(facts));
     const existing = await this.prisma.storeOrder.findUnique({ where: { storeId_externalId: { storeId: store.id, externalId: facts.externalId } } });
     // An older event than what we know (stores do not promise order).
     if (existing && existing.storeUpdatedAt.getTime() > new Date(facts.updatedAt).getTime()) return 'ignored';
@@ -142,6 +160,10 @@ export class StoreEventsProcessor implements OnModuleInit {
 
     // A COD question waiting for the customer closes when the store cancels the order or it is paid (US5).
     if (existing) await this.cod.onStoreChange(order, facts);
+    // The order's cart is recovered (after a reminder) or closed (US6).
+    if (!facts.cancelled) {
+      await this.carts.onOrder(store, { id: order.id, orderNumber: order.orderNumber, externalId: order.externalId, contactId: order.contactId, total: facts.total, currency: facts.currency, placedAt: order.placedAt }, checkoutId);
+    }
 
     const stages = orderStages(facts, store.platform, { shippedStatus: store.shippedStatus, deliveredStatus: store.deliveredStatus });
     if (!stages.length) return 'processed';
@@ -201,7 +223,7 @@ export class StoreEventsProcessor implements OnModuleInit {
   }
 
   /** Finds or creates the contact with the store's tag; opts in only with confirmed consent text (FR-027). */
-  private async contactFor(store: Store, e164: string, facts: StoreOrderFacts) {
+  private async contactFor(store: Store, e164: string, facts: Pick<StoreOrderFacts, 'customerName' | 'acceptsMarketing'>) {
     const tag = normaliseTag(store.customerTag);
     const select = { id: true, name: true, consentStatus: true, blockedAt: true, tags: { select: { tag: { select: { name: true } } } } } as const;
     let contact = await this.prisma.contact.findUnique({ where: { phoneE164: e164 }, select });

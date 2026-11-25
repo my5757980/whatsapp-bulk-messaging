@@ -181,6 +181,18 @@ export class PlatformEvents {
     );
   }
 
+  /** A cart was ordered after a reminder (feature 006 US6). */
+  cartRecovered(
+    db: Db,
+    input: { store: { id: string; name: string; platform: string }; cart: { id: string }; order: { id: string; number: string }; contactId: string | null; value: string; currency: string },
+  ): Promise<void> {
+    return this.when(
+      'store.cart_recovered',
+      async () => ({ store: input.store, cart: input.cart, order: input.order, contact: await this.contact(db, input.contactId), value: input.value, currency: input.currency }),
+      db,
+    );
+  }
+
   linkClicked(db: Db, input: { contactId: string | null; campaignId: string | null; dripId: string | null; destination: string; device: string; at: Date }): Promise<void> {
     return this.when(
       'link.clicked',

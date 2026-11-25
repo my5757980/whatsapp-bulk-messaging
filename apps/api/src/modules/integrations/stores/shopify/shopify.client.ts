@@ -18,6 +18,11 @@ const WEBHOOK_CREATE = `mutation WebhookCreate($topic: WebhookSubscriptionTopic!
 const WEBHOOK_LIST = `query WebhookList { webhookSubscriptions(first: 100) { nodes { id topic uri } } }`;
 const WEBHOOK_DELETE = `mutation WebhookDelete($id: ID!) { webhookSubscriptionDelete(id: $id) { deletedWebhookSubscriptionId userErrors { field message } } }`;
 const SHOP_INFO = `query ShopInfo { shop { name currencyCode } }`;
+const ABANDONED_CHECKOUTS = `query AbandonedCheckouts($query: String!) {
+  abandonedCheckouts(first: 5, query: $query) {
+    nodes { id createdAt updatedAt completedAt abandonedCheckoutUrl totalPriceSet { shopMoney { amount currencyCode } } customer { firstName lastName phone } lineItems(first: 3) { nodes { title quantity } } }
+  }
+}`;
 const TAGS_ADD = `mutation TagsAdd($id: ID!, $tags: [String!]!) { tagsAdd(id: $id, tags: $tags) { node { id } userErrors { field message } } }`;
 const METAFIELDS_SET = `mutation MetafieldsSet($metafields: [MetafieldsSetInput!]!) { metafieldsSet(metafields: $metafields) { metafields { key } userErrors { field message } } }`;
 const ORDER_CANCEL = `mutation OrderCancel($orderId: ID!, $reason: OrderCancelReason!, $refund: Boolean!, $restock: Boolean!, $notifyCustomer: Boolean) {
@@ -138,6 +143,12 @@ export class ShopifyClient {
     });
     const error = data.orderCancel.orderCancelUserErrors[0];
     if (error) throw new StoreApiError(`Shopify refused to cancel the order: ${error.message}`.slice(0, 200), null);
+  }
+
+  /** A checkout read again at reminder time (US6): payloads can lack details, and it may be completed by now. */
+  async abandonedCheckout(store: Pick<StoreConnection, 'baseUrl'>, token: string, checkoutId: string): Promise<Json | null> {
+    const data = await this.graphql<{ abandonedCheckouts: { nodes: Array<Json & { id?: string }> } }>(store.baseUrl, token, ABANDONED_CHECKOUTS, { query: `id:${checkoutId}` });
+    return data.abandonedCheckouts.nodes.find((n) => String(n.id ?? '').split('/').pop() === checkoutId) ?? null;
   }
 
   /** One order, in the REST shape of Shopify webhooks; null when Shopify has no such order. */

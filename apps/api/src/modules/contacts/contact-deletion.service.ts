@@ -47,6 +47,13 @@ export class ContactDeletionService {
       ? await this.prisma.mediaAsset.findMany({ where: { purpose: 'INBOUND', chatMessages: { some: { conversationId: { in: chatIds } } } }, select: { id: true, storageKey: true } })
       : [];
 
+    // Store orders and carts keep their rows without the person's details (feature 006, FR-060).
+    await this.prisma.$transaction([
+      this.prisma.storeCart.updateMany({ where: { contactId, status: { in: ['OPEN', 'REMINDING'] } }, data: { status: 'STOPPED', stopReason: 'deleted', nextAt: null } }),
+      this.prisma.storeCart.updateMany({ where: { contactId }, data: { phoneE164: null } }),
+      this.prisma.storeOrder.updateMany({ where: { contactId, codStatus: { in: ['ASKED', 'NO_ANSWER'] } }, data: { codStatus: 'CLOSED', codNextAt: null } }),
+      this.prisma.storeOrder.updateMany({ where: { contactId }, data: { phoneE164: null, customerName: null } }),
+    ]);
     const [messages] = await this.prisma.$transaction([
       this.prisma.message.updateMany({ where: { contactId }, data: { contactId: null, phoneE164: null, resolvedParams: {} } }),
       this.prisma.campaignUploadRow.deleteMany({ where: { phoneE164: contact.phoneE164 } }),
