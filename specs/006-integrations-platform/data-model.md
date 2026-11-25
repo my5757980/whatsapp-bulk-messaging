@@ -421,5 +421,6 @@ One wizard run (FR-051 – FR-055).
   - `api_campaign.created`, `api_campaign.updated`, `api_campaign.live`, `api_campaign.paused`,
     `api_campaign.stopped`
   - `store_automation.updated`
-  - `chat_link.created`, `chat_link.updated`, `chat_link.turned_off`, `chat_link.deleted`
+  - `chat_link.created`, `chat_link.updated`, `chat_link.turned_off`, `chat_link.deleted`,
+    `chat_link.contacts_tagged`
   - `number.connected_with_wizard`, `number.fixed_with_wizard`

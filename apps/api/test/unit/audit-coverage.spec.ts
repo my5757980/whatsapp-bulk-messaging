@@ -8,10 +8,6 @@ import { AUDIT_ACTIONS } from '../../src/modules/audit/audit-actions.js';
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
 /** Actions listed before the code that records them exists (feature 006 T014; each story removes its own). */
 const PENDING = new Set<string>([
-  'chat_link.created',
-  'chat_link.updated',
-  'chat_link.turned_off',
-  'chat_link.deleted',
   'number.connected_with_wizard',
   'number.fixed_with_wizard',
 ]);
@@ -122,6 +118,7 @@ describe('audit coverage', () => {
       'chat_link.updated',
       'chat_link.turned_off',
       'chat_link.deleted',
+      'chat_link.contacts_tagged',
       'number.connected_with_wizard',
       'number.fixed_with_wizard',
     ]);
