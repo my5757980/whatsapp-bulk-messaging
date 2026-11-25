@@ -101,6 +101,7 @@ export const AUDIT_ACTIONS = [
   'chat_link.updated',
   'chat_link.turned_off',
   'chat_link.deleted',
+  'chat_link.contacts_tagged',
   'number.connected_with_wizard',
   'number.fixed_with_wizard',
 ] as const;

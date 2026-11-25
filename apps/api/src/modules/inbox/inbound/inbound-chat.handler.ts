@@ -22,6 +22,7 @@ import { ChatRoutingService } from '../routing/chat-routing.service.js';
 import { LiveChatSettingsService } from '../settings/live-chat-settings.service.js';
 import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 import { CodService } from '../../integrations/stores/cod.service.js';
+import { ChatLinkMatcher } from '../../integrations/chat-links/chat-link-matcher.js';
 import { parseInboundMessage, previewOf, type ParsedInbound } from './message-parser.js';
 import { stopContactCarts } from '../../integrations/stores/store-carts.js';
 
@@ -63,6 +64,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly drips: DripLeaving,
     private readonly platformEvents: PlatformEvents,
     private readonly cod: CodService,
+    private readonly chatLinks: ChatLinkMatcher,
   ) {}
 
   onModuleInit(): void {
@@ -104,12 +106,16 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
       this.logger.warn({ numberId }, 'Customer message from a number that cannot be normalised; not added to live chat');
       return;
     }
-    const contact = await this.prisma.contact.upsert({
-      where: { phoneE164: phone.e164 },
-      create: { phoneE164: phone.e164, countryCode: phone.country, name: msg.profileName?.slice(0, 120) ?? null, leadSource: 'Organic' },
-      update: {},
-      select: { id: true, blockedAt: true },
-    });
+    // Chat links count new contacts (feature 006 US7, FR-049): the contact is new when this message creates it.
+    const known = await this.prisma.contact.findUnique({ where: { phoneE164: phone.e164 }, select: { id: true, blockedAt: true } });
+    const contact =
+      known ??
+      (await this.prisma.contact.upsert({
+        where: { phoneE164: phone.e164 },
+        create: { phoneE164: phone.e164, countryCode: phone.country, name: msg.profileName?.slice(0, 120) ?? null, leadSource: 'Organic' },
+        update: {},
+        select: { id: true, blockedAt: true },
+      }));
 
     const itemId = uuidv7();
     const outcome = await this.prisma.$transaction(async (tx) => {
@@ -199,6 +205,20 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     // COD answers (feature 006 US5): a cod1: button tap is answered here, before flows and the AI agent.
     const tappedPayload = typeof msg.payload.payload === 'string' ? msg.payload.payload : null;
     if (tappedPayload && (await this.cod.handleButton(tappedPayload, { conversationId: outcome.conversationId, contactId: contact.id }))) return;
+    // Chat links (feature 006 US7): the pre-filled message counts for its link and tags the contact; the link's
+    // flow answers it before keyword flows and the AI agent, unless a flow runs or a member has the chat.
+    if (
+      await this.chatLinks.onCustomerMessage({
+        numberId,
+        conversationId: outcome.conversationId,
+        contactId: contact.id,
+        newContact: !known,
+        chatState: outcome.state,
+        text: msg.text,
+      })
+    ) {
+      return;
+    }
     // Chatbot flows answer first (003 research R5); a flow answer replaces welcome/off-hours (FR-029).
     const flowAnswered = await this.flows.onCustomerMessage({
       conversationId: outcome.conversationId,
