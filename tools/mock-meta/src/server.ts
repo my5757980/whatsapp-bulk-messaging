@@ -10,6 +10,7 @@ import { env } from './env.js';
 import { handleShopify } from './shopify.js';
 import { handleWoo } from './woocommerce.js';
 import { handleWizard } from './wizard.js';
+import { handleAds } from './ads.js';
 import { postSigned, statusPayload, templateStatusPayload } from './webhook-emitter.js';
 
 interface MockTemplate {
@@ -217,6 +218,9 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   // Feature 006: mock Shopify and WooCommerce stores (src/shopify.ts, src/woocommerce.ts).
   if (await handleShopify(req, res, url)) return;
   if (await handleWoo(req, res, url)) return;
+  // Feature 007: the Marketing API routes for the ads tokens (src/ads.ts), before the wizard so its
+  // debug_token answer does not take the ads tokens.
+  if (await handleAds(req, res, url)) return;
   // Feature 006 US8: the number connection wizard's Graph routes, for the wizard tokens (src/wizard.ts).
   if (await handleWizard(req, res, url)) return;
 

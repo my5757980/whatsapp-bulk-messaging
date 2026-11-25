@@ -35,7 +35,7 @@ paths:
       summary: The current connection with its last checks (null when not connected)
       x-permission: campaigns.view
       responses:
-        '200': { description: Connection, content: { application/json: { schema: { oneOf: [{ $ref: '#/components/schemas/AdsConnection' }, { type: 'null' }] } } } }
+        '200': { description: Connection, content: { application/json: { schema: { type: object, required: [connection], properties: { connection: { oneOf: [{ $ref: '#/components/schemas/AdsConnection' }, { type: 'null' }] } } } } } }
     post:
       tags: [ads-connection]
       summary: Save the connection with the chosen ad account and page (FR-001)
@@ -550,7 +550,8 @@ components:
         checkedAt: { type: [string, 'null'], format: date-time }
         monthlyCapMinor: { type: [integer, 'null'] }
         monthSpendMinor: { type: integer }
-        linkedNumberIds: { type: array, items: { type: string, format: uuid } }
+        linkedNumberIds: { type: array, items: { type: string, format: uuid }, description: Numbers linked to the page; every connected number when Meta does not say }
+        linkedNumbersKnown: { type: boolean, description: False when Meta did not let the token read the linked numbers }
     AdGoal: { type: string, enum: [CHATS, LEADS, WEBSITE] }
     AdCampaignStatus: { type: string, enum: [DRAFT, SUBMITTING, IN_REVIEW, ACTIVE, PAUSED, REJECTED, ENDED, ERROR] }
     TargetingOption:
