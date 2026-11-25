@@ -1,4 +1,5 @@
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
+import { makeChatRef, makeLinkCode } from '@wbm/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { StorageService } from '../../src/common/storage/storage.service.js';
 import { seedContact, seedNumber, seedRunningCampaign, seedTemplate, uaePhone } from '../support/fixtures.js';
@@ -165,6 +166,39 @@ describe('Contact deletion', () => {
     expect(await ctx.prisma.linkClick.findUniqueOrThrow({ where: { id: click.id } })).toMatchObject({ contactId: null, device: 'MOBILE' });
     expect(await ctx.prisma.dripEnrolment.findUniqueOrThrow({ where: { id: enrolment.id } })).toMatchObject({ contactId: null, status: 'LEFT', leftReason: 'DELETED', nextDueAt: null });
     expect(await ctx.prisma.dripEvent.count({ where: { contactId: contact.id } })).toBe(0);
+  });
+
+  it('stops their carts, closes COD questions, keeps calls, orders and chat starts without them, and cancels waiting webhooks (006 FR-060)', async () => {
+    const number = await seedNumber(ctx);
+    const template = await seedTemplate(ctx, number.wabaId);
+    const phone = uaePhone();
+    const contact = await seedContact(ctx, phone, { name: 'Order Person' });
+    const store = await ctx.prisma.storeConnection.create({
+      data: { platform: 'SHOPIFY', name: 'Erase shop', baseUrl: `https://${randomUUID()}.myshopify.com`, credentialsEncrypted: 'x', numberId: number.id, defaultCountry: 'AE', customerTag: 'shopify', status: 'DISCONNECTED' },
+    });
+    const now = new Date();
+    const cart = await ctx.prisma.storeCart.create({
+      data: { storeId: store.id, externalId: randomUUID(), contactId: contact.id, phoneE164: phone, value: '20.00', currency: 'AED', startedAt: now, storeUpdatedAt: now, status: 'REMINDING', nextStep: 2, nextAt: new Date(now.getTime() + 3_600_000) },
+    });
+    const order = await ctx.prisma.storeOrder.create({
+      data: { storeId: store.id, externalId: randomUUID(), orderNumber: '#77', contactId: contact.id, phoneE164: phone, customerName: 'Order Person', total: '20.00', currency: 'AED', paymentKind: 'COD', status: 'pending', placedAt: now, storeUpdatedAt: now, codStatus: 'ASKED', codNextAt: new Date(now.getTime() + 3_600_000) },
+    });
+    const campaign = await ctx.prisma.apiCampaign.create({ data: { name: `Erase ${randomUUID()}`, apiName: `erase-${randomUUID().slice(0, 8)}`, numberId: number.id, templateId: template.id } });
+    const trigger = await ctx.prisma.apiCampaignTrigger.create({ data: { apiCampaignId: campaign.id, contactId: contact.id, phoneE164: phone, outcome: 'NOT_SENT', reason: 'opted_out' } });
+    const link = await ctx.prisma.chatLink.create({ data: { name: `Erase ${randomUUID()}`, numberId: number.id, message: 'Hi', ref: makeChatRef(randomInt), code: makeLinkCode(randomInt) } });
+    const start = await ctx.prisma.chatLinkStart.create({ data: { chatLinkId: link.id, contactId: contact.id, newContact: true } });
+    const endpoint = await ctx.prisma.webhookEndpoint.create({ data: { name: `Erase ${randomUUID()}`, url: 'https://hooks.example.test/in', secretEncrypted: 'x', eventTypes: ['message.received'] } });
+    const event = await ctx.prisma.outboundEvent.create({ data: { type: 'message.received', occurredAt: now, data: { contact: { id: contact.id, phone }, text: 'my address is 5 Palm St' } } });
+    const delivery = await ctx.prisma.webhookDelivery.create({ data: { endpointId: endpoint.id, eventId: event.id, status: 'PENDING', nextAttemptAt: now } });
+
+    expect((await admin.agent.delete(`/api/contacts/${contact.id}`).set('x-csrf-token', admin.csrf)).status).toBe(204);
+    expect(await ctx.prisma.storeCart.findUniqueOrThrow({ where: { id: cart.id } })).toMatchObject({ status: 'STOPPED', stopReason: 'deleted', nextAt: null, phoneE164: null, contactId: null });
+    expect(await ctx.prisma.storeOrder.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ codStatus: 'CLOSED', codNextAt: null, phoneE164: null, customerName: null, contactId: null });
+    expect(await ctx.prisma.apiCampaignTrigger.findUniqueOrThrow({ where: { id: trigger.id } })).toMatchObject({ contactId: null, phoneE164: null, outcome: 'NOT_SENT' });
+    expect(await ctx.prisma.chatLinkStart.findUniqueOrThrow({ where: { id: start.id } })).toMatchObject({ contactId: null, newContact: true });
+    expect(await ctx.prisma.webhookDelivery.findUniqueOrThrow({ where: { id: delivery.id } })).toMatchObject({ status: 'CANCELLED', nextAttemptAt: null });
+    expect((await ctx.prisma.outboundEvent.findUniqueOrThrow({ where: { id: event.id } })).data).toEqual({ contact: { id: contact.id } });
+    await ctx.prisma.webhookEndpoint.delete({ where: { id: endpoint.id } });
   });
 
   it('is admin-only and returns 404 for unknown contacts', async () => {

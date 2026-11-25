@@ -53,6 +53,8 @@ export class ContactDeletionService {
       this.prisma.storeCart.updateMany({ where: { contactId }, data: { phoneE164: null } }),
       this.prisma.storeOrder.updateMany({ where: { contactId, codStatus: { in: ['ASKED', 'NO_ANSWER'] } }, data: { codStatus: 'CLOSED', codNextAt: null } }),
       this.prisma.storeOrder.updateMany({ where: { contactId }, data: { phoneE164: null, customerName: null } }),
+      // API campaign calls keep their counts; chat link starts lose the contact through their foreign key.
+      this.prisma.apiCampaignTrigger.updateMany({ where: { OR: [{ contactId }, { phoneE164: contact.phoneE164 }] }, data: { phoneE164: null } }),
     ]);
     const [messages] = await this.prisma.$transaction([
       this.prisma.message.updateMany({ where: { contactId }, data: { contactId: null, phoneE164: null, resolvedParams: {} } }),

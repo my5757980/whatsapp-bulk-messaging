@@ -41,7 +41,27 @@ type PurgeTable =
   | 'assistant_requests'
   | 'link_clicks'
   | 'drip_enrolments'
-  | 'drip_events';
+  | 'drip_events'
+  | 'outbound_events'
+  | 'store_events'
+  | 'api_campaign_triggers'
+  | 'store_orders'
+  | 'store_carts'
+  | 'chat_link_opens'
+  | 'chat_link_starts'
+  | 'number_connection_checks';
+
+/** Integration records removed by one run (006 FR-059). */
+export interface IntegrationsRetentionResult {
+  outboundEvents: number;
+  storeEvents: number;
+  apiCampaignTriggers: number;
+  storeOrders: number;
+  storeCarts: number;
+  chatLinkOpens: number;
+  chatLinkStarts: number;
+  connectionChecks: number;
+}
 
 /** Campaign growth records removed by one run (005). */
 export interface GrowthRetentionResult {
@@ -65,7 +85,7 @@ export interface LiveChatRetentionResult {
   chatMedia: number;
 }
 
-export interface RetentionResult extends LiveChatRetentionResult, AiRetentionResult, GrowthRetentionResult {
+export interface RetentionResult extends LiveChatRetentionResult, AiRetentionResult, GrowthRetentionResult, IntegrationsRetentionResult {
   campaigns: number;
   messages: number;
   webhookEvents: number;
@@ -108,6 +128,14 @@ export class RetentionService {
       linkClicks: 0,
       dripEnrolments: 0,
       dripEvents: 0,
+      outboundEvents: 0,
+      storeEvents: 0,
+      apiCampaignTriggers: 0,
+      storeOrders: 0,
+      storeCarts: 0,
+      chatLinkOpens: 0,
+      chatLinkStarts: 0,
+      connectionChecks: 0,
     };
     const failures: string[] = [];
     const step = async (name: string, fn: () => Promise<void>) => {
@@ -137,6 +165,9 @@ export class RetentionService {
     });
     await step('campaign growth', async () => {
       Object.assign(result, await this.purgeGrowth(now));
+    });
+    await step('integrations', async () => {
+      Object.assign(result, await this.purgeIntegrations(now));
     });
     this.logger.log({ ...result }, 'Retention run finished');
     if (failures.length) throw new Error(`Retention partly failed: ${failures.join('; ')}`);
@@ -255,6 +286,26 @@ export class RetentionService {
     // The drip tick consumes events every 30 seconds; any left a day later are stale.
     const dripEvents = await this.deleteInBatches('drip_events', Prisma.sql`occurred_at < ${new Date(now.getTime() - DAY_MS)}`);
     return { linkClicks, dripEnrolments, dripEvents };
+  }
+
+  /**
+   * Integration records (006 FR-059, data-model §5): outbound events (their deliveries go with them)
+   * and raw store events after 30 days; API campaign triggers, store orders (with their messages),
+   * carts (with their reminders), chat link openings and starts, and number checks after 12 months.
+   */
+  async purgeIntegrations(now: Date): Promise<IntegrationsRetentionResult> {
+    const short = new Date(now.getTime() - SHORT_LIVED_DAYS * DAY_MS);
+    const cutoff = monthsBefore(now, CAMPAIGN_MONTHS);
+    return {
+      outboundEvents: await this.deleteInBatches('outbound_events', Prisma.sql`created_at < ${short}`),
+      storeEvents: await this.deleteInBatches('store_events', Prisma.sql`received_at < ${short}`),
+      apiCampaignTriggers: await this.deleteInBatches('api_campaign_triggers', Prisma.sql`created_at < ${cutoff}`),
+      storeOrders: await this.deleteInBatches('store_orders', Prisma.sql`created_at < ${cutoff}`),
+      storeCarts: await this.deleteInBatches('store_carts', Prisma.sql`created_at < ${cutoff}`),
+      chatLinkOpens: await this.deleteInBatches('chat_link_opens', Prisma.sql`opened_at < ${cutoff}`),
+      chatLinkStarts: await this.deleteInBatches('chat_link_starts', Prisma.sql`started_at < ${cutoff}`),
+      connectionChecks: await this.deleteInBatches('number_connection_checks', Prisma.sql`created_at < ${cutoff}`),
+    };
   }
 
   /** Deletes matching rows in batches so no single statement holds locks for long. */
