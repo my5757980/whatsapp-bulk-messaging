@@ -163,10 +163,48 @@ describe('Integrations API contract', () => {
     await check('get', '/stores/{id}/automations/{kind}/results', await call('get', `/stores/${missing}/automations/ORDER_CONFIRMED/results`), 404);
     await check('get', '/stores/{id}/orders', await call('get', `/stores/${id}/orders`), 200);
     await check('get', '/stores/{id}/orders', await call('get', `/stores/${missing}/orders`), 404);
+    await check('get', '/stores/{id}/carts', await call('get', `/stores/${id}/carts?status=OPEN`), 200);
+    await check('get', '/stores/{id}/carts', await call('get', `/stores/${missing}/carts`), 404);
     await check('post', '/stores/{id}/sync', await call('post', `/stores/${id}/sync`), 202);
     await check('post', '/stores/{id}/sync', await call('post', `/stores/${missing}/sync`), 404);
     await check('post', '/stores/{id}/disconnect', await call('post', `/stores/${id}/disconnect`), 200);
     await check('post', '/stores/{id}/disconnect', await call('post', `/stores/${missing}/disconnect`), 404);
     nock.cleanAll();
+  });
+
+  it('US7: chat links, the QR image, results, contacts, tagging, the export and the public redirect', async () => {
+    const number = await seedNumber(ctx);
+    const missing = randomUUID();
+    const body = { name: uniq('Counter '), numberId: number.id, message: 'Hi, I saw your poster' };
+    const created = await call('post', '/chat-links', body);
+    await check('post', '/chat-links', created, 201);
+    await check('post', '/chat-links', await call('post', '/chat-links', body), 409);
+    await check('post', '/chat-links', await call('post', '/chat-links', { ...body, name: uniq('Counter '), message: '' }), 422);
+    const id = created.body.id as string;
+    const one = `/chat-links/${id}`;
+    const none = `/chat-links/${missing}`;
+    await check('get', '/chat-links', await call('get', '/chat-links'), 200);
+    await check('get', '/chat-links/{id}', await call('get', one), 200);
+    await check('get', '/chat-links/{id}', await call('get', none), 404);
+    await check('patch', '/chat-links/{id}', await call('patch', one, { message: 'Hello from the counter' }), 200);
+    await check('patch', '/chat-links/{id}', await call('patch', one, { status: 'PAUSED' }), 422);
+    await check('patch', '/chat-links/{id}', await call('patch', none, { status: 'OFF' }), 404);
+    await check('get', '/chat-links/{id}/qr', await call('get', `${one}/qr?format=svg`), 200);
+    await check('get', '/chat-links/{id}/qr', await call('get', `${none}/qr`), 404);
+    await check('get', '/chat-links/{id}/results', await call('get', `${one}/results`), 200);
+    await check('get', '/chat-links/{id}/results', await call('get', `${none}/results`), 404);
+    await check('get', '/chat-links/{id}/contacts', await call('get', `${one}/contacts`), 200);
+    await check('get', '/chat-links/{id}/contacts', await call('get', `${none}/contacts`), 404);
+    await check('post', '/chat-links/{id}/contacts/tag', await call('post', `${one}/contacts/tag`, { tag: 'counter' }), 200);
+    await check('post', '/chat-links/{id}/contacts/tag', await call('post', `${none}/contacts/tag`, { tag: 'counter' }), 404);
+    await check('get', '/chat-links/{id}/contacts/export', await call('get', `${one}/contacts/export`), 200);
+    await check('get', '/chat-links/{id}/contacts/export', await call('get', `${none}/contacts/export`), 404);
+
+    const code = String(created.body.shortUrl).split('/').pop()!;
+    await check('get', '/l/c/{code}', await request(ctx.server()).get(`/l/c/${code}`), 302);
+    await check('get', '/l/c/{code}', await request(ctx.server()).get('/l/c/Zz9Zz9Zz9Z'), 404);
+    await check('delete', '/chat-links/{id}', await call('delete', one), 204);
+    await check('delete', '/chat-links/{id}', await call('delete', one), 404);
+    await check('get', '/l/c/{code}', await request(ctx.server()).get(`/l/c/${code}`), 404);
   });
 });
