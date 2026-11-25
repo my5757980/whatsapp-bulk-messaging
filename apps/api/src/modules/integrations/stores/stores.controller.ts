@@ -6,11 +6,13 @@ import { ZodValidationPipe } from '../../../common/validation/zod.pipe.js';
 import type { StoreAutomationKind } from '../../../generated/prisma/client.js';
 import {
   AutomationInputSchema,
+  CartsQuerySchema,
   KindSchema,
   OrdersQuerySchema,
   ResultsQuerySchema,
   StoreAutomationsService,
   type AutomationInput,
+  type CartsQuery,
   type OrdersQuery,
   type StoreResultsQuery,
 } from './store-automations.service.js';
@@ -95,6 +97,12 @@ export class StoresController {
   @Require('campaigns.view')
   results(@Param('id', ParseUUIDPipe) id: string, @Param('kind') kind: string, @Query(new ZodValidationPipe(ResultsQuerySchema)) query: StoreResultsQuery) {
     return this.automations.results(id, kindOf(kind), query);
+  }
+
+  @Get(':id/carts')
+  @Require('campaigns.view')
+  carts(@Param('id', ParseUUIDPipe) id: string, @Query(new ZodValidationPipe(CartsQuerySchema)) query: CartsQuery, @CurrentUser() user: RequestUser) {
+    return this.automations.carts(id, query, user.role);
   }
 
   @Get(':id/orders')

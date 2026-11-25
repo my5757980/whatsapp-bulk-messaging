@@ -48,6 +48,8 @@ export const KindSchema = z.enum(STORE_AUTOMATION_KINDS);
 export const OrdersQuerySchema = PageQuerySchema.extend({ codStatus: z.enum(['ASKED', 'CONFIRMED', 'CANCELLED', 'NO_ANSWER', 'CLOSED']).optional() }).strict();
 export type OrdersQuery = z.infer<typeof OrdersQuerySchema>;
 export const ResultsQuerySchema = z.object({ from: z.iso.date().optional(), to: z.iso.date().optional() }).strict();
+export const CartsQuerySchema = PageQuerySchema.extend({ status: z.enum(['OPEN', 'REMINDING', 'RECOVERED', 'STOPPED', 'SKIPPED', 'EXPIRED']).optional() }).strict();
+export type CartsQuery = z.infer<typeof CartsQuerySchema>;
 export type StoreResultsQuery = z.infer<typeof ResultsQuerySchema>;
 
 type Problem = { code: string; message: string };
@@ -136,6 +138,7 @@ export class StoreAutomationsService {
     await this.store(storeId);
     const from = query.from ? new Date(`${query.from}T00:00:00Z`) : new Date(0);
     const to = query.to ? new Date(new Date(`${query.to}T00:00:00Z`).getTime() + 86_400_000) : new Date('9999-12-31T00:00:00Z');
+    if (kind === 'CART_REMINDER') return this.cartResults(storeId, from, to);
     const [counts] = await this.prisma.$queryRaw<Array<Record<string, number>>>`
       SELECT count(*)::int AS orders,
              (count(*) FILTER (WHERE m.outcome = 'QUEUED'))::int AS queued,
@@ -171,6 +174,77 @@ export class StoreAutomationsService {
           )[0]
         : undefined;
     return { kind, counts: { ...(counts ?? {}), ...(cod ?? {}) }, skipReasons: Object.fromEntries(reasons.map((r) => [r.reason, r.n])) };
+  }
+
+  /** Carts, reminders per step, clicks on the cart links, recovered orders and their value (FR-044). */
+  private async cartResults(storeId: string, from: Date, to: Date) {
+    const [counts] = await this.prisma.$queryRaw<Array<Record<string, number | string>>>`
+      SELECT count(*)::int AS carts,
+             (count(*) FILTER (WHERE status IN ('OPEN', 'REMINDING')))::int AS waiting,
+             (count(*) FILTER (WHERE status = 'RECOVERED'))::int AS recovered,
+             coalesce(sum(recovered_value) FILTER (WHERE status = 'RECOVERED'), 0)::text AS "recoveredValue",
+             (count(*) FILTER (WHERE status = 'SKIPPED'))::int AS skipped,
+             (count(*) FILTER (WHERE status = 'EXPIRED'))::int AS expired
+        FROM store_carts
+       WHERE store_id = ${storeId}::uuid AND started_at >= ${from} AND started_at < ${to}`;
+    const steps = await this.prisma.$queryRaw<Array<{ step: number; sent: number }>>`
+      SELECT r.step::int AS step, (count(*) FILTER (WHERE r.outcome = 'QUEUED'))::int AS sent
+        FROM store_cart_reminders r
+        JOIN store_carts c ON c.id = r.cart_id
+       WHERE c.store_id = ${storeId}::uuid AND c.started_at >= ${from} AND c.started_at < ${to}
+       GROUP BY 1 ORDER BY 1`;
+    const [clicks] = await this.prisma.$queryRaw<Array<{ clicks: number }>>`
+      SELECT count(*)::int AS clicks
+        FROM link_clicks lc
+        JOIN tracked_links tl ON tl.id = lc.tracked_link_id
+        JOIN messages m ON m.id = tl.message_id
+        JOIN store_carts c ON c.id = m.store_cart_id
+       WHERE c.store_id = ${storeId}::uuid AND c.started_at >= ${from} AND c.started_at < ${to}`;
+    const reasons = await this.prisma.$queryRaw<Array<{ reason: string; n: number }>>`
+      SELECT reason, sum(n)::int AS n FROM (
+        SELECT stop_reason AS reason, count(*) AS n FROM store_carts
+         WHERE store_id = ${storeId}::uuid AND status IN ('SKIPPED', 'STOPPED') AND stop_reason IS NOT NULL AND started_at >= ${from} AND started_at < ${to}
+         GROUP BY 1
+        UNION ALL
+        SELECT r.skip_reason, count(*) FROM store_cart_reminders r JOIN store_carts c ON c.id = r.cart_id
+         WHERE c.store_id = ${storeId}::uuid AND r.outcome = 'SKIPPED' AND r.skip_reason IS NOT NULL AND c.started_at >= ${from} AND c.started_at < ${to}
+         GROUP BY 1
+      ) s GROUP BY 1`;
+    return {
+      kind: 'CART_REMINDER' as const,
+      counts: { ...(counts ?? {}), clicks: clicks?.clicks ?? 0, perStep: Object.fromEntries(steps.map((s) => [String(s.step), s.sent])) },
+      skipReasons: Object.fromEntries(reasons.map((r) => [r.reason, r.n])),
+    };
+  }
+
+  async carts(storeId: string, query: CartsQuery, role: Role) {
+    await this.store(storeId);
+    const where: Prisma.StoreCartWhereInput = { storeId, ...(query.status ? { status: query.status } : {}) };
+    const [total, rows] = await Promise.all([
+      this.prisma.storeCart.count({ where }),
+      this.prisma.storeCart.findMany({
+        where,
+        include: { contact: { select: { id: true, name: true, phoneE164: true } }, _count: { select: { reminders: { where: { outcome: 'QUEUED' } } } } },
+        orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
+      }),
+    ]);
+    const full = can(role, 'phones.full');
+    return {
+      total,
+      items: rows.map((c) => ({
+        id: c.id,
+        contact: c.contact ? { id: c.contact.id, name: c.contact.name, phone: full ? c.contact.phoneE164 : maskPhone(c.contact.phoneE164) } : null,
+        value: c.value.toFixed(2),
+        currency: c.currency,
+        status: c.status,
+        stopReason: c.stopReason,
+        remindersSent: c._count.reminders,
+        recoveredValue: c.recoveredValue?.toFixed(2) ?? null,
+        startedAt: c.startedAt.toISOString(),
+      })),
+    };
   }
 
   async orders(storeId: string, query: OrdersQuery, role: Role) {
