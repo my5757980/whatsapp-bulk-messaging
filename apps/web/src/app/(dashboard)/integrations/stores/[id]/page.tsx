@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { COD_DEFAULTS, ORDER_FIELDS, ORDER_FIELD_LABELS, parseVariableKey } from '@wbm/shared';
+import { CART_FIELDS, COD_DEFAULTS, ORDER_FIELDS, ORDER_FIELD_LABELS, parseVariableKey } from '@wbm/shared';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
@@ -20,6 +20,7 @@ import { errorMessage, toastError } from '@/lib/errors';
 import { formatDateTime, titleCase } from '@/lib/format';
 import {
   AUTOMATION_KIND_LABEL,
+  CART_STATUS_LABEL,
   COD_STATUS_LABEL,
   SKIP_REASON_LABEL,
   STORE_PLATFORM_LABEL,
@@ -28,6 +29,7 @@ import {
   type StoreAutomation,
   type StoreAutomationKind,
   type StoreAutomationResults,
+  type StoreCartRow,
   type StoreOrderRow,
 } from '@/lib/integrations';
 import { Can } from '@/lib/permissions';
@@ -125,9 +127,12 @@ function StoreView() {
         ))}
         <h3 className="text-base font-semibold">Cash on delivery</h3>
         <AutomationCard store={s} kind="COD_CONFIRMATION" />
+        <h3 className="text-base font-semibold">Abandoned carts</h3>
+        <CartCard store={s} />
       </div>
 
       <OrdersCard storeId={s.id} />
+      <CartsCard storeId={s.id} />
     </div>
   );
 }
@@ -493,6 +498,254 @@ function OrdersCard({ storeId }: { storeId: string }) {
                       : '—'}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">{formatDateTime(o.placedAt)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+const CART_FIELD_LABELS: Record<(typeof CART_FIELDS)[number], string> = {
+  first_name: 'Customer first name',
+  customer_name: 'Customer name',
+  items: 'Items',
+  total: 'Cart total',
+  cart_url: 'Cart link (tracked)',
+  store_name: 'Store name',
+};
+
+interface CartStepDraft {
+  templateId: string;
+  waitMinutes: number;
+  mapping: Record<string, Source | undefined>;
+}
+
+/** Up to three marketing reminders with increasing waits (US6). */
+function CartCard({ store }: { store: Store }) {
+  const queryClient = useQueryClient();
+  const automation = useQuery({ queryKey: ['store-automation', store.id, 'CART_REMINDER'], queryFn: () => api<StoreAutomation>(`/stores/${store.id}/automations/CART_REMINDER`) });
+  const results = useQuery({ queryKey: ['store-results', store.id, 'CART_REMINDER'], queryFn: () => api<StoreAutomationResults>(`/stores/${store.id}/automations/CART_REMINDER/results`) });
+  if (!automation.data) return null;
+  return (
+    <CartEditor
+      key={JSON.stringify(automation.data)}
+      store={store}
+      automation={automation.data}
+      results={results.data}
+      onSaved={() => Promise.all([queryClient.invalidateQueries({ queryKey: ['store-automation', store.id, 'CART_REMINDER'] }), queryClient.invalidateQueries({ queryKey: ['store', store.id] })])}
+    />
+  );
+}
+
+function CartEditor({ store, automation, results, onSaved }: { store: Store; automation: StoreAutomation; results: StoreAutomationResults | undefined; onSaved: () => Promise<unknown> }) {
+  const templates = useQuery({ queryKey: queryKeys.templates({ status: 'APPROVED' }), queryFn: () => api<Template[]>('/templates?status=APPROVED') });
+  const numbers = useQuery({ queryKey: queryKeys.numbers, queryFn: () => api<WhatsAppNumber[]>('/numbers') });
+  const waba = (numbers.data ?? []).find((n) => n.id === store.numberId)?.wabaId;
+  const usable = (templates.data ?? []).filter((t) => (!waba || t.wabaId === waba) && t.category === 'MARKETING');
+  const [enabled, setEnabled] = useState(automation.enabled);
+  const [steps, setSteps] = useState<CartStepDraft[]>(
+    automation.steps.length
+      ? automation.steps.map((s) => ({ templateId: s.templateId, waitMinutes: s.waitMinutes ?? 60, mapping: s.variableMapping as Record<string, Source> }))
+      : [{ templateId: '', waitMinutes: 60, mapping: {} }],
+  );
+  const save = useMutation({
+    mutationFn: () =>
+      api<StoreAutomation>(`/stores/${store.id}/automations/CART_REMINDER`, {
+        method: 'PUT',
+        json: {
+          enabled,
+          steps: steps.map((s) => {
+            const variables = (usable.find((t) => t.id === s.templateId)?.variables ?? []).map((v) => v.key);
+            return { templateId: s.templateId, waitMinutes: Number(s.waitMinutes), variableMapping: Object.fromEntries(variables.flatMap((v) => (s.mapping[v] ? [[v, s.mapping[v]]] : []))) };
+          }),
+        },
+      }),
+    onSuccess: () => {
+      toast.success('Saved');
+      return onSaved();
+    },
+    onError: toastError,
+  });
+  const update = (index: number, patch: Partial<CartStepDraft>) => setSteps((all) => all.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  const counts = results?.counts ?? {};
+  const perStep = (counts.perStep ?? {}) as unknown as Record<string, number>;
+  const skips = Object.entries(results?.skipReasons ?? {});
+
+  return (
+    <Card data-testid="automation-CART_REMINDER">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          {AUTOMATION_KIND_LABEL.CART_REMINDER}
+          {automation.enabled ? <Badge variant="success">On</Badge> : <Badge variant="outline">Off</Badge>}
+        </CardTitle>
+        <CardDescription>
+          <span data-testid="cart-results">
+            {Number(counts.carts ?? 0)} carts · reminders sent {[1, 2, 3].map((n) => perStep[String(n)] ?? 0).join(' / ')} · {Number(counts.clicks ?? 0)} clicks · {Number(counts.recovered ?? 0)} recovered (
+            {String(counts.recoveredValue ?? '0')})
+          </span>
+          {skips.length ? ` · ${skips.map(([r, n]) => `${SKIP_REASON_LABEL[r] ?? r}: ${n}`).join(', ')}` : ''}
+        </CardDescription>
+      </CardHeader>
+      <Can permission="campaigns.manage">
+        <CardContent className="grid gap-3">
+          <p className="text-xs text-muted-foreground">
+            Cart reminders are marketing messages: use Marketing templates. They go only to contacts who opted in.{' '}
+            {store.consentIsWhatsapp
+              ? 'Customers who agree to marketing at checkout count as opted in.'
+              : 'Checkout consent does not count yet: confirm that your checkout consent text names WhatsApp in Settings above.'}
+          </p>
+          {steps.map((step, index) => {
+            const template = usable.find((t) => t.id === step.templateId);
+            const variables = (template?.variables ?? []).map((v) => v.key);
+            return (
+              <div key={index} data-testid={`cart-step-${index + 1}`} className="grid gap-2 rounded-md border p-3">
+                <div className="grid gap-2 sm:grid-cols-[1fr_12rem_auto] sm:items-end">
+                  <div className="grid gap-1">
+                    <Label htmlFor={`cart-tpl-${index}`}>Reminder {index + 1} template</Label>
+                    <NativeSelect id={`cart-tpl-${index}`} value={step.templateId} onChange={(e) => update(index, { templateId: e.target.value, mapping: {} })}>
+                      <option value="">Choose a Marketing template…</option>
+                      {usable.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name} · {t.language}
+                        </option>
+                      ))}
+                    </NativeSelect>
+                  </div>
+                  <div className="grid gap-1">
+                    <Label htmlFor={`cart-wait-${index}`}>Minutes after the cart</Label>
+                    <Input id={`cart-wait-${index}`} type="number" min={30} max={10080} value={step.waitMinutes} onChange={(e) => update(index, { waitMinutes: Number(e.target.value) })} />
+                  </div>
+                  {steps.length > 1 ? (
+                    <Button type="button" variant="ghost" onClick={() => setSteps((all) => all.filter((_, i) => i !== index))}>
+                      Remove
+                    </Button>
+                  ) : null}
+                </div>
+                {variables.map((variable) => {
+                  const source = step.mapping[variable];
+                  const id = `cart-${index}-${variable.replace(/[^A-Za-z0-9]/g, '-')}`;
+                  const set = (next: Source | undefined) => update(index, { mapping: { ...step.mapping, [variable]: next } });
+                  return (
+                    <div key={variable} data-testid={`cart-map-${index + 1}-${variable}`} className="grid gap-2 sm:grid-cols-[8rem_12rem_1fr] sm:items-end">
+                      <div className="font-mono text-sm">{`{{${parseVariableKey(variable)?.placeholder ?? variable}}}`}</div>
+                      <div className="grid gap-1">
+                        <Label htmlFor={`src-${id}`}>Source</Label>
+                        <NativeSelect
+                          id={`src-${id}`}
+                          value={source?.source ?? ''}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            set(v === 'order' ? { source: 'order', key: 'cart_url' } : v === 'field' ? { source: 'field', key: 'name' } : v === 'static' ? { source: 'static', value: '' } : undefined);
+                          }}
+                        >
+                          <option value="">Choose…</option>
+                          <option value="order">Cart field</option>
+                          <option value="field">Contact field</option>
+                          <option value="static">Fixed text</option>
+                        </NativeSelect>
+                      </div>
+                      <div className="grid gap-1">
+                        {source?.source === 'order' ? (
+                          <>
+                            <Label htmlFor={`fld-${id}`}>Cart field</Label>
+                            <NativeSelect id={`fld-${id}`} value={source.key} onChange={(e) => set({ source: 'order', key: e.target.value })}>
+                              {CART_FIELDS.map((f) => (
+                                <option key={f} value={f}>
+                                  {CART_FIELD_LABELS[f]}
+                                </option>
+                              ))}
+                            </NativeSelect>
+                          </>
+                        ) : source?.source === 'field' ? (
+                          <>
+                            <Label htmlFor={`cf-${id}`}>Contact field</Label>
+                            <NativeSelect id={`cf-${id}`} value={source.key} onChange={(e) => set({ source: 'field', key: e.target.value })}>
+                              <option value="name">Name</option>
+                              <option value="phone">Phone</option>
+                            </NativeSelect>
+                          </>
+                        ) : source?.source === 'static' ? (
+                          <>
+                            <Label htmlFor={`txt-${id}`}>Fixed text</Label>
+                            <Input id={`txt-${id}`} value={source.value} onChange={(e) => set({ source: 'static', value: e.target.value })} />
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+          {steps.length < 3 ? (
+            <div>
+              <Button type="button" variant="outline" size="sm" onClick={() => setSteps((all) => [...all, { templateId: '', waitMinutes: (all[all.length - 1]?.waitMinutes ?? 60) * 2, mapping: {} }])}>
+                Add a reminder
+              </Button>
+            </div>
+          ) : null}
+          {automation.problems.length ? (
+            <ul className="list-disc pl-5 text-sm text-destructive">
+              {automation.problems.map((p) => (
+                <li key={`${p.code}-${p.message}`}>{p.message}</li>
+              ))}
+            </ul>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" className="size-4" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+              Send cart reminders
+            </label>
+            <Button size="sm" onClick={() => save.mutate()} disabled={save.isPending || steps.some((s) => !s.templateId)}>
+              Save
+            </Button>
+          </div>
+        </CardContent>
+      </Can>
+    </Card>
+  );
+}
+
+function CartsCard({ storeId }: { storeId: string }) {
+  const carts = useQuery({ queryKey: ['store-carts', storeId], queryFn: () => api<{ items: StoreCartRow[]; total: number }>(`/stores/${storeId}/carts?pageSize=50`) });
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Carts</CardTitle>
+        <CardDescription>{carts.data ? `${carts.data.total} carts` : 'Checkouts left without an order'}</CardDescription>
+      </CardHeader>
+      <CardContent className="p-0">
+        {!carts.data?.items.length ? (
+          <p className="p-6 text-sm text-muted-foreground">No carts yet.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Customer</TableHead>
+                <TableHead>Value</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Reminders</TableHead>
+                <TableHead>Recovered</TableHead>
+                <TableHead>Started</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {carts.data.items.map((c) => (
+                <TableRow key={c.id} data-testid="store-cart-row">
+                  <TableCell className="text-sm">{c.contact ? (c.contact.name ?? c.contact.phone) : <span className="text-muted-foreground">No phone</span>}</TableCell>
+                  <TableCell className="tabular-nums">
+                    {c.value} {c.currency}
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {CART_STATUS_LABEL[c.status]}
+                    {c.stopReason ? ` (${SKIP_REASON_LABEL[c.stopReason] ?? c.stopReason})` : ''}
+                  </TableCell>
+                  <TableCell className="tabular-nums">{c.remindersSent}</TableCell>
+                  <TableCell className="tabular-nums">{c.recoveredValue ? `${c.recoveredValue} ${c.currency}` : '—'}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{formatDateTime(c.startedAt)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
