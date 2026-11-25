@@ -59,6 +59,9 @@ export default function CampaignsPage() {
           <Button variant="outline" asChild>
             <Link href="/campaigns/api">API campaigns</Link>
           </Button>
+          <Button variant="outline" asChild>
+            <Link href="/campaigns/chat-links">Chat links</Link>
+          </Button>
           <Can permission="campaigns.manage">
             <Button asChild>
               <Link href="/campaigns/new">New campaign</Link>

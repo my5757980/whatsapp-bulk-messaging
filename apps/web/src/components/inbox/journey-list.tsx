@@ -104,6 +104,15 @@ export function describeJourneyEntry(entry: JourneyEntry): string {
       return d.reason === 'FINISHED'
         ? `Finished drip "${String(d.dripName ?? '')}"`
         : `Left drip "${String(d.dripName ?? '')}": ${DRIP_LEFT_REASON[String(d.reason)] ?? String(d.reason ?? '').toLowerCase().replace(/_/g, ' ')}`;
+    // Feature 006: store orders, COD answers and chat links.
+    case 'ORDER_PLACED':
+      return `Placed order ${String(d.orderNumber ?? '')} in ${String(d.store ?? 'the store')}${d.total ? ` (${String(d.total)})` : ''}`;
+    case 'COD_ANSWERED':
+      return d.answer === 'NO_ANSWER'
+        ? `Did not answer the cash on delivery question for order ${String(d.orderNumber ?? '')}`
+        : `${d.answer === 'CONFIRMED' ? 'Confirmed' : 'Cancelled'} cash on delivery order ${String(d.orderNumber ?? '')}`;
+    case 'CHAT_LINK_STARTED':
+      return `Started a chat from the chat link "${String(d.chatLinkName ?? '')}"${d.newContact ? ' (new contact)' : ''}`;
     default:
       return entry.type;
   }

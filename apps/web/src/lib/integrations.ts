@@ -279,9 +279,31 @@ export interface ChatLink {
   status: 'ACTIVE' | 'OFF';
   opens: number;
   chatsStarted: number;
+  numberLabel: string;
+  flowName: string | null;
+  tagName: string | null;
+  createdAt: string;
+}
+
+export interface ChatLinkPatch {
+  name?: string;
+  message?: string;
+  flowId?: string | null;
+  tagId?: string | null;
+  status?: 'ACTIVE' | 'OFF';
+}
+
+/** A contact who started a chat from a link; the phone is masked without phones.full. */
+export interface ChatLinkContact {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  startedAt: string;
 }
 
 export interface ChatLinkResults {
+  from: string;
+  to: string;
   totals: { opens: number; chatsStarted: number; newContacts: number };
   days: Array<{ date: string; opens: number; chatsStarted: number; newContacts: number }>;
 }
