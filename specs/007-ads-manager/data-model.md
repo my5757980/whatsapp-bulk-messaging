@@ -127,7 +127,6 @@ A chat that began from an ad (FR-021 – FR-024, R11).
 | media_url | varchar(2000)? | image, video or thumbnail URL |
 | source_url | varchar(2000)? | |
 | ctwa_clid | varchar(200)? | absent for Status placements |
-| first_reply_at | timestamptz? | first business reply, for the free window |
 | started_at | timestamptz | |
 
 Unique `(meta_ad_id, contact_id, (started_at AT TIME ZONE 'UTC')::date)`; indexes on
@@ -196,7 +195,6 @@ Lead forms and their leads (FR-035 – FR-039, R9).
 | consent | boolean | the WhatsApp checkbox |
 | contact_id | uuid? FK contacts `SET NULL` | |
 | status | `AdLeadStatus` | `PROCESSED`, `NO_PHONE`, `INVALID_PHONE`, `FAILED` |
-| welcome_message_id | uuid? FK messages `SET NULL` | |
 | submitted_at / received_at | timestamptz | |
 
 ### ad_link_opens
@@ -206,7 +204,7 @@ opened_at timestamptz)`, index `(ad_campaign_id, opened_at)`. No IP is stored.
 
 ## 2. Changed tables and enums
 
-- `messages`: `ad_lead_id uuid? FK ad_leads SET NULL` (the welcome template), indexed.
+- `messages`: `ad_lead_id uuid? FK ad_leads SET NULL` (the welcome template), indexed. The free ad window is computed when read, from the first business message after the chat start.
 - `MessageOrigin` + `ADS` (shown as automatic in live chat).
 - `ConsentSource` + `LEAD_FORM`.
 - `JourneyEventType` + `AD_CHAT_STARTED`, `LEAD_RECEIVED`.

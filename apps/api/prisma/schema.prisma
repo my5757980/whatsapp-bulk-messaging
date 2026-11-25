@@ -53,6 +53,8 @@ enum ConsentSource {
   AI_AGENT
   /// A store checkout consent confirmed by an admin to name WhatsApp (feature 006, FR-027).
   STORE
+  /// A lead form consent question that names WhatsApp (feature 007, FR-037).
+  LEAD_FORM
 }
 
 enum AttributeType {
@@ -139,6 +141,8 @@ enum MessageOrigin {
   DRIP
   /// A store notification, COD message or cart reminder (feature 006).
   STORE
+  /// A lead form welcome template (feature 007).
+  ADS
 }
 
 enum MessageStatus {
@@ -199,6 +203,12 @@ enum NotificationType {
   STORE_CONNECTION_ERROR
   API_CAMPAIGN_PAUSED
   COD_CANCELLED
+  /// Feature 007: the ads connection failed a check, a version was rejected, an ad stopped
+  /// delivering, and the month's spending cap paused the platform's ads.
+  ADS_CONNECTION_ERROR
+  AD_REJECTED
+  AD_NOT_DELIVERING
+  ADS_SPEND_CAP_REACHED
 }
 
 // ---------- Live chat enums (feature 002) ----------
@@ -275,6 +285,9 @@ enum JourneyEventType {
   CHAT_LINK_STARTED
   ORDER_PLACED
   COD_ANSWERED
+  // Feature 007
+  AD_CHAT_STARTED
+  LEAD_RECEIVED
 }
 
 enum JourneyActor {
@@ -366,6 +379,11 @@ model User {
   updatedStoreAutomations StoreAutomation[]       @relation("StoreAutomationUpdatedBy")
   createdChatLinks        ChatLink[]              @relation("ChatLinkCreatedBy")
   numberChecks            NumberConnectionCheck[] @relation("NumberCheckRunBy")
+  // Feature 007
+  adsConnections          AdsConnection[]         @relation("AdsConnectedBy")
+  createdAdCampaigns      AdCampaign[]            @relation("AdCampaignCreatedBy")
+  createdAdAudiences      AdAudience[]            @relation("AdAudienceCreatedBy")
+  createdAdLeadForms      AdLeadForm[]            @relation("AdLeadFormCreatedBy")
 
   @@map("users")
 }
@@ -473,6 +491,8 @@ model WhatsAppNumber {
   storeConnections StoreConnection[]
   chatLinks        ChatLink[]
   connectionChecks NumberConnectionCheck[]
+  // Feature 007
+  adCampaigns      AdCampaign[]
 
   @@map("whatsapp_numbers")
 }
@@ -515,6 +535,9 @@ model Contact {
   storeOrders         StoreOrder[]
   storeCarts          StoreCart[]
   chatLinkStarts      ChatLinkStart[]
+  // Feature 007
+  adChatStarts        AdChatStart[]
+  adLeads             AdLead[]
 
   @@index([consentStatus])
   @@index([attributes], type: Gin)
@@ -535,7 +558,10 @@ model Tag {
   flowFirstMessageRules FlowTrigger[] @relation("FlowTriggerFirstMessageTag")
   dripTriggers          DripTrigger[]
 
-  chatLinks ChatLink[]
+  chatLinks   ChatLink[]
+  // Feature 007
+  adCampaigns AdCampaign[]
+  adLeadForms AdLeadForm[]
 
   @@map("tags")
 }
@@ -644,6 +670,7 @@ model Template {
   dripSteps    DripStep[]
 
   apiCampaigns ApiCampaign[]
+  adLeadForms  AdLeadForm[]
 
   @@unique([wabaId, name, language])
   @@index([status])
@@ -674,6 +701,8 @@ model MediaAsset {
   dripSteps      DripStep[]      @relation("DripStepHeaderMedia")
 
   apiCampaignHeaders ApiCampaign[] @relation("ApiCampaignHeaderMedia")
+  // Feature 007
+  adVersions         AdVersion[]
 
   @@index([purpose, createdAt(sort: Desc)])
   @@map("media_assets")
@@ -787,6 +816,9 @@ model Message {
   storeOrder          StoreOrder?          @relation(fields: [storeOrderId], references: [id], onDelete: SetNull)
   storeCartId         String?              @map("store_cart_id") @db.Uuid
   storeCart           StoreCart?           @relation(fields: [storeCartId], references: [id], onDelete: SetNull)
+  /// A lead form welcome template (feature 007).
+  adLeadId            String?              @map("ad_lead_id") @db.Uuid
+  adLead              AdLead?              @relation(fields: [adLeadId], references: [id], onDelete: SetNull)
   apiCampaignTriggers ApiCampaignTrigger[]
   storeOrderMessages  StoreOrderMessage[]
   storeCartReminders  StoreCartReminder[]
@@ -798,6 +830,7 @@ model Message {
   @@index([dripEnrolmentId])
   @@index([apiCampaignId])
   @@index([storeOrderId])
+  @@index([adLeadId])
   @@index([storeCartId])
   @@map("messages")
 }
@@ -937,6 +970,7 @@ model Conversation {
 
   /// NULL contact ids (after erasure) stay distinct.
   chatLinkStarts ChatLinkStart[]
+  adChatStarts   AdChatStart[]
 
   @@unique([contactId, numberId])
   @@index([state, lastActivityAt(sort: Desc)])
@@ -1236,7 +1270,8 @@ model Flow {
   sessions FlowSession[]
   secrets  FlowSecret[]
 
-  chatLinks ChatLink[]
+  chatLinks   ChatLink[]
+  adCampaigns AdCampaign[]
 
   @@map("flows")
 }
@@ -2604,4 +2639,337 @@ model ApiIdempotentResponse {
   @@unique([apiKeyId, key])
   @@index([expiresAt])
   @@map("api_idempotent_responses")
+}
+
+// ---------- Feature 007: ads manager (specs/007-ads-manager/data-model.md) ----------
+
+enum AdsConnectionStatus {
+  CONNECTED
+  ERROR
+}
+
+enum AdGoal {
+  CHATS
+  LEADS
+  WEBSITE
+}
+
+enum AdCampaignStatus {
+  DRAFT
+  SUBMITTING
+  IN_REVIEW
+  ACTIVE
+  PAUSED
+  REJECTED
+  ENDED
+  ERROR
+}
+
+enum AdSpecialCategory {
+  NONE
+  CREDIT
+  EMPLOYMENT
+  HOUSING
+  SOCIAL_ISSUES
+}
+
+enum AdMediaKind {
+  IMAGE
+  VIDEO
+}
+
+enum AdVersionStatus {
+  DRAFT
+  IN_REVIEW
+  ACTIVE
+  PAUSED
+  REJECTED
+  ENDED
+}
+
+enum AdAudienceKind {
+  CUSTOM
+  LOOKALIKE
+}
+
+enum AdAudienceStatus {
+  SYNCING
+  READY
+  TOO_SMALL
+  ERROR
+}
+
+enum AdLeadStatus {
+  PROCESSED
+  NO_PHONE
+  INVALID_PHONE
+  FAILED
+}
+
+/// The company's ad account and page (R1, R2). One row (index in the migration tail).
+model AdsConnection {
+  id              String              @id @default(uuid(7)) @db.Uuid
+  adAccountId     String              @map("ad_account_id") @db.VarChar(40)
+  adAccountName   String              @map("ad_account_name") @db.VarChar(200)
+  pageId          String              @map("page_id") @db.VarChar(40)
+  pageName        String              @map("page_name") @db.VarChar(200)
+  /// System user token, encrypted with the 001 TokenCipher; never returned.
+  tokenEnc        String              @map("token_enc")
+  pageTokenEnc    String?             @map("page_token_enc")
+  currency        String              @db.Char(3)
+  timezone        String              @db.VarChar(64)
+  status          AdsConnectionStatus @default(CONNECTED)
+  checks          Json                @default("{}")
+  checkedAt       DateTime?           @map("checked_at") @db.Timestamptz
+  monthlyCapMinor BigInt?             @map("monthly_cap_minor")
+  /// YYYY-MM when the cap paused the platform's ads, so they are paused once a month.
+  cappedMonth     String?             @map("capped_month") @db.Char(7)
+  connectedById   String?             @map("connected_by_id") @db.Uuid
+  connectedBy     User?               @relation("AdsConnectedBy", fields: [connectedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("ads_connections")
+}
+
+/// What a manager builds: one Meta campaign and ad set with up to five ads (R3).
+model AdCampaign {
+  id                String            @id @default(uuid(7)) @db.Uuid
+  name              String            @db.Citext
+  goal              AdGoal
+  status            AdCampaignStatus  @default(DRAFT)
+  numberId          String?           @map("number_id") @db.Uuid
+  number            WhatsAppNumber?   @relation(fields: [numberId], references: [id], onDelete: Restrict)
+  prefilledMessage  String?           @map("prefilled_message") @db.VarChar(300)
+  welcomeSequenceId String?           @map("welcome_sequence_id") @db.VarChar(40)
+  leadFormId        String?           @map("lead_form_id") @db.Uuid
+  leadForm          AdLeadForm?       @relation(fields: [leadFormId], references: [id], onDelete: Restrict)
+  websiteUrl        String?           @map("website_url") @db.VarChar(2000)
+  linkCode          String?           @unique @map("link_code") @db.Char(10)
+  targeting         Json
+  placements        Json
+  specialCategory   AdSpecialCategory @default(NONE) @map("special_category")
+  dailyBudgetMinor  BigInt            @map("daily_budget_minor")
+  currency          String            @db.Char(3)
+  startAt           DateTime          @map("start_at") @db.Timestamptz
+  endAt             DateTime?         @map("end_at") @db.Timestamptz
+  flowId            String?           @map("flow_id") @db.Uuid
+  flow              Flow?             @relation(fields: [flowId], references: [id], onDelete: SetNull)
+  tagId             String?           @map("tag_id") @db.Uuid
+  tag               Tag?              @relation(fields: [tagId], references: [id], onDelete: SetNull)
+  metaCampaignId    String?           @map("meta_campaign_id") @db.VarChar(40)
+  metaAdsetId       String?           @map("meta_adset_id") @db.VarChar(40)
+  metaStatus        String?           @map("meta_status") @db.VarChar(40)
+  lastError         String?           @map("last_error") @db.VarChar(500)
+  syncedAt          DateTime?         @map("synced_at") @db.Timestamptz
+  submittedAt       DateTime?         @map("submitted_at") @db.Timestamptz
+  endedAt           DateTime?         @map("ended_at") @db.Timestamptz
+  createdById       String?           @map("created_by_id") @db.Uuid
+  createdBy         User?             @relation("AdCampaignCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  deletedAt         DateTime?         @map("deleted_at") @db.Timestamptz
+  createdAt         DateTime          @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime          @updatedAt @map("updated_at") @db.Timestamptz
+
+  versions   AdVersion[]
+  resultDays AdResultDay[]
+  chatStarts AdChatStart[]
+  leads      AdLead[]
+  linkOpens  AdLinkOpen[]
+
+  @@index([status])
+  @@index([flowId])
+  @@index([tagId])
+  @@index([numberId])
+  @@index([leadFormId])
+  @@map("ad_campaigns")
+}
+
+/// One creative of a campaign; one ad at Meta.
+model AdVersion {
+  id             String          @id @default(uuid(7)) @db.Uuid
+  adCampaignId   String          @map("ad_campaign_id") @db.Uuid
+  adCampaign     AdCampaign      @relation(fields: [adCampaignId], references: [id], onDelete: Cascade)
+  position       Int             @db.SmallInt
+  mediaAssetId   String          @map("media_asset_id") @db.Uuid
+  mediaAsset     MediaAsset      @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+  mediaKind      AdMediaKind     @map("media_kind")
+  metaImageHash  String?         @map("meta_image_hash") @db.VarChar(100)
+  metaVideoId    String?         @map("meta_video_id") @db.VarChar(100)
+  primaryText    String          @map("primary_text") @db.VarChar(2200)
+  headline       String          @db.VarChar(255)
+  callToAction   String          @map("call_to_action") @db.VarChar(40)
+  metaCreativeId String?         @map("meta_creative_id") @db.VarChar(40)
+  metaAdId       String?         @unique @map("meta_ad_id") @db.VarChar(40)
+  status         AdVersionStatus @default(DRAFT)
+  reviewFeedback String?         @map("review_feedback") @db.VarChar(1000)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  resultDays AdResultDay[]
+  chatStarts AdChatStart[]
+
+  @@unique([adCampaignId, position])
+  @@index([mediaAssetId])
+  @@map("ad_versions")
+}
+
+/// Meta's numbers for a campaign (ad_version_id null, for reach) or a version on one day (R7).
+model AdResultDay {
+  id                String     @id @default(uuid(7)) @db.Uuid
+  adCampaignId      String     @map("ad_campaign_id") @db.Uuid
+  adCampaign        AdCampaign @relation(fields: [adCampaignId], references: [id], onDelete: Cascade)
+  adVersionId       String?    @map("ad_version_id") @db.Uuid
+  adVersion         AdVersion? @relation(fields: [adVersionId], references: [id], onDelete: Cascade)
+  day               DateTime   @db.Date
+  impressions       BigInt     @default(0)
+  reach             BigInt     @default(0)
+  clicks            BigInt     @default(0)
+  spendMinor        BigInt     @default(0) @map("spend_minor")
+  metaConversations Int        @default(0) @map("meta_conversations")
+  metaLeads         Int        @default(0) @map("meta_leads")
+  readAt            DateTime   @map("read_at") @db.Timestamptz
+
+  @@index([adCampaignId, day])
+  @@index([adVersionId])
+  @@index([day])
+  @@map("ad_result_days")
+}
+
+/// A chat that began from an ad (R11); a contact once a day per ad (index in the migration tail).
+model AdChatStart {
+  id             String        @id @default(uuid(7)) @db.Uuid
+  metaAdId       String        @map("meta_ad_id") @db.VarChar(40)
+  adCampaignId   String?       @map("ad_campaign_id") @db.Uuid
+  adCampaign     AdCampaign?   @relation(fields: [adCampaignId], references: [id], onDelete: SetNull)
+  adVersionId    String?       @map("ad_version_id") @db.Uuid
+  adVersion      AdVersion?    @relation(fields: [adVersionId], references: [id], onDelete: SetNull)
+  contactId      String?       @map("contact_id") @db.Uuid
+  contact        Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  conversationId String?       @map("conversation_id") @db.Uuid
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  newContact     Boolean       @map("new_contact")
+  headline       String?       @db.VarChar(500)
+  body           String?       @db.VarChar(500)
+  mediaUrl       String?       @map("media_url") @db.VarChar(2000)
+  sourceUrl      String?       @map("source_url") @db.VarChar(2000)
+  ctwaClid       String?       @map("ctwa_clid") @db.VarChar(200)
+  startedAt      DateTime      @default(now()) @map("started_at") @db.Timestamptz
+
+  @@index([adCampaignId, startedAt])
+  @@index([adVersionId])
+  @@index([contactId])
+  @@index([conversationId])
+  @@index([metaAdId])
+  @@index([startedAt])
+  @@map("ad_chat_starts")
+}
+
+/// A saved audience at Meta (R8).
+model AdAudience {
+  id               String           @id @default(uuid(7)) @db.Uuid
+  name             String           @db.Citext
+  kind             AdAudienceKind
+  source           Json?
+  originAudienceId String?          @map("origin_audience_id") @db.Uuid
+  originAudience   AdAudience?      @relation("AdAudienceLookalikes", fields: [originAudienceId], references: [id], onDelete: Cascade)
+  lookalikes       AdAudience[]     @relation("AdAudienceLookalikes")
+  lookalikeCountry String?          @map("lookalike_country") @db.Char(2)
+  lookalikeRatio   Decimal?         @map("lookalike_ratio") @db.Decimal(4, 2)
+  metaAudienceId   String?          @map("meta_audience_id") @db.VarChar(40)
+  memberCount      Int              @default(0) @map("member_count")
+  status           AdAudienceStatus @default(SYNCING)
+  lastError        String?          @map("last_error") @db.VarChar(500)
+  syncedAt         DateTime?        @map("synced_at") @db.Timestamptz
+  createdById      String?          @map("created_by_id") @db.Uuid
+  createdBy        User?            @relation("AdAudienceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  deletedAt        DateTime?        @map("deleted_at") @db.Timestamptz
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  members AdAudienceMember[]
+
+  @@index([originAudienceId])
+  @@map("ad_audiences")
+}
+
+/// The hashes sent to Meta, so daily syncs send only the difference (R8). No contact foreign key:
+/// a deleted contact's row stays until the next sync removes it at Meta.
+model AdAudienceMember {
+  audienceId String     @map("audience_id") @db.Uuid
+  audience   AdAudience @relation(fields: [audienceId], references: [id], onDelete: Cascade)
+  contactId  String     @map("contact_id") @db.Uuid
+  phoneHash  String     @map("phone_hash") @db.Char(64)
+  addedAt    DateTime   @default(now()) @map("added_at") @db.Timestamptz
+
+  @@id([audienceId, contactId])
+  @@index([contactId])
+  @@map("ad_audience_members")
+}
+
+/// A lead form at Meta (R9).
+model AdLeadForm {
+  id                String    @id @default(uuid(7)) @db.Uuid
+  name              String    @unique @db.Citext
+  questions         Json
+  privacyUrl        String    @map("privacy_url") @db.VarChar(2000)
+  consentText       String    @map("consent_text") @db.VarChar(300)
+  tagId             String?   @map("tag_id") @db.Uuid
+  tag               Tag?      @relation(fields: [tagId], references: [id], onDelete: SetNull)
+  welcomeTemplateId String?   @map("welcome_template_id") @db.Uuid
+  welcomeTemplate   Template? @relation(fields: [welcomeTemplateId], references: [id], onDelete: SetNull)
+  welcomeMapping    Json      @default("{}") @map("welcome_mapping")
+  metaFormId        String?   @unique @map("meta_form_id") @db.VarChar(40)
+  lastLeadAt        DateTime? @map("last_lead_at") @db.Timestamptz
+  createdById       String?   @map("created_by_id") @db.Uuid
+  createdBy         User?     @relation("AdLeadFormCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  campaigns AdCampaign[]
+  leads     AdLead[]
+
+  @@index([tagId])
+  @@index([welcomeTemplateId])
+  @@map("ad_lead_forms")
+}
+
+/// One person's answers to a form; recorded once by Meta's id (R9).
+model AdLead {
+  id           String       @id @default(uuid(7)) @db.Uuid
+  formId       String       @map("form_id") @db.Uuid
+  form         AdLeadForm   @relation(fields: [formId], references: [id], onDelete: Cascade)
+  metaLeadId   String       @unique @map("meta_lead_id") @db.VarChar(40)
+  metaAdId     String?      @map("meta_ad_id") @db.VarChar(40)
+  adCampaignId String?      @map("ad_campaign_id") @db.Uuid
+  adCampaign   AdCampaign?  @relation(fields: [adCampaignId], references: [id], onDelete: SetNull)
+  answers      Json         @default("{}")
+  phoneE164    String?      @map("phone_e164") @db.VarChar(16)
+  email        String?      @db.VarChar(320)
+  consent      Boolean      @default(false)
+  contactId    String?      @map("contact_id") @db.Uuid
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  status       AdLeadStatus
+  submittedAt  DateTime     @map("submitted_at") @db.Timestamptz
+  receivedAt   DateTime     @default(now()) @map("received_at") @db.Timestamptz
+
+  messages Message[]
+
+  @@index([formId, submittedAt])
+  @@index([adCampaignId])
+  @@index([contactId])
+  @@index([receivedAt])
+  @@map("ad_leads")
+}
+
+/// Website ad visits through /l/a/:code (R10). No IP is stored.
+model AdLinkOpen {
+  id           String      @id @default(uuid(7)) @db.Uuid
+  adCampaignId String      @map("ad_campaign_id") @db.Uuid
+  adCampaign   AdCampaign  @relation(fields: [adCampaignId], references: [id], onDelete: Cascade)
+  device       ClickDevice
+  openedAt     DateTime    @default(now()) @map("opened_at") @db.Timestamptz
+
+  @@index([adCampaignId, openedAt])
+  @@index([openedAt])
+  @@map("ad_link_opens")
 }

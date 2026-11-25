@@ -19,7 +19,8 @@ export type ContractFile =
   | 'ai-api.openapi.yaml'
   | 'growth-api.openapi.yaml'
   | 'integrations-api.openapi.yaml'
-  | 'public-api-v1.openapi.yaml';
+  | 'public-api-v1.openapi.yaml'
+  | 'ads-api.openapi.yaml';
 
 interface MediaTypeObject {
   schema?: object;
@@ -46,6 +47,7 @@ const FEATURE_OF: Record<ContractFile, string> = {
   'growth-api.openapi.yaml': '005-campaign-growth',
   'integrations-api.openapi.yaml': INTEGRATIONS,
   'public-api-v1.openapi.yaml': INTEGRATIONS,
+  'ads-api.openapi.yaml': '007-ads-manager',
 };
 const contractsDir = (file: ContractFile) => path.join(specsDir, FEATURE_OF[file], 'contracts');
 

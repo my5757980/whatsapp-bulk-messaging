@@ -82,7 +82,7 @@ paths:
             schema: { type: object, properties: { sessionId: { type: string, format: uuid }, adAccountId: { type: string }, pageId: { type: string } } }
       responses:
         '200': { description: Results, content: { application/json: { schema: { $ref: '#/components/schemas/AdsChecks' } } } }
-        '404': { description: Session expired, or nothing connected, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: "Session expired, or nothing connected", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /ads/connection/spend-cap:
     put:
       tags: [ads-connection]
@@ -239,7 +239,7 @@ paths:
       responses:
         '200': { description: Active again, content: { application/json: { schema: { $ref: '#/components/schemas/AdCampaign' } } } }
         '404': { $ref: '#/components/responses/NotFound' }
-        '409': { description: NOT_PAUSED, SPEND_CAP or CONNECTION_ERROR, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: "NOT_PAUSED, SPEND_CAP or CONNECTION_ERROR", content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /ads/campaigns/{id}/end:
     parameters: [{ $ref: '#/components/parameters/Id' }]
     post:

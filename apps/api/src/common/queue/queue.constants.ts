@@ -25,6 +25,11 @@ export const QUEUES = {
    * COD and cart reminders, and store updates (feature 006, research R7–R11).
    */
   STORES: 'stores',
+  /**
+   * Ads: status every 5 minutes, hourly insights and the spending cap, daily audience diffs, leads and
+   * the lead catch-up (feature 007, plan Technical Context).
+   */
+  ADS: 'ads',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
