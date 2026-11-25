@@ -216,9 +216,12 @@ export function isStale(at: string | Date, now: Date = new Date()): boolean {
 
 /** Order fields a template value can come from. */
 export const ORDER_FIELDS = ['order_number', 'total', 'customer_name', 'first_name', 'items', 'tracking_number', 'tracking_url', 'payment_url', 'store_name'] as const;
+/** Every field a store template value can name (orders and carts). */
+export const STORE_VALUE_FIELDS = ['order_number', 'total', 'customer_name', 'first_name', 'items', 'tracking_number', 'tracking_url', 'payment_url', 'store_name', 'cart_url'] as const;
 export type OrderField = (typeof ORDER_FIELDS)[number];
 
-export const ORDER_FIELD_LABELS: Record<OrderField, string> = {
+export const ORDER_FIELD_LABELS: Record<OrderField | 'cart_url', string> = {
+  cart_url: 'Cart link (tracked)',
   order_number: 'Order number',
   total: 'Order total',
   customer_name: 'Customer name',
@@ -273,4 +276,82 @@ export function resolveOrderValues(
     params[variable] = text;
   }
   return { ok: true, params };
+}
+
+/** A checkout (Shopify) or an unpaid order (WooCommerce) that may become an abandoned cart (US6). */
+export interface StoreCartFacts {
+  /** Shopify: the checkout id (digits); WooCommerce: the order id. */
+  externalId: string;
+  value: string;
+  currency: string;
+  phones: Partial<Record<PhoneSource, string>>;
+  customerName: string | null;
+  firstName: string | null;
+  items: string | null;
+  /** The recovery or payment link. */
+  cartUrl: string | null;
+  startedAt: string;
+  updatedAt: string;
+  /** The checkout became an order. */
+  completed: boolean;
+  acceptsMarketing: boolean;
+}
+
+/** A Shopify checkout webhook (REST JSON), or an abandoned checkout read back through GraphQL. */
+export function mapShopifyCheckout(payload: unknown): StoreCartFacts {
+  const o = obj(payload);
+  const customer = obj(o.customer);
+  const shipping = obj(o.shipping_address ?? o.shippingAddress);
+  const billing = obj(o.billing_address ?? o.billingAddress);
+  const money = obj(obj(o.totalPriceSet).shopMoney);
+  const gid = str(o.id) ?? '';
+  const lines = Array.isArray(o.line_items) ? o.line_items : arr(obj(o.lineItems).nodes);
+  const startedAt = isoUtc(o.created_at ?? o.createdAt) ?? new Date(0).toISOString();
+  return {
+    externalId: gid.split('/').pop() ?? gid,
+    value: str(o.total_price) ?? str(money.amount) ?? '0',
+    currency: (str(o.currency) ?? str(money.currencyCode) ?? 'USD').toUpperCase(),
+    phones: compact({ shipping: str(shipping.phone), billing: str(billing.phone), customer: str(customer.phone) ?? str(o.phone) }),
+    customerName: fullName(shipping) ?? fullName(customer) ?? [str(customer.firstName), str(customer.lastName)].filter(Boolean).join(' ') ?? null,
+    firstName: str(shipping.first_name) ?? str(customer.first_name) ?? str(customer.firstName),
+    items: itemsSummary(lines, 'title'),
+    cartUrl: str(o.abandoned_checkout_url) ?? str(o.abandonedCheckoutUrl),
+    startedAt,
+    updatedAt: isoUtc(o.updated_at ?? o.updatedAt) ?? startedAt,
+    completed: Boolean(o.completed_at ?? o.completedAt),
+    acceptsMarketing: o.buyer_accepts_marketing === true,
+  };
+}
+
+/** A WooCommerce order left in `pending` (payment not completed) as a cart, linking to its payment page (R8). */
+export function wooCartFacts(order: StoreOrderFacts): StoreCartFacts {
+  return {
+    externalId: order.externalId,
+    value: order.total,
+    currency: order.currency,
+    phones: order.phones,
+    customerName: order.customerName,
+    firstName: order.firstName,
+    items: order.items,
+    cartUrl: order.paymentUrl,
+    startedAt: order.placedAt,
+    updatedAt: order.updatedAt,
+    completed: order.status !== 'pending',
+    acceptsMarketing: order.acceptsMarketing,
+  };
+}
+
+/** Cart fields a cart reminder's template values can come from; cart_url becomes a tracked link (005). */
+export const CART_FIELDS = ['first_name', 'customer_name', 'items', 'total', 'cart_url', 'store_name'] as const;
+export type CartField = (typeof CART_FIELDS)[number];
+
+export function cartFieldValues(cart: StoreCartFacts | { value: string; currency: string; customerName: string | null; firstName: string | null; items: string | null; cartUrl: string | null }, storeName: string): Record<CartField, string> {
+  return {
+    first_name: cart.firstName ?? '',
+    customer_name: cart.customerName ?? '',
+    items: cart.items ?? '',
+    total: `${cart.value} ${cart.currency}`,
+    cart_url: cart.cartUrl ?? '',
+    store_name: storeName,
+  };
 }

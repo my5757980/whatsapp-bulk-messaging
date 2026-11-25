@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cartFieldValues,
   choosePhone,
   isStale,
   mapShopifyFulfillment,
   mapShopifyOrder,
+  mapShopifyCheckout,
   mapWooOrder,
   orderFieldValues,
   orderStages,
   resolveOrderValues,
+  wooCartFacts,
 } from './stores.js';
 
 // T042 (feature 006 US4, research R7 - R9): Shopify and WooCommerce orders in one shape, stages,
@@ -160,5 +163,25 @@ describe('store orders', () => {
       ok: false,
       missing: 'BODY.1',
     });
+  });
+
+  it('reads a Shopify checkout and a WooCommerce unpaid order as carts, with their links', () => {
+    const cart = mapShopifyCheckout({
+      id: 4411,
+      created_at: '2026-11-24T10:00:00Z',
+      updated_at: '2026-11-24T10:05:00Z',
+      total_price: '249.00',
+      currency: 'AED',
+      phone: '+971501112233',
+      buyer_accepts_marketing: true,
+      abandoned_checkout_url: 'https://shop.example/checkouts/4411/recover',
+      line_items: [{ title: 'Shoes', quantity: 1 }],
+      completed_at: null,
+    });
+    expect(cart).toMatchObject({ externalId: '4411', value: '249.00', currency: 'AED', phones: { customer: '+971501112233' }, cartUrl: 'https://shop.example/checkouts/4411/recover', completed: false, acceptsMarketing: true, items: 'Shoes' });
+    expect(mapShopifyCheckout({ id: 'gid://shopify/AbandonedCheckout/4411', createdAt: '2026-11-24T10:00:00Z', completedAt: '2026-11-24T11:00:00Z', abandonedCheckoutUrl: 'https://x/y', totalPriceSet: { shopMoney: { amount: '9.00', currencyCode: 'AED' } } })).toMatchObject({ externalId: '4411', value: '9.00', completed: true, cartUrl: 'https://x/y' });
+    const pending = wooCartFacts(mapWooOrder({ ...wooOrder, status: 'pending', date_paid_gmt: null }));
+    expect(pending).toMatchObject({ externalId: '734', cartUrl: 'https://shop.example/checkout/order-pay/734', completed: false });
+    expect(cartFieldValues(cart, 'Desert Shoes')).toEqual({ first_name: '', customer_name: '', items: 'Shoes', total: '249.00 AED', cart_url: 'https://shop.example/checkouts/4411/recover', store_name: 'Desert Shoes' });
   });
 });

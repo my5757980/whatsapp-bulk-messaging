@@ -294,19 +294,19 @@ repeated event, "no phone" skipped, and the customer becomes a contact with the 
 
 ### Tests for User Story 4 (write first, must fail)
 
-- [ ] T042 [P] [US4] Unit tests packages/shared/src/integrations/stores.test.ts:
+- [X] T042 [P] [US4] Unit tests packages/shared/src/integrations/stores.test.ts:
   - Shopify and WooCommerce payloads map to one order shape: number, total and currency, phones, payment kind
   - stage detection: confirmed, shipped with tracking, delivered from `shipmentStatus`, cancelled, and WooCommerce's chosen statuses
   - the phone choice order (shipping, billing, customer) with the store's default country
   - the 3-day stale rule
   - template variables from order fields
-- [ ] T043 [P] [US4] Add mock stores to mock-meta: tools/mock-meta/src/shopify.ts and tools/mock-meta/src/woocommerce.ts
+- [X] T043 [P] [US4] Add mock stores to mock-meta: tools/mock-meta/src/shopify.ts and tools/mock-meta/src/woocommerce.ts
   - Shopify:
     - the client-credentials token endpoint
     - Admin GraphQL: shop, orders, `webhookSubscriptionCreate` and `Delete`, `tagsAdd`, `metafieldsSet`, `orderCancel`, `abandonedCheckouts`
   - WooCommerce REST v3: orders, notes, and webhooks CRUD with status
   - signed webhook senders for both, and the `npm run mock:store` command (quickstart §2) in tools/mock-meta/package.json and the root package.json
-- [ ] T044 [P] [US4] Integration test apps/api/test/integration/integrations-shopify.int-spec.ts (nock):
+- [X] T044 [P] [US4] Integration test apps/api/test/integration/integrations-shopify.int-spec.ts (nock):
   - **Connect:** the token exchange, subscriptions created, and the access test; the 5-store limit; credentials never returned
   - **Receiver:** a bad HMAC gives 401; a repeated `X-Shopify-Webhook-Id` is ignored
   - **Order confirmed:** sent once even when delivered twice; no phone, opted out and stale orders are skipped with reasons
@@ -317,14 +317,14 @@ repeated event, "no phone" skipped, and the customer becomes a contact with the 
   - **Reconciler:** it fetches orders since the last sync and re-creates a missing subscription
   - **Disconnect:** removes the subscriptions
   - **Drips:** drip starting events `ORDER_PLACED` and `ORDER_DELIVERED` are written
-- [ ] T045 [P] [US4] Integration test apps/api/test/integration/integrations-woocommerce.int-spec.ts (nock):
+- [X] T045 [P] [US4] Integration test apps/api/test/integration/integrations-woocommerce.int-spec.ts (nock):
   - the key test
   - webhooks created with a per-store secret
   - a bad signature gives 401; the unsigned activation ping is answered and ignored
   - `processing` means confirmed; `completed` means shipped by default; a chosen delivered status
   - the reconciler sets disabled webhooks active again and fetches orders `modified_after` the last sync
-- [ ] T046 [P] [US4] Contract cases in apps/api/test/contract/integrations.contract-spec.ts for `/stores*`, `/stores/{id}/automations/{kind}`, its results, `/stores/{id}/orders`, and both public receivers (401 and 200)
-- [ ] T047 [P] [US4] Playwright e2e apps/web/e2e/integrations-us4-store-orders.spec.ts:
+- [X] T046 [P] [US4] Contract cases in apps/api/test/contract/integrations.contract-spec.ts for `/stores*`, `/stores/{id}/automations/{kind}`, its results, `/stores/{id}/orders`, and both public receivers (401 and 200)
+- [X] T047 [P] [US4] Playwright e2e apps/web/e2e/integrations-us4-store-orders.spec.ts:
   - connect the mock Shopify store
   - turn on *Order confirmed* with a template mapped to order fields
   - place an order (twice delivered) and one without a phone, through `mock:store` routes
@@ -332,34 +332,34 @@ repeated event, "no phone" skipped, and the customer becomes a contact with the 
 
 ### Implementation for User Story 4
 
-- [ ] T048 [US4] Implement the Shopify client and receiver:
+- [X] T048 [US4] Implement the Shopify client and receiver:
   - apps/api/src/modules/integrations/stores/shopify/shopify.client.ts: GraphQL through `safeRequest` on `/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, the client-credentials token exchange and refresh (encrypted, `token_expires_at`), legacy tokens, webhook subscriptions, tags, metafields, cancel, and abandoned checkouts
   - apps/api/src/modules/integrations/stores/shopify/shopify-webhooks.controller.ts: the raw-body HMAC check before anything else
   - apps/api/src/modules/integrations/stores/shopify/shopify-mapping.ts: uses the shared mapping
-- [ ] T049 [US4] Implement the WooCommerce client and receiver:
+- [X] T049 [US4] Implement the WooCommerce client and receiver:
   - apps/api/src/modules/integrations/stores/woocommerce/woo.client.ts: REST v3 with Basic auth over https through `safeRequest`; orders, notes, status and webhooks
   - apps/api/src/modules/integrations/stores/woocommerce/woo-webhooks.controller.ts: the signature check, and the activation ping answered
   - apps/api/src/modules/integrations/stores/woocommerce/woo-mapping.ts
-- [ ] T050 [US4] Implement apps/api/src/modules/integrations/stores/store-connections.service.ts and stores.controller.ts:
+- [X] T050 [US4] Implement apps/api/src/modules/integrations/stores/store-connections.service.ts and stores.controller.ts:
   - connect with the access test and webhook creation; patch (including the consent confirmation audit and the status mapping); disconnect (webhooks removed, automations stopped); sync now
   - up to 5 active stores
   - credentials encrypted and never returned
   - audit entries
-- [ ] T051 [US4] Implement apps/api/src/modules/integrations/stores/store-events.processor.ts on the `stores` queue. Receivers save `store_events` (unique by delivery id) and queue a job; the processor then:
+- [X] T051 [US4] Implement apps/api/src/modules/integrations/stores/store-events.processor.ts on the `stores` queue. Receivers save `store_events` (unique by delivery id) and queue a job; the processor then:
   - upserts the order and the contact (tag; opt-in source `STORE` only when consent is confirmed)
   - detects stages and writes notifications for enabled automations, unique per order and kind, with the consent, block and template checks
   - writes messages with origin `STORE` and `store_order_id` through the 001 dispatcher
   - raises `store.notification_sent`
   - writes drip starting events `ORDER_PLACED` and `ORDER_DELIVERED` (005 `DripEvents`; extend its kinds)
-- [ ] T052 [US4] Implement apps/api/src/modules/integrations/stores/store-reconciler.processor.ts (every 15 minutes, a job scheduler on `stores`):
+- [X] T052 [US4] Implement apps/api/src/modules/integrations/stores/store-reconciler.processor.ts (every 15 minutes, a job scheduler on `stores`):
   - check each connected store
   - refresh Shopify tokens due within 1 hour
   - re-create missing Shopify subscriptions, and set WooCommerce webhooks active again
   - fetch orders updated since `last_synced_at` (at most 3 days back) as `sync:` events
   - after three failures in a row, move the store to `ERROR` with the `STORE_CONNECTION_ERROR` notification, and back to `CONNECTED` on success
-- [ ] T053 [US4] Implement apps/api/src/modules/integrations/stores/automations.service.ts and store-results.service.ts: get and put automations with validation (approved templates, mapping from order fields), results per kind with skip reasons, and the orders list (phones masked for agents)
-- [ ] T054 [US4] Show `STORE` messages as automatic in live chat (`WHEN 'STORE' THEN 'AUTOMATIC'` in the 002 chat timeline), and add an `ORDER_PLACED` journey entry. Update the origin enum in specs/002-team-inbox/contracts/inbox-api.openapi.yaml and in the 001 dashboard contract where message origins are listed
-- [ ] T055 [P] [US4] Add the web pages apps/web/src/app/(dashboard)/integrations/stores/page.tsx and apps/web/src/app/(dashboard)/integrations/stores/[id]/page.tsx:
+- [X] T053 [US4] Implement apps/api/src/modules/integrations/stores/automations.service.ts and store-results.service.ts: get and put automations with validation (approved templates, mapping from order fields), results per kind with skip reasons, and the orders list (phones masked for agents)
+- [X] T054 [US4] Show `STORE` messages as automatic in live chat (`WHEN 'STORE' THEN 'AUTOMATIC'` in the 002 chat timeline), and add an `ORDER_PLACED` journey entry. Update the origin enum in specs/002-team-inbox/contracts/inbox-api.openapi.yaml and in the 001 dashboard contract where message origins are listed
+- [X] T055 [P] [US4] Add the web pages apps/web/src/app/(dashboard)/integrations/stores/page.tsx and apps/web/src/app/(dashboard)/integrations/stores/[id]/page.tsx:
   - the list, and a connect dialog per platform with plain set-up steps (the Shopify Dev Dashboard app and its scopes; WooCommerce keys)
   - settings, including the consent confirmation and WooCommerce status mapping
   - notification editors with mapping from order fields, and results
@@ -380,11 +380,11 @@ on), and no answer.
 
 ### Tests for User Story 5 (write first, must fail)
 
-- [ ] T056 [P] [US5] Unit tests packages/shared/src/integrations/cod.test.ts:
+- [X] T056 [P] [US5] Unit tests packages/shared/src/integrations/cod.test.ts:
   - building and parsing payloads `cod1:{orderId}:Y|N`
   - transitions: the first answer wins; `CLOSED` when the order is cancelled or paid first
   - the reminder and final times
-- [ ] T057 [P] [US5] Integration test apps/api/test/integration/integrations-cod.int-spec.ts:
+- [X] T057 [P] [US5] Integration test apps/api/test/integration/integrations-cod.int-spec.ts:
   - **Confirmation:** a COD order gets the confirmation with both payloads
   - **Confirm:** gives the Shopify tag and metafield, and the free-text reply
   - **Cancel:** with automatic cancel on, calls `orderCancel`; with it off, adds the tag only and sends `COD_CANCELLED` to admins
@@ -394,7 +394,7 @@ on), and no answer.
   - **WooCommerce:** a note, meta and status
   - **Failures:** a failing store action is retried and shown on the order
   - **Results:** counts match
-- [ ] T058 [P] [US5] Playwright e2e apps/web/e2e/integrations-us5-cod.spec.ts:
+- [X] T058 [P] [US5] Playwright e2e apps/web/e2e/integrations-us5-cod.spec.ts:
   - turn on COD with short test waits
   - place three COD orders with `mock:store`
   - tap the buttons with `mock:inbound --button-payload`
@@ -402,16 +402,16 @@ on), and no answer.
 
 ### Implementation for User Story 5
 
-- [ ] T059 [US5] Support quick-reply button payload parameters in apps/api/src/modules/sending/template-payload.builder.ts. `resolvedParams` keys `BUTTON.{index}.payload` become `{ type: "button", sub_type: "quick_reply", index, parameters: [{ type: "payload", payload }] }`, with unit cases in its existing test file
-- [ ] T060 [US5] Implement `CodService` in apps/api/src/modules/integrations/stores/cod.service.ts:
+- [X] T059 [US5] Support quick-reply button payload parameters in apps/api/src/modules/sending/template-payload.builder.ts. `resolvedParams` keys `BUTTON.{index}.payload` become `{ type: "button", sub_type: "quick_reply", index, parameters: [{ type: "payload", payload }] }`, with unit cases in its existing test file
+- [X] T060 [US5] Implement `CodService` in apps/api/src/modules/integrations/stores/cod.service.ts:
   - sending the confirmation from the events processor (button payloads per message)
   - `handleButton(payload, inbound)`, called from apps/api/src/modules/inbox/inbound/inbound-chat.handler.ts before flow routing for `cod1:` payloads
   - the first answer wins
   - the reply goes through the 002 session send path
   - store actions (tag, metafield, note, cancel) are jobs on `stores` with retries
   - it raises `store.cod_answered` and adds the `COD_ANSWERED` journey entry
-- [ ] T061 [US5] Implement apps/api/src/modules/integrations/stores/store-tick.processor.ts (every 30 seconds, a job scheduler on `stores`). It claims due COD reminders and finals with `FOR UPDATE SKIP LOCKED` (the 005 drip tick pattern), and leaves a hook for cart reminders (T067)
-- [ ] T062 [P] [US5] Add a COD tab on the store page apps/web/src/app/(dashboard)/integrations/stores/[id]/page.tsx:
+- [X] T061 [US5] Implement apps/api/src/modules/integrations/stores/store-tick.processor.ts (every 30 seconds, a job scheduler on `stores`). It claims due COD reminders and finals with `FOR UPDATE SKIP LOCKED` (the 005 drip tick pattern), and leaves a hook for cart reminders (T067)
+- [X] T062 [P] [US5] Add a COD tab on the store page apps/web/src/app/(dashboard)/integrations/stores/[id]/page.tsx:
   - the template picker, which accepts only templates with two quick-reply buttons
   - the replies and waits
   - the automatic cancel setting, with a plain explanation
@@ -431,7 +431,7 @@ the order, the cart counted as recovered with its value, and a cart without cons
 
 ### Tests for User Story 6 (write first, must fail)
 
-- [ ] T063 [P] [US6] Unit tests packages/shared/src/integrations/carts.test.ts:
+- [X] T063 [P] [US6] Unit tests packages/shared/src/integrations/carts.test.ts:
   - step validation: 1–3 steps, 30 minutes to 7 days, increasing
   - due times
   - stop decisions per event
