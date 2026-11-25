@@ -15,7 +15,7 @@
     "build": "npm run build -w @wbm/shared && npm run build -w @wbm/api && npm run build -w @wbm/web",
     "dev": "concurrently -k -n shared,api,worker,web,mock -c gray,blue,magenta,green,yellow \"npm run dev -w @wbm/shared\" \"npm run dev -w @wbm/api\" \"npm run dev:worker -w @wbm/api\" \"npm run dev -w @wbm/web\" \"npm run dev -w @wbm/mock-meta\"",
     "lint": "eslint .",
-    "lint:contracts": "redocly lint specs/001-whatsapp-bulk-messaging/contracts/dashboard-api.openapi.yaml specs/001-whatsapp-bulk-messaging/contracts/public-api.openapi.yaml specs/002-team-inbox/contracts/inbox-api.openapi.yaml specs/003-chatbot-flow-builder/contracts/flows-api.openapi.yaml specs/004-ai-agent/contracts/ai-api.openapi.yaml specs/005-campaign-growth/contracts/growth-api.openapi.yaml",
+    "lint:contracts": "redocly lint specs/001-whatsapp-bulk-messaging/contracts/dashboard-api.openapi.yaml specs/001-whatsapp-bulk-messaging/contracts/public-api.openapi.yaml specs/002-team-inbox/contracts/inbox-api.openapi.yaml specs/003-chatbot-flow-builder/contracts/flows-api.openapi.yaml specs/004-ai-agent/contracts/ai-api.openapi.yaml specs/005-campaign-growth/contracts/growth-api.openapi.yaml specs/006-integrations-platform/contracts/integrations-api.openapi.yaml specs/006-integrations-platform/contracts/public-api-v1.openapi.yaml",
     "format": "prettier --write .",
     "typecheck": "npm run typecheck --workspaces --if-present && tsc -p tools/perf/tsconfig.json && tsc -p tools/eval/tsconfig.json",
     "test": "npm run test --workspaces --if-present",
@@ -25,6 +25,7 @@
     "db:migrate": "npm run db:migrate -w @wbm/api",
     "db:seed": "npm run db:seed -w @wbm/api --",
     "mock:inbound": "npm run inbound -w @wbm/mock-meta --",
+    "mock:store": "npm run store -w @wbm/mock-meta --",
     "inbox:age": "npm run inbox:age -w @wbm/api --",
     "perf:campaign": "tsx tools/perf/campaign-10k.ts",
     "perf:import": "tsx tools/perf/import-50k.ts",
@@ -33,6 +34,8 @@
     "perf:flows": "tsx tools/perf/flows-latency.ts",
     "perf:ai": "tsx tools/perf/ai-latency.ts",
     "perf:drips": "tsx tools/perf/drips-latency.ts",
+    "perf:webhooks": "tsx tools/perf/webhooks-latency.ts",
+    "perf:stores": "tsx tools/perf/stores-latency.ts",
     "eval:ai": "tsx tools/eval/ai-agent-eval.ts"
   },
   "devDependencies": {

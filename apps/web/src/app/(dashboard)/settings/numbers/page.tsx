@@ -2,8 +2,10 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
+import Link from 'next/link';
 import { useState, type FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { WizardCheckList } from '@/components/integrations/wizard-checks';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,6 +17,7 @@ import { toast } from '@/components/ui/toaster';
 import { api } from '@/lib/api-client';
 import { errorMessage, toastError } from '@/lib/errors';
 import { formatDateTime } from '@/lib/format';
+import type { WizardChecks } from '@/lib/integrations';
 import { Can } from '@/lib/permissions';
 import { queryKeys } from '@/lib/query';
 import type { WhatsAppNumber } from '@/lib/types';
@@ -46,7 +49,12 @@ export default function NumbersPage() {
           <p className="text-sm text-muted-foreground">Numbers connected through the WhatsApp Cloud API. Access tokens are stored encrypted and never shown again.</p>
         </div>
         <Can permission="numbers.manage">
-          <ConnectNumberDialog onConnected={invalidate} />
+          <div className="flex flex-wrap gap-2">
+            <Button asChild>
+              <Link href="/numbers/connect">Connect with checks</Link>
+            </Button>
+            <ConnectNumberDialog onConnected={invalidate} />
+          </div>
         </Can>
       </div>
 
@@ -106,6 +114,7 @@ export default function NumbersPage() {
                           <RefreshCw className="h-3.5 w-3.5" /> Refresh
                         </Button>
                         <Can permission="numbers.manage">
+                          <HealthCheckDialog number={n} />
                           <EditNumberDialog number={n} onSaved={invalidate} />
                           {n.connectionStatus !== 'DISCONNECTED' ? (
                             <ConfirmDialog
@@ -280,6 +289,41 @@ function EditNumberDialog({ number, onSaved }: { number: WhatsAppNumber; onSaved
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** The wizard's checks on a connected number, with its stored token; nothing is changed (006 FR-055). */
+function HealthCheckDialog({ number }: { number: WhatsAppNumber }) {
+  const [open, setOpen] = useState(false);
+  const run = useMutation({ mutationFn: () => api<WizardChecks>(`/numbers/${number.id}/health-check`, { method: 'POST' }), onError: toastError });
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) run.mutate();
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" aria-label={`Run checks on ${number.label}`}>
+          Run checks
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Checks for {number.label}</DialogTitle>
+          <DialogDescription>
+            {run.isPending ? 'Checking with Meta…' : run.data ? (run.data.ready ? 'Nothing failed.' : 'Some checks failed; each shows how to fix it.') : 'The same checks as the connection wizard.'}
+          </DialogDescription>
+        </DialogHeader>
+        {run.data ? <WizardCheckList checks={run.data.checks} /> : null}
+        <DialogFooter>
+          <Button variant="outline" disabled={run.isPending} onClick={() => run.mutate()}>
+            Run again
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

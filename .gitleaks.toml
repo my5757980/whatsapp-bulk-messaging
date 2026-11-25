@@ -20,3 +20,30 @@ regexTarget = "line"
 regexes = [
   '''growth-api\.openapi\.yaml': '005-campaign-growth''',
 ]
+
+[[allowlists]]
+description = "Feature 006: the published Standard Webhooks reference vector (a documentation example secret and its signature, not real credentials) in packages/shared/src/integrations/signing.test.ts and the integrations contract example"
+regexTarget = "line"
+regexes = [
+  '''whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw''',
+  '''g0hM9SsE\+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=''',
+]
+
+[[allowlists]]
+description = "Feature 006: placeholder text in the API campaign call example of commit b2f193e (apps/api/src/modules/integrations/api-campaigns/api-campaigns.service.ts); 'wbk_YOUR_KEY' and the idempotency example are not secrets, and later commits use $WBM_API_KEY"
+regexTarget = "line"
+regexes = [
+  '''Authorization: Bearer wbk_YOUR_KEY''',
+  '''Idempotency-Key: a-unique-id-per-message''',
+]
+
+[[allowlists]]
+description = "Feature 006: made-up store credentials in the store tests (apps/api/test/integration/integrations-shopify.int-spec.ts, integrations-woocommerce.int-spec.ts and the integrations contract test); they only sign requests to nock fakes"
+regexTarget = "line"
+regexes = [
+  '''shopify-client-secret-for-tests''',
+  '''ck_test_0123456789abcdef''',
+  '''cs_test_0123456789abcdef''',
+  '''ck_contract_0123456789''',
+  '''cs_contract_0123456789''',
+]

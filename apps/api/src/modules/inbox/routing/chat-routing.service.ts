@@ -10,6 +10,7 @@ import { factsOf, SUMMARY_INCLUDE, type ConversationRow } from '../conversations
 import { canAccess, seesAll } from '../conversations/visibility.js';
 import { InboxNotifier } from '../notifications/inbox-notifier.js';
 import { InboxPublisher } from '../realtime/inbox-publisher.js';
+import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 
 /**
  * Routing work shared by the HTTP app and the worker (US3): alerts for chats waiting for an
@@ -25,6 +26,7 @@ export class ChatRoutingService {
     private readonly publisher: InboxPublisher,
     private readonly notifier: InboxNotifier,
     private readonly ai: AiConversationsService,
+    private readonly platformEvents: PlatformEvents,
   ) {}
 
   /** Active members with live chat access who may see the chat (FR-019). */
@@ -98,6 +100,8 @@ export class ChatRoutingService {
             data: { reason: 'ownerId' in filter ? 'owner_deactivated' : 'inactive_24h', previousOwnerId: chat.intervenedById },
           },
         });
+        // Outbound webhooks (feature 006, FR-002): closed automatically.
+        await this.platformEvents.chatClosed(tx, chat.id, null);
         const opening = await tx.conversationOpening.findFirst({ where: { conversationId: chat.id }, orderBy: { openedAt: 'desc' }, select: { id: true } });
         if (opening) await tx.conversationOpening.updateMany({ where: { id: opening.id, resolvedAt: null }, data: { resolvedAt: now } });
         return true;

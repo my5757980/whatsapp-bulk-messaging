@@ -18,6 +18,8 @@ export const ConsentSource = {
   MANUAL: 'MANUAL',
   // Feature 004: a customer asked the AI agent, in their own words, not to be messaged (FR-027).
   AI_AGENT: 'AI_AGENT',
+  // Feature 006: a store checkout consent the admin confirmed names WhatsApp (FR-027).
+  STORE: 'STORE',
 } as const;
 export type ConsentSource = (typeof ConsentSource)[keyof typeof ConsentSource];
 
@@ -93,6 +95,11 @@ export const NotificationType = {
   AI_FAILING: 'AI_FAILING',
   // Feature 005 campaign growth
   DRIP_PAUSED: 'DRIP_PAUSED',
+  // Feature 006 integrations
+  WEBHOOK_ENDPOINT_FAILING: 'WEBHOOK_ENDPOINT_FAILING',
+  STORE_CONNECTION_ERROR: 'STORE_CONNECTION_ERROR',
+  API_CAMPAIGN_PAUSED: 'API_CAMPAIGN_PAUSED',
+  COD_CANCELLED: 'COD_CANCELLED',
 } as const;
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
 

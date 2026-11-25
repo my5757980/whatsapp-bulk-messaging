@@ -7,6 +7,7 @@ import { REDIS_CLIENT } from '../../../common/queue/queue.module.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import { DripLeaving } from '../../growth/drips/drip-leaving.js';
 import { InboxPublisher } from '../../inbox/realtime/inbox-publisher.js';
+import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 import { RateCardService } from '../../rate-card/rate-card.controller.js';
 import { messageCost } from '../../reports/cost-calculator.js';
 import { WebhookRouter, type WebhookChange, type WebhookChangeHandler } from '../webhook-router.js';
@@ -40,6 +41,7 @@ export class StatusHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly rateCard: RateCardService,
     private readonly inbox: InboxPublisher,
     private readonly drips: DripLeaving,
+    private readonly platformEvents: PlatformEvents,
   ) {}
 
   onModuleInit(): void {
@@ -111,6 +113,8 @@ export class StatusHandler implements WebhookChangeHandler, OnModuleInit {
           await tx.message.updateMany({ where: { id: known.id, status: current.status }, data: update });
           newStatus = update.status;
         }
+        // Each Meta status once (duplicates fail on the event's dedupe key above): feature 006, FR-002.
+        await this.platformEvents.messageStatus(tx, known.id, status);
       }, { maxWait: 10_000 });
     } catch (error) {
       if (isUniqueViolation(error)) return true; // duplicate delivery of the same event
@@ -155,6 +159,7 @@ export class StatusHandler implements WebhookChangeHandler, OnModuleInit {
         // Pricing is not tracked for free replies inside the window (service conversations).
         const { billable: _billable, pricingCategory: _category, ...fields } = update;
         changed = (await tx.chatMessage.updateMany({ where: { id: item.id, status: current.status }, data: fields })).count > 0;
+        if (changed) await this.platformEvents.chatReplyStatus(tx, item.id, status);
       },
       { maxWait: 10_000 },
     );

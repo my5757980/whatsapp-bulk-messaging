@@ -28,6 +28,19 @@ const SECRET_KEYS = new Set([
   'valueencrypted',
   'value_encrypted',
   'secretvalue',
+  // Integrations (feature 006, FR-058): store credentials, the wizard's two-step PIN, and webhook
+  // signatures (ours and the stores').
+  'credentials',
+  'clientsecret',
+  'client_secret',
+  'consumerkey',
+  'consumer_key',
+  'consumersecret',
+  'consumer_secret',
+  'pin',
+  'webhook-signature',
+  'x-shopify-hmac-sha256',
+  'x-wc-webhook-signature',
 ]);
 
 const CONTENT_KEYS = new Set([

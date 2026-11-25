@@ -10,6 +10,12 @@ function agentNameOf(data: unknown): string | null {
   return typeof name === 'string' ? name : null;
 }
 
+/** Changes made through the public API name the key (feature 006, FR-016). */
+function apiKeyNameOf(data: unknown): string | null {
+  const key = data && typeof data === 'object' ? (data as { apiKey?: { name?: unknown } }).apiKey : null;
+  return key && typeof key.name === 'string' ? key.name : null;
+}
+
 function flowNameOf(data: unknown): string | null {
   const name = data && typeof data === 'object' ? (data as { flowName?: unknown }).flowName : null;
   return typeof name === 'string' ? name : null;
@@ -18,7 +24,7 @@ function flowNameOf(data: unknown): string | null {
 export interface JourneyEntry {
   type: string;
   at: string;
-  actor: { type: 'MEMBER' | 'CUSTOMER' | 'SYSTEM' | 'CAMPAIGN' | 'FLOW' | 'AI_AGENT'; name: string | null };
+  actor: { type: 'MEMBER' | 'CUSTOMER' | 'SYSTEM' | 'CAMPAIGN' | 'FLOW' | 'AI_AGENT' | 'API_KEY'; name: string | null };
   data: Record<string, unknown>;
 }
 
@@ -59,9 +65,18 @@ export class JourneyService {
         at: e.occurredAt.toISOString(),
         actor: {
           type: e.actorType,
-          // Flow entries name the flow (feature 003), AI agent entries the agent (feature 004); members name the member.
+          // Flow entries name the flow (feature 003), AI agent entries the agent (feature 004), API
+          // entries the key (feature 006); members name the member.
           name:
-            e.actorType === 'MEMBER' ? (e.actorUser?.name ?? null) : e.actorType === 'FLOW' ? flowNameOf(e.data) : e.actorType === 'AI_AGENT' ? agentNameOf(e.data) : null,
+            e.actorType === 'MEMBER'
+              ? (e.actorUser?.name ?? null)
+              : e.actorType === 'FLOW'
+                ? flowNameOf(e.data)
+                : e.actorType === 'AI_AGENT'
+                  ? agentNameOf(e.data)
+                  : e.actorType === 'API_KEY'
+                    ? apiKeyNameOf(e.data)
+                    : null,
         },
         data: (e.data ?? {}) as Record<string, unknown>,
         sortAt: e.occurredAt.getTime(),

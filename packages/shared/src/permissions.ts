@@ -36,6 +36,8 @@ export const ALL_PERMISSIONS = [
   'ai.manage',
   'ai.usage',
   'assistant.use',
+  // Feature 006 integrations (spec FR-056, contracts/integrations-api.openapi.yaml header): admins only
+  'integrations.manage',
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];

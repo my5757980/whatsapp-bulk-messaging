@@ -7,6 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
     "inbound": "tsx src/inbound-cli.ts",
+    "store": "tsx src/store-cli.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {

@@ -20,20 +20,21 @@ export interface LinkResponse {
   body?: string;
 }
 
-const NO_CACHE = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' };
-const PAGE_HEADERS = {
+export const NO_CACHE = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' };
+export const PAGE_HEADERS = {
   ...NO_CACHE,
   'Content-Type': 'text/html; charset=utf-8',
   'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
   'X-Robots-Tag': 'noindex',
 };
 
-function page(title: string, text: string): string {
+/** A short page of our own, for unknown, unusable and limited links (also used by 006 chat links). */
+export function page(title: string, text: string): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${title}</title></head><body style="font-family: system-ui, sans-serif; max-width: 32rem; margin: 15vh auto; padding: 0 1rem; color: #222"><h1 style="font-size: 1.25rem">${title}</h1><p>${text}</p></body></html>`;
 }
 
-const NOT_AVAILABLE = page('This link is not available', 'The link may be mistyped or no longer in use. Please check the message you received.');
-const TOO_MANY = page('Please try again shortly', 'Too many links were opened from this connection. Please wait a minute and try again.');
+export const NOT_AVAILABLE = page('This link is not available', 'The link may be mistyped or no longer in use. Please check the message you received.');
+export const TOO_MANY = page('Please try again shortly', 'Too many links were opened from this connection. Please wait a minute and try again.');
 
 /**
  * The public tracked-link route (FR-003 - FR-005): send the visitor on at once, count real clicks

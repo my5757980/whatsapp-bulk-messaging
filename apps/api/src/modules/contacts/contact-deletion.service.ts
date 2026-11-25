@@ -4,6 +4,7 @@ import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { StorageService } from '../../common/storage/storage.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { AuditService, type AuditActor } from '../audit/audit.service.js';
+import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
 
 /**
  * Deletes a contact's personal data (FR-015, T103): the contact, its tags, consent events and
@@ -28,6 +29,7 @@ export class ContactDeletionService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly storage: StorageService,
+    private readonly platformEvents: PlatformEvents,
   ) {}
 
   async delete(contactId: string, actor: AuditActor): Promise<void> {
@@ -45,6 +47,15 @@ export class ContactDeletionService {
       ? await this.prisma.mediaAsset.findMany({ where: { purpose: 'INBOUND', chatMessages: { some: { conversationId: { in: chatIds } } } }, select: { id: true, storageKey: true } })
       : [];
 
+    // Store orders and carts keep their rows without the person's details (feature 006, FR-060).
+    await this.prisma.$transaction([
+      this.prisma.storeCart.updateMany({ where: { contactId, status: { in: ['OPEN', 'REMINDING'] } }, data: { status: 'STOPPED', stopReason: 'deleted', nextAt: null } }),
+      this.prisma.storeCart.updateMany({ where: { contactId }, data: { phoneE164: null } }),
+      this.prisma.storeOrder.updateMany({ where: { contactId, codStatus: { in: ['ASKED', 'NO_ANSWER'] } }, data: { codStatus: 'CLOSED', codNextAt: null } }),
+      this.prisma.storeOrder.updateMany({ where: { contactId }, data: { phoneE164: null, customerName: null } }),
+      // API campaign calls keep their counts; chat link starts lose the contact through their foreign key.
+      this.prisma.apiCampaignTrigger.updateMany({ where: { OR: [{ contactId }, { phoneE164: contact.phoneE164 }] }, data: { phoneE164: null } }),
+    ]);
     const [messages] = await this.prisma.$transaction([
       this.prisma.message.updateMany({ where: { contactId }, data: { contactId: null, phoneE164: null, resolvedParams: {} } }),
       this.prisma.campaignUploadRow.deleteMany({ where: { phoneE164: contact.phoneE164 } }),
@@ -77,6 +88,16 @@ export class ContactDeletionService {
       this.prisma.dripEvent.deleteMany({ where: { contactId } }),
       this.prisma.contact.delete({ where: { id: contactId } }),
     ]);
+    // Outbound webhooks (feature 006, FR-060): waiting events about them are cancelled, stored events
+    // keep only their id, and endpoints are told the contact was deleted (with the id only).
+    await this.prisma.$executeRaw`
+      UPDATE webhook_deliveries SET status = 'CANCELLED', next_attempt_at = NULL, updated_at = now()
+       WHERE status = 'PENDING' AND event_id IN (SELECT id FROM outbound_events WHERE data->'contact'->>'id' = ${contactId})`;
+    await this.prisma.$executeRaw`
+      UPDATE outbound_events
+         SET data = (data - 'text' - 'caption' - 'buttonPayload') || jsonb_build_object('contact', jsonb_build_object('id', ${contactId}::text))
+       WHERE data->'contact'->>'id' = ${contactId}`;
+    await this.platformEvents.contactDeleted(this.prisma, contactId);
     // Files after the commit; one that cannot be deleted now is left for the retention job.
     for (const media of customerMedia) await this.storage.delete(media.storageKey).catch(() => undefined);
     await this.audit.record(actor, 'contact.deleted', { type: 'contact', id: contactId }, {

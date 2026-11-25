@@ -20,7 +20,11 @@ import { ChatTimelineService } from '../messages/chat-timeline.service.js';
 import { InboxPublisher, type PreviousFacts } from '../realtime/inbox-publisher.js';
 import { ChatRoutingService } from '../routing/chat-routing.service.js';
 import { LiveChatSettingsService } from '../settings/live-chat-settings.service.js';
+import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
+import { CodService } from '../../integrations/stores/cod.service.js';
+import { ChatLinkMatcher } from '../../integrations/chat-links/chat-link-matcher.js';
 import { parseInboundMessage, previewOf, type ParsedInbound } from './message-parser.js';
+import { stopContactCarts } from '../../integrations/stores/store-carts.js';
 
 interface LockedChat {
   id: string;
@@ -58,6 +62,9 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly flows: FlowRouter,
     private readonly aiAgents: AiAgentRouter,
     private readonly drips: DripLeaving,
+    private readonly platformEvents: PlatformEvents,
+    private readonly cod: CodService,
+    private readonly chatLinks: ChatLinkMatcher,
   ) {}
 
   onModuleInit(): void {
@@ -134,6 +141,22 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
       if (!inserted) return null; // a repeated webhook
       // Writing to a drip's number ends that drip for the contact when its reply rule is on (005 FR-028).
       await this.drips.onEvent(contact.id, { kind: 'REPLIED', numberId }, tx);
+      // A reply on a store's number stops that store's cart reminders for the contact (feature 006, FR-042).
+      await stopContactCarts(tx, contact.id, 'replied', numberId);
+      // Outbound webhooks (feature 006, FR-002); text is removed later for endpoints that chose so.
+      const buttonPayload = typeof msg.payload.payload === 'string' ? msg.payload.payload : typeof msg.payload.id === 'string' ? msg.payload.id : null;
+      await this.platformEvents.messageReceived(tx, {
+        chatMessageId: itemId,
+        waMessageId: msg.waMessageId,
+        conversationId: chat.id,
+        numberId,
+        contactId: contact.id,
+        type: msg.contentType.toLowerCase(),
+        text: msg.media ? null : msg.text,
+        caption: msg.media ? msg.text : null,
+        buttonPayload,
+        at: msg.occurredAt,
+      });
 
       const previous: PreviousFacts = { state: chat.state, intervenedById: chat.intervened_by_id, blocked: contact.blockedAt !== null };
       const { next, countRequest, becameRequesting } = onCustomerMessage(created ? null : { state: chat.state, intervenedById: chat.intervened_by_id }, {
@@ -175,6 +198,23 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     else await this.notifier.queue({ kind: 'message', conversationId: outcome.conversationId, itemId });
     // An opt-out stops the AI agent at once; the flow router below ends flows and answers it (004 FR-027).
     if (optOutKeyword) await this.aiAgents.onOptOut(outcome.conversationId);
+    // COD answers (feature 006 US5): a cod1: button tap is answered here, before flows and the AI agent.
+    const tappedPayload = typeof msg.payload.payload === 'string' ? msg.payload.payload : null;
+    if (tappedPayload && (await this.cod.handleButton(tappedPayload, { conversationId: outcome.conversationId, contactId: contact.id }))) return;
+    // Chat links (feature 006 US7): the pre-filled message counts for its link and tags the contact; the link's
+    // flow answers it before keyword flows and the AI agent, unless a flow runs or a member has the chat.
+    if (
+      await this.chatLinks.onCustomerMessage({
+        numberId,
+        conversationId: outcome.conversationId,
+        contactId: contact.id,
+        waMessageId: msg.waMessageId,
+        chatState: outcome.state,
+        text: msg.text,
+      })
+    ) {
+      return;
+    }
     // Chatbot flows answer first (003 research R5); a flow answer replaces welcome/off-hours (FR-029).
     const flowAnswered = await this.flows.onCustomerMessage({
       conversationId: outcome.conversationId,

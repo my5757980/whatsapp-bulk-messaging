@@ -7,6 +7,7 @@ import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { QueueRegistry } from '../../common/queue/queue.module.js';
 import type { Prisma, WhatsAppNumber } from '../../generated/prisma/client.js';
 import { AuditService, type AuditActor } from '../audit/audit.service.js';
+import { ApiCampaignPauser } from '../integrations/api-campaigns/api-campaign-pauser.js';
 import { CampaignsService } from '../campaigns/campaigns.service.js';
 import { classifyMetaError, describeMetaError } from '../meta/meta-error-classifier.js';
 import { MetaApiError, MetaGraphClient, type PhoneNumberInfo } from '../meta/meta-graph.client.js';
@@ -91,6 +92,7 @@ export class NumbersService {
     private readonly audit: AuditService,
     private readonly campaigns: CampaignsService,
     private readonly notifications: NotificationsService,
+    private readonly apiCampaigns: ApiCampaignPauser,
   ) {}
 
   /** Decrypted access token, for Graph API calls only; never logged or returned. */
@@ -181,6 +183,7 @@ export class NumbersService {
     await this.prisma.whatsAppNumber.update({ where: { id }, data: { connectionStatus: 'DISCONNECTED' } });
     const running = await this.prisma.campaign.findMany({ where: { numberId: id, state: 'RUNNING' }, select: { id: true } });
     for (const campaign of running) await this.campaigns.autoPause(campaign.id, 'number_disconnected', actor);
+    await this.apiCampaigns.pauseForNumber(id);
     await this.audit.record(actor, 'number.disconnected', { type: 'whatsapp_number', id }, { phoneNumberId: number.phoneNumberId });
   }
 
@@ -206,6 +209,7 @@ export class NumbersService {
         data: { lastError: reason, ...(credentialProblem && number.connectionStatus === 'CONNECTED' ? { connectionStatus: 'ERROR' as const } : {}) },
       });
       if (credentialProblem && number.connectionStatus === 'CONNECTED') {
+        await this.apiCampaigns.pauseForNumber(id);
         await this.notifications.notifyAdmins({
           type: 'CREDENTIALS_FAILED',
           title: 'WhatsApp number needs attention',
@@ -228,6 +232,7 @@ export class NumbersService {
       data: { connectionStatus: 'ERROR', lastError: reason },
     });
     if (!count) return;
+    await this.apiCampaigns.pauseForNumber(numberId);
     const number = await this.getRow(numberId);
     await this.notifications.notifyAdmins({
       type: 'CREDENTIALS_FAILED',

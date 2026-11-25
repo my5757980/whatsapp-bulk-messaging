@@ -13,7 +13,7 @@ export interface SentMessage {
   phoneNumberId: string;
   to: string;
   template: string;
-  components?: Array<{ type: string; index?: string; parameters?: Array<{ text?: string }> }>;
+  components?: Array<{ type: string; sub_type?: string; index?: string; parameters?: Array<{ text?: string; payload?: string }> }>;
 }
 
 export async function csrfHeaders(page: Page): Promise<Record<string, string>> {

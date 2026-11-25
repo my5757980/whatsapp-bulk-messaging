@@ -31,7 +31,7 @@ export type CreateDripInput = z.infer<typeof CreateDripSchema>;
 
 const TriggerSchema = z
   .object({
-    kind: z.enum(['TAG_ADDED', 'OPTED_IN', 'IMPORTED', 'API_CREATED', 'LINK_CLICKED']),
+    kind: z.enum(['TAG_ADDED', 'OPTED_IN', 'IMPORTED', 'API_CREATED', 'LINK_CLICKED', 'ORDER_PLACED', 'ORDER_DELIVERED']),
     tagId: z.uuid().nullish(),
     campaignId: z.uuid().nullish(),
   })

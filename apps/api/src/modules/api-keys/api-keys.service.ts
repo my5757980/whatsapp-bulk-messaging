@@ -1,5 +1,6 @@
 import { randomInt } from 'node:crypto';
-import { Body, Controller, Delete, Get, HttpCode, Injectable, Param, ParseUUIDPipe, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Injectable, Param, ParseUUIDPipe, Post, Put, Req } from '@nestjs/common';
+import { API_KEY_SCOPES, effectiveScopes } from '@wbm/shared';
 import { z } from 'zod';
 import { Require } from '../../common/auth/permissions.guard.js';
 import { CurrentUser, clientIp, type AuthedRequest, type RequestUser } from '../../common/auth/request-user.js';
@@ -27,6 +28,10 @@ const CreateKeySchema = z
   .strict();
 type CreateKeyInput = z.infer<typeof CreateKeySchema>;
 
+/** What a key may do (feature 006, FR-010); at least one permission. */
+const ScopesSchema = z.object({ scopes: z.array(z.enum(API_KEY_SCOPES)).min(1) }).strict();
+type ScopesInput = z.infer<typeof ScopesSchema>;
+
 const toDto = (k: ApiKey) => ({
   id: k.id,
   name: k.name,
@@ -35,6 +40,7 @@ const toDto = (k: ApiKey) => ({
   createdAt: k.createdAt.toISOString(),
   lastUsedAt: k.lastUsedAt?.toISOString() ?? null,
   revokedAt: k.revokedAt?.toISOString() ?? null,
+  scopes: effectiveScopes(k.scopes),
 });
 
 @Injectable()
@@ -65,6 +71,16 @@ export class ApiKeysService {
     return { ...toDto(key), secret };
   }
 
+  /** Sets what a key may do (feature 006, FR-010); audited with the before and after lists. */
+  async setScopes(id: string, input: ScopesInput, actor: AuditActor) {
+    const key = await this.prisma.apiKey.findUnique({ where: { id } });
+    if (!key) throw AppError.notFound('API key not found');
+    const scopes = API_KEY_SCOPES.filter((s) => input.scopes.includes(s));
+    const updated = await this.prisma.apiKey.update({ where: { id }, data: { scopes } });
+    await this.audit.record(actor, 'api_key.scopes_changed', { type: 'api_key', id }, { name: key.name, from: effectiveScopes(key.scopes), to: scopes });
+    return { id, scopes: effectiveScopes(updated.scopes) };
+  }
+
   async revoke(id: string, actor: AuditActor): Promise<void> {
     const key = await this.prisma.apiKey.findUnique({ where: { id } });
     if (!key) throw AppError.notFound('API key not found');
@@ -88,6 +104,12 @@ export class ApiKeysController {
   @Require('apikeys.manage')
   create(@Body(new ZodValidationPipe(CreateKeySchema)) body: CreateKeyInput, @CurrentUser() user: RequestUser, @Req() req: AuthedRequest) {
     return this.keys.create(body, { userId: user.id, ip: clientIp(req) ?? null });
+  }
+
+  @Put(':id/scopes')
+  @Require('apikeys.manage')
+  setScopes(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(ScopesSchema)) body: ScopesInput, @CurrentUser() user: RequestUser, @Req() req: AuthedRequest) {
+    return this.keys.setScopes(id, body, { userId: user.id, ip: clientIp(req) ?? null });
   }
 
   @Delete(':id')

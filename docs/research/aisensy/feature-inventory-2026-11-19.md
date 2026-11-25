@@ -9,7 +9,7 @@
 - Where a page leaves a detail out, we choose a sensible default and mark it "default". Nothing undocumented is claimed as "identical".
 
 **Status legend:**
-- ✅ built (features 001 to 005)
+- ✅ built (features 001 to 006)
 - 🟡 partly built
 - ❌ missing
 - ➖ not applicable to a single company running its own WhatsApp account
@@ -20,7 +20,7 @@
 
 | # | AiSensy capability (documented flow) | Our status | Planned in |
 |---|---|---|---|
-| 1.1 | Connect a WhatsApp Business number (they use Meta "Log in with Facebook" Embedded Signup; needs Meta Tech Provider status) | 🟡 We connect by pasting the WABA ID, phone number ID and system-user token. This works for one company and needs no partner status. | Integrations adds a guided connect wizard. Embedded Signup only if the company becomes a Tech Provider ➖ |
+| 1.1 | Connect a WhatsApp Business number (they use Meta "Log in with Facebook" Embedded Signup; needs Meta Tech Provider status) | ✅ A guided connection wizard: paste a system-user token once, pick the account and number, and each check (permissions, expiry, registration and PIN, display name, quality, limit, app subscription, webhook address) shows a fix; it registers the number and subscribes the app on request, and ends with a test message (006). The manual form stays. | 006 Integrations. Embedded Signup only if the company becomes a Tech Provider ➖ |
 | 1.2 | Quality rating and messaging-limit tier (250 → 2K → 10K → 100K → unlimited) shown, with upgrade guidance | ✅ Quality, tier and quality webhooks; upgrade guidance text 🟡 | Contacts & settings (guidance) |
 | 1.3 | Edit the WhatsApp Business profile: logo (640×640, ≤5 MB), description (≤256), address (≤256), email, vertical/category, website. Owner only. | ❌ | Contacts & settings |
 | 1.4 | Display-name verification status, and a free Blue Tick (official business account) application guide | ❌ | Contacts & settings (status display and a step-by-step guide; Meta decides) |
@@ -85,8 +85,8 @@
 | 5.6 | Campaign analytics: sent, delivered, read, replied, clicked, failed with reasons; budget and cost | 🟡 Clicked shows in the campaign results with a click rate (005); replied is a retarget group with its size (005) but not yet a report column | Templates & growth (replied column) |
 | 5.7 | **Retargeting** by Read, Replied, Clicked, Delivered (from the campaign tabs) | ✅ Retarget by failed, not read, read, delivered, clicked, not clicked, replied, not replied and held back, with each group's size first (005) | 005 Campaign growth |
 | 5.8 | **Click tracking**: URL CTA buttons only; "Clicked" tab with per-user click counts; one-tap retarget of clickers | ✅ A tracked link per recipient on URL buttons and text variables; a Clicked view with first and last clicks and counts, an export, and one-click retargeting of clickers; previews and robots are not counted (005) | 005 Campaign growth |
-| 5.9 | **API campaigns**: a named "Live" campaign bound to one template, triggered by API with params, media, tags and attributes; auto-creates contacts | 🟡 Our public API sends a template directly, with idempotency and rate limits. Named API campaigns, and tags/attributes on API calls, are missing. | Integrations |
-| 5.10 | **QR code campaigns**: name, pre-filled message, optional linked flow; "Set Live and generate QR"; download the QR or a printable standee; track Scanned → Replied leads, then export, broadcast or tag them | ❌ | Templates & growth |
+| 5.9 | **API campaigns**: a named "Live" campaign bound to one template, triggered by API with params, media, tags and attributes; auto-creates contacts | ✅ Named API campaigns with a template, variable mapping, header media, tags, attributes and a daily limit, called by API name; contacts are created on the first call; results per day and an export (006) | 006 Integrations |
+| 5.10 | **QR code campaigns**: name, pre-filled message, optional linked flow; "Set Live and generate QR"; download the QR or a printable standee; track Scanned → Replied leads, then export, broadcast or tag them | ✅ Chat links: a short link, QR images (PNG, SVG) and a printable poster of our own design; openings, chats started and new contacts per day; the link's flow and tag; the contacts can be exported or tagged for a campaign (006) | 006 Integrations |
 | 5.11 | **Birthday automation**: a date-of-birth attribute; a toggle with send time; "skip opted-out"; a chosen template; analytics. Default: any date attribute. | ❌ | Contacts & settings |
 | 5.12 | **Drip sequences**: time-based follow-ups after an action | ✅ Drips of up to 10 timed template steps with quiet hours; contacts join by hand or on a tag, an opt-in, an import, the API or a link click, and leave on a reply, a stop tag, an opt-out and more; results per step (005) | 005 Campaign growth |
 | 5.13 | Campaign reports download (campaign, user, overview, opt-in/opt-out) | 🟡 Campaign export works; overview and opt-in/out reports are missing | Templates & growth |
@@ -116,7 +116,7 @@
 | # | Capability | Our status | Planned in |
 |---|---|---|---|
 | 7.1 | Build by drag-and-drop canvas, from a template (60+ by industry), or with an AI generator from a prompt | 🟡 Canvas and 6 starter flows of our own (003); the team assistant drafts a flow from a prompt (004); fewer starters than 60 | 003 Flow builder (AI generator in 004 AI agent) |
-| 7.2 | **Triggers**: keywords, regex, template-message buttons, QR codes, Click-to-WhatsApp ads | 🟡 Keywords, patterns (regex), template quick-reply buttons and first-message rules (003); QR codes and ads not yet | 003 Flow builder (QR in Integrations, ads in Ads) |
+| 7.2 | **Triggers**: keywords, regex, template-message buttons, QR codes, Click-to-WhatsApp ads | 🟡 Keywords, patterns (regex), template quick-reply buttons and first-message rules (003); QR codes through chat links (006); ads not yet | 003 Flow builder, 006 Integrations (ads in Ads) |
 | 7.3 | **Message nodes**: text/media, reply buttons, list menus | ✅ (003) | 003 Flow builder |
 | 7.4 | **Commerce nodes**: product cards, catalog, cart, payments, native forms | ❌ | Commerce |
 | 7.5 | **Logic**: save answers to attributes; conditions; API request (live data such as order status); time delay; timeout fallback; fallback reply for unknown input | ✅ Questions with validation and retries, attributes, tags, conditions, safe API calls with secrets, delays, timeouts and invalid-answer branches (003) | 003 Flow builder |
@@ -161,12 +161,12 @@
 | # | Capability | Our status | Planned in |
 |---|---|---|---|
 | 11.1 | Template message API (send) | ✅ Public API v1 with keys, idempotency and rate limits | – |
-| 11.2 | Project APIs: contacts, tags, attributes and more | ❌ | Integrations |
-| 11.3 | **Outbound webhooks**: message and status events pushed to your backend, with events chosen by toggles | ❌ | Integrations |
-| 11.4 | Shopify: abandoned cart (up to 3 reminders), order confirmed/fulfilled/delivered/cancelled, COD confirmation and status, payment reminders, feedback, reorder; per-flow metrics | ❌ | Integrations |
-| 11.5 | WooCommerce, OpenCart | ❌ | Integrations (WooCommerce; OpenCart optional) |
-| 11.6 | Zapier, Pabbly, Integrately, viaSocket ("2000+ apps") | ❌ | Integrations (webhooks and API cover Zapier, Pabbly, Make and n8n) |
-| 11.7 | CRMs and engagement tools: WebEngage, CleverTap, MoEngage, LeadSquared, Kylas, Superleap and others | ❌ | Integrations (generic webhooks/API; named connectors on request) |
+| 11.2 | Project APIs: contacts, tags, attributes and more | ✅ Contacts API v1: find by phone, create, update, tags, attributes, opt-in and opt-out, tags and attribute lists, drip enrolment; key permissions per area (006) | 006 Integrations |
+| 11.3 | **Outbound webhooks**: message and status events pushed to your backend, with events chosen by toggles | ✅ Signed webhooks (Standard Webhooks) with chosen events, retries, a delivery log, resend, secret renewal and automatic pause with alerts (006) | 006 Integrations |
+| 11.4 | Shopify: abandoned cart (up to 3 reminders), order confirmed/fulfilled/delivered/cancelled, COD confirmation and status, payment reminders, feedback, reorder; per-flow metrics | ✅ Order confirmed, shipped, delivered and cancelled notifications; COD confirmation with buttons, tags and automatic cancel; up to 3 cart reminders with recovery tracking; results per automation (006). Feedback and reorder messages are drips that start on an order placed or delivered (005, 006). | 006 Integrations |
+| 11.5 | WooCommerce, OpenCart | ✅ WooCommerce with the same automations; unpaid orders get the cart reminders with their payment link (006). OpenCart not planned. | 006 Integrations |
+| 11.6 | Zapier, Pabbly, Integrately, viaSocket ("2000+ apps") | ✅ Through their webhook and HTTP steps: signed events out, the API in (006); no app listed in their directories | 006 Integrations |
+| 11.7 | CRMs and engagement tools: WebEngage, CleverTap, MoEngage, LeadSquared, Kylas, Superleap and others | 🟡 Generic webhooks and the API connect any of them (006); named connectors only on request | 006 Integrations |
 | 11.8 | Razorpay and PayU payment notifications | ❌ | Commerce |
 
 ## 12. Growth tools and apps
@@ -190,9 +190,9 @@
 
 ## Roadmap to full functional parity
 
-Feature numbers follow the order specs are started. 002 to 005 are built; each remaining row gets the
-next free number when its spec starts. Agreed order: the AI agent and campaign growth (click tracking
-and drips) are built; next integrations, then click-to-WhatsApp ads and payments; the other rows are
+Feature numbers follow the order specs are started. 002 to 006 are built; each remaining row gets the
+next free number when its spec starts. Agreed order: the AI agent, campaign growth (click tracking
+and drips) and integrations are built; next click-to-WhatsApp ads and payments; the other rows are
 scheduled around them.
 
 | Feature | Scope | Depends on |
@@ -201,8 +201,8 @@ scheduled around them.
 | **003 Chatbot flow builder** ✅ built | Items 7.1–7.3 and 7.5–7.7: canvas, starters, keyword, pattern, template-button and first-message triggers, questions, lists, logic, API calls, hand-over, test numbers, versions and analytics | 002 |
 | **004 AI agent and AI suite** ✅ built | Items 9.1–9.6: agents answering from knowledge, skills, hand-over, starter agents, usage and limits, the team assistant drafting templates, flows and campaigns. Still open: more starter agents (9.3) and ads in the assistant (9.5) | 002, 003 |
 | **005 Campaign growth** ✅ built | Items 5.5, 5.7, 5.8 and 5.12, and clicked in 5.6: tracked links and clicks, retargeting by clicked, replied and held back, retry rounds, drips with starting events, leaving rules and results | 001, 002 |
-| **Integrations and developer platform** | Items 5.9; 7.8; 11.2–11.7; guided connect 1.1; QR codes for flow triggers | 002, 003 |
-| **Templates and campaign growth** | Items 4.1, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9 and 4.11; 5.3, 5.6 (replied column), 5.10, 5.13 and 5.14; 12.1 and 12.2 | 001 |
+| **006 Integrations and developer platform** ✅ built | Items 1.1 (guided connect), 5.9, 5.10 (chat links and QR codes, also the QR trigger of 7.2) and 11.2–11.7: signed webhooks, key permissions and the contacts API, API campaigns, Shopify and WooCommerce notifications, COD confirmation and cart reminders. Still open: Dialogflow (7.8, optional) and named CRM connectors (11.7) | 002, 003 |
+| **Templates and campaign growth** | Items 4.1, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9 and 4.11; 5.3, 5.6 (replied column), 5.13 and 5.14; 12.1 and 12.2 | 001 |
 | **Ads manager** | Items 9.7 and 10.1–10.4 (click-to-WhatsApp ads start flows) | 003, Integrations |
 | **Commerce, forms and payments** | Items 3.13, 4.8, 6.12, 7.4 and 8.1–8.5; 11.8 | 003 |
 | **Contacts, settings and security** | Items 1.3, 1.4, 1.6 and 2.3; 3.2, 3.3, 3.5, 3.8, 3.9 and 3.10 (3.7 first-message tags came with 003); 5.11 (birthday and date automations) | 001 |

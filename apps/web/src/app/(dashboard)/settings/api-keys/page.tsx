@@ -1,6 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { API_KEY_SCOPES, SCOPE_LABELS, type ApiKeyScope } from '@wbm/shared';
 import { useState, type FormEvent } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { RequirePermission } from '@/components/require-permission';
@@ -24,9 +25,11 @@ interface ApiKeyRow {
   createdAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
+  /** What the key may do (feature 006). */
+  scopes: ApiKeyScope[];
 }
 
-/** Settings > API keys (T192): create (secret shown once), list and revoke. */
+/** Settings > API keys (T192): create (secret shown once), list, set permissions (006 T033) and revoke. */
 export default function ApiKeysPage() {
   return (
     <RequirePermission permission="apikeys.manage">
@@ -45,7 +48,7 @@ function ApiKeys() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">API keys</h2>
-          <p className="text-sm text-muted-foreground">Keys let your website, CRM or billing system send approved templates through the API.</p>
+          <p className="text-sm text-muted-foreground">Keys let your website, CRM or billing system send approved templates and manage contacts through the API.</p>
         </div>
         <CreateKeyDialog onCreated={invalidate} />
       </div>
@@ -64,6 +67,7 @@ function ApiKeys() {
                   <TableHead>Name</TableHead>
                   <TableHead>Key</TableHead>
                   <TableHead>Limit</TableHead>
+                  <TableHead>Permissions</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Last used</TableHead>
                   <TableHead>Status</TableHead>
@@ -78,10 +82,18 @@ function ApiKeys() {
                     <TableCell className="font-medium">{k.name}</TableCell>
                     <TableCell className="font-mono text-xs">wbk_••••{k.last4}</TableCell>
                     <TableCell>{k.rateLimitPerMinute}/min</TableCell>
+                    <TableCell className="text-xs">
+                      <ul className="grid gap-0.5">
+                        {k.scopes.map((s) => (
+                          <li key={s}>{SCOPE_LABELS[s]}</li>
+                        ))}
+                      </ul>
+                    </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatDateTime(k.createdAt)}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatDateTime(k.lastUsedAt)}</TableCell>
                     <TableCell>{k.revokedAt ? <Badge variant="outline">Revoked</Badge> : <Badge variant="success">Active</Badge>}</TableCell>
                     <TableCell className="text-right">
+                      {!k.revokedAt ? <PermissionsDialog keyRow={k} onSaved={invalidate} /> : null}
                       {!k.revokedAt ? (
                         <ConfirmDialog
                           trigger={
@@ -116,11 +128,92 @@ function ApiKeys() {
           <CardTitle className="text-base">Using the API</CardTitle>
           <CardDescription>
             Send <code className="font-mono">POST /api/v1/messages</code> with <code className="font-mono">Authorization: Bearer wbk_…</code>. Add an{' '}
-            <code className="font-mono">Idempotency-Key</code> header so retries never send twice. Opted-out contacts are always refused.
+            <code className="font-mono">Idempotency-Key</code> header so retries never send twice. Opted-out contacts are always refused. With more permissions a key can also manage contacts, tags and consent under{' '}
+            <code className="font-mono">/api/v1/contacts</code>, and add contacts to drips.
           </CardDescription>
         </CardHeader>
       </Card>
     </div>
+  );
+}
+
+/** Plain descriptions of each permission (feature 006, T033). */
+const SCOPE_HELP: Record<ApiKeyScope, string> = {
+  'messages.send': 'Send approved templates and read the template list',
+  'contacts.read': 'Look contacts up, list them for syncing, and list tags and attributes',
+  'contacts.write': 'Create and update contacts, add and remove tags, and record opt-ins (with a source note) and opt-outs',
+  'campaigns.trigger': 'Send the template of a live API campaign to one phone number',
+  'drips.enrol': 'Add a contact to an active drip by its name or id, or take them out of it',
+};
+
+function PermissionsDialog({ keyRow, onSaved }: { keyRow: ApiKeyRow; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [chosen, setChosen] = useState<Set<ApiKeyScope>>(new Set(keyRow.scopes));
+  const [error, setError] = useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: (scopes: ApiKeyScope[]) => api<{ id: string; scopes: ApiKeyScope[] }>(`/api-keys/${keyRow.id}/scopes`, { method: 'PUT', json: { scopes } }),
+    onSuccess: () => {
+      toast.success('Permissions saved');
+      setOpen(false);
+      onSaved();
+    },
+    onError: (e) => setError(errorMessage(e)),
+  });
+  const toggle = (scope: ApiKeyScope, on: boolean) => {
+    const next = new Set(chosen);
+    if (on) next.add(scope);
+    else next.delete(scope);
+    setChosen(next);
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) {
+          setChosen(new Set(keyRow.scopes));
+          setError(null);
+        }
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm">
+          Permissions
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>What can “{keyRow.name}” do?</DialogTitle>
+          <DialogDescription>
+            Older keys can only send messages until you give them more. Systems using this key get the change on their next request.
+          </DialogDescription>
+        </DialogHeader>
+        <fieldset className="grid gap-3">
+          <legend className="sr-only">Permissions</legend>
+          {API_KEY_SCOPES.map((scope) => (
+            <label key={scope} className="flex items-start gap-2 text-sm">
+              <input type="checkbox" className="mt-0.5 size-4" checked={chosen.has(scope)} onChange={(e) => toggle(scope, e.target.checked)} />
+              <span className="grid gap-0.5">
+                <span>{SCOPE_LABELS[scope]}</span>
+                <span className="text-xs text-muted-foreground">{SCOPE_HELP[scope]}</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+        {chosen.size === 0 ? <p className="text-sm text-muted-foreground">Choose at least one permission, or revoke the key instead.</p> : null}
+        {error ? (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        ) : null}
+        <DialogFooter>
+          <Button disabled={save.isPending || chosen.size === 0} onClick={() => save.mutate(API_KEY_SCOPES.filter((s) => chosen.has(s)))}>
+            {save.isPending ? 'Saving…' : 'Save permissions'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

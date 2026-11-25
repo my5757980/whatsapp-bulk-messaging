@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { ClickDeviceKind } from '@wbm/shared';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { InboxPublisher } from '../../inbox/realtime/inbox-publisher.js';
+import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 import { DripEvents } from '../drips/drip-events.js';
 import type { ResolvedLink } from './link-resolver.js';
 
@@ -18,6 +19,7 @@ export class ClickRecorder {
     private readonly prisma: PrismaService,
     private readonly publisher: InboxPublisher,
     private readonly dripEvents: DripEvents,
+    private readonly platformEvents: PlatformEvents,
   ) {}
 
   async record(link: ResolvedLink, device: ClickDeviceKind): Promise<void> {
@@ -33,6 +35,8 @@ export class ClickRecorder {
         },
       });
       if (link.contactId) await this.dripEvents.recordClick(tx, link.contactId, { campaignId: link.campaignId, dripId: link.dripId });
+      // Outbound webhooks (feature 006, FR-002).
+      await this.platformEvents.linkClicked(tx, { contactId: link.contactId, campaignId: link.campaignId, dripId: link.dripId, destination: link.destination, device, at: new Date() });
     });
     if (link.contactId) await this.publisher.contactUpdated(link.contactId).catch(() => undefined);
   }

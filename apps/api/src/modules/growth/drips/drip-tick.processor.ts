@@ -13,6 +13,7 @@ import { sendJobId } from '../../sending/dispatch-planner.js';
 import { MAX_SEND_ATTEMPTS } from '../../sending/send-outcome.js';
 import { HEADER_MEDIA_ASSET_PARAM } from '../../sending/template-send-rules.js';
 import { TrackedLinkCodes } from '../links/link-codes.js';
+import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 import { DripEvents } from './drip-events.js';
 import { quietHoursOf } from './drip-views.js';
 
@@ -62,6 +63,7 @@ export class DripTickProcessor implements OnModuleInit, OnApplicationBootstrap {
     private readonly notifications: NotificationsService,
     private readonly events: DripEvents,
     private readonly metrics: MetricsService,
+    private readonly platformEvents: PlatformEvents,
   ) {}
 
   onModuleInit(): void {
@@ -134,6 +136,7 @@ export class DripTickProcessor implements OnModuleInit, OnApplicationBootstrap {
           const step = drip.steps.find((s) => s.position === enrolment.current_position);
           if (!step) {
             await this.end(tx, enrolment.id, 'FINISHED', null);
+            await this.platformEvents.dripFinished(tx, drip.id, enrolment.contact_id);
             summary.finished += 1;
             continue;
           }
@@ -142,6 +145,7 @@ export class DripTickProcessor implements OnModuleInit, OnApplicationBootstrap {
           const leftReason = !contact ? 'DELETED' : contact.consentStatus === 'OPTED_OUT' ? 'OPTED_OUT' : contact.blockedAt ? 'BLOCKED' : null;
           if (!contact || leftReason) {
             await this.end(tx, enrolment.id, 'LEFT', leftReason ?? 'DELETED');
+            await this.platformEvents.dripLeft(tx, drip.id, enrolment.contact_id, leftReason ?? 'DELETED');
             summary.left += 1;
             continue;
           }
@@ -169,6 +173,7 @@ export class DripTickProcessor implements OnModuleInit, OnApplicationBootstrap {
             });
           } else {
             await this.end(tx, enrolment.id, 'FINISHED', null, enrolment.current_position + 1);
+            await this.platformEvents.dripFinished(tx, drip.id, enrolment.contact_id);
             summary.finished += 1;
           }
         }

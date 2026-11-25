@@ -97,6 +97,17 @@ const EnvSchema = z.object({
       (v) => v === undefined || /^https?:\/\/[^/?#\s]+(\/[^?#\s]*)?$/.test(v),
       'must be an http(s) address without a query or fragment',
     ),
+  /** Integrations (feature 006, research R7): the Shopify Admin API version, upgraded on purpose. */
+  SHOPIFY_API_VERSION: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-(01|04|07|10)$/, 'must look like 2026-10')
+    .default('2026-10'),
+  /**
+   * Local runs and tests only (feature 006): lets webhook endpoints and stores use http://localhost.
+   * Outbound requests are otherwise https-only and never reach private addresses. Refused in production.
+   */
+  OUTBOUND_ALLOW_LOCAL: boolString,
 }).superRefine((env, ctx) => {
   const pushKeys = [env.WEB_PUSH_PUBLIC_KEY, env.WEB_PUSH_PRIVATE_KEY, env.WEB_PUSH_SUBJECT].filter(Boolean).length;
   if (pushKeys > 0 && pushKeys < 3) {
@@ -109,6 +120,7 @@ const EnvSchema = z.object({
   if (env.PUBLIC_LINK_BASE_URL && !env.PUBLIC_LINK_BASE_URL.startsWith('https://')) {
     ctx.addIssue({ code: 'custom', path: ['PUBLIC_LINK_BASE_URL'], message: 'must use https in production' });
   }
+  if (env.OUTBOUND_ALLOW_LOCAL) ctx.addIssue({ code: 'custom', path: ['OUTBOUND_ALLOW_LOCAL'], message: 'must not be "true" in production' });
 });
 
 export type AppConfig = z.infer<typeof EnvSchema>;

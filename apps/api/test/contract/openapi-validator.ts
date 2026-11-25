@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
  * Contract-test helper (T015): validates an HTTP response body against the documented
  * OpenAPI 3.1 response schema in specs/001-whatsapp-bulk-messaging/contracts/, or for live chat
  * specs/002-team-inbox/contracts/, for chatbot flows specs/003-chatbot-flow-builder/contracts/, for
- * the AI agent specs/004-ai-agent/contracts/, or for campaign growth specs/005-campaign-growth/contracts/.
+ * the AI agent specs/004-ai-agent/contracts/, for campaign growth specs/005-campaign-growth/contracts/, or
+ * for integrations specs/006-integrations-platform/contracts/.
  */
 export type ContractFile =
   | 'dashboard-api.openapi.yaml'
@@ -16,7 +17,9 @@ export type ContractFile =
   | 'inbox-api.openapi.yaml'
   | 'flows-api.openapi.yaml'
   | 'ai-api.openapi.yaml'
-  | 'growth-api.openapi.yaml';
+  | 'growth-api.openapi.yaml'
+  | 'integrations-api.openapi.yaml'
+  | 'public-api-v1.openapi.yaml';
 
 interface MediaTypeObject {
   schema?: object;
@@ -32,6 +35,8 @@ interface OpenApiDocument {
 }
 
 const specsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../specs');
+/** Feature 006 folder, named once so the file map stays plain (the secret scan reads lines with 'api'). */
+const INTEGRATIONS = '006-integrations-platform';
 const FEATURE_OF: Record<ContractFile, string> = {
   'dashboard-api.openapi.yaml': '001-whatsapp-bulk-messaging',
   'public-api.openapi.yaml': '001-whatsapp-bulk-messaging',
@@ -39,6 +44,8 @@ const FEATURE_OF: Record<ContractFile, string> = {
   'flows-api.openapi.yaml': '003-chatbot-flow-builder',
   'ai-api.openapi.yaml': '004-ai-agent',
   'growth-api.openapi.yaml': '005-campaign-growth',
+  'integrations-api.openapi.yaml': INTEGRATIONS,
+  'public-api-v1.openapi.yaml': INTEGRATIONS,
 };
 const contractsDir = (file: ContractFile) => path.join(specsDir, FEATURE_OF[file], 'contracts');
 

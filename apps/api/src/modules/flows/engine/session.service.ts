@@ -20,6 +20,7 @@ import type { FlowOutboundMessage, FlowSessionResult } from './effects.js';
 import { renderFlowText } from './render.js';
 import { newSessionState, run, type FlowFacts, type FlowInput, type RunResult, type SessionState } from './run.js';
 import { DripEvents } from '../../growth/drips/drip-events.js';
+import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 
 type Tx = Prisma.TransactionClient;
 
@@ -91,6 +92,7 @@ export class FlowSessionService {
     private readonly metrics: MetricsService,
     private readonly aiConversations: AiConversationsService,
     private readonly dripEvents: DripEvents,
+    private readonly platformEvents: PlatformEvents,
   ) {}
 
   /** Starts a flow for a chat; refuses when a session is already running unless asked to replace it. */
@@ -508,6 +510,7 @@ export class FlowSessionService {
     if (!row.contactId) return;
     const changed = await writeAttributes(tx, row.contactId, values, { type: 'FLOW', flowId: flow.id, flowName: flow.name });
     if (changed.length) after.contactChanged = row.contactId;
+    await this.platformEvents.contactUpdated(tx, row.contactId, changed.map((key) => `attributes.${key}`));
   }
 
   /** The published version a jump continues in (a test run continues in the draft); null when not available. */
@@ -541,6 +544,7 @@ export class FlowSessionService {
       await this.dripEvents.recordTagsAdded(tx, contactId, added);
     }
     if (removed.length) await tx.contactTag.deleteMany({ where: { contactId, tagId: { in: removed } } });
+    await this.platformEvents.tagLinksChanged(tx, added.map((tagId) => ({ contactId, tagId })), removed.map((tagId) => ({ contactId, tagId })));
     const chats = await tx.conversation.findMany({ where: { contactId }, select: { id: true } });
     const occurredAt = new Date();
     const changes = [

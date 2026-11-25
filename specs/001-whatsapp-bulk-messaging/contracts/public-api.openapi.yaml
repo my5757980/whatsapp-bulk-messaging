@@ -49,6 +49,7 @@ paths:
               schema: { $ref: '#/components/schemas/MessageAccepted' }
         '400': { $ref: '#/components/responses/BadRequest' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
         '404':
           description: Number or template not found
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
@@ -77,6 +78,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/MessageStatusResponse' }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
         '404':
           description: Not found or not created by this key
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
@@ -100,6 +102,7 @@ paths:
                     category: { type: string, enum: [MARKETING, UTILITY, AUTHENTICATION] }
                     variables: { type: array, items: { type: string }, examples: [[BODY.1, BODY.2]] }
         '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/InsufficientScope' }
 
 components:
   securitySchemes:
@@ -113,6 +116,9 @@ components:
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     Unauthorized:
       description: Missing, invalid or revoked API key
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    InsufficientScope:
+      description: insufficient_scope - the key lacks the messages.send permission (feature 006 key permissions)
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     TooManyRequests:
       description: Per-key request limit exceeded

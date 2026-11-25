@@ -6,7 +6,7 @@ import { api } from '@/lib/api-client';
 export interface JourneyEntry {
   type: string;
   at: string;
-  actor: { type: 'MEMBER' | 'CUSTOMER' | 'SYSTEM' | 'CAMPAIGN' | 'FLOW' | 'AI_AGENT'; name: string | null };
+  actor: { type: 'MEMBER' | 'CUSTOMER' | 'SYSTEM' | 'CAMPAIGN' | 'FLOW' | 'AI_AGENT' | 'API_KEY'; name: string | null };
   data: Record<string, unknown>;
 }
 
@@ -48,8 +48,14 @@ const DRIP_LEFT_REASON: Record<string, string> = {
 /** Our own wording for journey entries (constitution Principle II). */
 export function describeJourneyEntry(entry: JourneyEntry): string {
   const d = entry.data;
-  // Changes the AI agent made say so, with the agent's name (004 T110).
-  const by = entry.actor.name ? (entry.actor.type === 'AI_AGENT' ? ` by AI agent "${entry.actor.name}"` : ` by ${entry.actor.name}`) : '';
+  // Changes the AI agent made say so, with the agent's name (004 T110); API changes name the key (006).
+  const by = entry.actor.name
+    ? entry.actor.type === 'AI_AGENT'
+      ? ` by AI agent "${entry.actor.name}"`
+      : entry.actor.type === 'API_KEY'
+        ? ` by API key "${entry.actor.name}"`
+        : ` by ${entry.actor.name}`
+    : '';
   const agent = String(d.agentName ?? entry.actor.name ?? '');
   const test = d.test ? ' (test)' : '';
   switch (entry.type) {
@@ -98,6 +104,15 @@ export function describeJourneyEntry(entry: JourneyEntry): string {
       return d.reason === 'FINISHED'
         ? `Finished drip "${String(d.dripName ?? '')}"`
         : `Left drip "${String(d.dripName ?? '')}": ${DRIP_LEFT_REASON[String(d.reason)] ?? String(d.reason ?? '').toLowerCase().replace(/_/g, ' ')}`;
+    // Feature 006: store orders, COD answers and chat links.
+    case 'ORDER_PLACED':
+      return `Placed order ${String(d.orderNumber ?? '')} in ${String(d.store ?? 'the store')}${d.total ? ` (${String(d.total)})` : ''}`;
+    case 'COD_ANSWERED':
+      return d.answer === 'NO_ANSWER'
+        ? `Did not answer the cash on delivery question for order ${String(d.orderNumber ?? '')}`
+        : `${d.answer === 'CONFIRMED' ? 'Confirmed' : 'Cancelled'} cash on delivery order ${String(d.orderNumber ?? '')}`;
+    case 'CHAT_LINK_STARTED':
+      return `Started a chat from the chat link "${String(d.chatLinkName ?? '')}"${d.newContact ? ' (new contact)' : ''}`;
     default:
       return entry.type;
   }

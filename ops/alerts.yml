@@ -158,3 +158,34 @@ groups:
             Drip messages go out late (p95 {{ $value | humanizeDuration }}; quiet hours are not
             counted). Check that the worker runs the drips tick every 30 seconds, the drips and
             send queue depths, and the worker logs for "drip tick failed".
+
+      - alert: WbmWebhookBacklog
+        expr: |
+          max(wbm_webhook_backlog) > 0
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Webhook deliveries to active endpoints have been due for more than 5 minutes
+          description: >-
+            {{ $value }} deliveries are waiting. Check that the worker runs the webhooks-out queue and
+            its 30-second sweep, the webhooks-out queue depth, and the worker logs for "webhook
+            delivery".
+
+      - alert: WbmStoreEventsFailing
+        expr: |
+          (
+            sum(increase(wbm_store_events_total{result="failed"}[15m]))
+              /
+            sum(increase(wbm_store_events_total[15m]))
+          ) > 0.20
+          and sum(increase(wbm_store_events_total[15m])) >= 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 20% of store events failed in the last 15 minutes
+          description: >-
+            Order notifications, COD questions or cart reminders may be missing. Check Integrations >
+            Stores for stores in error, the store API keys, and the worker logs for "Store event
+            failed". The 15-minute reconciler fetches missed orders again.

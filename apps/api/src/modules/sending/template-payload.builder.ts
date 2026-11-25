@@ -80,6 +80,15 @@ export function buildTemplatePayload(input: PayloadInput): TemplateMessagePayloa
     });
   }
 
+  // Quick-reply buttons with a per-message payload (feature 006, COD answers): BUTTON.{index}.payload.
+  const quickReplies = Object.entries(input.params)
+    .map(([key, value]) => [/^BUTTON\.(\d+)\.payload$/.exec(key)?.[1], value] as const)
+    .filter((entry): entry is readonly [string, string] => entry[0] !== undefined)
+    .sort(([a], [b]) => Number(a) - Number(b));
+  for (const [index, payload] of quickReplies) {
+    components.push({ type: 'button', sub_type: 'quick_reply', index, parameters: [{ type: 'payload', payload }] });
+  }
+
   return {
     to: e164ToWaRecipient(input.to),
     template: { name: input.template.name, language: { code: input.template.language }, components },

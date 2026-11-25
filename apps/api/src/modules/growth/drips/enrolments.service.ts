@@ -8,6 +8,7 @@ import { PageQuerySchema } from '../../../common/validation/pagination.js';
 import type { EnrolmentStatus, Prisma } from '../../../generated/prisma/client.js';
 import { AuditService, type AuditActor } from '../../audit/audit.service.js';
 import { AudienceFilterSchema, AudienceQueryBuilder } from '../../contacts/audience-query.builder.js';
+import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 import { DripLeaving } from './drip-leaving.js';
 
 // Enrolling contacts in a drip by hand, and the list of contacts in it (feature 005 US4, FR-025 - FR-027).
@@ -59,6 +60,7 @@ export class EnrolmentsService {
     private readonly audit: AuditService,
     private readonly leaving: DripLeaving,
     private readonly metrics: MetricsService,
+    private readonly platformEvents: PlatformEvents,
   ) {}
 
   /** Enrols chosen contacts or a filter (FR-025). Opted-out and blocked contacts, and contacts already in, are counted and skipped. */
@@ -96,7 +98,7 @@ export class EnrolmentsService {
         result.enrolled += joining.length;
         continue;
       }
-      const { count } = await this.prisma.dripEnrolment.createMany({
+      const created = await this.prisma.dripEnrolment.createManyAndReturn({
         data: joining.map((contactId) => ({
           dripId,
           contactId,
@@ -108,7 +110,11 @@ export class EnrolmentsService {
         })),
         // A concurrent starting event may have enrolled the same contact (partial unique index).
         skipDuplicates: true,
+        select: { contactId: true },
       });
+      const count = created.length;
+      // Outbound webhooks (feature 006, FR-002).
+      await this.platformEvents.dripJoined(this.prisma, dripId, created.map((c) => ({ contactId: c.contactId, via: 'MANUAL' })));
       result.enrolled += count;
       result.skippedAlreadyIn += joining.length - count;
       active += count;

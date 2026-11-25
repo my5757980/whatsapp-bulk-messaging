@@ -47,6 +47,27 @@ describe('buildTemplatePayload', () => {
     ]);
   });
 
+  it('sends quick-reply payloads for BUTTON.{index}.payload, in button order (006 COD)', () => {
+    const payload = buildTemplatePayload({
+      to: '+971501234567',
+      template: {
+        name: 'cod_confirm',
+        language: 'en',
+        parameterFormat: 'POSITIONAL',
+        components: [
+          { type: 'BODY', text: 'Confirm order {{1}}?' },
+          { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Yes' }, { type: 'QUICK_REPLY', text: 'No' }] },
+        ],
+      },
+      params: { 'BODY.1': '#1001', 'BUTTON.1.payload': 'cod1:abc:N', 'BUTTON.0.payload': 'cod1:abc:Y' },
+    });
+    expect(payload.template.components).toEqual([
+      { type: 'body', parameters: [{ type: 'text', text: '#1001' }] },
+      { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: 'cod1:abc:Y' }] },
+      { type: 'button', sub_type: 'quick_reply', index: '1', parameters: [{ type: 'payload', payload: 'cod1:abc:N' }] },
+    ]);
+  });
+
   it('omits components without parameters', () => {
     const payload = buildTemplatePayload({
       to: '+15550001111',

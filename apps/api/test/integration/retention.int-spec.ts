@@ -1,4 +1,5 @@
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
+import { makeChatRef, makeLinkCode } from '@wbm/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { QUEUES } from '../../src/common/queue/queue.constants.js';
 import { QueueRegistry } from '../../src/common/queue/queue.module.js';
@@ -264,6 +265,62 @@ describe('Retention', () => {
     await ctx.prisma.dripEvent.delete({ where: { id: freshEvent.id } });
   });
 
+  it('purges integration records: events after 30 days, calls, orders, carts, chat links and checks after 12 months (006)', async () => {
+    const recent = new Date(Date.now() - DAY);
+    const oldShort = new Date(Date.now() - 31 * DAY);
+    const old = monthsAgo(13);
+    const endpoint = await ctx.prisma.webhookEndpoint.create({ data: { name: `Retention ${randomUUID()}`, url: 'https://hooks.example.test/in', secretEncrypted: 'x', eventTypes: ['contact.created'] } });
+    const oldEvent = await ctx.prisma.outboundEvent.create({ data: { type: 'contact.created', occurredAt: oldShort, data: {}, createdAt: oldShort } });
+    const newEvent = await ctx.prisma.outboundEvent.create({ data: { type: 'contact.created', occurredAt: recent, data: {}, createdAt: recent } });
+    const oldDelivery = await ctx.prisma.webhookDelivery.create({ data: { endpointId: endpoint.id, eventId: oldEvent.id, status: 'DELIVERED' } });
+    const store = await ctx.prisma.storeConnection.create({
+      data: { platform: 'WOOCOMMERCE', name: 'Retention shop', baseUrl: `https://${randomUUID()}.example.test`, credentialsEncrypted: 'x', numberId, defaultCountry: 'AE', customerTag: 'woo', status: 'DISCONNECTED' },
+    });
+    const storeEvent = (receivedAt: Date) => ctx.prisma.storeEvent.create({ data: { storeId: store.id, externalId: randomUUID(), topic: 'order.created', payload: {}, receivedAt } });
+    const [oldStoreEvent, newStoreEvent] = [await storeEvent(oldShort), await storeEvent(recent)];
+    const campaign = await ctx.prisma.apiCampaign.create({ data: { name: `Retention ${randomUUID()}`, apiName: `retention-${randomUUID().slice(0, 8)}`, numberId, templateId } });
+    const trigger = (createdAt: Date) => ctx.prisma.apiCampaignTrigger.create({ data: { apiCampaignId: campaign.id, outcome: 'NOT_SENT', reason: 'no_phone', createdAt } });
+    const [oldTrigger, newTrigger] = [await trigger(old), await trigger(recent)];
+    const order = (createdAt: Date) =>
+      ctx.prisma.storeOrder.create({
+        data: { storeId: store.id, externalId: randomUUID(), orderNumber: '#1', total: '10.00', currency: 'AED', paymentKind: 'PREPAID', status: 'completed', placedAt: createdAt, storeUpdatedAt: createdAt, createdAt },
+      });
+    const [oldOrder, newOrder] = [await order(old), await order(recent)];
+    await ctx.prisma.storeOrderMessage.create({ data: { orderId: oldOrder.id, kind: 'ORDER_CONFIRMED', outcome: 'SKIPPED', skipReason: 'off' } });
+    const cart = (createdAt: Date) =>
+      ctx.prisma.storeCart.create({ data: { storeId: store.id, externalId: randomUUID(), value: '10.00', currency: 'AED', startedAt: createdAt, storeUpdatedAt: createdAt, status: 'EXPIRED', createdAt } });
+    const [oldCart, newCart] = [await cart(old), await cart(recent)];
+    const link = await ctx.prisma.chatLink.create({ data: { name: `Retention ${randomUUID()}`, numberId, message: 'Hi', ref: makeChatRef(randomInt), code: makeLinkCode(randomInt) } });
+    const [oldOpen, newOpen] = [await ctx.prisma.chatLinkOpen.create({ data: { chatLinkId: link.id, device: 'MOBILE', openedAt: old } }), await ctx.prisma.chatLinkOpen.create({ data: { chatLinkId: link.id, device: 'MOBILE', openedAt: recent } })];
+    const [oldStart, newStart] = [
+      await ctx.prisma.chatLinkStart.create({ data: { chatLinkId: link.id, newContact: true, startedAt: old } }),
+      await ctx.prisma.chatLinkStart.create({ data: { chatLinkId: link.id, newContact: false, startedAt: recent } }),
+    ];
+    const [oldCheck, newCheck] = [await ctx.prisma.numberConnectionCheck.create({ data: { results: [], createdAt: old } }), await ctx.prisma.numberConnectionCheck.create({ data: { results: [], createdAt: recent } })];
+
+    const result = await retention.purgeIntegrations(new Date());
+    for (const key of ['outboundEvents', 'storeEvents', 'apiCampaignTriggers', 'storeOrders', 'storeCarts', 'chatLinkOpens', 'chatLinkStarts', 'connectionChecks'] as const) expect(result[key], key).toBeGreaterThanOrEqual(1);
+    expect(await ctx.prisma.outboundEvent.findUnique({ where: { id: oldEvent.id } })).toBeNull();
+    expect(await ctx.prisma.webhookDelivery.findUnique({ where: { id: oldDelivery.id } })).toBeNull();
+    expect(await ctx.prisma.outboundEvent.findUnique({ where: { id: newEvent.id } })).not.toBeNull();
+    expect(await ctx.prisma.storeEvent.findUnique({ where: { id: oldStoreEvent.id } })).toBeNull();
+    expect(await ctx.prisma.storeEvent.findUnique({ where: { id: newStoreEvent.id } })).not.toBeNull();
+    expect(await ctx.prisma.apiCampaignTrigger.findUnique({ where: { id: oldTrigger.id } })).toBeNull();
+    expect(await ctx.prisma.apiCampaignTrigger.findUnique({ where: { id: newTrigger.id } })).not.toBeNull();
+    expect(await ctx.prisma.storeOrder.findUnique({ where: { id: oldOrder.id } })).toBeNull();
+    expect(await ctx.prisma.storeOrderMessage.count({ where: { orderId: oldOrder.id } })).toBe(0);
+    expect(await ctx.prisma.storeOrder.findUnique({ where: { id: newOrder.id } })).not.toBeNull();
+    expect(await ctx.prisma.storeCart.findUnique({ where: { id: oldCart.id } })).toBeNull();
+    expect(await ctx.prisma.storeCart.findUnique({ where: { id: newCart.id } })).not.toBeNull();
+    expect(await ctx.prisma.chatLinkOpen.findUnique({ where: { id: oldOpen.id } })).toBeNull();
+    expect(await ctx.prisma.chatLinkOpen.findUnique({ where: { id: newOpen.id } })).not.toBeNull();
+    expect(await ctx.prisma.chatLinkStart.findUnique({ where: { id: oldStart.id } })).toBeNull();
+    expect(await ctx.prisma.chatLinkStart.findUnique({ where: { id: newStart.id } })).not.toBeNull();
+    expect(await ctx.prisma.numberConnectionCheck.findUnique({ where: { id: oldCheck.id } })).toBeNull();
+    expect(await ctx.prisma.numberConnectionCheck.findUnique({ where: { id: newCheck.id } })).not.toBeNull();
+    await ctx.prisma.webhookEndpoint.delete({ where: { id: endpoint.id } });
+  });
+
   it('runs every step daily on the maintenance queue', async () => {
     expect(await retention.run()).toEqual({
       linkClicks: expect.any(Number),
@@ -282,6 +339,14 @@ describe('Retention', () => {
       aiReplies: expect.any(Number),
       aiAsks: expect.any(Number),
       assistantRequests: expect.any(Number),
+      outboundEvents: expect.any(Number),
+      storeEvents: expect.any(Number),
+      apiCampaignTriggers: expect.any(Number),
+      storeOrders: expect.any(Number),
+      storeCarts: expect.any(Number),
+      chatLinkOpens: expect.any(Number),
+      chatLinkStarts: expect.any(Number),
+      connectionChecks: expect.any(Number),
     });
     const scheduler = await ctx.app.get(QueueRegistry).get(QUEUES.MAINTENANCE).getJobScheduler('retention');
     expect(scheduler?.pattern).toBe('15 3 * * *');

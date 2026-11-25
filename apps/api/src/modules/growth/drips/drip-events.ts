@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { Prisma, type DripTriggerKind } from '../../../generated/prisma/client.js';
+import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 import { DripLeaving } from './drip-leaving.js';
 
 type Db = PrismaService | Prisma.TransactionClient;
@@ -24,6 +25,7 @@ export class DripEvents {
     private readonly prisma: PrismaService,
     private readonly leaving: DripLeaving,
     private readonly metrics: MetricsService,
+    private readonly platformEvents: PlatformEvents,
   ) {}
 
   /** Tags newly added to a contact, by anyone or anything (members, bulk actions, imports, flows). */
@@ -56,6 +58,11 @@ export class DripEvents {
     await this.record(db, via, contactIds);
   }
 
+  /** A store order was placed or delivered (feature 006, FR-028). */
+  async recordOrderEvent(db: Db, kind: 'ORDER_PLACED' | 'ORDER_DELIVERED', contactIds: readonly string[]): Promise<void> {
+    await this.record(db, kind, contactIds);
+  }
+
   /** A real click on a tracked link: starting events of campaigns, and leaving a drip on its own links. */
   async recordClick(db: Db, contactId: string, link: { campaignId: string | null; dripId: string | null }): Promise<void> {
     if (link.dripId) await this.leaving.onEvent(contactId, { kind: 'CLICKED', dripId: link.dripId }, db);
@@ -75,7 +82,7 @@ export class DripEvents {
           SELECT id FROM drip_events ORDER BY id LIMIT ${CONSUME_BATCH} FOR UPDATE SKIP LOCKED`;
         if (!taken.length) return 0;
         const ids = taken.map((t) => t.id);
-        const enrolled = await tx.$executeRaw`
+        const joined = await tx.$queryRaw<Array<{ drip_id: string; contact_id: string; joined_via: string }>>`
           INSERT INTO drip_enrolments (id, drip_id, contact_id, status, joined_via, current_position, next_due_at, joined_at)
           SELECT gen_random_uuid(), x.drip_id, x.contact_id, 'ACTIVE', x.kind::text::"DripJoinVia", 1, now() + make_interval(mins => x.wait_minutes), now()
             FROM (
@@ -94,9 +101,14 @@ export class DripEvents {
              SELECT 1 FROM drip_enrolments p
               WHERE p.drip_id = x.drip_id AND p.contact_id = x.contact_id AND (p.status = 'ACTIVE' OR NOT x.allow_rejoin)
            )
-          ON CONFLICT DO NOTHING`;
+          ON CONFLICT DO NOTHING
+          RETURNING drip_id, contact_id, joined_via::text AS joined_via`;
         await tx.$executeRaw`DELETE FROM drip_events WHERE id = ANY(${ids}::bigint[])`;
-        return enrolled;
+        // Outbound webhooks (feature 006, FR-002): one drip.joined per new enrolment.
+        const byDrip = new Map<string, Array<{ contactId: string; via: string }>>();
+        for (const j of joined) byDrip.set(j.drip_id, [...(byDrip.get(j.drip_id) ?? []), { contactId: j.contact_id, via: j.joined_via }]);
+        for (const [dripId, joins] of byDrip) await this.platformEvents.dripJoined(tx, dripId, joins);
+        return joined.length;
       },
       { timeout: 60_000 },
     );
@@ -104,7 +116,7 @@ export class DripEvents {
     return enrolled;
   }
 
-  private async record(db: Db, kind: 'OPTED_IN' | 'IMPORTED' | 'API_CREATED', contactIds: readonly string[]): Promise<void> {
+  private async record(db: Db, kind: 'OPTED_IN' | 'IMPORTED' | 'API_CREATED' | 'ORDER_PLACED' | 'ORDER_DELIVERED', contactIds: readonly string[]): Promise<void> {
     if (!contactIds.length || !(await this.listens(db, kind))) return;
     await db.dripEvent.createMany({ data: contactIds.map((contactId) => ({ kind, contactId })) });
   }

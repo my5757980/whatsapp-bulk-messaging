@@ -27,6 +27,7 @@ import { canAccess, seesAll, visibleSql, type Viewer } from './visibility.js';
 import { isLive } from './window.js';
 import { AiConversationsService } from '../../ai/turns/ai-conversations.service.js';
 import { FlowSessionService } from '../../flows/engine/session.service.js';
+import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 
 export const ConversationListQuerySchema = z.object({
   view: z.enum(['live', 'history']).default('live'),
@@ -87,6 +88,7 @@ export class ConversationsService {
     private readonly audit: AuditService,
     private readonly flows: FlowSessionService,
     private readonly ai: AiConversationsService,
+    private readonly platformEvents: PlatformEvents,
   ) {}
 
   /** Hands a taken chat to another member who may see it (FR-022): the owner, or an admin or manager. */
@@ -117,6 +119,8 @@ export class ConversationsService {
       await tx.conversationEvent.create({
         data: { conversationId: id, type: 'TRANSFERRED', actorType: 'MEMBER', actorUserId: viewer.id, occurredAt: now, data: { fromUserId: row.intervenedById, toUserId: target.id } },
       });
+      // Outbound webhooks (feature 006, FR-002).
+      await this.platformEvents.chatAssigned(tx, id, target.id, 'member');
       await this.audit.record({ userId: viewer.id, ip }, 'inbox.transferred', { type: 'conversation', id }, { fromUserId: row.intervenedById, toUserId: target.id }, tx);
       return true;
     });
@@ -353,6 +357,7 @@ export class ConversationsService {
       });
       if (!updated.count) return false;
       await tx.conversationEvent.create({ data: { conversationId: row.id, type: 'INTERVENED', actorType: 'MEMBER', actorUserId: viewer.id, occurredAt: now } });
+      await this.platformEvents.chatAssigned(tx, row.id, viewer.id, 'member');
       await this.audit.record({ userId: viewer.id, ip }, 'inbox.intervened', { type: 'conversation', id: row.id }, {}, tx);
       const openingId = await latestOpeningId(tx, row.id);
       if (openingId) {
@@ -390,6 +395,7 @@ export class ConversationsService {
       });
       if (!updated.count) return false;
       await tx.conversationEvent.create({ data: { conversationId: id, type: 'RESOLVED', actorType: 'MEMBER', actorUserId: viewer.id, occurredAt: now } });
+      await this.platformEvents.chatClosed(tx, id, viewer.id);
       await this.audit.record({ userId: viewer.id, ip }, 'inbox.resolved', { type: 'conversation', id }, { ownerId: row.intervenedById }, tx);
       const openingId = await latestOpeningId(tx, id);
       if (openingId) await tx.conversationOpening.updateMany({ where: { id: openingId, resolvedAt: null }, data: { resolvedAt: now, resolvedById: viewer.id } });

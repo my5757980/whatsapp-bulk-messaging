@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { leavingReason, type DripLeavingEvent, type DripLeftReasonCode } from '@wbm/shared';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
+import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 
 type Db = PrismaService | Prisma.TransactionClient;
 
@@ -12,7 +13,10 @@ type Db = PrismaService | Prisma.TransactionClient;
  */
 @Injectable()
 export class DripLeaving {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly platformEvents: PlatformEvents,
+  ) {}
 
   /** Ends every active enrolment of the contact whose drip has this leaving rule. Returns how many ended. */
   async onEvent(contactId: string, event: DripLeavingEvent, db: Db = this.prisma): Promise<number> {
@@ -38,11 +42,14 @@ export class DripLeaving {
 
   /** Ends one active enrolment and cancels its step messages that are not sent yet. */
   async leaveEnrolment(enrolmentId: string, reason: DripLeftReasonCode, db: Db = this.prisma): Promise<boolean> {
-    const ended = await db.$executeRaw`
+    const [ended] = await db.$queryRaw<Array<{ drip_id: string; contact_id: string | null }>>`
       UPDATE drip_enrolments
          SET status = 'LEFT', left_reason = ${reason}::"DripLeftReason", ended_at = now(), next_due_at = NULL
-       WHERE id = ${enrolmentId}::uuid AND status = 'ACTIVE'`;
+       WHERE id = ${enrolmentId}::uuid AND status = 'ACTIVE'
+      RETURNING drip_id, contact_id`;
     if (!ended) return false;
+    // Outbound webhooks (feature 006, FR-002).
+    await this.platformEvents.dripLeft(db, ended.drip_id, ended.contact_id, reason);
     await db.$executeRaw`
       UPDATE messages SET status = 'CANCELLED', updated_at = now()
        WHERE drip_enrolment_id = ${enrolmentId}::uuid AND status IN ('PENDING', 'QUEUED')`;
@@ -57,11 +64,12 @@ export class DripLeaving {
 
   /** Archiving a drip ends every active enrolment with ARCHIVED. */
   async archiveAll(dripId: string, db: Db = this.prisma): Promise<number> {
-    const ended = await db.$queryRaw<Array<{ id: string }>>`
+    const ended = await db.$queryRaw<Array<{ id: string; contact_id: string | null }>>`
       UPDATE drip_enrolments
          SET status = 'LEFT', left_reason = 'ARCHIVED', ended_at = now(), next_due_at = NULL
        WHERE drip_id = ${dripId}::uuid AND status = 'ACTIVE'
-      RETURNING id`;
+      RETURNING id, contact_id`;
+    for (const row of ended) await this.platformEvents.dripLeft(db, dripId, row.contact_id, 'ARCHIVED');
     if (ended.length) {
       await db.$executeRaw`
         UPDATE messages SET status = 'CANCELLED', updated_at = now()

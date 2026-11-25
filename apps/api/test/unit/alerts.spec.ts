@@ -50,6 +50,11 @@ describe('alert rules', () => {
     expect(rule('WbmDripLagging')).toMatch(/histogram_quantile\(0\.95[\s\S]*wbm_drip_due_lag_seconds_bucket[\s\S]*> 300\n\s*for: 15m/);
   });
 
+  it('warn about a webhook backlog and failing store events (006 T085)', () => {
+    expect(rule('WbmWebhookBacklog')).toMatch(/max\(wbm_webhook_backlog\) > 0\n\s*for: 15m/);
+    expect(rule('WbmStoreEventsFailing')).toMatch(/wbm_store_events_total\{result="failed"\}\[15m\][\s\S]*> 0\.20[\s\S]*>= 10/);
+  });
+
   it('give every alert a severity and a summary', () => {
     const names = [...ALERTS.matchAll(/- alert: (\w+)/g)].map((m) => m[1]!);
     expect(names.length).toBeGreaterThanOrEqual(5);

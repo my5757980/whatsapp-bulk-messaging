@@ -103,3 +103,19 @@ describe('sanitizeLogObject: campaign growth (feature 005)', () => {
     expect(out.path).toBe('/l/[REDACTED]');
   });
 });
+
+// T015 (feature 006, FR-058): store credentials, PINs and webhook signatures never reach the logs.
+describe('sanitizeLogObject: integrations (feature 006)', () => {
+  it('removes store credentials, client and consumer secrets, PINs and signatures', () => {
+    const out = sanitizeLogObject({
+      store: { id: 's1', credentials: { clientId: 'abc', clientSecret: 'shh' }, clientSecret: 'shh', consumerKey: 'ck_1', consumerSecret: 'cs_1' },
+      wizard: { phoneNumberId: '123', pin: '123456' },
+      headers: { 'webhook-signature': 'v1,abc', 'x-shopify-hmac-sha256': 'abc=', 'x-wc-webhook-signature': 'def=', 'webhook-id': 'evt_1' },
+      webhookEndpoint: { id: 'e1', secret: 'whsec_x' },
+    }) as Record<string, Record<string, unknown>>;
+    expect(out.store).toEqual({ id: 's1', credentials: '[REDACTED]', clientSecret: '[REDACTED]', consumerKey: '[REDACTED]', consumerSecret: '[REDACTED]' });
+    expect(out.wizard).toEqual({ phoneNumberId: '123', pin: '[REDACTED]' });
+    expect(out.headers).toEqual({ 'webhook-signature': '[REDACTED]', 'x-shopify-hmac-sha256': '[REDACTED]', 'x-wc-webhook-signature': '[REDACTED]', 'webhook-id': 'evt_1' });
+    expect(out.webhookEndpoint).toEqual({ id: 'e1', secret: '[REDACTED]' });
+  });
+});

@@ -94,6 +94,78 @@ export interface PhoneNumberInfo {
   throughputLevel: string | undefined;
 }
 
+/** GET /debug_token (feature 006 US8, research R13). `expiresAt` 0 means the token never expires. */
+export interface TokenDebugInfo {
+  isValid: boolean;
+  appId: string | null;
+  type: string | null;
+  expiresAt: number | null;
+  scopes: string[];
+  granularScopes: Array<{ scope: string; targetIds: string[] }>;
+  error: string | null;
+}
+
+export interface WabaInfo {
+  id: string;
+  name: string;
+  currency: string | null;
+  timezoneId: string | null;
+}
+
+/** A number with the fields the wizard checks (research R13). */
+export interface WizardPhoneNumber {
+  id: string;
+  displayPhoneNumber: string;
+  verifiedName: string | null;
+  nameStatus: string | null;
+  status: string | null;
+  codeVerificationStatus: string | null;
+  qualityRating: string | null;
+  platformType: string | null;
+  throughputLevel: string | null;
+  /** whatsapp_business_manager_messaging_limit (portfolio limits since 2025-10-07). */
+  messagingLimit: string | null;
+}
+
+export interface AppSubscription {
+  object: string;
+  callbackUrl: string | null;
+  active: boolean;
+  fields: string[];
+}
+
+const WIZARD_PHONE_FIELDS =
+  'id,display_phone_number,verified_name,name_status,status,code_verification_status,quality_rating,platform_type,throughput,whatsapp_business_manager_messaging_limit';
+
+interface RawWizardPhone {
+  id: string;
+  display_phone_number?: string;
+  verified_name?: string;
+  name_status?: string;
+  status?: string;
+  code_verification_status?: string;
+  quality_rating?: string;
+  platform_type?: string;
+  throughput?: { level?: string };
+  whatsapp_business_manager_messaging_limit?: string | { tier?: string };
+}
+
+function toWizardPhone(p: RawWizardPhone): WizardPhoneNumber {
+  const limit = p.whatsapp_business_manager_messaging_limit;
+  return {
+    id: p.id,
+    displayPhoneNumber: p.display_phone_number ?? '',
+    verifiedName: p.verified_name ?? null,
+    nameStatus: p.name_status ?? null,
+    status: p.status ?? null,
+    codeVerificationStatus: p.code_verification_status ?? null,
+    qualityRating: p.quality_rating ?? null,
+    platformType: p.platform_type ?? null,
+    throughputLevel: p.throughput?.level ?? null,
+    messagingLimit: typeof limit === 'string' ? limit : (limit?.tier ?? null),
+  };
+}
+
 const PRE_SEND_CODES = new Set(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT', 'EHOSTUNREACH', 'ENETUNREACH']);
 
 function errorCode(error: unknown, depth = 0): string | undefined {
@@ -279,6 +351,85 @@ export class MetaGraphClient {
     form.set('type', mimeType);
     form.set('file', new Blob([new Uint8Array(file)], { type: mimeType }), filename);
     return this.request('POST', `/${phoneNumberId}/media`, token, { form });
+  }
+
+  // ---------- Number connection wizard (feature 006 US8, research R13) ----------
+
+  /** Inspects a pasted token; `authToken` is the app token "{app-id}|{app-secret}" when the app id is set. */
+  async debugToken(inputToken: string, authToken: string): Promise<TokenDebugInfo> {
+    const body = await this.request<{
+      data?: {
+        is_valid?: boolean;
+        app_id?: string;
+        type?: string;
+        expires_at?: number;
+        scopes?: string[];
+        granular_scopes?: Array<{ scope: string; target_ids?: string[] }>;
+        error?: { message?: string };
+      };
+    }>('GET', '/debug_token', authToken, { query: { input_token: inputToken } });
+    const d = body.data ?? {};
+    return {
+      isValid: d.is_valid === true,
+      appId: d.app_id ?? null,
+      type: d.type ?? null,
+      expiresAt: typeof d.expires_at === 'number' ? d.expires_at : null,
+      scopes: d.scopes ?? [],
+      granularScopes: (d.granular_scopes ?? []).map((g) => ({ scope: g.scope, targetIds: g.target_ids ?? [] })),
+      error: d.error?.message ?? null,
+    };
+  }
+
+  /** The WhatsApp accounts a token reaches: their ids come from its granular scopes (debugToken). */
+  async listWabas(token: string, wabaIds: readonly string[]): Promise<WabaInfo[]> {
+    const accounts: WabaInfo[] = [];
+    for (const id of wabaIds) {
+      const body = await this.request<{ id: string; name?: string; currency?: string; timezone_id?: string }>('GET', `/${id}`, token, {
+        query: { fields: 'name,currency,timezone_id' },
+      });
+      accounts.push({ id: body.id ?? id, name: body.name ?? id, currency: body.currency ?? null, timezoneId: body.timezone_id ?? null });
+    }
+    return accounts;
+  }
+
+  async listPhoneNumbers(token: string, wabaId: string): Promise<WizardPhoneNumber[]> {
+    const body = await this.request<{ data?: RawWizardPhone[] }>('GET', `/${wabaId}/phone_numbers`, token, { query: { fields: WIZARD_PHONE_FIELDS, limit: '100' } });
+    return (body.data ?? []).map(toWizardPhone);
+  }
+
+  async phoneNumberDetails(token: string, phoneNumberId: string): Promise<WizardPhoneNumber> {
+    return toWizardPhone(await this.request<RawWizardPhone>('GET', `/${phoneNumberId}`, token, { query: { fields: WIZARD_PHONE_FIELDS } }));
+  }
+
+  /** Registers the number for the Cloud API with its two-step verification PIN. */
+  async registerNumber(token: string, phoneNumberId: string, pin: string): Promise<void> {
+    await this.request('POST', `/${phoneNumberId}/register`, token, { json: { messaging_product: 'whatsapp', pin } });
+  }
+
+  /** The apps that get the account's webhooks. */
+  async getSubscribedApps(token: string, wabaId: string): Promise<Array<{ id: string; name: string | null }>> {
+    const body = await this.request<{ data?: Array<{ whatsapp_business_api_data?: { id?: string; name?: string }; id?: string; name?: string }> }>('GET', `/${wabaId}/subscribed_apps`, token);
+    return (body.data ?? []).map((a) => ({ id: a.whatsapp_business_api_data?.id ?? a.id ?? '', name: a.whatsapp_business_api_data?.name ?? a.name ?? null })).filter((a) => a.id);
+  }
+
+  /** Subscribes the app that owns the token to the account's webhooks. */
+  async subscribeApp(token: string, wabaId: string): Promise<void> {
+    await this.request('POST', `/${wabaId}/subscribed_apps`, token);
+  }
+
+  /** The app's webhook settings (callback URL and fields), read with the app token. */
+  async getAppSubscriptions(appToken: string, appId: string): Promise<AppSubscription[]> {
+    const body = await this.request<{ data?: Array<{ object?: string; callback_url?: string; active?: boolean; fields?: Array<{ name?: string } | string> }> }>(
+      'GET',
+      `/${appId}/subscriptions`,
+      appToken,
+    );
+    return (body.data ?? []).map((sub) => ({
+      object: sub.object ?? '',
+      callbackUrl: sub.callback_url ?? null,
+      active: sub.active !== false,
+      fields: (sub.fields ?? []).map((f) => (typeof f === 'string' ? f : (f.name ?? ''))).filter(Boolean),
+    }));
   }
 
   private async request<T>(
