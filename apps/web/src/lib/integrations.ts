@@ -12,7 +12,7 @@ export type DeliveryError = 'TIMEOUT' | 'BLOCKED_ADDRESS' | 'NETWORK' | 'REDIREC
 export interface WebhookEventTypeInfo {
   type: EventType;
   label: string;
-  group: 'messages' | 'contacts' | 'links' | 'drips' | 'live_chat' | 'api_campaigns' | 'stores' | 'test';
+  group: 'messages' | 'contacts' | 'links' | 'drips' | 'live_chat' | 'api_campaigns' | 'stores' | 'ads' | 'test';
 }
 
 export interface WebhookEndpoint {

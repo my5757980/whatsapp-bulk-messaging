@@ -192,9 +192,17 @@ function Body({ item }: { item: ChatItem }) {
   }
 }
 
+/** A Click-to-WhatsApp referral kept on the customer's message (feature 007 US3). */
+function adReferral(value: unknown): { metaAdId: string; headline: string | null } | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { metaAdId, headline } = value as { metaAdId?: unknown; headline?: unknown };
+  return typeof metaAdId === 'string' ? { metaAdId, headline: typeof headline === 'string' ? headline : null } : null;
+}
+
 /** One timeline entry; customer messages on the left, ours on the right. */
 export function ChatItemView({ item }: { item: ChatItem }) {
   const ours = item.kind !== 'INBOUND';
+  const referral = adReferral(item.payload?.referral);
   return (
     <div className={cn('flex', ours ? 'justify-end' : 'justify-start')} data-testid="chat-item" data-kind={item.kind}>
       <div
@@ -204,6 +212,11 @@ export function ChatItemView({ item }: { item: ChatItem }) {
           item.kind === 'NOTE' && 'border border-dashed border-amber-400 bg-amber-50 dark:bg-amber-950',
         )}
       >
+        {referral ? (
+          <p className="mb-1 text-[11px] text-sky-700 dark:text-sky-300" data-testid="ad-referral">
+            From the ad: {referral.headline ?? referral.metaAdId}
+          </p>
+        ) : null}
         <Body item={item} />
         <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
           {item.kind === 'NOTE' && <span className="font-medium text-amber-700 dark:text-amber-300">Internal note ·</span>}

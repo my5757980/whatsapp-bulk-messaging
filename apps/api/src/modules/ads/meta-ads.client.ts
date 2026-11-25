@@ -208,6 +208,12 @@ export class MetaAdsClient {
     return s === 'ready' ? 'ready' : s === 'error' ? 'error' : 'processing';
   }
 
+  /** A thumbnail for a video creative (Meta asks for one). */
+  async videoThumbnail(token: string, videoId: string): Promise<string | null> {
+    const body = await this.request<{ picture?: string }>('GET', `/${videoId}`, token, { query: { fields: 'picture' } });
+    return body.picture ?? null;
+  }
+
   /** A WhatsApp welcome message sequence carrying the pre-filled message (R4). */
   async createWelcomeSequence(token: string, wabaId: string, name: string, prefilledMessage: string): Promise<string> {
     const body = await this.request<{ sequence_id?: string; id?: string }>('POST', `/${wabaId}/welcome_message_sequences`, token, {

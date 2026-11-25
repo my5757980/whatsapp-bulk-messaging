@@ -603,6 +603,7 @@ components:
             status: { type: string, enum: [DRAFT, IN_REVIEW, ACTIVE, PAUSED, REJECTED, ENDED] }
             reviewFeedback: { type: [string, 'null'] }
             metaAdId: { type: [string, 'null'] }
+            edited: { type: boolean, description: A rejected version edited since its rejection; the next submit sends it again }
     AdCampaignInput:
       type: object
       required: [name, goal, targeting, placements, dailyBudgetMinor, startAt, versions]

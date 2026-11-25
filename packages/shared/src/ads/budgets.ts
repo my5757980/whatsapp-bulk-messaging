@@ -51,11 +51,11 @@ export function capReached(capMinor: number | null, spentThisMonthMinor: number)
   return capMinor !== null && spentThisMonthMinor >= capMinor;
 }
 
-/** Minor units to an amount with the currency's own decimals, for display. */
+/** Minor units to an amount with the currency's own decimals, for display (plain spaces, so messages compare and copy cleanly). */
 export function formatMinor(minor: number, currency: string, locale = 'en'): string {
   const format = new Intl.NumberFormat(locale, { style: 'currency', currency });
   const digits = format.resolvedOptions().maximumFractionDigits ?? 2;
-  return format.format(minor / 10 ** digits);
+  return format.format(minor / 10 ** digits).replace(/[\u00a0\u202f]/g, ' ');
 }
 
 /** An amount typed in major units (for example 50.5) to minor units for the currency. */

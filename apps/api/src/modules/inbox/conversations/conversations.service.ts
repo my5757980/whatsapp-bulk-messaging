@@ -25,6 +25,7 @@ import {
 } from './conversation-views.js';
 import { canAccess, seesAll, visibleSql, type Viewer } from './visibility.js';
 import { isLive } from './window.js';
+import { AdChatInfo } from '../../ads/chats/ad-chat-matcher.js';
 import { AiConversationsService } from '../../ai/turns/ai-conversations.service.js';
 import { FlowSessionService } from '../../flows/engine/session.service.js';
 import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
@@ -89,6 +90,7 @@ export class ConversationsService {
     private readonly flows: FlowSessionService,
     private readonly ai: AiConversationsService,
     private readonly platformEvents: PlatformEvents,
+    private readonly adChats: AdChatInfo,
   ) {}
 
   /** Hands a taken chat to another member who may see it (FR-022): the owner, or an admin or manager. */
@@ -274,7 +276,7 @@ export class ConversationsService {
 
   async detail(viewer: Viewer, id: string) {
     const row = await this.loadVisible(viewer, id);
-    const [unread, templateMessageCount, sessionMessageCount, contact, campaigns] = await Promise.all([
+    const [unread, templateMessageCount, sessionMessageCount, contact, campaigns, adChat] = await Promise.all([
       this.unreadFor(viewer.id, id),
       this.prisma.chatMessage.count({ where: { conversationId: id, kind: 'MESSAGE_REF' } }),
       this.prisma.chatMessage.count({ where: { conversationId: id, kind: 'SESSION_OUT' } }),
@@ -304,6 +306,8 @@ export class ConversationsService {
             select: { campaignId: true, status: true, sentAt: true, campaign: { select: { name: true } } },
           })
         : [],
+      // The latest Click-to-WhatsApp ad of the chat with Meta's free window (feature 007 US3).
+      this.adChats.forConversation(id),
     ]);
     const live = isLive(row.lastCustomerMessageAt);
     const numberUsable = row.number.connectionStatus === 'CONNECTED' && row.number.sendingEnabled;
@@ -334,6 +338,7 @@ export class ConversationsService {
         status: m.status,
       })),
       canReply: live && numberUsable && mayAct,
+      adChat,
     };
   }
 

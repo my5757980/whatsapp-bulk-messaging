@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/toaster';
 import { api, ApiError } from '@/lib/api-client';
 import { Can } from '@/lib/permissions';
+import { AdReferralCard } from '@/components/inbox/ad-referral-card';
 import { STATE_LABEL, type ChatItemPage, type ConversationDetail, type ConversationSummary } from '@/lib/inbox-types';
 import { queryKeys } from '@/lib/query';
 import { ChatItemView } from './chat-item-view';
@@ -113,6 +114,7 @@ export function ChatView({ id, meId, canMonitor }: { id: string; meId: string; c
           )}
         </div>
       </header>
+      {chat.adChat ? <AdReferralCard adChat={chat.adChat} /> : null}
 
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-muted/30 p-4" data-testid="timeline">
         {timeline.hasNextPage && (

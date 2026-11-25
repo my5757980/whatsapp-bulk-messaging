@@ -193,6 +193,31 @@ export class PlatformEvents {
     );
   }
 
+  /** A chat started from a Click-to-WhatsApp ad (feature 007 US3, FR-021). */
+  adChatStarted(
+    db: Db,
+    input: { contactId: string; conversationId: string; campaign: { id: string; name: string } | null; metaAdId: string; headline: string | null; newContact: boolean; at: Date },
+  ): Promise<void> {
+    return this.when(
+      'ad.chat_started',
+      async () => ({ contact: await this.contact(db, input.contactId), conversationId: input.conversationId, adCampaign: input.campaign, metaAdId: input.metaAdId, headline: input.headline, newContact: input.newContact }),
+      db,
+      input.at,
+    );
+  }
+
+  /** A lead form answer arrived (feature 007 US7, FR-034); the answers stay in the platform. */
+  adLeadReceived(
+    db: Db,
+    input: { contactId: string | null; form: { id: string; name: string }; campaign: { id: string; name: string } | null; metaLeadId: string; consent: boolean; status: string },
+  ): Promise<void> {
+    return this.when(
+      'ad.lead_received',
+      async () => ({ contact: await this.contact(db, input.contactId), leadForm: input.form, adCampaign: input.campaign, metaLeadId: input.metaLeadId, consent: input.consent, status: input.status }),
+      db,
+    );
+  }
+
   linkClicked(db: Db, input: { contactId: string | null; campaignId: string | null; dripId: string | null; destination: string; device: string; at: Date }): Promise<void> {
     return this.when(
       'link.clicked',

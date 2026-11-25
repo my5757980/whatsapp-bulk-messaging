@@ -19,7 +19,20 @@ describe('parseInboundMessage', () => {
       payload: {},
       media: null,
       replyToWaId: null,
+      adReferral: null,
     });
+  });
+
+  it('keeps the referral of a message from a Click-to-WhatsApp ad in the payload (feature 007)', () => {
+    const parsed = parse({
+      type: 'text',
+      text: { body: 'Hi, I saw your ad' },
+      referral: { source_url: 'https://fb.me/abc', source_id: '120200000001', source_type: 'ad', headline: 'Spring sale', body: '30% off', media_type: 'image', image_url: 'https://cdn.example/ad.jpg', ctwa_clid: 'CLID1' },
+    });
+    const referral = { metaAdId: '120200000001', headline: 'Spring sale', body: '30% off', mediaType: 'image', mediaUrl: 'https://cdn.example/ad.jpg', sourceUrl: 'https://fb.me/abc', ctwaClid: 'CLID1' };
+    expect(parsed).toMatchObject({ contentType: 'TEXT', text: 'Hi, I saw your ad', payload: { referral }, adReferral: referral });
+    // A referral from a post, not an ad, is not an ad chat.
+    expect(parse({ type: 'text', text: { body: 'hi' }, referral: { source_id: '1', source_type: 'post' } })).toMatchObject({ payload: {}, adReferral: null });
   });
 
   it('keeps the message a customer replied to', () => {

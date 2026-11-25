@@ -1,4 +1,10 @@
 import { Global, Module, type Provider, type Type } from '@nestjs/common';
+import { AdCampaignsController } from './campaigns/ad-campaigns.controller.js';
+import { AdCampaignsService } from './campaigns/ad-campaigns.service.js';
+import { AdLauncher } from './campaigns/ad-launcher.js';
+import { AdTargetingController } from './campaigns/ad-targeting.controller.js';
+import { AdChatInfo, AdChatMatcher } from './chats/ad-chat-matcher.js';
+import { AdChatsController } from './chats/ad-chats.controller.js';
 import { AdsConnectionController } from './connection/ads-connection.controller.js';
 import { AdsConnectionService } from './connection/ads-connection.service.js';
 import { MetaAdsClient } from './meta-ads.client.js';
@@ -7,7 +13,7 @@ import { MetaAdsClient } from './meta-ads.client.js';
 // module shared by the HTTP app and the worker: the Graph client and, from US3, the ad chat matcher
 // that the 002 inbound handler calls. HTTP controllers live in AdsApiModule, and the queue processors
 // in WorkerFeaturesModule. Each story adds its providers here.
-const DOMAIN: Provider[] = [MetaAdsClient, AdsConnectionService];
+const DOMAIN: Provider[] = [MetaAdsClient, AdsConnectionService, AdLauncher, AdCampaignsService, AdChatMatcher, AdChatInfo];
 
 /** Ads services shared by the HTTP app and the worker. */
 @Global()
@@ -15,7 +21,7 @@ const DOMAIN: Provider[] = [MetaAdsClient, AdsConnectionService];
 export class AdsDomainModule {}
 
 const API_PROVIDERS: Provider[] = [];
-const CONTROLLERS: Type[] = [AdsConnectionController];
+const CONTROLLERS: Type[] = [AdsConnectionController, AdCampaignsController, AdTargetingController, AdChatsController];
 
 /** The ads connection, campaigns, results, audiences and lead forms endpoints (HTTP app only). */
 @Module({

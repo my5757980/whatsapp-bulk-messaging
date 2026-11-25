@@ -22,6 +22,7 @@ import { ChatRoutingService } from '../routing/chat-routing.service.js';
 import { LiveChatSettingsService } from '../settings/live-chat-settings.service.js';
 import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 import { CodService } from '../../integrations/stores/cod.service.js';
+import { AdChatMatcher } from '../../ads/chats/ad-chat-matcher.js';
 import { ChatLinkMatcher } from '../../integrations/chat-links/chat-link-matcher.js';
 import { parseInboundMessage, previewOf, type ParsedInbound } from './message-parser.js';
 import { stopContactCarts } from '../../integrations/stores/store-carts.js';
@@ -65,6 +66,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly platformEvents: PlatformEvents,
     private readonly cod: CodService,
     private readonly chatLinks: ChatLinkMatcher,
+    private readonly adChats: AdChatMatcher,
   ) {}
 
   onModuleInit(): void {
@@ -201,6 +203,22 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     // COD answers (feature 006 US5): a cod1: button tap is answered here, before flows and the AI agent.
     const tappedPayload = typeof msg.payload.payload === 'string' ? msg.payload.payload : null;
     if (tappedPayload && (await this.cod.handleButton(tappedPayload, { conversationId: outcome.conversationId, contactId: contact.id }))) return;
+    // Chats from ads (feature 007 US3): the referral names the ad; its campaign tags the contact and its flow
+    // answers before chat links, keyword flows and the AI agent, unless a flow runs or a member has the chat.
+    if (
+      msg.adReferral &&
+      (await this.adChats.onAdMessage({
+        numberId,
+        conversationId: outcome.conversationId,
+        contactId: contact.id,
+        waMessageId: msg.waMessageId,
+        chatState: outcome.state,
+        referral: msg.adReferral,
+        occurredAt: msg.occurredAt,
+      }))
+    ) {
+      return;
+    }
     // Chat links (feature 006 US7): the pre-filled message counts for its link and tags the contact; the link's
     // flow answers it before keyword flows and the AI agent, unless a flow runs or a member has the chat.
     if (

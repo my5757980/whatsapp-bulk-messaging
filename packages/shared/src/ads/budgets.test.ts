@@ -29,8 +29,8 @@ describe('ad budgets and the spending cap', () => {
   });
 
   it("formats and reads amounts with the currency's decimals", () => {
-    // Intl puts a non-breaking space between the code and the amount.
-    expect(formatMinor(5_050, 'AED').replace(/\s/g, ' ')).toBe('AED 50.50');
+    // Intl puts a non-breaking space between the code and the amount; messages get a plain one.
+    expect(formatMinor(5_050, 'AED')).toBe('AED 50.50');
     expect(formatMinor(5_000, 'JPY')).toBe('¥5,000');
     expect(toMinor(50.5, 'AED')).toBe(5_050);
     expect(toMinor(500, 'JPY')).toBe(500);

@@ -25,10 +25,11 @@ the nock fakes follow this file.
 | `GET /act_{id}/minimum_budgets` | minimum daily budgets per currency |
 | `POST /act_{id}/adimages` (bytes) → `images.{name}.hash` | image upload |
 | `POST /act_{id}/advideos` (file) → `id`; `GET /{video-id}?fields=status` | video upload and readiness |
+| `GET /{video-id}?fields=picture` | the thumbnail a video creative needs (`video_data.image_url`) |
 | `POST /{waba-id}/welcome_message_sequences` → `sequence_id` | pre-filled message (`autofill_message`) |
 | `POST /act_{id}/adcreatives` → `id` | creative (`object_story_spec`, `asset_feed_spec.additional_data.partner_app_welcome_message_flow_id` for chats *(verify)*) |
-| `POST /act_{id}/campaigns` → `id` | `name`, `objective`, `special_ad_categories`, `status` |
-| `POST /act_{id}/adsets` → `id` | `campaign_id`, `daily_budget`, `start_time`, `end_time`, `billing_event`, `optimization_goal`, `destination_type`, `promoted_object`, `targeting`, `status` |
+| `POST /act_{id}/campaigns` → `id` | `name`, `objective`, `special_ad_categories` (`[]`, `CREDIT`, `EMPLOYMENT`, `HOUSING`, `ISSUES_ELECTIONS_POLITICS` *(verify: credit may be `FINANCIAL_PRODUCTS_SERVICES` on newer versions)*), `special_ad_category_country` with a category, `is_adset_budget_sharing_enabled: false` (budgets live on the ad set) *(verify)*, `status` |
+| `POST /act_{id}/adsets` → `id` | `campaign_id`, `daily_budget`, `start_time`, `end_time`, `billing_event`, `bid_strategy: LOWEST_COST_WITHOUT_CAP`, `optimization_goal`, `destination_type`, `promoted_object` (chats: `{ page_id, whatsapp_phone_number: "+<digits>" }`), `targeting`, `status` |
 | `POST /act_{id}/ads` → `id` | `adset_id`, `creative: { creative_id }`, `status` |
 | `DELETE /{id}` | rollback of a failed launch |
 

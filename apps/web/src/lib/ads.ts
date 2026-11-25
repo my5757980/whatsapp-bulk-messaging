@@ -89,6 +89,8 @@ export interface AdVersion extends AdVersionInput {
   status: AdVersionStatus;
   reviewFeedback?: string | null;
   metaAdId?: string | null;
+  /** A rejected version edited since, waiting to be submitted again. */
+  edited?: boolean;
 }
 
 export interface AdCampaignInput {
@@ -200,6 +202,19 @@ export type FreeWindowState =
   | { state: 'OPEN'; until: string }
   | { state: 'ENDED'; until: string }
   | { state: 'MISSED' };
+
+/** The latest ad a chat came from, on the live chat detail (002 ConversationDetail.adChat). */
+export interface AdChat {
+  metaAdId: string;
+  headline: string | null;
+  body: string | null;
+  mediaUrl: string | null;
+  sourceUrl: string | null;
+  startedAt: string;
+  newContact: boolean;
+  adCampaign: { id: string; name: string } | null;
+  freeWindow: FreeWindowState;
+}
 
 // ---------- Audiences (US6) and lead forms (US7) ----------
 

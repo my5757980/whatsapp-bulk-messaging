@@ -9,16 +9,9 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../sr
 /** Actions listed before the code that records them exists (feature 006 T014; each story removes its own). */
 /** Actions listed before the code that records them exists (feature 007 T014; each story removes its own). */
 const PENDING = new Set<string>([
-  'ads.connected',
-  'ads.disconnected',
-  'ads.checks_run',
-  'ads.spend_cap_changed',
-  'ad_campaign.created',
-  'ad_campaign.submitted',
   'ad_campaign.paused',
   'ad_campaign.resumed',
   'ad_campaign.ended',
-  'ad_campaign.budget_changed',
   'ad_campaign.duplicated',
   'ad_audience.created',
   'ad_audience.deleted',

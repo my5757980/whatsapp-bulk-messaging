@@ -67,6 +67,8 @@ webhook-signature: v1,K5oZfzN95Z9UVu1EsfQmfVNQhnkZ2pj9o9NDN/H/pI4= v1,Q2xpZW50IH
 | `store.notification_sent` | `{ store: { id, name, platform }, order: { id, number }, kind: "ORDER_CONFIRMED"\|"ORDER_SHIPPED"\|"ORDER_DELIVERED"\|"ORDER_CANCELLED"\|"COD_CONFIRMATION"\|"CART_REMINDER", contact, messageId }` |
 | `store.cod_answered` | `{ store, order, contact, answer: "CONFIRMED"\|"CANCELLED"\|"NO_ANSWER", cancelledInStore: boolean }` |
 | `store.cart_recovered` | `{ store, cart: { id }, order: { id, number }, contact, value, currency }` |
+| `ad.chat_started` | `{ contact, conversationId, adCampaign: { id, name } \| null, metaAdId, headline, newContact }` (feature 007; `adCampaign` is null for ads made outside the platform) |
+| `ad.lead_received` | `{ contact, leadForm: { id, name }, adCampaign: { id, name } \| null, metaLeadId, consent, status }` (feature 007; answers are not sent) |
 | `test.ping` | `{ endpointId, sentBy: { id, name } }` |
 
 ## 4. Rules

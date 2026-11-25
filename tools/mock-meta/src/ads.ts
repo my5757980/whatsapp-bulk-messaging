@@ -330,7 +330,10 @@ export async function handleAds(req: IncomingMessage, res: ServerResponse, url: 
       const body = (await readJson(req)) as { payload?: { schema?: string; data?: string[] } };
       const data = body.payload?.data ?? [];
       if (body.payload?.schema !== 'PHONE_SHA256') return graphError(res, 400, 100, 'Unsupported schema');
-      for (const hash of data) (req.method === 'POST' ? audience.members.add(hash) : audience.members.delete(hash));
+      for (const hash of data) {
+        if (req.method === 'POST') audience.members.add(hash);
+        else audience.members.delete(hash);
+      }
       return send(res, 200, { audience_id: id, num_received: data.length, num_invalid_entries: 0 });
     }
     if (req.method === 'GET' && !resource) {
@@ -355,7 +358,7 @@ export async function handleAds(req: IncomingMessage, res: ServerResponse, url: 
     if (campaign) return send(res, 200, { id, effective_status: campaign.status, configured_status: campaign.status });
     if (adset) return send(res, 200, { id, effective_status: adset.status, configured_status: adset.status, daily_budget: String(adset.dailyBudget), end_time: adset.endTime });
     if (ad) return send(res, 200, { id, configured_status: ad.status, ...adStatus(ad) });
-    if (videos.has(id)) return send(res, 200, { id, status: { video_status: 'ready', processing_progress: 100 } });
+    if (videos.has(id)) return send(res, 200, { id, status: { video_status: 'ready', processing_progress: 100 }, picture: `https://mock.example/${id}.jpg` });
   }
   if (req.method === 'POST' && !resource && (campaign || adset || ad)) {
     const body = await readJson(req);
