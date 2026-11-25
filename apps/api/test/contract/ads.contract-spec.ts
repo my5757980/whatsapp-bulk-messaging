@@ -1,12 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import nock from 'nock';
+import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { APP_CONFIG } from '../../src/common/config/config.module.js';
 import type { AppConfig } from '../../src/common/config/config.js';
 import { StorageService } from '../../src/common/storage/storage.service.js';
 import { clearAds, seedAdsConnection } from '../support/ads.js';
 import { FakeAdsGraph } from '../support/fake-ads-graph.js';
-import { META_BASE, META_VERSION, digits, restoreNetwork, seedNumber, useNockLocalOnly } from '../support/fixtures.js';
+import { META_BASE, META_VERSION, digits, restoreNetwork, seedNumber, seedTemplate, useNockLocalOnly } from '../support/fixtures.js';
 import { createTestContext, signIn, uniq, type SignedInAgent, type TestContext } from '../support/test-context.js';
 import { expectMatchesContract } from './openapi-validator.js';
 
@@ -197,5 +198,72 @@ describe('Ads API contract', () => {
     await check('post', '/ads/audiences/{id}/lookalikes', await call('post', `/ads/audiences/${missing}/lookalikes`, { country: 'AE', ratio: 0.01 }), 404);
     await check('delete', '/ads/audiences/{id}', await call('delete', `/ads/audiences/${audienceId}`), 204);
     await check('delete', '/ads/audiences/{id}', await call('delete', `/ads/audiences/${audienceId}`), 404);
+  });
+
+  it('US7 and US8: lead forms and leads, AI texts and the website ad link', async () => {
+    await seedAdsConnection(ctx);
+    const number = await seedNumber(ctx);
+    const template = await seedTemplate(ctx, number.wabaId);
+    const missing = randomUUID();
+    const input = {
+      name: uniq('Contract form '),
+      questions: { standard: ['FULL_NAME', 'PHONE'] },
+      privacyUrl: 'https://example.com/privacy',
+      consentText: 'Yes, message me on WhatsApp',
+      welcomeTemplateId: template.id,
+      welcomeMapping: { 'BODY.1': { source: 'column', key: 'full_name', fallback: 'there' } },
+    };
+    const form = await call('post', '/ads/lead-forms', input);
+    await check('post', '/ads/lead-forms', form, 201);
+    await check('post', '/ads/lead-forms', await call('post', '/ads/lead-forms', input), 409);
+    await check('post', '/ads/lead-forms', await call('post', '/ads/lead-forms', { ...input, name: uniq('Bad form '), consentText: 'Yes, message me by text' }), 422);
+    const formId = form.body.id as string;
+    await check('get', '/ads/lead-forms', await call('get', '/ads/lead-forms'), 200);
+    await check('get', '/ads/lead-forms/{id}', await call('get', `/ads/lead-forms/${formId}`), 200);
+    await check('get', '/ads/lead-forms/{id}', await call('get', `/ads/lead-forms/${missing}`), 404);
+    await check('patch', '/ads/lead-forms/{id}', await call('patch', `/ads/lead-forms/${formId}`, { welcomeTemplateId: null }), 200);
+    await check('patch', '/ads/lead-forms/{id}', await call('patch', `/ads/lead-forms/${formId}`, { tagId: missing }), 422);
+    await check('patch', '/ads/lead-forms/{id}', await call('patch', `/ads/lead-forms/${missing}`, { tagId: null }), 404);
+    await check('get', '/ads/lead-forms/{id}/leads', await call('get', `/ads/lead-forms/${formId}/leads`), 200);
+    await check('get', '/ads/lead-forms/{id}/leads', await call('get', `/ads/lead-forms/${missing}/leads`), 404);
+    expect((await call('get', `/ads/lead-forms/${formId}/leads/export`)).status).toBe(200);
+    await check('get', '/ads/lead-forms/{id}/leads/export', await call('get', `/ads/lead-forms/${missing}/leads/export`), 404);
+
+    nock('https://api.anthropic.com')
+      .post('/v1/messages')
+      .query(true)
+      .reply(200, {
+        id: 'msg_contract',
+        type: 'message',
+        role: 'assistant',
+        model: 'claude-opus-5-5',
+        content: [{ type: 'text', text: JSON.stringify({ options: [{ primaryText: 'Fresh dates for Eid', headline: 'Order on WhatsApp' }] }) }],
+        stop_reason: 'end_turn',
+        stop_sequence: null,
+        usage: { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+      });
+    await check('post', '/ads/ai-text', await call('post', '/ads/ai-text', { goal: 'CHATS', description: 'Fresh dates gift boxes for Eid' }), 200);
+    await check('post', '/ads/ai-text', await call('post', '/ads/ai-text', { goal: 'CHATS', description: 'short' }), 422);
+
+    const media = await ctx.prisma.mediaAsset.create({ data: { storageKey: `library/c-${randomUUID()}.jpg`, mimeType: 'image/jpeg', sizeBytes: 1_000, purpose: 'LIBRARY' } });
+    const site = await ctx.prisma.adCampaign.create({
+      data: {
+        name: uniq('Contract site '),
+        goal: 'WEBSITE',
+        status: 'ACTIVE',
+        websiteUrl: 'https://example.com/spring',
+        linkCode: 'Ct1Ct2Ct3C',
+        targeting: { locations: [{ key: 'AE', name: 'United Arab Emirates', type: 'country' }] },
+        placements: { auto: true },
+        dailyBudgetMinor: 5_000n,
+        currency: 'AED',
+        startAt: new Date(),
+        versions: { create: [{ position: 1, mediaAssetId: media.id, mediaKind: 'IMAGE', primaryText: 'x', headline: 'x', callToAction: 'LEARN_MORE' }] },
+      },
+    });
+    expect((await request(ctx.server()).get('/l/a/Ct1Ct2Ct3C')).status).toBe(302);
+    expect((await request(ctx.server()).get('/l/a/Zz9Zz9Zz9X')).status).toBe(404);
+    await ctx.prisma.adCampaign.update({ where: { id: site.id }, data: { status: 'ENDED' } });
+    expect((await request(ctx.server()).get('/l/a/Ct1Ct2Ct3C')).status).toBe(404);
   });
 });

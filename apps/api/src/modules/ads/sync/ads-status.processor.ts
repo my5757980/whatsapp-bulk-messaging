@@ -1,6 +1,7 @@
 import { Injectable, Logger, type OnApplicationBootstrap, type OnModuleInit } from '@nestjs/common';
 import { campaignStateFrom, SYNCED_CAMPAIGN_STATES, versionStateFrom, type AdVersionState } from '@wbm/shared';
 import type { Job } from 'bullmq';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { ProcessorRegistry } from '../../../common/queue/processor.registry.js';
 import { QUEUES } from '../../../common/queue/queue.constants.js';
@@ -38,6 +39,7 @@ export class AdsStatusProcessor implements OnModuleInit, OnApplicationBootstrap 
     private readonly ads: MetaAdsClient,
     private readonly connection: AdsConnectionService,
     private readonly notifications: NotificationsService,
+    private readonly metrics: MetricsService,
   ) {}
 
   onModuleInit(): void {
@@ -69,7 +71,9 @@ export class AdsStatusProcessor implements OnModuleInit, OnApplicationBootstrap 
       try {
         await this.syncCampaign(row, access, now);
         read += 1;
+        this.metrics.adsSyncTotal.inc({ job: 'status', result: 'ok' });
       } catch (error) {
+        this.metrics.adsSyncTotal.inc({ job: 'status', result: 'failed' });
         if (await this.tokenFailed(error)) break;
         this.logger.warn({ campaignId: row.id, err: error instanceof Error ? error.message : String(error) }, 'Ad campaign status sync failed');
       }

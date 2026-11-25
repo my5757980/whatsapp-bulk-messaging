@@ -201,6 +201,25 @@ describe('Contact deletion', () => {
     await ctx.prisma.webhookEndpoint.delete({ where: { id: endpoint.id } });
   });
 
+  it('clears their leads, keeps chats from ads without them, and keeps audience hashes for the removal at Meta (007)', async () => {
+    const phone = uaePhone();
+    const contact = await seedContact(ctx, phone, { name: 'Lead Person' });
+    const form = await ctx.prisma.adLeadForm.create({ data: { name: `Erase form ${randomUUID()}`, questions: { standard: ['FULL_NAME', 'PHONE'] }, privacyUrl: 'https://example.com/p', consentText: 'WhatsApp offers please' } });
+    const lead = await ctx.prisma.adLead.create({
+      data: { formId: form.id, metaLeadId: randomUUID(), contactId: contact.id, phoneE164: phone, email: 'lead@example.com', answers: { full_name: 'Lead Person', phone_number: phone }, consent: true, status: 'PROCESSED', submittedAt: new Date() },
+    });
+    const start = await ctx.prisma.adChatStart.create({ data: { metaAdId: randomUUID().slice(0, 20), contactId: contact.id, newContact: true } });
+    const audience = await ctx.prisma.adAudience.create({ data: { name: `Erase audience ${randomUUID()}`, kind: 'CUSTOM', source: { type: 'tag', tagId: randomUUID() }, status: 'READY', memberCount: 1 } });
+    await ctx.prisma.adAudienceMember.create({ data: { audienceId: audience.id, contactId: contact.id, phoneHash: 'a'.repeat(64) } });
+
+    expect((await admin.agent.delete(`/api/contacts/${contact.id}`).set('x-csrf-token', admin.csrf)).status).toBe(204);
+    expect(await ctx.prisma.adLead.findUniqueOrThrow({ where: { id: lead.id } })).toMatchObject({ contactId: null, phoneE164: null, email: null, answers: {}, consent: true, status: 'PROCESSED' });
+    expect(await ctx.prisma.adChatStart.findUniqueOrThrow({ where: { id: start.id } })).toMatchObject({ contactId: null, newContact: true });
+    // The hash stays until the audience's next sync removes it at Meta (queued now).
+    expect(await ctx.prisma.adAudienceMember.count({ where: { audienceId: audience.id, contactId: contact.id } })).toBe(1);
+    await ctx.prisma.adAudience.delete({ where: { id: audience.id } });
+  });
+
   it('is admin-only and returns 404 for unknown contacts', async () => {
     const contact = await seedContact(ctx, uaePhone());
     const manager = await signIn(ctx, 'MANAGER');

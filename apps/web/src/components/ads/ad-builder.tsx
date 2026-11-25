@@ -434,6 +434,7 @@ export function AdBuilder({ campaign }: { campaign?: AdCampaign }) {
               ) : null}
             </fieldset>
           ))}
+          <AiTextPanel goal={goal} versions={versions.length} onUse={(i, o) => setVersion(i, o)} />
           {versions.length < 5 ? (
             <Button type="button" variant="outline" className="justify-self-start" onClick={() => setVersions((list) => [...list, emptyVersion(goal)])}>
               Add a version
@@ -487,6 +488,71 @@ export function AdBuilder({ campaign }: { campaign?: AdCampaign }) {
           </Button>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+/** Drafts the main text and headline with the 004 AI service (feature 007 US8, FR-015); nothing is sent to Meta. */
+function AiTextPanel({ goal, versions, onUse }: { goal: AdGoal; versions: number; onUse: (index: number, option: { primaryText: string; headline: string }) => void }) {
+  const [open, setOpen] = useState(false);
+  const [description, setDescription] = useState('');
+  const [language, setLanguage] = useState('');
+  const [target, setTarget] = useState(0);
+  const [options, setOptions] = useState<Array<{ primaryText: string; headline: string }>>([]);
+  const draft = useMutation({
+    mutationFn: () => api<{ options: Array<{ primaryText: string; headline: string }> }>('/ads/ai-text', { method: 'POST', json: { goal, description: description.trim(), ...(language.trim() ? { language: language.trim() } : {}) } }),
+    onSuccess: (r) => setOptions(r.options),
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  if (!open) {
+    return (
+      <Button type="button" variant="outline" className="justify-self-start" onClick={() => setOpen(true)}>
+        Write with AI
+      </Button>
+    );
+  }
+  return (
+    <div className="grid gap-2 rounded-md border border-dashed p-3" data-testid="ai-text-panel">
+      <Label htmlFor="ai-description">What do you offer?</Label>
+      <textarea id="ai-description" className="min-h-16 rounded-md border bg-background p-2 text-sm" maxLength={1000} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Fresh dates gift boxes for Eid, delivered in Dubai" />
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="grid gap-1">
+          <Label htmlFor="ai-language">Language (optional)</Label>
+          <Input id="ai-language" value={language} maxLength={10} onChange={(e) => setLanguage(e.target.value)} placeholder="en, ar, ur" className="w-28" />
+        </div>
+        <Button type="button" onClick={() => draft.mutate()} disabled={draft.isPending || description.trim().length < 10}>
+          {draft.isPending ? 'Writing…' : 'Draft texts'}
+        </Button>
+        <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+          Close
+        </Button>
+      </div>
+      {options.length ? (
+        <div className="grid gap-2">
+          {versions > 1 ? (
+            <div className="grid gap-1">
+              <Label htmlFor="ai-target">Use for</Label>
+              <NativeSelect id="ai-target" value={target} onChange={(e) => setTarget(Number(e.target.value))} className="w-36">
+                {Array.from({ length: versions }, (_, i) => (
+                  <option key={i} value={i}>
+                    Version {i + 1}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
+          ) : null}
+          {options.map((o, i) => (
+            <div key={i} className="grid gap-1 rounded-md border p-2 text-sm" data-testid="ai-option">
+              <p className="font-medium">{o.headline}</p>
+              <p className="whitespace-pre-wrap">{o.primaryText}</p>
+              <Button type="button" size="sm" variant="outline" className="justify-self-start" onClick={() => onUse(target, o)}>
+                Use option {i + 1}
+              </Button>
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">Check the texts before submitting; Meta reviews every ad.</p>
+        </div>
+      ) : null}
     </div>
   );
 }

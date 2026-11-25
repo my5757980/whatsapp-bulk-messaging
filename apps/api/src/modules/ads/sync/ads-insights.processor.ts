@@ -1,6 +1,7 @@
 import { Injectable, Logger, type OnApplicationBootstrap, type OnModuleInit } from '@nestjs/common';
 import { localParts } from '@wbm/shared';
 import { v7 as uuidv7 } from 'uuid';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { ProcessorRegistry } from '../../../common/queue/processor.registry.js';
 import { QUEUES } from '../../../common/queue/queue.constants.js';
@@ -51,6 +52,7 @@ export class AdsInsightsProcessor implements OnModuleInit, OnApplicationBootstra
     private readonly ads: MetaAdsClient,
     private readonly connection: AdsConnectionService,
     private readonly cap: AdsCap,
+    private readonly metrics: MetricsService,
   ) {}
 
   onModuleInit(): void {
@@ -143,7 +145,9 @@ export class AdsInsightsProcessor implements OnModuleInit, OnApplicationBootstra
       try {
         await this.syncCampaign(c, access, rangeOf(c), now);
         read += 1;
+        this.metrics.adsSyncTotal.inc({ job: 'insights', result: 'ok' });
       } catch (error) {
+        this.metrics.adsSyncTotal.inc({ job: 'insights', result: 'failed' });
         if (error instanceof MetaApiError && (error.code === 190 || error.httpStatus === 401)) {
           await this.connection.markError(`Meta stopped accepting the ads token: ${error.message}`);
           break;

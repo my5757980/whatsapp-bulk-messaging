@@ -1,6 +1,6 @@
-import { randomBytes } from 'node:crypto';
+import { randomInt } from 'node:crypto';
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { metaTargeting, type AdPlacements, type AdTargeting } from '@wbm/shared';
+import { makeLinkCode, metaTargeting, type AdPlacements, type AdTargeting } from '@wbm/shared';
 import { APP_CONFIG } from '../../../common/config/config.module.js';
 import type { AppConfig } from '../../../common/config/config.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
@@ -20,16 +20,15 @@ const OBJECTIVE = { CHATS: 'OUTCOME_ENGAGEMENT', LEADS: 'OUTCOME_LEADS', WEBSITE
 const SPECIAL = { NONE: null, CREDIT: 'CREDIT', EMPLOYMENT: 'EMPLOYMENT', HOUSING: 'HOUSING', SOCIAL_ISSUES: 'ISSUES_ELECTIONS_POLITICS' } as const;
 const WHATSAPP_LINK = 'https://api.whatsapp.com/send';
 const LEAD_LINK = 'http://fb.me/';
-const LINK_ALPHABET = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 /** The counted link of a website ad (R10). */
 export function adLinkUrl(base: string | undefined, code: string | null): string | null {
   return base && code ? `${base.replace(/\/+$/, '')}/a/${code}` : null;
 }
 
+/** A code in the 005 link format, unguessable. */
 export function newLinkCode(): string {
-  const bytes = randomBytes(10);
-  return Array.from(bytes, (b) => LINK_ALPHABET[b % LINK_ALPHABET.length]).join('');
+  return makeLinkCode((max) => randomInt(max));
 }
 
 @Injectable()

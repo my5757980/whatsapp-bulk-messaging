@@ -39,6 +39,9 @@ function Ads() {
             <Link href="/ads/audiences">Audiences</Link>
           </Button>
           <Button asChild variant="outline">
+            <Link href="/ads/lead-forms">Lead forms</Link>
+          </Button>
+          <Button asChild variant="outline">
             <Link href="/ads/connect">Ad account</Link>
           </Button>
           <Can permission="campaigns.manage">

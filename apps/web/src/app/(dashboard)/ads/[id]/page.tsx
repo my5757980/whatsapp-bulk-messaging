@@ -88,6 +88,13 @@ function Campaign() {
         </p>
       </div>
 
+      {c.goal === 'WEBSITE' && c.linkUrl ? (
+        <p className="text-sm">
+          Counted link: <span className="font-mono text-xs" data-testid="ad-link-url">{c.linkUrl}</span>
+          <span className="text-muted-foreground"> → {c.websiteUrl}</span>
+        </p>
+      ) : null}
+
       {c.lastError ? (
         <p role="alert" data-testid="ad-error" className="rounded-md border border-destructive/50 p-3 text-sm text-destructive">
           {c.lastError}

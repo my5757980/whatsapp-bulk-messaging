@@ -74,10 +74,11 @@ function isOnTrackingAddress(url: URL, trackingBase: string): boolean {
 }
 
 /**
- * Adds utm_source=whatsapp, utm_medium=message and utm_campaign=<name> (FR-007). Tags the address
- * already has are kept, and so are its other query parameters and its fragment, unchanged.
+ * Adds utm_source=whatsapp, utm_medium=message and utm_campaign=<name> (FR-007); website ads (feature
+ * 007) pass source meta and medium paid. Tags the address already has are kept, and so are its other
+ * query parameters and its fragment, unchanged.
  */
-export function withCampaignTags(destination: string, campaignName: string): string {
+export function withCampaignTags(destination: string, campaignName: string, source = 'whatsapp', medium = 'message'): string {
   const hashAt = destination.indexOf('#');
   const base = hashAt === -1 ? destination : destination.slice(0, hashAt);
   const hash = hashAt === -1 ? '' : destination.slice(hashAt);
@@ -88,8 +89,8 @@ export function withCampaignTags(destination: string, campaignName: string): str
     return destination;
   }
   const tags: Array<[string, string]> = [
-    ['utm_source', 'whatsapp'],
-    ['utm_medium', 'message'],
+    ['utm_source', source],
+    ['utm_medium', medium],
     ['utm_campaign', campaignName],
   ];
   const missing = tags.filter(([key]) => !existing.has(key));

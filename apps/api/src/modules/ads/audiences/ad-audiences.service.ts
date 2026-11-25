@@ -3,6 +3,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { AUDIENCE_BATCH, AUDIENCE_MIN_SIZE, normalizePhoneForHash } from '@wbm/shared';
 import { z } from 'zod';
 import { AppError } from '../../../common/errors/app-error.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { isUniqueViolation } from '../../../common/prisma/prisma-errors.js';
 import { QUEUES } from '../../../common/queue/queue.constants.js';
@@ -49,6 +50,7 @@ export class AdAudiencesService {
     private readonly audiences: AudienceQueryBuilder,
     private readonly audit: AuditService,
     private readonly queues: QueueRegistry,
+    private readonly metrics: MetricsService,
   ) {}
 
   async list() {
@@ -179,7 +181,9 @@ export class AdAudiencesService {
           data: { memberCount: wanted.size, status: wanted.size < AUDIENCE_MIN_SIZE ? 'TOO_SMALL' : 'READY', syncedAt: now, lastError: null },
         });
       });
+      this.metrics.adsSyncTotal.inc({ job: 'audiences', result: 'ok' });
     } catch (error) {
+      this.metrics.adsSyncTotal.inc({ job: 'audiences', result: 'failed' });
       const message = error instanceof Error ? error.message : 'unknown error';
       await this.prisma.adAudience.update({ where: { id }, data: { status: 'ERROR', lastError: message.slice(0, 500) } });
       if (error instanceof MetaApiError && (error.code === 190 || error.httpStatus === 401)) await this.connection.markError(`Meta stopped accepting the ads token: ${message}`);

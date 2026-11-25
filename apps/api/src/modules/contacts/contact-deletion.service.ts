@@ -1,4 +1,7 @@
 import { Injectable } from '@nestjs/common';
+import { QUEUES } from '../../common/queue/queue.constants.js';
+import { QueueRegistry } from '../../common/queue/queue.module.js';
+import { ADS_AUDIENCE_SYNC_JOB } from '../ads/sync/ads-jobs.js';
 import { AppError } from '../../common/errors/app-error.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { StorageService } from '../../common/storage/storage.service.js';
@@ -30,6 +33,7 @@ export class ContactDeletionService {
     private readonly audit: AuditService,
     private readonly storage: StorageService,
     private readonly platformEvents: PlatformEvents,
+    private readonly queues: QueueRegistry,
   ) {}
 
   async delete(contactId: string, actor: AuditActor): Promise<void> {
@@ -55,7 +59,12 @@ export class ContactDeletionService {
       this.prisma.storeOrder.updateMany({ where: { contactId }, data: { phoneE164: null, customerName: null } }),
       // API campaign calls keep their counts; chat link starts lose the contact through their foreign key.
       this.prisma.apiCampaignTrigger.updateMany({ where: { OR: [{ contactId }, { phoneE164: contact.phoneE164 }] }, data: { phoneE164: null } }),
+      // Leads (feature 007, R13) keep only their counts: answers, phone and email go; chats from ads lose
+      // the contact through their foreign key.
+      this.prisma.adLead.updateMany({ where: { OR: [{ contactId }, { phoneE164: contact.phoneE164 }] }, data: { answers: {}, phoneE164: null, email: null } }),
     ]);
+    // Saved audiences that sent their phone hash are updated now rather than at the daily sync (007).
+    const audienceIds = (await this.prisma.adAudienceMember.findMany({ where: { contactId }, select: { audienceId: true }, distinct: ['audienceId'] })).map((m) => m.audienceId);
     const [messages] = await this.prisma.$transaction([
       this.prisma.message.updateMany({ where: { contactId }, data: { contactId: null, phoneE164: null, resolvedParams: {} } }),
       this.prisma.campaignUploadRow.deleteMany({ where: { phoneE164: contact.phoneE164 } }),
@@ -98,6 +107,12 @@ export class ContactDeletionService {
          SET data = (data - 'text' - 'caption' - 'buttonPayload') || jsonb_build_object('contact', jsonb_build_object('id', ${contactId}::text))
        WHERE data->'contact'->>'id' = ${contactId}`;
     await this.platformEvents.contactDeleted(this.prisma, contactId);
+    for (const audienceId of audienceIds) {
+      await this.queues
+        .get(QUEUES.ADS)
+        .add(ADS_AUDIENCE_SYNC_JOB, { audienceId }, { jobId: `ads-audience-${audienceId}-${Date.now()}`, attempts: 3, backoff: { type: 'exponential', delay: 30_000 }, removeOnComplete: true, removeOnFail: 20 })
+        .catch(() => undefined);
+    }
     // Files after the commit; one that cannot be deleted now is left for the retention job.
     for (const media of customerMedia) await this.storage.delete(media.storageKey).catch(() => undefined);
     await this.audit.record(actor, 'contact.deleted', { type: 'contact', id: contactId }, {

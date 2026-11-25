@@ -4,6 +4,7 @@ import type { Redis } from 'ioredis';
 import { v7 as uuidv7 } from 'uuid';
 import { APP_CONFIG } from '../../../common/config/config.module.js';
 import type { AppConfig } from '../../../common/config/config.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { REDIS_CLIENT } from '../../../common/queue/queue.module.js';
 import { FlowSessionService } from '../../flows/engine/session.service.js';
@@ -42,6 +43,7 @@ export class AdChatMatcher {
     private readonly dripEvents: DripEvents,
     private readonly platformEvents: PlatformEvents,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly metrics: MetricsService,
   ) {}
 
   /** True when the campaign's flow started and so answered the message. */
@@ -98,6 +100,7 @@ export class AdChatMatcher {
         return true;
       });
       if (!counted) return false;
+      this.metrics.adChatStartsTotal.inc({ matched: campaign ? 'true' : 'false' });
       await this.journey.recordForContact(msg.contactId, {
         type: 'AD_CHAT_STARTED',
         actorType: 'CUSTOMER',

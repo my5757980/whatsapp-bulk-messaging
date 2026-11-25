@@ -33,6 +33,10 @@ export class FakeAdsGraph {
   /** Custom audiences and lookalikes with the hashes they hold; each users call is kept. */
   readonly audiences = new Map<string, { body: Json; members: Set<string> }>();
   readonly userCalls: Array<{ audienceId: string; method: string; count: number }> = [];
+  /** Lead forms made on a page (body as sent), page subscriptions, and leads Meta would return. */
+  readonly leadForms = new Map<string, Json>();
+  readonly subscriptions: Array<{ pageId: string; body: Json; token: string }> = [];
+  readonly leads = new Map<string, Json>();
   readonly order: string[] = [];
   images = 0;
   failAt: string | null = null;
@@ -152,6 +156,22 @@ export class FakeAdsGraph {
     if (audience && !edge && method === 'GET') return [200, { id, approximate_count_lower_bound: audience.members.size }];
     if (method === 'GET' && id && edge === 'ads' && this.adsets.has(id)) {
       return [200, { data: this.adsOf(id).map(([adId, a]) => ({ id: adId, effective_status: a.effective, ...(a.feedback ? { ad_review_feedback: a.feedback } : {}) })) }];
+    }
+    if (method === 'POST' && id && edge === 'leadgen_forms') {
+      if (this.failAt === edge) return [400, { error: { message: 'Terms not accepted', error_user_msg: 'Accept the lead ads terms for the page first.', code: 100 } }];
+      const formId = this.nextId('FORM');
+      this.leadForms.set(formId, { pageId: id, token: request.headers.get('authorization'), ...body });
+      return [200, { id: formId }];
+    }
+    if (method === 'POST' && id && edge === 'subscribed_apps') {
+      this.subscriptions.push({ pageId: id, body, token: request.headers.get('authorization') ?? '' });
+      return [200, { success: true }];
+    }
+    if (method === 'GET' && id && !edge && this.leads.has(id)) return [200, this.leads.get(id)];
+    if (method === 'GET' && id && edge === 'leads') {
+      const filter = JSON.parse(url.searchParams.get('filtering') ?? '[]') as Array<{ value?: number }>;
+      const since = Number(filter[0]?.value ?? 0);
+      return [200, { data: [...this.leads.values()].filter((l) => l.form_id === id && Date.parse(String(l.created_time).replace('+0000', 'Z')) / 1000 > since) }];
     }
     return [404, { error: { message: `Unknown fake Graph path ${method} ${url.pathname}`, code: 100 } }];
   }

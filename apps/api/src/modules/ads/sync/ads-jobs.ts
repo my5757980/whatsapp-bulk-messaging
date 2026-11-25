@@ -39,3 +39,7 @@ export const ADS_FIRST_INSIGHTS_DELAY_MS = 30_000;
 export interface AdsInsightsOneData {
   campaignId: string;
 }
+
+/** Leads whose webhook never arrived: each form's leads since its last one, every 15 minutes (R9). */
+export const ADS_LEADS_CATCH_UP_JOB = 'ads-leads-catch-up';
+export const ADS_LEADS_CATCH_UP_EVERY_MS = 15 * 60_000;

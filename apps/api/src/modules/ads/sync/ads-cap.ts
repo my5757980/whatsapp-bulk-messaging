@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { capCheck, capReached, formatMinor, monthLeft } from '@wbm/shared';
 import { AppError } from '../../../common/errors/app-error.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { AdCampaignStatus } from '../../../generated/prisma/client.js';
 import { NotificationsService } from '../../notifications/notifications.service.js';
@@ -22,6 +23,7 @@ export class AdsCap {
     private readonly connection: AdsConnectionService,
     private readonly ads: MetaAdsClient,
     private readonly notifications: NotificationsService,
+    private readonly metrics: MetricsService,
   ) {}
 
   /** Refuses (409 SPEND_CAP, with the amount left) a change that could let this month's spend pass the cap. */
@@ -83,6 +85,7 @@ export class AdsCap {
         link: '/ads',
       },
     );
+    if (paused) this.metrics.adsSpendCapPausesTotal.inc(paused);
     return paused;
   }
 }
