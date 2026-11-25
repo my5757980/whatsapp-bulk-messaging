@@ -1,15 +1,15 @@
 // Feature 006 US8 (T078): the Graph routes of the number connection wizard (research R13), answered for
 // the wizard tokens only, so the routes for "mock-token" are unchanged.
-//   mock-token-ok             both permissions, never expires
-//   mock-token-missing-scope  no whatsapp_business_messaging
-//   mock-token-expiring       both permissions, expires in 3 days
+//   mock-token-ok-wizard             both permissions, never expires
+//   mock-token-missing-scope-wizard  no whatsapp_business_messaging
+//   mock-token-expiring-wizard       both permissions, expires in 3 days (tokens are at least 20 characters)
 // The account MOCK_WIZARD_WABA has one number, not registered until POST /register with PIN 123456,
 // and not subscribed to the app until POST /subscribed_apps. A template sent from the number gets
 // sent and delivered status webhooks.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { postSigned, statusPayload } from './webhook-emitter.js';
 
-export const WIZARD_TOKENS = { ok: 'mock-token-ok', missingScope: 'mock-token-missing-scope', expiring: 'mock-token-expiring' } as const;
+export const WIZARD_TOKENS = { ok: 'mock-token-ok-wizard', missingScope: 'mock-token-missing-scope-wizard', expiring: 'mock-token-expiring-wizard' } as const;
 export const WIZARD_WABA = 'MOCK_WIZARD_WABA';
 export const WIZARD_PHONE = '990000000001';
 export const WIZARD_PIN = '123456';
