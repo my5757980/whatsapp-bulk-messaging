@@ -3,7 +3,6 @@ import {
   AD_GOALS,
   AD_SPECIAL_CATEGORIES,
   budgetProblem,
-  capCheck,
   formatMinor,
   mediaKindOf,
   normalizePlacements,
@@ -28,6 +27,7 @@ import { AuditService, type AuditActor } from '../../audit/audit.service.js';
 import { MetaApiError, MetaNetworkError } from '../../meta/meta-graph.client.js';
 import { AdsConnectionService, type AdsAccess } from '../connection/ads-connection.service.js';
 import { MetaAdsClient } from '../meta-ads.client.js';
+import { AdsCap, SPENDING_STATES } from '../sync/ads-cap.js';
 import { ADS_FOLLOW_UP_DELAYS_MS, ADS_STATUS_ONE_JOB, type AdsStatusOneData } from '../sync/ads-jobs.js';
 import { AdLauncher, adLinkUrl } from './ad-launcher.js';
 
@@ -108,8 +108,8 @@ interface Stats {
 
 /** States of campaigns made at Meta in which budgets, dates, the flow and the tag can change. */
 const AT_META: readonly AdCampaignStatus[] = ['IN_REVIEW', 'ACTIVE', 'PAUSED', 'REJECTED', 'ERROR'];
-/** Campaigns whose budgets count towards the cap's projection (R7). */
-const SPENDING: readonly AdCampaignStatus[] = ['IN_REVIEW', 'ACTIVE'];
+/** Campaigns that can be paused: in review, active, or with a delivery problem. */
+const RUNNING: readonly AdCampaignStatus[] = ['IN_REVIEW', 'ACTIVE', 'ERROR'];
 const AFTER_SUBMIT_FIELDS = new Set(['dailyBudgetMinor', 'endAt', 'flowId', 'tagId']);
 
 @Injectable()
@@ -121,6 +121,7 @@ export class AdCampaignsService {
     private readonly launcher: AdLauncher,
     private readonly audit: AuditService,
     private readonly queues: QueueRegistry,
+    private readonly cap: AdsCap,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
@@ -194,7 +195,7 @@ export class AdCampaignsService {
         const min = await this.meta(() => this.ads.minimumDailyBudget(access.token, access.row.adAccountId));
         const problem = budgetProblem(input.dailyBudgetMinor!, min.minDailyBudgetMinor);
         if (problem) throw AppError.validation('Check the daily budget', [{ field: 'dailyBudgetMinor', issue: `${problem} — ${formatMinor(min.minDailyBudgetMinor, row.currency)}` }]);
-        if (input.dailyBudgetMinor! > Number(row.dailyBudgetMinor) && SPENDING.includes(row.status)) await this.checkCap(input.dailyBudgetMinor!, access, row.id);
+        if (input.dailyBudgetMinor! > Number(row.dailyBudgetMinor) && SPENDING_STATES.includes(row.status)) await this.cap.check(input.dailyBudgetMinor!, access, row.id);
       }
       await this.meta(() =>
         this.ads.update(access.token, row.metaAdsetId!, {
@@ -285,7 +286,7 @@ export class AdCampaignsService {
       }
     }
     if (problems.length) throw AppError.validation('Fix these before submitting', problems);
-    await this.checkCap(Number(row.dailyBudgetMinor), access, row.id);
+    await this.cap.check(Number(row.dailyBudgetMinor), access, row.id);
 
     const locked = await this.prisma.adCampaign.updateMany({
       where: { id, status: { in: ['DRAFT', 'ERROR'] }, metaCampaignId: null, deletedAt: null },
@@ -305,28 +306,118 @@ export class AdCampaignsService {
     return this.get(id);
   }
 
-  /** The daily budgets of the platform's other spending campaigns and this month's spend against the cap (R7). */
-  async checkCap(newDailyBudgetMinor: number, access: AdsAccess, exceptCampaignId: string | null): Promise<void> {
-    if (access.row.monthlyCapMinor === null) return;
-    const cap = Number(access.row.monthlyCapMinor);
-    const others = await this.prisma.adCampaign.findMany({
-      where: { deletedAt: null, status: { in: [...SPENDING] }, ...(exceptCampaignId ? { id: { not: exceptCampaignId } } : {}) },
-      select: { dailyBudgetMinor: true },
-    });
-    const result = capCheck({
-      capMinor: cap,
-      spentThisMonthMinor: await this.connection.monthSpendMinor(access.row),
-      activeDailyBudgetsMinor: others.map((o) => Number(o.dailyBudgetMinor)),
-      newDailyBudgetMinor,
-      now: new Date(),
-      timeZone: access.row.timezone,
-    });
-    if (!result.ok) {
-      throw AppError.conflict(
-        `This could pass the monthly spending cap of ${formatMinor(cap, access.row.currency)}: ${formatMinor(result.remainingMinor, access.row.currency)} is left this month.`,
-        'SPEND_CAP',
-      );
+  // ---------- Managing running campaigns (US5, FR-016 – FR-019) ----------
+
+  async pause(id: string, actor: AuditActor) {
+    const row = await this.find(id);
+    if (!RUNNING.includes(row.status) || !row.metaCampaignId) throw AppError.conflict('Only campaigns in review, active or with a problem can be paused', 'NOT_RUNNING');
+    const access = await this.connection.requireUsable();
+    await this.meta(() => this.ads.update(access.token, row.metaCampaignId!, { status: 'PAUSED' }));
+    await this.prisma.adCampaign.update({ where: { id }, data: { status: 'PAUSED', metaStatus: 'PAUSED' } });
+    await this.audit.record(actor, 'ad_campaign.paused', { type: 'ad_campaign', id }, {});
+    return this.get(id);
+  }
+
+  async resume(id: string, actor: AuditActor) {
+    const row = await this.find(id);
+    if (row.status !== 'PAUSED' || !row.metaCampaignId) throw AppError.conflict('Only paused campaigns can be resumed', 'NOT_PAUSED');
+    if (row.endAt && row.endAt <= new Date()) throw AppError.conflict('The campaign has ended; duplicate it to run it again', 'NOT_PAUSED');
+    const access = await this.connection.requireUsable();
+    await this.cap.check(Number(row.dailyBudgetMinor), access, row.id);
+    await this.meta(() => this.ads.update(access.token, row.metaCampaignId!, { status: 'ACTIVE' }));
+    const status = row.versions.some((v) => v.status === 'ACTIVE') || !row.versions.some((v) => v.status === 'IN_REVIEW') ? 'ACTIVE' : 'IN_REVIEW';
+    await this.prisma.adCampaign.update({ where: { id }, data: { status, metaStatus: 'ACTIVE', lastError: null } });
+    await this.audit.record(actor, 'ad_campaign.resumed', { type: 'ad_campaign', id }, {});
+    await this.followUp(id);
+    return this.get(id);
+  }
+
+  /** Ends now: the campaign pauses at Meta and its ad set ends; the platform keeps its results. */
+  async end(id: string, actor: AuditActor, now = new Date()) {
+    const row = await this.find(id);
+    if (!AT_META.includes(row.status) || !row.metaCampaignId) throw AppError.conflict('Only campaigns at Meta can be ended', 'NOT_RUNNING');
+    const access = await this.connection.requireUsable();
+    await this.meta(() => this.ads.update(access.token, row.metaCampaignId!, { status: 'PAUSED' }));
+    // Meta may refuse an end time in the past; the pause already stops delivery.
+    if (row.metaAdsetId) await this.ads.update(access.token, row.metaAdsetId, { end_time: new Date(now.getTime() + 60_000).toISOString() }).catch(() => undefined);
+    await this.prisma.$transaction([
+      this.prisma.adCampaign.update({ where: { id }, data: { status: 'ENDED', metaStatus: 'PAUSED', endAt: now, endedAt: now } }),
+      this.prisma.adVersion.updateMany({ where: { adCampaignId: id }, data: { status: 'ENDED' } }),
+    ]);
+    await this.audit.record(actor, 'ad_campaign.ended', { type: 'ad_campaign', id }, {});
+    return this.get(id);
+  }
+
+  /** A new draft with the same settings and versions (never Meta's ids). */
+  async duplicate(id: string, actor: AuditActor & { userId: string }) {
+    const row = await this.find(id);
+    const now = new Date();
+    for (let n = 1; n <= 50; n += 1) {
+      const name = `${row.name} (copy${n > 1 ? ` ${n}` : ''})`.slice(0, 120);
+      try {
+        const copy = await this.prisma.adCampaign.create({
+          data: {
+            name,
+            goal: row.goal,
+            numberId: row.numberId,
+            prefilledMessage: row.prefilledMessage,
+            leadFormId: row.leadFormId,
+            websiteUrl: row.websiteUrl,
+            targeting: row.targeting as Prisma.InputJsonValue,
+            placements: row.placements as Prisma.InputJsonValue,
+            specialCategory: row.specialCategory,
+            dailyBudgetMinor: row.dailyBudgetMinor,
+            currency: row.currency,
+            startAt: row.startAt > now ? row.startAt : now,
+            endAt: row.endAt && row.endAt > now ? row.endAt : null,
+            flowId: row.flowId,
+            tagId: row.tagId,
+            createdById: actor.userId,
+            versions: {
+              create: row.versions.map((v) => ({ position: v.position, mediaAssetId: v.mediaAssetId, mediaKind: v.mediaKind, primaryText: v.primaryText, headline: v.headline, callToAction: v.callToAction })),
+            },
+          },
+          select: { id: true },
+        });
+        await this.audit.record(actor, 'ad_campaign.duplicated', { type: 'ad_campaign', id: copy.id }, { from: id });
+        return this.get(copy.id);
+      } catch (error) {
+        if (!isUniqueViolation(error)) throw error;
+      }
     }
+    throw AppError.conflict('Rename some copies first', 'NAME_TAKEN');
+  }
+
+  async pauseVersion(id: string, versionId: string, actor: AuditActor) {
+    const { row, version, access } = await this.versionAtMeta(id, versionId);
+    if (version.status !== 'ACTIVE' && version.status !== 'IN_REVIEW') throw AppError.conflict('Only versions in review or active can be paused', 'NOT_RUNNING');
+    await this.meta(() => this.ads.update(access.token, version.metaAdId!, { status: 'PAUSED' }));
+    await this.prisma.adVersion.update({ where: { id: versionId }, data: { status: 'PAUSED' } });
+    // With every version paused or rejected, the campaign shows as paused.
+    if (row.versions.every((v) => v.id === versionId || v.status === 'PAUSED' || v.status === 'REJECTED')) await this.prisma.adCampaign.update({ where: { id }, data: { status: 'PAUSED' } });
+    await this.audit.record(actor, 'ad_campaign.paused', { type: 'ad_campaign', id }, { versionId, position: version.position });
+    return this.get(id);
+  }
+
+  async resumeVersion(id: string, versionId: string, actor: AuditActor) {
+    const { row, version, access } = await this.versionAtMeta(id, versionId);
+    if (version.status !== 'PAUSED') throw AppError.conflict('Only paused versions can be resumed', 'NOT_PAUSED');
+    if (row.status === 'PAUSED' && row.metaStatus === 'PAUSED') throw AppError.conflict('Resume the campaign first', 'NOT_PAUSED');
+    await this.meta(() => this.ads.update(access.token, version.metaAdId!, { status: 'ACTIVE' }));
+    await this.prisma.adVersion.update({ where: { id: versionId }, data: { status: 'ACTIVE' } });
+    if (row.status === 'PAUSED') await this.prisma.adCampaign.update({ where: { id }, data: { status: 'ACTIVE' } });
+    await this.audit.record(actor, 'ad_campaign.resumed', { type: 'ad_campaign', id }, { versionId, position: version.position });
+    await this.followUp(id);
+    return this.get(id);
+  }
+
+  private async versionAtMeta(id: string, versionId: string) {
+    const row = await this.find(id);
+    const version = row.versions.find((v) => v.id === versionId);
+    if (!version) throw AppError.notFound('Version not found');
+    if (!row.metaCampaignId || !version.metaAdId || row.status === 'ENDED') throw AppError.conflict('This version is not running at Meta', 'NOT_RUNNING');
+    const access = await this.connection.requireUsable();
+    return { row, version, access };
   }
 
   /** Reads Meta's state again shortly after a submit, until the review ends. */
@@ -500,7 +591,7 @@ export class AdCampaignsService {
       else if (number.connectionStatus === 'DISCONNECTED') problems.push({ field: 'numberId', issue: 'is disconnected' });
     }
     if (input.goal === 'LEADS' && input.leadFormId) {
-      const form = await this.prisma.adLeadForm.findFirst({ where: { id: input.leadFormId, deletedAt: null }, select: { id: true } });
+      const form = await this.prisma.adLeadForm.findUnique({ where: { id: input.leadFormId }, select: { id: true } });
       if (!form) problems.push({ field: 'leadFormId', issue: 'is not a lead form' });
     }
     if (input.flowId) {

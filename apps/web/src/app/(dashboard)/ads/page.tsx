@@ -36,6 +36,9 @@ function Ads() {
         </div>
         <div className="flex gap-2">
           <Button asChild variant="outline">
+            <Link href="/ads/audiences">Audiences</Link>
+          </Button>
+          <Button asChild variant="outline">
             <Link href="/ads/connect">Ad account</Link>
           </Button>
           <Can permission="campaigns.manage">

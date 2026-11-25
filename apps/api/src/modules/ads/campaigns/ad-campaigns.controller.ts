@@ -52,6 +52,47 @@ export class AdCampaignsController {
     return this.campaigns.submit(id, this.actor(user, req));
   }
 
+  @Post(':id/pause')
+  @HttpCode(200)
+  @Require('campaigns.launch')
+  pause(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser, @Req() req: AuthedRequest) {
+    return this.campaigns.pause(id, this.actor(user, req));
+  }
+
+  @Post(':id/resume')
+  @HttpCode(200)
+  @Require('campaigns.launch')
+  resume(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser, @Req() req: AuthedRequest) {
+    return this.campaigns.resume(id, this.actor(user, req));
+  }
+
+  @Post(':id/end')
+  @HttpCode(200)
+  @Require('campaigns.launch')
+  end(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser, @Req() req: AuthedRequest) {
+    return this.campaigns.end(id, this.actor(user, req));
+  }
+
+  @Post(':id/duplicate')
+  @Require('campaigns.manage')
+  duplicate(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: RequestUser, @Req() req: AuthedRequest) {
+    return this.campaigns.duplicate(id, this.actor(user, req));
+  }
+
+  @Post(':id/versions/:versionId/pause')
+  @HttpCode(200)
+  @Require('campaigns.launch')
+  pauseVersion(@Param('id', ParseUUIDPipe) id: string, @Param('versionId', ParseUUIDPipe) versionId: string, @CurrentUser() user: RequestUser, @Req() req: AuthedRequest) {
+    return this.campaigns.pauseVersion(id, versionId, this.actor(user, req));
+  }
+
+  @Post(':id/versions/:versionId/resume')
+  @HttpCode(200)
+  @Require('campaigns.launch')
+  resumeVersion(@Param('id', ParseUUIDPipe) id: string, @Param('versionId', ParseUUIDPipe) versionId: string, @CurrentUser() user: RequestUser, @Req() req: AuthedRequest) {
+    return this.campaigns.resumeVersion(id, versionId, this.actor(user, req));
+  }
+
   @Put(':id/versions/:versionId')
   @Require('campaigns.manage')
   updateVersion(@Param('id', ParseUUIDPipe) id: string, @Param('versionId', ParseUUIDPipe) versionId: string, @Body(new ZodValidationPipe(VersionSchema)) body: VersionInput) {

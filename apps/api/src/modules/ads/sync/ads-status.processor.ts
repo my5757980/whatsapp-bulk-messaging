@@ -10,7 +10,16 @@ import { MetaApiError } from '../../meta/meta-graph.client.js';
 import { NotificationsService } from '../../notifications/notifications.service.js';
 import { AdsConnectionService, type AdsAccess } from '../connection/ads-connection.service.js';
 import { MetaAdsClient } from '../meta-ads.client.js';
-import { ADS_FOLLOW_UP_DELAYS_MS, ADS_STATUS_EVERY_MS, ADS_STATUS_JOB, ADS_STATUS_ONE_JOB, type AdsStatusOneData } from './ads-jobs.js';
+import {
+  ADS_FIRST_INSIGHTS_DELAY_MS,
+  ADS_FOLLOW_UP_DELAYS_MS,
+  ADS_INSIGHTS_ONE_JOB,
+  ADS_STATUS_EVERY_MS,
+  ADS_STATUS_JOB,
+  ADS_STATUS_ONE_JOB,
+  type AdsInsightsOneData,
+  type AdsStatusOneData,
+} from './ads-jobs.js';
 
 // Meta's review and delivery states (feature 007 US2, FR-013, FR-017, research R6): every 5 minutes
 // for campaigns in review, active, paused, rejected or in error, and right after a submit until the
@@ -129,18 +138,26 @@ export class AdsStatusProcessor implements OnModuleInit, OnApplicationBootstrap 
       },
     });
     if (status === 'ENDED') await this.prisma.adVersion.updateMany({ where: { adCampaignId: row.id, status: { not: 'ENDED' } }, data: { status: 'ENDED' } });
+    if (status === 'ACTIVE' && row.status !== 'ACTIVE') {
+      // The first numbers soon after delivery starts, not at the next hourly read.
+      const data: AdsInsightsOneData = { campaignId: row.id };
+      await this.queues
+        .get(QUEUES.ADS)
+        .add(ADS_INSIGHTS_ONE_JOB, data, { delay: ADS_FIRST_INSIGHTS_DELAY_MS, jobId: `ads-insights-${row.id}-${Date.now()}`, attempts: 2, removeOnComplete: true, removeOnFail: 20 });
+    }
 
     const link = `/ads/${row.id}`;
-    if (rejected.length) {
+    const alertProblem = status === 'ERROR' && row.status !== 'ERROR';
+    if (rejected.length || alertProblem) {
       // Admins and the campaign's maker, once each.
       const admins = await this.prisma.user.findMany({ where: { role: 'ADMIN', status: 'ACTIVE' }, select: { id: true } });
       const userIds = [...new Set([...admins.map((a) => a.id), ...(row.createdById ? [row.createdById] : [])])];
       for (const v of rejected) {
         await this.notifications.notifyUsers(userIds, { type: 'AD_REJECTED', title: `Ad rejected: ${row.name}`, body: `Version ${v.position} was rejected by Meta. Edit it and submit again.`, link });
       }
-    }
-    if (status === 'ERROR' && row.status !== 'ERROR') {
-      await this.notifications.notifyAdmins({ type: 'AD_NOT_DELIVERING', title: `Ad not delivering: ${row.name}`, body: `${problem}. Check the campaign in Meta Ads Manager.`, link });
+      if (alertProblem) {
+        await this.notifications.notifyUsers(userIds, { type: 'AD_NOT_DELIVERING', title: `Ad not delivering: ${row.name}`, body: `${problem}. Check the campaign and the ad account's payment method in Meta.`, link });
+      }
     }
     return status;
   }

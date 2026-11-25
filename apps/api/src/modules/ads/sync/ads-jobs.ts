@@ -13,3 +13,29 @@ export interface AdsStatusOneData {
   campaignId: string;
   attempt: number;
 }
+
+/** Meta's numbers for running campaigns, hourly (R7); then the spending cap is checked. */
+export const ADS_INSIGHTS_JOB = 'ads-insights';
+export const ADS_INSIGHTS_EVERY_MS = 60 * 60_000;
+
+/** Meta updates attribution for up to 28 days: once a day, the last 28 days of campaigns that ran. */
+export const ADS_INSIGHTS_DAILY_JOB = 'ads-insights-daily';
+export const ADS_INSIGHTS_DAILY_EVERY_MS = 24 * 60 * 60_000;
+export const ADS_REFRESH_DAYS = 28;
+
+/** Saved audiences: every CUSTOM audience once a day, sending only the difference (R8). */
+export const ADS_AUDIENCES_JOB = 'ads-audiences';
+export const ADS_AUDIENCES_EVERY_MS = 24 * 60 * 60_000;
+
+/** One audience now: after it is made, or when someone asks (POST /ads/audiences/{id}/sync). */
+export const ADS_AUDIENCE_SYNC_JOB = 'ads-audience-sync';
+export interface AdsAudienceSyncData {
+  audienceId: string;
+}
+
+/** A campaign's first numbers, read shortly after it becomes active rather than at the next hour. */
+export const ADS_INSIGHTS_ONE_JOB = 'ads-insights-one';
+export const ADS_FIRST_INSIGHTS_DELAY_MS = 30_000;
+export interface AdsInsightsOneData {
+  campaignId: string;
+}

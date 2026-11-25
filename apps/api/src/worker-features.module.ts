@@ -17,6 +17,8 @@ import { FlowsDomainModule } from './modules/flows/flows.module.js';
 import { GrowthDomainModule } from './modules/growth/growth.module.js';
 import { IntegrationsDomainModule } from './modules/integrations/integrations.module.js';
 import { AdsDomainModule } from './modules/ads/ads.module.js';
+import { AdsAudiencesProcessor } from './modules/ads/audiences/ads-audiences.processor.js';
+import { AdsInsightsProcessor } from './modules/ads/sync/ads-insights.processor.js';
 import { AdsStatusProcessor } from './modules/ads/sync/ads-status.processor.js';
 import { StoreEventsProcessor } from './modules/integrations/stores/store-events.processor.js';
 import { StoreReconcilerProcessor } from './modules/integrations/stores/store-reconciler.processor.js';
@@ -58,6 +60,8 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
   providers: [
     StatusHandler,
     AdsStatusProcessor,
+    AdsInsightsProcessor,
+    AdsAudiencesProcessor,
     InboundHandler,
     TemplateStatusHandler,
     QualityHandler,

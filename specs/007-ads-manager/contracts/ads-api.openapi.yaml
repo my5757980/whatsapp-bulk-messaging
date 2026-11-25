@@ -677,7 +677,7 @@ components:
       required: [impressions, reach, clicks, spendMinor, chatsStarted, newContacts, replied, leads]
       properties:
         impressions: { type: integer }
-        reach: { type: integer }
+        reach: { type: integer, description: "Meta's reach; over several days, the highest day (reach cannot be added up)" }
         clicks: { type: integer }
         ctr: { type: [number, 'null'] }
         cpcMinor: { type: [integer, 'null'] }
@@ -696,6 +696,8 @@ components:
       properties:
         currency: { type: string }
         timezone: { type: string }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
         syncedAt: { type: [string, 'null'], format: date-time }
         totals: { $ref: '#/components/schemas/AdResultNumbers' }
         days:

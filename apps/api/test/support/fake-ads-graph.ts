@@ -27,6 +27,12 @@ export class FakeAdsGraph {
   readonly deleted: string[] = [];
   readonly resubmitted: string[] = [];
   readonly updates: Array<{ id: string; body: Json }> = [];
+  /** Insight rows per Meta campaign id, as Meta returns them, by level (set by tests). */
+  readonly insights = new Map<string, { ad: Json[]; campaign: Json[] }>();
+  readonly insightCalls: Array<{ campaignId: string; level: string; since: string; until: string }> = [];
+  /** Custom audiences and lookalikes with the hashes they hold; each users call is kept. */
+  readonly audiences = new Map<string, { body: Json; members: Set<string> }>();
+  readonly userCalls: Array<{ audienceId: string; method: string; count: number }> = [];
   readonly order: string[] = [];
   images = 0;
   failAt: string | null = null;
@@ -77,6 +83,12 @@ export class FakeAdsGraph {
       this.sequences.push({ wabaId: id, sequenceId, ...body });
       return [200, { sequence_id: sequenceId }];
     }
+    if (method === 'POST' && id === account && edge === 'customaudiences') {
+      if (this.failAt === edge) return [400, { error: { message: 'Terms of service not accepted', error_user_msg: 'Accept the custom audience terms first.', code: 2650 } }];
+      const audienceId = this.nextId('AUD');
+      this.audiences.set(audienceId, { body, members: new Set() });
+      return [200, { id: audienceId }];
+    }
     if (method === 'POST' && id === account && edge) {
       if (this.failAt === edge) return [400, { error: { message: 'Invalid parameter', error_user_msg: 'The audience is too narrow for this budget.', code: 100, error_subcode: 1487 } }];
       const madeId = this.nextId(edge.replace(/s$/, '').toUpperCase());
@@ -87,8 +99,9 @@ export class FakeAdsGraph {
       if (edge === 'ads') this.ads.set(madeId, { adsetId: body.adset_id, creativeId: body.creative?.creative_id, status: body.status ?? 'ACTIVE', effective: 'PENDING_REVIEW' });
       return [200, { id: madeId }];
     }
-    if (method === 'DELETE' && id) {
+    if (method === 'DELETE' && id && !edge) {
       this.deleted.push(id);
+      this.audiences.delete(id);
       this.campaigns.delete(id);
       this.adsets.delete(id);
       this.ads.delete(id);
@@ -118,6 +131,25 @@ export class FakeAdsGraph {
       const object = this.campaigns.get(id) ?? this.adsets.get(id);
       if (object) return [200, { id, effective_status: object.status, configured_status: object.status, daily_budget: object.daily_budget }];
     }
+    if (method === 'GET' && id && edge === 'insights') {
+      const level = url.searchParams.get('level') ?? 'campaign';
+      const range = JSON.parse(url.searchParams.get('time_range') ?? '{}') as { since?: string; until?: string };
+      this.insightCalls.push({ campaignId: id, level, since: range.since ?? '', until: range.until ?? '' });
+      const rows = this.insights.get(id)?.[level === 'ad' ? 'ad' : 'campaign'] ?? [];
+      return [200, { data: rows.filter((r) => (!range.since || r.date_start >= range.since) && (!range.until || r.date_start <= range.until)), paging: {} }];
+    }
+    const audience = id ? this.audiences.get(id) : undefined;
+    if (audience && edge === 'users' && (method === 'POST' || method === 'DELETE')) {
+      const hashes: string[] = body.payload?.data ?? [];
+      if (body.payload?.schema !== 'PHONE_SHA256') return [400, { error: { message: 'Unsupported schema', code: 100 } }];
+      this.userCalls.push({ audienceId: id!, method, count: hashes.length });
+      for (const h of hashes) {
+        if (method === 'POST') audience.members.add(h);
+        else audience.members.delete(h);
+      }
+      return [200, { audience_id: id, num_received: hashes.length, num_invalid_entries: 0 }];
+    }
+    if (audience && !edge && method === 'GET') return [200, { id, approximate_count_lower_bound: audience.members.size }];
     if (method === 'GET' && id && edge === 'ads' && this.adsets.has(id)) {
       return [200, { data: this.adsOf(id).map(([adId, a]) => ({ id: adId, effective_status: a.effective, ...(a.feedback ? { ad_review_feedback: a.feedback } : {}) })) }];
     }

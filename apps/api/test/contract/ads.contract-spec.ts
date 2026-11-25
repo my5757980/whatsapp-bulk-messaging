@@ -138,4 +138,64 @@ describe('Ads API contract', () => {
     await check('get', '/ads/campaigns/{id}/chats', await call('get', `/ads/campaigns/${missing}/chats`), 404);
     await check('get', '/ads/other-chats', await call('get', '/ads/other-chats'), 200);
   });
+
+  it('US4 - US6: results, managing campaigns, and audiences', async () => {
+    await seedAdsConnection(ctx);
+    const number = await seedNumber(ctx);
+    const key = `library/contract-${randomUUID()}.jpg`;
+    await ctx.app.get(StorageService).put(key, Buffer.from('jpeg-bytes'), 'image/jpeg');
+    const media = await ctx.prisma.mediaAsset.create({ data: { storageKey: key, mimeType: 'image/jpeg', sizeBytes: 100_000, purpose: 'LIBRARY' } });
+    const input = {
+      name: uniq('Contract manage '),
+      goal: 'CHATS',
+      numberId: number.id,
+      prefilledMessage: 'Hi',
+      targeting: { locations: [{ key: 'AE', name: 'United Arab Emirates', type: 'country', countryCode: 'AE' }] },
+      placements: { auto: true },
+      dailyBudgetMinor: 5_000,
+      startAt: new Date().toISOString(),
+      versions: [{ mediaAssetId: media.id, primaryText: 'One', headline: 'One', callToAction: 'WHATSAPP_MESSAGE' }, { mediaAssetId: media.id, primaryText: 'Two', headline: 'Two', callToAction: 'WHATSAPP_MESSAGE' }],
+    };
+    const created = await call('post', '/ads/campaigns', input);
+    const id = created.body.id as string;
+    expect((await call('post', `/ads/campaigns/${id}/submit`)).status).toBe(200);
+    const versionId = created.body.versions[0].id as string;
+    const missing = randomUUID();
+
+    await check('get', '/ads/campaigns/{id}/results', await call('get', `/ads/campaigns/${id}/results`), 200);
+    await check('get', '/ads/campaigns/{id}/results', await call('get', `/ads/campaigns/${missing}/results`), 404);
+    expect((await call('get', `/ads/campaigns/${id}/results/export`)).status).toBe(200);
+    await check('get', '/ads/campaigns/{id}/results/export', await call('get', `/ads/campaigns/${missing}/results/export`), 404);
+
+    await check('post', '/ads/campaigns/{id}/versions/{versionId}/pause', await call('post', `/ads/campaigns/${id}/versions/${versionId}/pause`), 200);
+    await check('post', '/ads/campaigns/{id}/versions/{versionId}/pause', await call('post', `/ads/campaigns/${id}/versions/${versionId}/pause`), 409);
+    await check('post', '/ads/campaigns/{id}/versions/{versionId}/resume', await call('post', `/ads/campaigns/${id}/versions/${versionId}/resume`), 200);
+    await check('post', '/ads/campaigns/{id}/versions/{versionId}/resume', await call('post', `/ads/campaigns/${id}/versions/${versionId}/resume`), 409);
+    await check('post', '/ads/campaigns/{id}/versions/{versionId}/pause', await call('post', `/ads/campaigns/${id}/versions/${missing}/pause`), 404);
+    await check('post', '/ads/campaigns/{id}/pause', await call('post', `/ads/campaigns/${id}/pause`), 200);
+    await check('post', '/ads/campaigns/{id}/pause', await call('post', `/ads/campaigns/${id}/pause`), 409);
+    await check('post', '/ads/campaigns/{id}/resume', await call('post', `/ads/campaigns/${id}/resume`), 200);
+    await check('post', '/ads/campaigns/{id}/resume', await call('post', `/ads/campaigns/${id}/resume`), 409);
+    await check('post', '/ads/campaigns/{id}/resume', await call('post', `/ads/campaigns/${missing}/resume`), 404);
+    await check('post', '/ads/campaigns/{id}/duplicate', await call('post', `/ads/campaigns/${id}/duplicate`), 201);
+    await check('post', '/ads/campaigns/{id}/duplicate', await call('post', `/ads/campaigns/${missing}/duplicate`), 404);
+    await check('post', '/ads/campaigns/{id}/end', await call('post', `/ads/campaigns/${id}/end`), 200);
+    await check('post', '/ads/campaigns/{id}/end', await call('post', `/ads/campaigns/${id}/end`), 409);
+    await check('post', '/ads/campaigns/{id}/end', await call('post', `/ads/campaigns/${missing}/end`), 404);
+
+    const tag = await ctx.prisma.tag.create({ data: { name: uniq('contract-aud-') } });
+    const audience = await call('post', '/ads/audiences', { name: uniq('Contract audience '), source: { type: 'tag', tagId: tag.id } });
+    await check('post', '/ads/audiences', audience, 201);
+    await check('post', '/ads/audiences', await call('post', '/ads/audiences', { name: uniq('Bad '), source: { type: 'tag', tagId: missing } }), 422);
+    await check('get', '/ads/audiences', await call('get', '/ads/audiences'), 200);
+    const audienceId = audience.body.id as string;
+    await check('get', '/ads/audiences/{id}', await call('get', `/ads/audiences/${audienceId}`), 200);
+    await check('get', '/ads/audiences/{id}', await call('get', `/ads/audiences/${missing}`), 404);
+    await check('post', '/ads/audiences/{id}/sync', await call('post', `/ads/audiences/${audienceId}/sync`), 202);
+    await check('post', '/ads/audiences/{id}/sync', await call('post', `/ads/audiences/${missing}/sync`), 404);
+    await check('post', '/ads/audiences/{id}/lookalikes', await call('post', `/ads/audiences/${audienceId}/lookalikes`, { country: 'AE', ratio: 0.01 }), 409);
+    await check('post', '/ads/audiences/{id}/lookalikes', await call('post', `/ads/audiences/${missing}/lookalikes`, { country: 'AE', ratio: 0.01 }), 404);
+    await check('delete', '/ads/audiences/{id}', await call('delete', `/ads/audiences/${audienceId}`), 204);
+    await check('delete', '/ads/audiences/{id}', await call('delete', `/ads/audiences/${audienceId}`), 404);
+  });
 });

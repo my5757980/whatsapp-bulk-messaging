@@ -20,6 +20,7 @@ import {
   money,
   toMajorUnits,
   toMinorUnits,
+  type AdAudience,
   type AdCampaign,
   type AdCampaignInput,
   type AdsConnection,
@@ -84,6 +85,16 @@ export function AdBuilder({ campaign }: { campaign?: AdCampaign }) {
   const media = useQuery({ queryKey: mediaLibraryKey, queryFn: () => api<{ items: MediaItem[] }>('/media-library?pageSize=60') });
   const flows = useQuery({ queryKey: flowKeys.list, queryFn: () => api<FlowSummary[]>('/flows'), enabled: goal === 'CHATS' });
   const tags = useQuery({ queryKey: queryKeys.tags, queryFn: () => api<Tag[]>('/tags') });
+  const audiences = useQuery({ queryKey: adsKeys.audiences, queryFn: () => api<AdAudience[]>('/ads/audiences') });
+  const readyAudiences = (audiences.data ?? []).filter((a) => a.status === 'READY');
+  const toggleAudience = (key: 'includeAudienceIds' | 'excludeAudienceIds', id: string, on: boolean) =>
+    setTargeting((t) => {
+      const other = key === 'includeAudienceIds' ? 'excludeAudienceIds' : 'includeAudienceIds';
+      const list = new Set(t[key] ?? []);
+      if (on) list.add(id);
+      else list.delete(id);
+      return { ...t, [key]: [...list], [other]: (t[other] ?? []).filter((x) => !on || x !== id) };
+    });
   const visual = (media.data?.items ?? []).filter((m) => m.kind === 'image' || m.kind === 'video');
 
   useEffect(() => {
@@ -276,6 +287,24 @@ export function AdBuilder({ campaign }: { campaign?: AdCampaign }) {
             disabled={special}
             onChange={(interests) => setTargeting((t) => ({ ...t, interests }))}
           />
+          {readyAudiences.length ? (
+            <fieldset className="grid gap-1" data-testid="ad-audiences">
+              <legend className="text-sm font-medium">Saved audiences (optional)</legend>
+              {readyAudiences.map((a) => (
+                <div key={a.id} className="flex flex-wrap items-center gap-3 text-sm">
+                  <span className="min-w-40">{a.name}</span>
+                  <label className="flex items-center gap-1">
+                    <input type="checkbox" className="size-4" checked={(targeting.includeAudienceIds ?? []).includes(a.id)} onChange={(e) => toggleAudience('includeAudienceIds', a.id, e.target.checked)} aria-label={`Show to ${a.name}`} />
+                    Show to
+                  </label>
+                  <label className="flex items-center gap-1">
+                    <input type="checkbox" className="size-4" checked={(targeting.excludeAudienceIds ?? []).includes(a.id)} onChange={(e) => toggleAudience('excludeAudienceIds', a.id, e.target.checked)} aria-label={`Leave out ${a.name}`} />
+                    Leave out
+                  </label>
+                </div>
+              ))}
+            </fieldset>
+          ) : null}
           <div className="flex flex-wrap items-center gap-3">
             <Button type="button" variant="outline" onClick={() => runEstimate.mutate()} disabled={!targeting.locations.length || runEstimate.isPending}>
               {runEstimate.isPending ? 'Estimating…' : 'Estimate audience'}

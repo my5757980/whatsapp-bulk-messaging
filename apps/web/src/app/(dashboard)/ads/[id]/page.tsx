@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { AdChats } from '@/components/ads/ad-chats';
+import { AdManage } from '@/components/ads/ad-manage';
+import { AdResultsPanel } from '@/components/ads/ad-results';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { RequirePermission } from '@/components/require-permission';
 import { Badge } from '@/components/ui/badge';
@@ -138,6 +140,19 @@ function Campaign() {
         ) : null}
       </div>
 
+      {!draft ? <AdManage campaign={c} /> : null}
+
+      {!draft ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Results</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AdResultsPanel campaignId={c.id} versions={c.versions} />
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Versions</CardTitle>
@@ -180,6 +195,15 @@ function VersionRow({ campaign, version, onSaved }: { campaign: AdCampaign; vers
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
+  const toggle = useMutation({
+    mutationFn: (action: 'pause' | 'resume') => api<AdCampaign>(`/ads/campaigns/${campaign.id}/versions/${version.id}/${action}`, { method: 'POST' }),
+    onSuccess: async (_, action) => {
+      toast.success(action === 'pause' ? `Version ${version.position} paused` : `Version ${version.position} running again`);
+      await onSaved();
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const atMeta = Boolean(version.metaAdId) && campaign.status !== 'ENDED';
 
   return (
     <div className="grid gap-2 rounded-md border p-3" data-testid={`ad-version-row-${version.position}`}>
@@ -195,6 +219,13 @@ function VersionRow({ campaign, version, onSaved }: { campaign: AdCampaign; vers
         <p className="text-sm text-destructive" data-testid={`ad-feedback-${version.position}`}>
           Meta&apos;s reason: {version.reviewFeedback}
         </p>
+      ) : null}
+      {atMeta && (version.status === 'ACTIVE' || version.status === 'IN_REVIEW' || version.status === 'PAUSED') ? (
+        <Can permission="campaigns.launch">
+          <Button variant="outline" size="sm" className="justify-self-start" onClick={() => toggle.mutate(version.status === 'PAUSED' ? 'resume' : 'pause')} disabled={toggle.isPending}>
+            {version.status === 'PAUSED' ? `Resume version ${version.position}` : `Pause version ${version.position}`}
+          </Button>
+        </Can>
       ) : null}
       {version.status === 'REJECTED' && !editing ? (
         <Can permission="campaigns.manage">
