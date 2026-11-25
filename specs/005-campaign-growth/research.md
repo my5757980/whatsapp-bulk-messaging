@@ -113,6 +113,9 @@ summaries were available, that is said.
     scheduled, and refused when the sum of the delays exceeds 24 hours.
   - When the campaign's first pass is final (every message sent, failed or skipped), round 1 is due
     after the first delay. Each later round is due its delay after the previous round finishes.
+  - Failure statuses arrive as webhooks a moment after a message is sent. So when nothing may be
+    retried yet, the decision waits until a minute after the campaign's last send before the
+    campaign completes without a round.
   - A round row (`campaign_retry_rounds`) is created when it becomes due. It runs as a delayed
     BullMQ job `campaign-retry-round` on the existing `maintenance` queue (beside `campaign-start`; the `campaign-dispatch` queue has one processor for dispatch ticks). A 30-second sweep in the
     existing schedule reconciler starts due rounds whose job was lost.
