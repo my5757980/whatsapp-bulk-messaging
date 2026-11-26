@@ -7,6 +7,7 @@ import type { CampaignPaymentConfig, CampaignPaymentContext, CampaignPaymentReci
 import { PaymentGatewayService } from '../gateway/payment-gateway.service.js';
 import { PaymentSender } from '../requests/payment-sender.js';
 import { PaymentSettingsService } from '../settings/payment-settings.service.js';
+import { firstReminderAt } from '../tick/payment-reminders.js';
 
 // Campaign payment requests (feature 008 US3, FR-009, research R5): one request per recipient, made in
 // the launch transaction with the recipient's message, with no Stripe call; the Checkout Session is
@@ -38,6 +39,8 @@ export class CampaignPayments implements CampaignPaymentsPort {
 
   async createMany(tx: Prisma.TransactionClient, campaign: { id: string; config: CampaignPaymentConfig; context: CampaignPaymentContext }, recipients: CampaignPaymentRecipient[]): Promise<void> {
     if (!recipients.length) return;
+    const settings = await this.settings.row();
+    const now = new Date();
     await tx.paymentRequest.createMany({
       data: recipients.map((r) => ({
         id: uuidv7(),
@@ -56,6 +59,7 @@ export class CampaignPayments implements CampaignPaymentsPort {
         tagId: campaign.config.tagId ?? null,
         flowId: campaign.config.flowId ?? null,
         isTest: !campaign.context.livemode,
+        nextReminderAt: firstReminderAt(settings, now, r.payment.expiresAt),
       })),
     });
   }

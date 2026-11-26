@@ -96,7 +96,7 @@ export class PaymentSender {
     row: PaymentRequest,
     template: Template,
     mappingJson: unknown,
-    opts: { sentByUserId?: string | null; automatic?: boolean; origin?: 'PAYMENTS' | 'INBOX' } = {},
+    opts: { sentByUserId?: string | null; automatic?: boolean; origin?: 'PAYMENTS' | 'INBOX'; /** Reminders keep the request's first message (US4). */ keepLinks?: boolean } = {},
   ): Promise<{ messageId: string; chatItemId: string | null }> {
     const contact = await this.prisma.contact.findUniqueOrThrow({ where: { id: target.contactId }, select: { name: true, phoneE164: true, attributes: true, consentStatus: true, countryCode: true } });
     if (!contact.phoneE164) throw AppError.validation('This contact has no phone number');
@@ -150,7 +150,7 @@ export class PaymentSender {
           UPDATE conversations SET last_activity_at = GREATEST(last_activity_at, ${now}), last_message_preview = ${`Template: ${template.name}`.slice(0, 120)}, updated_at = now()
            WHERE id = ${target.conversationId}::uuid`;
       }
-      await tx.paymentRequest.update({ where: { id: row.id }, data: { messageId: created.id, ...(itemId ? { chatItemId: itemId } : {}) } });
+      if (!opts.keepLinks) await tx.paymentRequest.update({ where: { id: row.id }, data: { messageId: created.id, ...(itemId ? { chatItemId: itemId } : {}) } });
       return created;
     });
     const job = chatTemplateSendJob(message.id);

@@ -119,6 +119,26 @@ describe('Commerce API contract', () => {
     });
   });
 
+  describe('US4 reports', () => {
+    beforeEach(async () => {
+      await seedGateway(ctx);
+      await seedPaymentSettings(ctx);
+    });
+
+    it('GET /payments/requests, /payments/summary and /payments/export.csv', async () => {
+      const zone = (await ctx.prisma.settings.findUnique({ where: { id: 1 }, select: { defaultTimezone: true } }))?.defaultTimezone ?? 'UTC';
+      const day = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      const { conversation } = await seedOpenChat(ctx);
+      await call('post', `/inbox/conversations/${conversation.id}/payment-requests`, { amountMinor: 15000, description: 'Order 1042' });
+      await check('get', '/payments/requests', await call('get', '/payments/requests?status=WAITING&includeTest=true'), 200);
+      await check('get', '/payments/summary', await call('get', `/payments/summary?from=${day}&to=${day}`), 200);
+      await check('get', '/payments/summary', await call('get', '/payments/summary?from=2026-11-20&to=2026-11-01'), 422);
+      const csv = await call('get', `/payments/export.csv?from=${day}&to=${day}`);
+      expect(csv.status).toBe(200);
+      expect(csv.headers['content-type']).toMatch(/text\/csv/);
+    });
+  });
+
   describe('US3 test results', () => {
     beforeEach(async () => {
       await seedGateway(ctx);

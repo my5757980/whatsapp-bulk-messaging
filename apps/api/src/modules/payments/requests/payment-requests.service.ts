@@ -11,6 +11,7 @@ import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 import { PaymentGatewayService, type GatewayAccess } from '../gateway/payment-gateway.service.js';
 import { PaymentSettingsService } from '../settings/payment-settings.service.js';
 import { PaymentEffects } from './payment-effects.js';
+import { firstReminderAt } from '../tick/payment-reminders.js';
 import { PaymentSessions } from './payment-sessions.js';
 import { REQUEST_INCLUDE, eventPayment, requestDto, type RequestRow } from './payment-views.js';
 
@@ -100,7 +101,8 @@ export class PaymentRequestsService {
     if (problem === 'AMOUNT_TOO_LARGE') throw AppError.validation('The amount is above the limit set in Payments > Settings', [{ field: 'amountMinor', issue: 'is too large' }], 'AMOUNT_TOO_LARGE');
     const id = uuidv7();
     const code = makeLinkCode(randomInt);
-    const expiresAt = new Date(Date.now() + input.expiresInMinutes * 60_000);
+    const createdAt = new Date();
+    const expiresAt = new Date(createdAt.getTime() + input.expiresInMinutes * 60_000);
     const session = input.lazySession
       ? null
       : await this.sessions.create(input.access, { requestId: id, code, amountMinor: input.amountMinor, currency: input.access.currency, description: input.description, reference: input.reference ?? null, expiresAt, sequence: 1 });
@@ -133,6 +135,8 @@ export class PaymentRequestsService {
           sessionUrl: session?.url ?? null,
           sessionExpiresAt: session?.expiresAt ?? null,
           sessionsCreated: session ? 1 : 0,
+          // Reminders (US4): the first one's time, from the settings.
+          nextReminderAt: firstReminderAt(input.settings, createdAt, expiresAt),
         },
       });
       if (created.conversationId) {

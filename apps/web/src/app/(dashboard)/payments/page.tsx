@@ -4,9 +4,11 @@ import { useQuery } from '@tanstack/react-query';
 import type { PaymentDisplay, PaymentSource, PaymentStatus } from '@wbm/shared';
 import Link from 'next/link';
 import { useState } from 'react';
+import { PaymentsExportButton, PaymentsSummaryPanel, defaultPeriod } from '@/components/payments/payments-summary';
 import { RequirePermission } from '@/components/require-permission';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { NativeSelect } from '@/components/ui/native-select';
 import { api } from '@/lib/api-client';
 import { PAYMENT_DISPLAY_LABEL, PAYMENT_DISPLAY_TONE, PAYMENT_SOURCE_LABEL, paymentMoney, paymentsKeys, type PaymentRequest } from '@/lib/payments';
@@ -16,7 +18,7 @@ const TONE_VARIANT = { neutral: 'secondary', good: 'success', warn: 'warning', b
 const STATUSES: PaymentStatus[] = ['WAITING', 'PAID', 'EXPIRED', 'CANCELLED', 'REFUNDED'];
 const SOURCES: PaymentSource[] = ['INBOX', 'FLOW', 'CAMPAIGN', 'API', 'STORE_ORDER', 'CHAT_ORDER'];
 
-/** Payments (feature 008): every payment request with filters; US4 adds totals and export. */
+/** Payments (feature 008): totals for a period, every payment request with filters, and the export (US4). */
 export default function PaymentsPage() {
   return (
     <RequirePermission permission="payments.view">
@@ -29,11 +31,12 @@ function Payments() {
   const [status, setStatus] = useState('');
   const [source, setSource] = useState('');
   const [page, setPage] = useState(1);
-  const filters = { status: status || undefined, source: source || undefined, page };
+  const [period, setPeriod] = useState(defaultPeriod);
+  const filters = { status: status || undefined, source: source || undefined, page, from: period.from, to: period.to };
   const query = useQuery({
     queryKey: paymentsKeys.requests(filters),
     queryFn: () => {
-      const params = new URLSearchParams({ page: String(page), pageSize: '50' });
+      const params = new URLSearchParams({ page: String(page), pageSize: '50', from: period.from, to: period.to });
       if (status) params.set('status', status);
       if (source) params.set('source', source);
       return api<{ items: PaymentRequest[]; total: number }>(`/payments/requests?${params.toString()}`);
@@ -59,7 +62,15 @@ function Payments() {
           </Button>
         </div>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="grid gap-1 text-xs text-muted-foreground">
+          From
+          <Input type="date" aria-label="From" value={period.from} max={period.to} onChange={(e) => e.target.value && (setPeriod((p) => ({ ...p, from: e.target.value })), setPage(1))} />
+        </label>
+        <label className="grid gap-1 text-xs text-muted-foreground">
+          To
+          <Input type="date" aria-label="To" value={period.to} min={period.from} onChange={(e) => e.target.value && (setPeriod((p) => ({ ...p, to: e.target.value })), setPage(1))} />
+        </label>
         <NativeSelect aria-label="Status" value={status} onChange={(e) => (setStatus(e.target.value), setPage(1))}>
           <option value="">All statuses</option>
           {STATUSES.map((s) => (
@@ -76,7 +87,9 @@ function Payments() {
             </option>
           ))}
         </NativeSelect>
+        <PaymentsExportButton from={period.from} to={period.to} status={status || undefined} source={source || undefined} />
       </div>
+      <PaymentsSummaryPanel from={period.from} to={period.to} source={source || undefined} />
       {query.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {query.isSuccess && items.length === 0 ? <p className="text-sm text-muted-foreground">No payment requests yet.</p> : null}
       {items.length ? (

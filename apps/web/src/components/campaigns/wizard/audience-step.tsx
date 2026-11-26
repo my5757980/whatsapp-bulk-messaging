@@ -192,6 +192,8 @@ const RETARGET_LABEL: Record<string, string> = {
   REPLIED: 'who wrote back within 3 days of receiving it',
   NOT_REPLIED: 'who received it but did not write back within 3 days',
   HELD_BACK: "whose message Meta held back (per-person marketing limit)",
+  PAID: 'who paid the payment request it sent',
+  NOT_PAID: 'who received the payment request but did not pay',
 };
 
 /** Retarget audience (US5): recipients of the source campaign with the chosen result. */

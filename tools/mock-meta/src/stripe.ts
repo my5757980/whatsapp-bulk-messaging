@@ -3,6 +3,7 @@
 //   rk_test_mockOK1234      every permission
 //   rk_test_mockOKnoperm    cannot register webhook endpoints or read events (403)
 //   rk_test_mockXXnockout   rejected (401)
+//   rk_live_mockOK1234      every permission, live mode (sessions and events carry livemode: true)
 // A pay link opens /stripe/pay/<session> with Pay, Decline and Refund half; each sends a signed event
 // (Stripe-Signature t=…,v1=…) to the registered endpoint, or to MOCK_STRIPE_WEBHOOK_URL with
 // MOCK_STRIPE_WEBHOOK_SECRET when none is registered. Control routes: POST /mock/stripe/pay, /refund,
@@ -11,7 +12,7 @@ import { createHmac, randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { env } from './env.js';
 
-const KEY = /^(rk|sk)_test_mock[A-Za-z0-9]{6,}$/;
+const KEY = /^(rk|sk)_(test|live)_mock[A-Za-z0-9]{6,}$/;
 /** Stripe's minimum charge per currency in minor units (AED 2.00); others are not needed in tests. */
 const MINIMUM: Record<string, number> = { aed: 200, usd: 50 };
 
@@ -31,7 +32,7 @@ interface Session {
   success_url: string;
   expires_at: number;
   created: number;
-  livemode: false;
+  livemode: boolean;
   /** Not a Stripe field: the payment intent metadata, copied onto payment intent events. */
   piMetadata: Record<string, string>;
   refunded: number;
@@ -52,7 +53,7 @@ interface StripeEvent {
   object: 'event';
   type: string;
   created: number;
-  livemode: false;
+  livemode: boolean;
   api_version: string;
   data: { object: unknown };
 }
@@ -118,8 +119,8 @@ async function deliver(event: StripeEvent): Promise<void> {
   }
 }
 
-function emit(type: string, object: unknown): StripeEvent {
-  const event: StripeEvent = { id: `evt_${rand(20)}`, object: 'event', type, created: now(), livemode: false, api_version: process.env.STRIPE_API_VERSION ?? '2026-09-30.endive', data: { object } };
+function emit(type: string, object: unknown, livemode = false): StripeEvent {
+  const event: StripeEvent = { id: `evt_${rand(20)}`, object: 'event', type, created: now(), livemode, api_version: process.env.STRIPE_API_VERSION ?? '2026-09-30.endive', data: { object } };
   events.push(event);
   void deliver(event);
   return event;
@@ -135,7 +136,7 @@ function pay(session: Session): void {
   session.status = 'complete';
   session.payment_status = 'paid';
   session.payment_intent = `pi_${rand(20)}`;
-  emit('checkout.session.completed', publicSession(session));
+  emit('checkout.session.completed', publicSession(session), session.livemode);
 }
 
 function decline(session: Session): void {
@@ -152,7 +153,7 @@ function decline(session: Session): void {
       message: 'Your card was declined.',
       payment_method: { id: `pm_${rand(14)}`, card: { brand: 'visa', last4: '0002', exp_month: 12, exp_year: 2030 }, billing_details: { name: 'Test Customer' } },
     },
-  });
+  }, session.livemode);
 }
 
 function refund(session: Session, amount: number): boolean {
@@ -169,13 +170,13 @@ function refund(session: Session, amount: number): boolean {
     metadata: {},
     payment_method_details: { type: 'card', card: { brand: 'visa', last4: '4242', exp_month: 12, exp_year: 2030 } },
     billing_details: { name: 'Test Customer', email: 'customer@example.com', address: { city: 'Dubai', country: 'AE' } },
-  });
+  }, session.livemode);
   return true;
 }
 
 function expireSession(session: Session): void {
   session.status = 'expired';
-  emit('checkout.session.expired', publicSession(session));
+  emit('checkout.session.expired', publicSession(session), session.livemode);
 }
 
 function page(session: Session): string {
@@ -327,7 +328,7 @@ export async function handleStripe(req: IncomingMessage, res: ServerResponse, ur
         success_url: one(f, 'success_url') ?? `${env.baseUrl}/`,
         expires_at: expiresAt,
         created,
-        livemode: false,
+        livemode: key.includes('_live_'),
         piMetadata: prefixed(f, 'payment_intent_data[metadata]'),
         refunded: 0,
       };

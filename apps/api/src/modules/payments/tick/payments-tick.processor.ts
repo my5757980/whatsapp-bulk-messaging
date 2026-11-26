@@ -8,10 +8,11 @@ import type { PaymentRequest } from '../../../generated/prisma/client.js';
 import { PAYMENTS_TICK_EVERY_MS, PAYMENTS_TICK_JOB } from '../jobs.js';
 import { PaymentEffects } from '../requests/payment-effects.js';
 import { PaymentSessions } from '../requests/payment-sessions.js';
+import { PaymentReminders } from './payment-reminders.js';
 
 // The payments tick (feature 008, research R6): every 60 seconds, from due times in Postgres, waiting
 // requests past their expiry become EXPIRED and their sessions are expired at Stripe (retried by later
-// ticks, at most 10 times); reminders come with US4.
+// ticks, at most 10 times), and due reminders are sent (US4, payment-reminders.ts).
 
 const BATCH = 500;
 
@@ -25,6 +26,7 @@ export class PaymentsTickProcessor implements OnModuleInit, OnApplicationBootstr
     private readonly prisma: PrismaService,
     private readonly effects: PaymentEffects,
     private readonly sessions: PaymentSessions,
+    private readonly reminders: PaymentReminders,
   ) {}
 
   onModuleInit(): void {
@@ -39,10 +41,11 @@ export class PaymentsTickProcessor implements OnModuleInit, OnApplicationBootstr
       .upsertJobScheduler(PAYMENTS_TICK_JOB, { every: PAYMENTS_TICK_EVERY_MS }, { name: PAYMENTS_TICK_JOB, data: {}, opts: { removeOnComplete: true, removeOnFail: 20 } });
   }
 
-  async runTick(now = new Date()): Promise<{ expired: number; sessionsClosed: number }> {
+  async runTick(now = new Date()): Promise<{ expired: number; sessionsClosed: number; reminders: number }> {
     const expired = await this.expireDue(now);
     const sessionsClosed = await this.closePendingSessions();
-    return { expired, sessionsClosed };
+    const reminders = await this.reminders.sendDue(now);
+    return { expired, sessionsClosed, reminders };
   }
 
   /** Waiting requests past their expiry become EXPIRED (FR-012). */

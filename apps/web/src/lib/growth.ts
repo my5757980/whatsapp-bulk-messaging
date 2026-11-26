@@ -52,7 +52,7 @@ export interface Clicker {
   clicks: number;
 }
 
-export type RetargetGroup = 'FAILED' | 'NOT_READ' | 'READ' | 'DELIVERED' | 'CLICKED' | 'NOT_CLICKED' | 'REPLIED' | 'NOT_REPLIED' | 'HELD_BACK';
+export type RetargetGroup = 'FAILED' | 'NOT_READ' | 'READ' | 'DELIVERED' | 'CLICKED' | 'NOT_CLICKED' | 'REPLIED' | 'NOT_REPLIED' | 'HELD_BACK' | 'PAID' | 'NOT_PAID';
 
 export interface RetryPlan {
   rounds: number;

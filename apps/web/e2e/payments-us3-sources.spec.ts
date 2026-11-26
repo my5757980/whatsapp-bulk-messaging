@@ -1,49 +1,14 @@
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { expect, test, type Page } from '@playwright/test';
-import { LINK_BASE, MOCK_META, connectNumber, csrfHeaders, signInAsAdmin } from './growth-helpers';
-import { ensureStripeConnected, payMockSession, sessionFor } from './payments-helpers';
+import { MOCK_META, connectNumber, csrfHeaders, signInAsAdmin } from './growth-helpers';
+import { createPayLinkTemplate, ensureStripeConnected, payMockSession, requests, sessionFor } from './payments-helpers';
 
 // T049 (feature 008, quickstart US3 rows): payment requests without an agent. A flow's Request
 // payment step run by a test number and driven with Mark paid (test); a campaign that asks three
 // contacts to pay; a store order with the Pay link automation, paid through the mock Stripe page.
 
 const REPO_ROOT = fileURLToPath(new URL('../../../', import.meta.url));
-
-interface RequestRow {
-  id: string;
-  phone: string | null;
-  status: string;
-  payUrl: string;
-  source: string;
-}
-
-async function requests(page: Page, query: string): Promise<RequestRow[]> {
-  const res = await page.request.get(`/api/payments/requests?includeTest=true&pageSize=200&${query}`);
-  expect(res.ok()).toBe(true);
-  return ((await res.json()) as { items: RequestRow[] }).items;
-}
-
-/** A utility template whose URL button is our pay link, approved by mock-meta. */
-async function createPayLinkTemplate(page: Page, wabaId: string, name: string): Promise<string> {
-  const res = await page.request.post('/api/templates', {
-    headers: await csrfHeaders(page),
-    data: {
-      wabaId,
-      name,
-      language: 'en_US',
-      category: 'UTILITY',
-      body: { text: 'Hi {{1}}, your invoice comes to {{2}}.', examples: ['Sara', 'AED 99.00'] },
-      buttons: [{ type: 'URL', text: 'Pay now', url: `${LINK_BASE}/p/{{1}}`, urlExample: `${LINK_BASE}/p/AbCdEf1234` }],
-    },
-  });
-  expect(res.status(), await res.text()).toBe(201);
-  const id = ((await res.json()) as { id: string }).id;
-  await expect
-    .poll(async () => ((await (await page.request.get(`/api/templates/${id}`)).json()) as { status: string }).status, { timeout: 45_000 })
-    .toBe('APPROVED');
-  return id;
-}
 
 async function textsSentTo(page: Page, phoneNumberId: string, phone: string): Promise<Array<string | undefined>> {
   const sent = (await (await page.request.get(`${MOCK_META}/mock/sent`)).json()) as { messages: Array<{ phoneNumberId: string; to: string; text?: string }> };

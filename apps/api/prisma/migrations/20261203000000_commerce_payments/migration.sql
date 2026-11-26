@@ -92,6 +92,10 @@ ALTER TYPE "SkipReason" ADD VALUE 'PAYMENT_AMOUNT_MISSING';
 -- AlterEnum (feature 008: a store order's Pay now link is sent once)
 ALTER TYPE "StoreMessageKind" ADD VALUE 'PAY_LINK';
 
+-- AlterEnum (feature 008: retarget a payment campaign's payers and non-payers)
+ALTER TYPE "RetargetStatus" ADD VALUE 'PAID';
+ALTER TYPE "RetargetStatus" ADD VALUE 'NOT_PAID';
+
 -- AlterTable
 ALTER TABLE "campaigns" ADD COLUMN     "payment_config" JSONB;
 

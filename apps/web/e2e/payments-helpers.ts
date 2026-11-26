@@ -1,5 +1,5 @@
-import type { Page } from '@playwright/test';
-import { csrfHeaders } from './growth-helpers';
+import { expect, type Page } from '@playwright/test';
+import { LINK_BASE, csrfHeaders } from './growth-helpers';
 
 // Feature 008 e2e helpers: the mock Stripe keys (tools/mock-meta/src/stripe.ts), a connected gateway,
 // and the mock gateway's control routes.
@@ -8,6 +8,52 @@ export const MOCK_META_URL = process.env.MOCK_META_URL ?? 'http://localhost:4010
 export const STRIPE_KEY_OK = 'rk_test_mockOK1234';
 export const STRIPE_KEY_NO_PERMS = 'rk_test_mockOKnoperm';
 export const STRIPE_KEY_REJECTED = 'rk_test_mockXXnockout';
+/** A live-mode mock key: its payments count in totals (test payments are left out, FR-005). */
+export const STRIPE_KEY_LIVE = 'rk_live_mockOK1234';
+
+export interface RequestRow {
+  id: string;
+  phone: string | null;
+  status: string;
+  payUrl: string;
+  source: string;
+  amountMinor: number;
+}
+
+/** Payment requests (test ones too) matching a query string. */
+export async function requests(page: Page, query: string): Promise<RequestRow[]> {
+  const res = await page.request.get(`/api/payments/requests?includeTest=true&pageSize=200&${query}`);
+  expect(res.ok()).toBe(true);
+  return ((await res.json()) as { items: RequestRow[] }).items;
+}
+
+/** A utility template whose URL button is our pay link, approved by mock-meta. */
+export async function createPayLinkTemplate(page: Page, wabaId: string, name: string): Promise<string> {
+  const res = await page.request.post('/api/templates', {
+    headers: await csrfHeaders(page),
+    data: {
+      wabaId,
+      name,
+      language: 'en_US',
+      category: 'UTILITY',
+      body: { text: 'Hi {{1}}, your invoice comes to {{2}}.', examples: ['Sara', 'AED 99.00'] },
+      buttons: [{ type: 'URL', text: 'Pay now', url: `${LINK_BASE}/p/{{1}}`, urlExample: `${LINK_BASE}/p/AbCdEf1234` }],
+    },
+  });
+  expect(res.status(), await res.text()).toBe(201);
+  const id = ((await res.json()) as { id: string }).id;
+  await expect
+    .poll(async () => ((await (await page.request.get(`/api/templates/${id}`)).json()) as { status: string }).status, { timeout: 45_000 })
+    .toBe('APPROVED');
+  return id;
+}
+
+/** Connects the mock Stripe account with this key (disconnecting first), with automatic registration. */
+export async function connectStripe(page: Page, secretKey: string): Promise<void> {
+  await page.request.delete('/api/payments/gateway', { headers: await csrfHeaders(page) });
+  const res = await page.request.put('/api/payments/gateway', { headers: await csrfHeaders(page), data: { secretKey, registerEndpoint: true } });
+  if (!res.ok()) throw new Error(`connecting Stripe failed: ${res.status()} ${await res.text()}`);
+}
 
 /** Connects the mock Stripe account with automatic registration, unless already connected. */
 export async function ensureStripeConnected(page: Page): Promise<void> {

@@ -13,11 +13,65 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { toast } from '@/components/ui/toaster';
 import { api } from '@/lib/api-client';
 import { errorMessage } from '@/lib/errors';
-import { paymentsKeys, type PaymentSettings } from '@/lib/payments';
+import { paymentsKeys, type PaymentReminder, type PaymentSettings } from '@/lib/payments';
 import { usePermissions } from '@/lib/permissions';
 import type { Template } from '@/lib/types';
 
 const ROLES = ['ADMIN', 'MANAGER', 'AGENT'] as const;
+
+/** What a payment template's body variable can show (the `payment` source, or the contact's name). */
+const VALUE_CHOICES = [
+  { value: 'payment:amount', label: 'Amount' },
+  { value: 'payment:description', label: 'What it is for' },
+  { value: 'payment:reference', label: 'Reference' },
+  { value: 'payment:expires', label: 'Link expiry' },
+  { value: 'payment:link', label: 'Pay link address' },
+  { value: 'field:name', label: 'Contact name' },
+] as const;
+
+/** Body variables of a template (the pay link button is filled with the request's code). */
+function bodyVariables(template: Template | undefined): string[] {
+  return (template?.variables ?? []).map((v) => v.key).filter((key) => !key.startsWith('BUTTON.'));
+}
+
+function MappingFields({ id, template, mapping, onChange, disabled }: { id: string; template: Template | undefined; mapping: Record<string, unknown>; onChange: (next: Record<string, unknown>) => void; disabled: boolean }) {
+  const keys = bodyVariables(template);
+  if (!keys.length) return null;
+  return (
+    <div className="grid gap-2">
+      {keys.map((key) => {
+        const current = mapping[key] as { source?: string; key?: string } | undefined;
+        const value = current?.source && current.key ? `${current.source}:${current.key}` : '';
+        return (
+          <div key={key} className="grid gap-1 sm:grid-cols-[8rem_1fr] sm:items-center">
+            <Label htmlFor={`${id}-${key}`} className="font-mono text-xs">
+              {key}
+            </Label>
+            <NativeSelect
+              id={`${id}-${key}`}
+              value={value}
+              disabled={disabled}
+              onChange={(e) => {
+                const [source, field] = e.target.value.split(':');
+                const next = { ...mapping };
+                if (source && field) next[key] = { source, key: field };
+                else delete next[key];
+                onChange(next);
+              }}
+            >
+              <option value="">Choose…</option>
+              {VALUE_CHOICES.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </NativeSelect>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /** Payments > Settings (feature 008, T044): limits, who may ask, the Pay now text and the payment template. */
 export default function PaymentSettingsPage() {
@@ -138,7 +192,7 @@ function SettingsForm() {
             <CardDescription>Used outside the 24-hour window. It needs a website button whose link ends in /p/{'{{1}}'} on the link address.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3">
-            <NativeSelect aria-label="Payment template" value={draft.templateId ?? ''} onChange={(e) => set({ templateId: e.target.value || null })} disabled={!editable}>
+            <NativeSelect aria-label="Payment template" value={draft.templateId ?? ''} onChange={(e) => set({ templateId: e.target.value || null, templateMapping: {} })} disabled={!editable}>
               <option value="">No template (requests outside the window are refused)</option>
               {(templates.data ?? []).map((t) => (
                 <option key={t.id} value={t.id}>
@@ -146,6 +200,50 @@ function SettingsForm() {
                 </option>
               ))}
             </NativeSelect>
+            <MappingFields id="template-map" template={(templates.data ?? []).find((t) => t.id === draft.templateId)} mapping={draft.templateMapping} onChange={(templateMapping) => set({ templateMapping })} disabled={!editable} />
+          </CardContent>
+        </Card>
+        <Card data-testid="reminders">
+          <CardHeader>
+            <CardTitle>Reminders</CardTitle>
+            <CardDescription>Up to two templates before a waiting request expires, sent only when the request reached the customer. Each template needs the pay link button.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            {draft.reminders.map((reminder, i) => {
+              const update = (patch: Partial<PaymentReminder>) => set({ reminders: draft.reminders.map((r, j) => (j === i ? { ...r, ...patch } : r)) });
+              return (
+                <div key={i} className="grid gap-2 rounded-md border p-3" data-testid={`reminder-${i + 1}`}>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="grid gap-1">
+                      <Label htmlFor={`reminder-${i}-hours`}>Hours before the link expires</Label>
+                      <Input id={`reminder-${i}-hours`} type="number" min="0.25" step="0.25" value={reminder.beforeMinutes / 60} disabled={!editable} onChange={(e) => update({ beforeMinutes: Math.round(Number(e.target.value) * 60) })} />
+                    </div>
+                    <div className="grid gap-1">
+                      <Label htmlFor={`reminder-${i}-template`}>Template</Label>
+                      <NativeSelect id={`reminder-${i}-template`} value={reminder.templateId} disabled={!editable} onChange={(e) => update({ templateId: e.target.value, mapping: {} })}>
+                        <option value="">Choose a template…</option>
+                        {(templates.data ?? []).map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name} ({t.language})
+                          </option>
+                        ))}
+                      </NativeSelect>
+                    </div>
+                  </div>
+                  <MappingFields id={`reminder-${i}-map`} template={(templates.data ?? []).find((t) => t.id === reminder.templateId)} mapping={reminder.mapping ?? {}} onChange={(mapping) => update({ mapping })} disabled={!editable} />
+                  {editable ? (
+                    <Button type="button" variant="ghost" size="sm" className="justify-self-start" onClick={() => set({ reminders: draft.reminders.filter((_, j) => j !== i) })}>
+                      Remove reminder
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })}
+            {editable && draft.reminders.length < 2 ? (
+              <Button type="button" variant="outline" size="sm" className="justify-self-start" onClick={() => set({ reminders: [...draft.reminders, { beforeMinutes: draft.reminders.length ? 60 : 240, templateId: '', mapping: {} }] })}>
+                Add reminder
+              </Button>
+            ) : null}
           </CardContent>
         </Card>
         {error ? (

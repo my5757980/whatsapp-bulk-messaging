@@ -22,6 +22,8 @@ const GROUPS: Array<{ status: RetargetGroup; label: string; hint: string }> = [
   { status: 'DELIVERED', label: 'Delivered', hint: 'Received the message' },
   { status: 'FAILED', label: 'Failed', hint: 'The message failed' },
   { status: 'HELD_BACK', label: 'Held back', hint: "Held back by Meta's per-person marketing limit; send the next day" },
+  { status: 'PAID', label: 'Paid', hint: 'Paid the payment request this campaign sent' },
+  { status: 'NOT_PAID', label: 'Not paid', hint: 'Received the payment request and did not pay' },
 ];
 
 /**

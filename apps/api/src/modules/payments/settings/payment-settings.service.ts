@@ -67,6 +67,11 @@ export class PaymentSettingsService {
     if (input.templateId) await this.mustBePayLinkTemplate(input.templateId, 'templateId');
     const reminderProblem = reminderRulesProblem(input.reminders);
     if (reminderProblem) throw AppError.validation(reminderProblem, [{ field: 'reminders', issue: reminderProblem }]);
+    for (const [i, reminder] of input.reminders.entries()) {
+      if (reminder.beforeMinutes >= input.defaultExpiryMinutes) {
+        throw AppError.validation('A reminder must come before the link expires', [{ field: `reminders.${i}.beforeMinutes`, issue: 'is at or after the default expiry' }]);
+      }
+    }
     for (const [i, reminder] of input.reminders.entries()) await this.mustBePayLinkTemplate(reminder.templateId, `reminders.${i}.templateId`);
     if (input.chatOrderTagId && !(await this.prisma.tag.findUnique({ where: { id: input.chatOrderTagId }, select: { id: true } }))) {
       throw AppError.validation('The chat order tag does not exist', [{ field: 'chatOrderTagId', issue: 'not found' }]);

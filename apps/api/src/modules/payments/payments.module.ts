@@ -10,6 +10,8 @@ import { FLOW_PAYMENTS } from '../flows/engine/ports.js';
 import { CampaignPayments } from './campaigns/campaign-payments.js';
 import { STORE_PAYMENTS } from '../integrations/stores/store-payments.port.js';
 import { StorePayments } from './stores/store-payments.js';
+import { PaymentReminders } from './tick/payment-reminders.js';
+import { PaymentsReportsController, PaymentsReportsService } from './reports/payments-reports.js';
 import { PaymentEventsService } from './events/payment-events.service.js';
 import { FlowPayments } from './flows/flow-payments.js';
 import { StripeWebhookController } from './events/stripe-webhook.controller.js';
@@ -51,6 +53,7 @@ const DOMAIN: Provider[] = [
   // The port campaign launches call for per-recipient requests (campaigns never import payments).
   { provide: CAMPAIGN_PAYMENTS, useExisting: CampaignPayments },
   StorePayments,
+  PaymentReminders,
   // The port store order events call for pay links (stores never import payments).
   { provide: STORE_PAYMENTS, useExisting: StorePayments },
 ];
@@ -64,6 +67,7 @@ const API_PROVIDERS: Provider[] = [
   PaymentChatService,
   PayLinkService,
   PublicPaymentsService,
+  PaymentsReportsService,
   // Pay links share the 005 per-client limit (the same Redis keys as tracked links).
   {
     provide: LinkRateLimiter,
@@ -71,7 +75,7 @@ const API_PROVIDERS: Provider[] = [
     useFactory: (redis: Redis, config: AppConfig) => new LinkRateLimiter(redis, config.TOKEN_ENCRYPTION_KEY),
   },
 ];
-const CONTROLLERS: Type[] = [PaymentGatewayController, PaymentSettingsController, StripeWebhookController, PaymentRequestsController, PayLinkController, PublicPaymentsController];
+const CONTROLLERS: Type[] = [PaymentGatewayController, PaymentSettingsController, StripeWebhookController, PaymentRequestsController, PayLinkController, PublicPaymentsController, PaymentsReportsController];
 
 /** The gateway, settings, payment requests, reports, the pay link and the Stripe webhook (HTTP app only). */
 @Module({

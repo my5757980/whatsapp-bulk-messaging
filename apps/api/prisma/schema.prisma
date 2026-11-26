@@ -133,6 +133,9 @@ enum RetargetStatus {
   REPLIED
   NOT_REPLIED
   HELD_BACK
+  /// Feature 008 (US4): payment campaigns
+  PAID
+  NOT_PAID
 }
 
 enum MessageOrigin {
