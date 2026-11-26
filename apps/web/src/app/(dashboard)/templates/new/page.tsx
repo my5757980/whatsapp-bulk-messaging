@@ -310,8 +310,15 @@ function Editor() {
                 return (
                 <div key={i} className="grid gap-3 rounded-md border p-3 sm:grid-cols-2" data-testid="template-button">
                   <div className="text-sm font-medium sm:col-span-2">
-                    Button {i + 1}: {tracked ? 'Tracked link' : b.type === 'URL' ? 'Website' : b.type === 'PHONE_NUMBER' ? 'Phone call' : 'Quick reply'}
+                    Button {i + 1}:{' '}
+                    {tracked ? 'Tracked link' : b.type === 'URL' ? 'Website' : b.type === 'PHONE_NUMBER' ? 'Phone call' : b.type === 'CATALOG' ? 'View catalog' : b.type === 'MPM' ? 'Product list' : 'Quick reply'}
                   </div>
+                  {b.type === 'CATALOG' || b.type === 'MPM' ? (
+                    <p className="text-xs text-muted-foreground sm:col-span-2">
+                      {b.type === 'CATALOG' ? 'Opens your Meta catalog.' : 'Shows up to 30 products in sections.'} You choose the products when you prepare a campaign. Marketing
+                      templates only, and this must be the only button.
+                    </p>
+                  ) : null}
                   {tracked ? (
                     <p className="text-xs text-muted-foreground sm:col-span-2">
                       Each person gets their own short link on your company&apos;s address, so campaign results show who clicked. You choose where it
@@ -371,6 +378,22 @@ function Editor() {
                 </Button>
                 <Button type="button" variant="outline" size="sm" onClick={() => update({ buttons: [...buttons, { type: 'PHONE_NUMBER', text: '', phoneNumber: '' }] })}>
                   Add phone button
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => update({ category: 'MARKETING', buttons: [{ type: 'CATALOG', text: 'View catalog' }] })}>
+                  Add catalog button
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => update({ category: 'MARKETING', buttons: [{ type: 'MPM', text: 'View items' }] })}>
+                  Add product list button
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!trackedUrl}
+                  title={trackedUrl ? 'A website button to this platform’s pay links: each customer gets their own payment link' : 'Link tracking is not set up on this server'}
+                  onClick={() => trackedUrl && update({ buttons: [...buttons, { type: 'URL', text: 'Pay now', url: trackedUrl.replace(/\{\{1\}\}$/, 'p/{{1}}'), urlExample: trackedUrl.replace(/\{\{1\}\}$/, `p/${SAMPLE_LINK_CODE}`) }] })}
+                >
+                  Add pay link button
                 </Button>
               </div>
             </CardContent>

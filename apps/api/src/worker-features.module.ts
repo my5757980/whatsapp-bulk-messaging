@@ -19,6 +19,7 @@ import { IntegrationsDomainModule } from './modules/integrations/integrations.mo
 import { AdsDomainModule } from './modules/ads/ads.module.js';
 import { CommerceDomainModule } from './modules/commerce/commerce.module.js';
 import { PaymentsDomainModule } from './modules/payments/payments.module.js';
+import { CatalogSyncProcessor } from './modules/commerce/catalog/catalog-sync.processor.js';
 import { PaymentEventsProcessor } from './modules/payments/events/payment-events.processor.js';
 import { PaymentsReconcileProcessor } from './modules/payments/events/payments-reconcile.processor.js';
 import { PaymentsTickProcessor } from './modules/payments/tick/payments-tick.processor.js';
@@ -67,6 +68,7 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
   providers: [
     StatusHandler,
     PaymentEventsProcessor,
+    CatalogSyncProcessor,
     PaymentsTickProcessor,
     PaymentsReconcileProcessor,
     AdsStatusProcessor,

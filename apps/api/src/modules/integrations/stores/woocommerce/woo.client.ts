@@ -94,6 +94,34 @@ export class WooClient {
     await this.http.json({ method: 'PUT', url: this.api(store.baseUrl, `/orders/${orderId}`), headers: this.headers(credentials), body: changes });
   }
 
+  /** Feature 008 (R9): the store's products, at most 20 pages of 100. */
+  async products(store: Pick<StoreConnection, 'baseUrl'>, credentials: WooCredentials): Promise<Json[]> {
+    const out: Json[] = [];
+    for (let page = 1; page <= 20; page += 1) {
+      const items = await this.http.json<Json[]>({ method: 'GET', url: this.api(store.baseUrl, `/products?per_page=100&page=${page}`), headers: this.headers(credentials) });
+      if (!Array.isArray(items)) throw new StoreApiError('WooCommerce answered the product list with something unexpected', null);
+      out.push(...items);
+      if (items.length < 100) break;
+    }
+    return out;
+  }
+
+  /** Feature 008: a variable product's variations. */
+  async variations(store: Pick<StoreConnection, 'baseUrl'>, credentials: WooCredentials, productId: string): Promise<Json[]> {
+    const items = await this.http.json<Json[]>({ method: 'GET', url: this.api(store.baseUrl, `/products/${encodeURIComponent(productId)}/variations?per_page=100`), headers: this.headers(credentials) });
+    return Array.isArray(items) ? items : [];
+  }
+
+  /** Feature 008: the store's currency setting, or null when it cannot be read. */
+  async currency(store: Pick<StoreConnection, 'baseUrl'>, credentials: WooCredentials): Promise<string | null> {
+    try {
+      const setting = await this.http.json<{ value?: string }>({ method: 'GET', url: this.api(store.baseUrl, '/settings/general/woocommerce_currency'), headers: this.headers(credentials) });
+      return typeof setting.value === 'string' ? setting.value.toLowerCase() : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** Orders changed since a time (GMT), oldest change first. */
   async ordersSince(store: Pick<StoreConnection, 'baseUrl'>, credentials: WooCredentials, since: Date): Promise<Json[]> {
     const out: Json[] = [];

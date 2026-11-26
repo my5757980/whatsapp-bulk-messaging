@@ -208,7 +208,9 @@ export class AudienceSnapshotService {
       ...(payment && plan ? { payment: paymentWords({ ...payment, amountMinor: BigInt(payment.amountMinor), currency: plan.context.currency, reference: null }, plan.context.linkBase, plan.context.timeZone) } : {}),
     });
     if (!resolved.ok) return { ...base, status: 'SKIPPED', skipReason: 'MISSING_VARIABLE' };
-    const params = { ...resolved.params, ...samples, ...(payment && plan ? { [plan.buttonKey]: payment.code } : {}) };
+    // Feature 008: catalog and multi-product templates carry the campaign's product choices.
+    const products = mapping['$products'];
+    const params = { ...resolved.params, ...samples, ...(payment && plan ? { [plan.buttonKey]: payment.code } : {}), ...(products?.source === 'static' && products.value ? { $products: products.value } : {}) };
     return { ...base, status: 'PENDING', skipReason: null, params, ...(payment ? { payment } : {}) };
   }
 

@@ -13,6 +13,7 @@ import { growthKeys, type TrackedLinkConfig, type TrackedLinkSet } from '@/lib/g
 import { queryKeys } from '@/lib/query';
 import type { CampaignDetail, CampaignPaymentConfig, Estimate, Template, VariableSource, VariableSourceKind } from '@/lib/types';
 import { PAYMENT_VARIABLE_KEYS, PaymentConfigCard, payLinkButtonKey, paymentConfigComplete } from './payment-config';
+import { ProductChoicesCard, choicesComplete, choicesFrom, choicesMapping, productButtonKind, type ProductChoices } from './product-choices';
 
 const SOURCES: Array<{ value: VariableSourceKind; label: string }> = [
   { value: 'column', label: 'Uploaded column' },
@@ -57,6 +58,9 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
   const paying = Boolean(payKey && payment);
   const sources = [...(allowColumn ? SOURCES : SOURCES.filter((s) => s.value !== 'column')), ...(paying ? [{ value: 'payment' as const, label: 'Payment request' }] : [])];
   const [mapping, setMapping] = useState<Record<string, VariableSource>>(campaign.variableMapping ?? {});
+  // Feature 008 (US5): catalog and product list templates carry product choices.
+  const productKind = productButtonKind(template.data);
+  const [choices, setChoices] = useState<ProductChoices>(() => choicesFrom(campaign.variableMapping ?? {}));
   const [tracked, setTracked] = useState<Record<string, TrackedChoice> | null>(null);
   const [previews, setPreviews] = useState<Estimate['previews'] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +99,8 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
             return [key, m.source === 'static' ? { source: 'static', value: m.value ?? '', fallback } : { source: m.source, key: m.key ?? '', fallback }];
           }),
       );
-      await api(`/campaigns/${campaign.id}`, { method: 'PATCH', json: { variableMapping: clean, paymentConfig: payKey ? payment : null } });
+      const withProducts = productKind ? { ...clean, $products: choicesMapping(productKind, choices) } : clean;
+      await api(`/campaigns/${campaign.id}`, { method: 'PATCH', json: { variableMapping: withProducts, paymentConfig: payKey ? payment : null } });
       await api(`/campaigns/${campaign.id}/tracked-links`, {
         method: 'PUT',
         json: { links: Object.entries(links).map(([variableKey, c]) => ({ variableKey, destination: c.destination.trim(), addCampaignTags: c.addCampaignTags })) },
@@ -115,6 +120,7 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
   const body = template.data?.components.find((c) => c.type.toUpperCase() === 'BODY')?.text ?? '';
   const ready =
     paymentConfigComplete(payKey ? payment : null) &&
+    choicesComplete(productKind, choices) &&
     variables.every(({ key }) => {
       if (paying && key === payKey) return true;
       const link = tracked?.[key];
@@ -130,6 +136,7 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
       </div>
       {!variables.length ? <p className="text-sm text-muted-foreground">This template has no variables. Continue to review.</p> : null}
       {payKey ? <PaymentConfigCard value={payment} onChange={setPayment} /> : null}
+      {productKind ? <ProductChoicesCard kind={productKind} value={choices} onChange={setChoices} /> : null}
       {variables.map(({ key, example }) => {
         if (paying && key === payKey) {
           return (

@@ -1,5 +1,6 @@
 'use client';
 
+import { formatMinor } from '@wbm/shared';
 import type { AiItemPayload, ChatItem, ChatItemStatus } from '@/lib/inbox-types';
 import { cn } from '@/lib/utils';
 import { PaymentCard } from './payment-card';
@@ -175,6 +176,29 @@ function Body({ item }: { item: ChatItem }) {
               </li>
             ))}
           </ul>
+        </div>
+      );
+    }
+    // Product messages (feature 008 US5): one product, a product list or the catalog.
+    case 'PRODUCT':
+    case 'PRODUCT_LIST':
+    case 'CATALOG': {
+      const products = (Array.isArray(p.products) ? p.products : []) as Array<{ retailerId?: string; name?: string; priceMinor?: number | null; currency?: string | null; imageUrl?: string | null }>;
+      return (
+        <div className="grid gap-1 text-sm" data-testid={`product-message-${item.contentType}`}>
+          {str(p.header) && <p className="font-medium">{str(p.header)}</p>}
+          {item.text ? <p className="whitespace-pre-wrap break-words">{item.text}</p> : null}
+          {item.contentType === 'CATALOG' ? <p className="text-xs text-muted-foreground">🛍 View catalog</p> : null}
+          <ul className="grid gap-1" aria-label="Products">
+            {products.map((product, i) => (
+              <li key={product.retailerId ?? i} className="flex items-center gap-2 rounded border bg-background px-2 py-1 text-xs">
+                {product.imageUrl ? <img src={product.imageUrl} alt="" className="size-8 rounded object-cover" /> : null}
+                <span className="flex-1">{product.name ?? product.retailerId}</span>
+                {typeof product.priceMinor === 'number' && product.currency ? <span>{formatMinor(product.priceMinor, product.currency)}</span> : null}
+              </li>
+            ))}
+          </ul>
+          {str(p.footer) && <p className="text-xs text-muted-foreground">{str(p.footer)}</p>}
         </div>
       );
     }

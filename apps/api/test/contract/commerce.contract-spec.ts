@@ -1,10 +1,12 @@
 import nock from 'nock';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
+import { CatalogService } from '../../src/modules/commerce/catalog/catalog.service.js';
 import { PaymentEventsProcessor } from '../../src/modules/payments/events/payment-events.processor.js';
 import { clearCommerce, seedGateway, seedOpenChat, seedPaymentSettings } from '../support/commerce.js';
+import { FAKE_CATALOG_ID, FakeCommerceGraph } from '../support/fake-commerce-graph.js';
 import { FakeStripe, STRIPE_TEST_KEY } from '../support/fake-stripe.js';
-import { restoreNetwork, useNockLocalOnly } from '../support/fixtures.js';
+import { restoreNetwork, seedNumber, useNockLocalOnly } from '../support/fixtures.js';
 import { createTestContext, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
 import { expectMatchesContract } from './openapi-validator.js';
 
@@ -136,6 +138,32 @@ describe('Commerce API contract', () => {
       const csv = await call('get', `/payments/export.csv?from=${day}&to=${day}`);
       expect(csv.status).toBe(200);
       expect(csv.headers['content-type']).toMatch(/text\/csv/);
+    });
+  });
+
+  describe('US5 catalog', () => {
+    it('the catalog routes and product messages', async () => {
+      new FakeCommerceGraph(40).install();
+      const number = await seedNumber(ctx);
+      await check('get', '/catalog/connection', await call('get', '/catalog/connection'), 200);
+      await check('post', '/catalog/connection', await call('post', '/catalog/connection', { catalogId: '123456789012' }), 422);
+      await check('post', '/catalog/connection', await call('post', '/catalog/connection', { catalogId: FAKE_CATALOG_ID }), 201);
+      await check('post', '/catalog/connection', await call('post', '/catalog/connection', { catalogId: FAKE_CATALOG_ID }), 409);
+      await check('post', '/catalog/sync', await call('post', '/catalog/sync'), 409);
+      await ctx.app.get(CatalogService).copy();
+      await check('post', '/catalog/sync', await call('post', '/catalog/sync'), 202);
+      await ctx.app.get(CatalogService).copy();
+      await check('put', '/catalog/numbers/{id}/commerce-settings', await call('put', `/catalog/numbers/${number.id}/commerce-settings`, { cartEnabled: true, catalogVisible: true }), 200);
+      await check('put', '/catalog/fill', await call('put', '/catalog/fill', { enabled: true, storeId: null }), 409);
+      await check('post', '/catalog/fill/run', await call('post', '/catalog/fill/run'), 409);
+      await check('get', '/catalog/products', await call('get', '/catalog/products?search=Product&pageSize=5'), 200);
+      const { conversation } = await seedOpenChat(ctx, { numberId: number.id });
+      const route = '/inbox/conversations/{id}/products';
+      await check('post', route, await call('post', `/inbox/conversations/${conversation.id}/products`, { kind: 'product', retailerId: 'shp-101' }), 201);
+      await check('post', route, await call('post', `/inbox/conversations/${conversation.id}/products`, { kind: 'product', retailerId: 'shp-103' }), 422);
+      await check('delete', '/catalog/connection', await call('delete', '/catalog/connection'), 204);
+      await check('delete', '/catalog/connection', await call('delete', '/catalog/connection'), 404);
+      await check('get', '/catalog/products', await call('get', '/catalog/products'), 409);
     });
   });
 

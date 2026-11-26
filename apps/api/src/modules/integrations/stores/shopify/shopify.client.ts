@@ -32,6 +32,17 @@ const ORDER_CANCEL = `mutation OrderCancel($orderId: ID!, $reason: OrderCancelRe
 const ORDER_MARK_AS_PAID = `mutation OrderMarkAsPaid($input: OrderMarkAsPaidInput!) {
   orderMarkAsPaid(input: $input) { order { id displayFinancialStatus } userErrors { field message } }
 }`;
+/** Feature 008 (R9): active products with their variants for the catalog fill; needs read_products. */
+const PRODUCTS = `query Products($after: String) {
+  products(first: 50, after: $after, query: "status:active") {
+    pageInfo { hasNextPage endCursor }
+    nodes {
+      id title description status onlineStoreUrl
+      featuredMedia { preview { image { url } } }
+      variants(first: 100) { nodes { id title price availableForSale media(first: 1) { nodes { preview { image { url } } } } } }
+    }
+  }
+}`;
 const ORDER_BY_ID = `query OrderById($id: ID!) { order(id: $id) { ...OrderFields } }
 ${ORDER_FIELDS_FRAGMENT}`;
 const ORDERS_SINCE = `query OrdersSince($query: String!, $after: String) {
@@ -154,6 +165,25 @@ export class ShopifyClient {
     const data = await this.graphql<{ orderMarkAsPaid: { userErrors: Array<{ message: string }> } }>(store.baseUrl, token, ORDER_MARK_AS_PAID, { input: { id: gid } });
     const error = data.orderMarkAsPaid.userErrors[0];
     if (error) throw new StoreApiError(`Shopify refused to mark the order paid: ${error.message}`.slice(0, 200), null);
+  }
+
+  /** Feature 008: the shop's currency (the catalog fill prices items in it). */
+  async shopCurrency(store: Pick<StoreConnection, 'baseUrl'>, token: string): Promise<string> {
+    const data = await this.graphql<{ shop: { currencyCode?: string } }>(store.baseUrl, token, SHOP_INFO);
+    return (data.shop.currencyCode ?? 'AED').toLowerCase();
+  }
+
+  /** Feature 008 (R9): every active product with its variants, at most 20 pages of 50. */
+  async products(store: Pick<StoreConnection, 'baseUrl'>, token: string): Promise<Json[]> {
+    const out: Json[] = [];
+    let after: string | null = null;
+    for (let page = 0; page < 20; page += 1) {
+      const data: { products: { pageInfo: { hasNextPage: boolean; endCursor: string | null }; nodes: Json[] } } = await this.graphql(store.baseUrl, token, PRODUCTS, { after });
+      out.push(...data.products.nodes);
+      if (!data.products.pageInfo.hasNextPage || !data.products.pageInfo.endCursor) break;
+      after = data.products.pageInfo.endCursor;
+    }
+    return out;
   }
 
   /** A checkout read again at reminder time (US6): payloads can lack details, and it may be completed by now. */
