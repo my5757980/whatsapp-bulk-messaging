@@ -2,6 +2,7 @@
 
 import type { AiItemPayload, ChatItem, ChatItemStatus } from '@/lib/inbox-types';
 import { cn } from '@/lib/utils';
+import { PaymentCard } from './payment-card';
 
 const mediaUrl = (id: string) => `/api/inbox/media/${id}`;
 const str = (value: unknown): string | null => (typeof value === 'string' && value ? value : null);
@@ -177,10 +178,19 @@ function Body({ item }: { item: ChatItem }) {
         </div>
       );
     }
+    // The Pay now message (feature 008 US2).
+    case 'PAYMENT_REQUEST':
+      return (
+        <div className="grid gap-1 text-sm">
+          <p className="whitespace-pre-wrap break-words">{item.text}</p>
+          {item.payment ? <PaymentCard payment={item.payment} /> : null}
+        </div>
+      );
     case 'TEMPLATE':
       return (
         <div className="grid gap-1 text-sm">
           <p className="whitespace-pre-wrap break-words">{item.template?.renderedText}</p>
+          {item.payment ? <PaymentCard payment={item.payment} /> : null}
           <span className="text-xs text-muted-foreground">
             Template {item.template?.name}
             {item.campaign ? ` · Campaign "${item.campaign.name}"` : item.origin === 'API' ? ' · API' : ''}

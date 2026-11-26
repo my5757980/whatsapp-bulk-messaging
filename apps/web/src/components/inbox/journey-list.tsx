@@ -118,6 +118,19 @@ export function describeJourneyEntry(entry: JourneyEntry): string {
       return `Started a chat from an ad${d.adCampaignName ? ` in "${String(d.adCampaignName)}"` : d.headline ? ` ("${String(d.headline)}")` : ''}${d.newContact ? ' (new contact)' : ''}`;
     case 'LEAD_RECEIVED':
       return `Sent a lead form${d.formName ? ` "${String(d.formName)}"` : ''}${d.consent ? ' and agreed to WhatsApp messages' : ''}`;
+    // Feature 008: payments, chat orders and forms.
+    case 'PAYMENT_REQUESTED':
+      return `Was asked to pay${d.description ? ` for "${String(d.description)}"` : ''}`;
+    case 'PAYMENT_PAID':
+      return d.paidLate ? 'Payment received (after the request ended)' : 'Payment received';
+    case 'PAYMENT_EXPIRED':
+      return 'A payment request expired unpaid';
+    case 'PAYMENT_REFUNDED':
+      return 'A payment was refunded';
+    case 'CHAT_ORDER_RECEIVED':
+      return `Sent an order in the chat${d.items ? ` (${String(d.items)} items)` : ''}`;
+    case 'FORM_SUBMITTED':
+      return `Filled in the form${d.formName ? ` "${String(d.formName)}"` : ''}`;
     default:
       return entry.type;
   }

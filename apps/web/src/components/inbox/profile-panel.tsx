@@ -12,6 +12,7 @@ import { api, ApiError } from '@/lib/api-client';
 import type { ConversationDetail } from '@/lib/inbox-types';
 import { Can } from '@/lib/permissions';
 import { queryKeys } from '@/lib/query';
+import { ContactPayments } from './contact-payments';
 import { JourneyList } from './journey-list';
 
 const CONSENT = { OPTED_IN: 'Opted in', OPTED_OUT: 'Opted out', UNKNOWN: 'Unknown' } as const;
@@ -164,6 +165,7 @@ export function ProfilePanel({ id }: { id: string }) {
           </div>
         </Can>
       )}
+      {p.contactId ? <ContactPayments contactId={p.contactId} /> : null}
       <JourneyList conversationId={id} />
     </aside>
   );

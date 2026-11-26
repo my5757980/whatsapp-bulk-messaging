@@ -54,10 +54,8 @@ test('US2: request a payment in live chat and see it paid', async ({ page }) => 
   await customerPage.close();
 
   await expect(card).toContainText('Paid', { timeout: 60_000 });
-  await page.getByRole('tab', { name: 'Payments' }).click();
   await expect(page.getByTestId('contact-payments')).toContainText('Order 1042');
   await expect(page.getByTestId('contact-payments')).toContainText('Paid');
-  await page.getByRole('tab', { name: 'Journey' }).click();
   await expect(page.getByTestId('journey')).toContainText('Payment received');
 
   // 3. A declined card shows Failed attempt; cancelling shows Cancelled.
