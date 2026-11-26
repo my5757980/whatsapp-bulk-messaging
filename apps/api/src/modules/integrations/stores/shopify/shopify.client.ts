@@ -28,6 +28,10 @@ const METAFIELDS_SET = `mutation MetafieldsSet($metafields: [MetafieldsSetInput!
 const ORDER_CANCEL = `mutation OrderCancel($orderId: ID!, $reason: OrderCancelReason!, $refund: Boolean!, $restock: Boolean!, $notifyCustomer: Boolean) {
   orderCancel(orderId: $orderId, reason: $reason, refund: $refund, restock: $restock, notifyCustomer: $notifyCustomer) { job { id } orderCancelUserErrors { field message } }
 }`;
+/** Feature 008 (R5): an order paid through its pay link; needs write_orders, as tags and cancel. */
+const ORDER_MARK_AS_PAID = `mutation OrderMarkAsPaid($input: OrderMarkAsPaidInput!) {
+  orderMarkAsPaid(input: $input) { order { id displayFinancialStatus } userErrors { field message } }
+}`;
 const ORDER_BY_ID = `query OrderById($id: ID!) { order(id: $id) { ...OrderFields } }
 ${ORDER_FIELDS_FRAGMENT}`;
 const ORDERS_SINCE = `query OrdersSince($query: String!, $after: String) {
@@ -143,6 +147,13 @@ export class ShopifyClient {
     });
     const error = data.orderCancel.orderCancelUserErrors[0];
     if (error) throw new StoreApiError(`Shopify refused to cancel the order: ${error.message}`.slice(0, 200), null);
+  }
+
+  /** Feature 008: marks the order paid for its outstanding balance (a pay link payment). */
+  async markOrderPaid(store: Pick<StoreConnection, 'baseUrl'>, token: string, gid: string): Promise<void> {
+    const data = await this.graphql<{ orderMarkAsPaid: { userErrors: Array<{ message: string }> } }>(store.baseUrl, token, ORDER_MARK_AS_PAID, { input: { id: gid } });
+    const error = data.orderMarkAsPaid.userErrors[0];
+    if (error) throw new StoreApiError(`Shopify refused to mark the order paid: ${error.message}`.slice(0, 200), null);
   }
 
   /** A checkout read again at reminder time (US6): payloads can lack details, and it may be completed by now. */

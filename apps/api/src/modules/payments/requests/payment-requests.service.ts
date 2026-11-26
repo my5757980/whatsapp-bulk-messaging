@@ -42,7 +42,9 @@ export const ListRequestsSchema = z
     contactId: z.uuid().optional(),
     campaignId: z.uuid().optional(),
     reference: z.string().trim().max(80).optional(),
-    includeTest: z.coerce.boolean().optional(),
+    includeTest: z.stringbool().optional(),
+    /** The waiting test requests of a flow's test sessions (the flow editor's test panel, R13). */
+    testFlowId: z.uuid().optional(),
     page: z.coerce.number().int().min(1).default(1),
     pageSize: z.coerce.number().int().min(1).max(200).default(50),
   })
@@ -176,6 +178,9 @@ export class PaymentRequestsService {
       ...(query.campaignId ? { campaignId: query.campaignId } : {}),
       ...(query.reference ? { reference: query.reference } : {}),
       ...(query.includeTest ? {} : { isTest: false }),
+      ...(query.testFlowId
+        ? { isTest: true, source: 'FLOW' as const, flowSessionId: { in: (await this.prisma.flowSession.findMany({ where: { flowId: query.testFlowId, isTest: true }, select: { id: true }, orderBy: { startedAt: 'desc' }, take: 50 })).map((s) => s.id) } }
+        : {}),
       ...(query.from || query.to
         ? { createdAt: { ...(query.from ? { gte: new Date(`${query.from}T00:00:00Z`) } : {}), ...(query.to ? { lt: new Date(new Date(`${query.to}T00:00:00Z`).getTime() + 86_400_000) } : {}) } }
         : {}),
@@ -195,6 +200,26 @@ export class PaymentRequestsService {
     const rows = await this.prisma.paymentRequest.findMany({ where: { contactId }, include: REQUEST_INCLUDE, orderBy: { createdAt: 'desc' }, take: 200 });
     const failed = await this.failedDeliveries(rows);
     return { requests: rows.map((r) => requestDto(r, this.effects.linkBase(), failed.has(r.id))), chatOrders: await this.chatOrdersOf(contactId) };
+  }
+
+  /**
+   * POST /payments/requests/{id}/test-result (R13): drives a flow test session's payment step without
+   * paying. Paid marks the test request paid; not paid cancels it; both resume the session.
+   */
+  async testResult(id: string, result: 'paid' | 'notPaid', actor: AuditActor) {
+    const row = await this.prisma.paymentRequest.findUnique({ where: { id } });
+    if (!row) throw AppError.notFound('Payment request not found');
+    if (!row.isTest || row.source !== 'FLOW') throw AppError.conflict('Only test requests from flow test sessions can be driven', 'NOT_TEST');
+    if (row.status !== 'WAITING') throw AppError.conflict('The request is no longer waiting', 'NOT_WAITING');
+    if (result === 'notPaid') return this.cancel(id, actor);
+    const access = await this.gateway.access();
+    const at = Math.floor(Date.now() / 1000);
+    await this.effects.applyTo(
+      id,
+      { id: `test:${id}`, type: 'checkout.session.completed', livemode: access?.livemode ?? false, created: at, requestId: id, paymentIntentId: null, check: false, change: { kind: 'paid', at, amountMinor: Number(row.amountMinor), paymentIntentId: null, sessionId: row.sessionId ?? 'test' } },
+      access?.livemode ?? false,
+    );
+    return this.dto(id);
   }
 
   /** Overridden by US6 to list chat orders; empty until then. */

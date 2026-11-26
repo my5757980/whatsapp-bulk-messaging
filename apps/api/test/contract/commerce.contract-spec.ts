@@ -118,4 +118,23 @@ describe('Commerce API contract', () => {
       expect((await request(ctx.server()).get('/l/p/ZZZZZZZZZZ')).status).toBe(404);
     });
   });
+
+  describe('US3 test results', () => {
+    beforeEach(async () => {
+      await seedGateway(ctx);
+      await seedPaymentSettings(ctx);
+    });
+
+    it('POST /payments/requests/{id}/test-result: 200, 409 and 404', async () => {
+      const { contact, conversation } = await seedOpenChat(ctx);
+      const base = { contactId: contact.id, conversationId: conversation.id, amountMinor: 9900n, currency: 'aed', description: 'Test booking', expiresAt: new Date(Date.now() + 3_600_000), status: 'WAITING' as const };
+      const test = await ctx.prisma.paymentRequest.create({ data: { ...base, code: 'TstRes0001', source: 'FLOW', isTest: true } });
+      const real = await ctx.prisma.paymentRequest.create({ data: { ...base, code: 'TstRes0002', source: 'INBOX', isTest: false } });
+      const route = '/payments/requests/{id}/test-result';
+      await check('post', route, await call('post', `/payments/requests/${test.id}/test-result`, { result: 'notPaid' }), 200);
+      await check('post', route, await call('post', `/payments/requests/${test.id}/test-result`, { result: 'paid' }), 409);
+      await check('post', route, await call('post', `/payments/requests/${real.id}/test-result`, { result: 'paid' }), 409);
+      await check('post', route, await call('post', '/payments/requests/0196f1f0-0000-7000-8000-00000000dead/test-result', { result: 'paid' }), 404);
+    });
+  });
 });

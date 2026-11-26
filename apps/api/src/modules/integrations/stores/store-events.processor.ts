@@ -1,4 +1,4 @@
-import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional, type OnModuleInit } from '@nestjs/common';
 import {
   choosePhone,
   isStale,
@@ -32,6 +32,7 @@ import { StoreCarts } from './store-carts.js';
 import { ShopifyClient } from './shopify/shopify.client.js';
 import { STORE_EVENT_JOB } from './store-events-inbox.js';
 import { StoreMessages } from './store-messages.js';
+import { STORE_PAYMENTS, type StorePaymentsPort } from './store-payments.port.js';
 import { plainStoreError } from './store-http.js';
 
 // Store events, one at a time (feature 006 US4, FR-026 - FR-033, research R9): the order is upserted
@@ -67,6 +68,7 @@ export class StoreEventsProcessor implements OnModuleInit {
     private readonly cod: CodService,
     private readonly carts: StoreCarts,
     private readonly metrics: MetricsService,
+    @Optional() @Inject(STORE_PAYMENTS) private readonly payments?: StorePaymentsPort,
   ) {}
 
   onModuleInit(): void {
@@ -167,6 +169,11 @@ export class StoreEventsProcessor implements OnModuleInit {
     // The order's cart is recovered (after a reminder) or closed (US6).
     if (!facts.cancelled) {
       await this.carts.onOrder(store, { id: order.id, orderNumber: order.orderNumber, externalId: order.externalId, contactId: order.contactId, total: facts.total, currency: facts.currency, placedAt: order.placedAt }, checkoutId);
+    }
+
+    // Feature 008: an unpaid (or, when chosen, COD) order gets its Pay now link once.
+    if (this.payments) {
+      await this.payments.payLink({ store, order, facts, phone: phone && recipient ? { e164: phone.e164, country: recipient.country } : null, contact });
     }
 
     const stages = orderStages(facts, store.platform, { shippedStatus: store.shippedStatus, deliveredStatus: store.deliveredStatus });

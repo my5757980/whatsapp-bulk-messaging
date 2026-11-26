@@ -6,6 +6,24 @@ import { validateForPublish, type Problem } from './validate.js';
 const graph = (raw: Record<string, unknown>) => FlowGraphSchema.parse({ version: 1, ...raw });
 const codes = (problems: Problem[]) => problems.map((p) => `${p.code}:${p.stepId ?? p.triggerId ?? '-'}`).sort();
 
+describe('validateForPublish: payment steps (feature 008, T045)', () => {
+  const withPayment = (step: Record<string, unknown>) =>
+    graph({ start: 'pay', triggers: [], steps: [{ id: 'pay', type: 'payment', description: 'Booking fee', next: 'ok', ...step }, { id: 'ok', type: 'message', text: 'Paid, thank you' }] });
+  it('needs what the payment is for and a paid branch', () => {
+    expect(validateForPublish(withPayment({}))).toEqual([]);
+    expect(codes(validateForPublish(withPayment({ description: ' ' })))).toEqual(['MISSING_CONTENT:pay']);
+    expect(codes(validateForPublish(withPayment({ next: null })))).toEqual(['BRANCH_NOT_CONNECTED:pay', 'UNREACHABLE_STEP:ok']);
+  });
+  it('needs Stripe connected when the caller says it is not', () => {
+    expect(codes(validateForPublish(withPayment({}), { gatewayConnected: false }))).toEqual(['PAYMENTS_NOT_CONNECTED:pay']);
+    expect(validateForPublish(withPayment({}), { gatewayConnected: true })).toEqual([]);
+  });
+  it('counts as waiting, so a retry loop through it is allowed', () => {
+    const loop = graph({ start: 'pay', triggers: [], steps: [{ id: 'pay', type: 'payment', description: 'Fee', next: 'ok', onNotPaid: 'again' }, { id: 'again', type: 'message', text: 'Try again', next: 'pay' }, { id: 'ok', type: 'end' }] });
+    expect(validateForPublish(loop)).toEqual([]);
+  });
+});
+
 describe('validateForPublish', () => {
   it('accepts a complete flow', () => {
     const g = graph({

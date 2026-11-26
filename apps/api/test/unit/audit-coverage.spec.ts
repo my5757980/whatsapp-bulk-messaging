@@ -10,11 +10,6 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../sr
 /** Actions listed before the code that records them exists (empty: every action is recorded). */
 const PENDING = new Set<string>([
   // Feature 008: recorded by their stories (tasks.md T094 empties this list)
-  'payments.gateway_connected',
-  'payments.gateway_keys_replaced',
-  'payments.gateway_disconnected',
-  'payments.settings_changed',
-  'payment_request.cancelled',
   'catalog.connected',
   'catalog.disconnected',
   'catalog.fill_changed',
@@ -149,6 +144,19 @@ describe('audit coverage', () => {
       'ad_audience.deleted',
       'ad_lead_form.created',
       'ad_leads.exported',
+      'payments.gateway_connected',
+      'payments.gateway_keys_replaced',
+      'payments.gateway_disconnected',
+      'payments.settings_changed',
+      'payment_request.cancelled',
+      'catalog.connected',
+      'catalog.disconnected',
+      'catalog.fill_changed',
+      'catalog.commerce_settings_changed',
+      'form.published',
+      'form.archived',
+      'payments.exported',
+      'form_answers.exported',
     ]);
   });
 

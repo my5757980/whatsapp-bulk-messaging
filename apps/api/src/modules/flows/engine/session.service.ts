@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { checkChatMedia, FlowGraphSchema, type AnswerContext, type FlowGraph, type StepOf } from '@wbm/shared';
 import { v7 as uuidv7 } from 'uuid';
 import { MetricsService } from '../../../common/metrics/metrics.service.js';
@@ -17,6 +17,7 @@ import { requestSendWorkerSync, sessionSendJob } from '../../sending/send-jobs.j
 import { SettingsService } from '../../settings/settings.service.js';
 import { FLOW_API_JOB, FLOW_TIMER_JOB, flowApiJobId, flowTimerJobId, todayIn, type FlowApiData, type FlowTimerData } from '../steps/flow-jobs.js';
 import type { FlowOutboundMessage, FlowSessionResult } from './effects.js';
+import { FLOW_PAYMENTS, type FlowPaymentRequest, type FlowPaymentsPort } from './ports.js';
 import { renderFlowText } from './render.js';
 import { newSessionState, run, type FlowFacts, type FlowInput, type RunResult, type SessionState } from './run.js';
 import { DripEvents } from '../../growth/drips/drip-events.js';
@@ -67,6 +68,8 @@ interface AfterCommit {
   requested: boolean;
   /** Notes added by hand-over steps, shown live after commit. */
   noteIds: string[];
+  /** Feature 008: payment steps' requests, made after commit (a Stripe call never runs in the lock). */
+  payments: FlowPaymentRequest[];
 }
 
 type SessionRow = Prisma.FlowSessionGetPayload<object>;
@@ -93,6 +96,7 @@ export class FlowSessionService {
     private readonly aiConversations: AiConversationsService,
     private readonly dripEvents: DripEvents,
     private readonly platformEvents: PlatformEvents,
+    @Optional() @Inject(FLOW_PAYMENTS) private readonly flowPayments?: FlowPaymentsPort,
   ) {}
 
   /** Starts a flow for a chat; refuses when a session is already running unless asked to replace it. */
@@ -166,7 +170,7 @@ export class FlowSessionService {
   }
 
   /** A timer or an API result for a session; stale tokens do nothing (research R10). */
-  async resume(sessionId: string, input: Extract<FlowInput, { kind: 'timer' | 'api' }>): Promise<void> {
+  async resume(sessionId: string, input: Extract<FlowInput, { kind: 'timer' | 'api' | 'payment' }>): Promise<void> {
     const session = await this.prisma.flowSession.findUnique({ where: { id: sessionId }, select: { conversationId: true } });
     if (!session) return;
     await this.inConversation(session.conversationId, async (tx, after) => {
@@ -282,7 +286,7 @@ export class FlowSessionService {
   // ---------- internals ----------
 
   private async inConversation<T>(conversationId: string, work: (tx: Tx, after: AfterCommit) => Promise<T>): Promise<T> {
-    const after: AfterCommit = { numberId: '', conversationId, sendItemIds: [], timers: [], apiCalls: [], touched: false, contactChanged: null, requested: false, noteIds: [] };
+    const after: AfterCommit = { numberId: '', conversationId, sendItemIds: [], timers: [], apiCalls: [], touched: false, contactChanged: null, requested: false, noteIds: [], payments: [] };
     const result = await this.prisma.$transaction(
       async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`flow-conversation:${conversationId}`}::text))`;
@@ -339,7 +343,7 @@ export class FlowSessionService {
       render: (text, fallbacks, answers, saved) =>
         renderFlowText(text, saved ? { ...contact, attributes: { ...contact.attributes, ...saved } } : contact, fallbacks, answers),
       answers: input.kind === 'message' ? await this.answerContext() : { today: todayIn('UTC'), normalizePhone: () => null },
-      ...(flow.graph.steps.some((st) => st.type === 'condition' || st.type === 'attributes') ? { facts: await this.factsFor(tx, row, contact) } : {}),
+      ...(flow.graph.steps.some((st) => st.type === 'condition' || st.type === 'attributes' || (st.type === 'payment' && st.amount.source === 'attribute')) ? { facts: await this.factsFor(tx, row, contact) } : {}),
     });
     await this.apply(tx, row, flow, result, conversation.lastCustomerMessageAt, after);
   }
@@ -416,6 +420,20 @@ export class FlowSessionService {
           break;
         case 'callApi':
           after.apiCalls.push({ sessionId: row.id, token: state.waitToken });
+          break;
+        case 'requestPayment':
+          after.payments.push({
+            sessionId: row.id,
+            token: state.waitToken,
+            conversationId: row.conversationId,
+            numberId: after.numberId,
+            contactId: row.contactId,
+            stepId: effect.stepId,
+            amount: effect.amount,
+            description: effect.description,
+            expiryMinutes: effect.expiryMinutes,
+            isTest: row.isTest,
+          });
           break;
         case 'end':
           ended = effect.reason ? { result: effect.result, reason: effect.reason } : { result: effect.result };
@@ -689,6 +707,14 @@ export class FlowSessionService {
       if (after.contactChanged) await this.publisher.contactUpdated(after.contactChanged);
       for (const timer of after.timers) await this.queueTimer(timer);
       for (const call of after.apiCalls) await this.queueApiCall(call);
+      // Feature 008: a payment that cannot be made sends the session on its not-paid branch.
+      for (const payment of after.payments) {
+        const made = this.flowPayments ? await this.flowPayments.request(payment).catch((error: Error) => ({ ok: false as const, reason: error.message })) : { ok: false as const, reason: 'payments are not available' };
+        if (!made.ok) {
+          this.logger.warn({ sessionId: payment.sessionId, reason: made.reason }, 'A flow payment request could not be made');
+          await this.resume(payment.sessionId, { kind: 'payment', token: payment.token, paid: false });
+        }
+      }
     } catch (error) {
       this.logger.error({ err: (error as Error).message, conversationId: after.conversationId }, 'Could not queue flow work after commit');
     }

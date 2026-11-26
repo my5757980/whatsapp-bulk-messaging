@@ -5,12 +5,20 @@ import type { AppConfig } from '../../common/config/config.js';
 import { REDIS_CLIENT } from '../../common/queue/queue.module.js';
 import { LinkRateLimiter } from '../growth/links/link-rate-limiter.js';
 import { InboxApiModule } from '../inbox/inbox.module.js';
+import { CAMPAIGN_PAYMENTS } from '../campaigns/campaign-payments.port.js';
+import { FLOW_PAYMENTS } from '../flows/engine/ports.js';
+import { CampaignPayments } from './campaigns/campaign-payments.js';
+import { STORE_PAYMENTS } from '../integrations/stores/store-payments.port.js';
+import { StorePayments } from './stores/store-payments.js';
 import { PaymentEventsService } from './events/payment-events.service.js';
+import { FlowPayments } from './flows/flow-payments.js';
 import { StripeWebhookController } from './events/stripe-webhook.controller.js';
 import { PaymentGatewayController } from './gateway/payment-gateway.controller.js';
 import { PaymentGatewayService } from './gateway/payment-gateway.service.js';
 import { PayLinkController, PayLinkService } from './links/pay-link.controller.js';
+import { PublicPaymentsController, PublicPaymentsService } from './public/public-payments.controller.js';
 import { PaymentChatService } from './requests/payment-chat.service.js';
+import { PaidActions } from './requests/paid-actions.js';
 import { PaymentEffects } from './requests/payment-effects.js';
 import { PaymentRequestsController } from './requests/payment-requests.controller.js';
 import { PaymentRequestsService } from './requests/payment-requests.service.js';
@@ -35,6 +43,16 @@ const DOMAIN: Provider[] = [
   PaymentSessions,
   PaymentSender,
   PaymentRequestsService,
+  PaidActions,
+  FlowPayments,
+  // The port the flow engine calls for payment steps (flows never import payments).
+  { provide: FLOW_PAYMENTS, useExisting: FlowPayments },
+  CampaignPayments,
+  // The port campaign launches call for per-recipient requests (campaigns never import payments).
+  { provide: CAMPAIGN_PAYMENTS, useExisting: CampaignPayments },
+  StorePayments,
+  // The port store order events call for pay links (stores never import payments).
+  { provide: STORE_PAYMENTS, useExisting: StorePayments },
 ];
 
 /** Payments services shared by the HTTP app and the worker. */
@@ -45,6 +63,7 @@ export class PaymentsDomainModule {}
 const API_PROVIDERS: Provider[] = [
   PaymentChatService,
   PayLinkService,
+  PublicPaymentsService,
   // Pay links share the 005 per-client limit (the same Redis keys as tracked links).
   {
     provide: LinkRateLimiter,
@@ -52,7 +71,7 @@ const API_PROVIDERS: Provider[] = [
     useFactory: (redis: Redis, config: AppConfig) => new LinkRateLimiter(redis, config.TOKEN_ENCRYPTION_KEY),
   },
 ];
-const CONTROLLERS: Type[] = [PaymentGatewayController, PaymentSettingsController, StripeWebhookController, PaymentRequestsController, PayLinkController];
+const CONTROLLERS: Type[] = [PaymentGatewayController, PaymentSettingsController, StripeWebhookController, PaymentRequestsController, PayLinkController, PublicPaymentsController];
 
 /** The gateway, settings, payment requests, reports, the pay link and the Stripe webhook (HTTP app only). */
 @Module({

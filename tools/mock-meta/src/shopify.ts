@@ -25,6 +25,8 @@ interface MockShop {
   tags: Map<string, string[]>;
   metafields: Map<string, Json[]>;
   cancelled: string[];
+  /** Orders marked paid by orderMarkAsPaid (feature 008). */
+  paid: string[];
   checkouts: Json[];
   deliveries: Array<{ topic: string; uri: string; status: number }>;
 }
@@ -34,7 +36,7 @@ const shops = new Map<string, MockShop>();
 function shopOf(handle: string): MockShop {
   let shop = shops.get(handle);
   if (!shop) {
-    shop = { handle, clientSecret: null, tokens: new Set(), subscriptions: [], orders: new Map(), nextOrder: 1001, tags: new Map(), metafields: new Map(), cancelled: [], checkouts: [], deliveries: [] };
+    shop = { handle, clientSecret: null, tokens: new Set(), subscriptions: [], orders: new Map(), nextOrder: 1001, tags: new Map(), metafields: new Map(), cancelled: [], paid: [], checkouts: [], deliveries: [] };
     shops.set(handle, shop);
   }
   return shop;
@@ -105,12 +107,13 @@ function restOrder(shop: MockShop, input: Json): Json {
     order_number: number,
     total_price: String(input.total ?? '120.00'),
     currency: String(input.currency ?? 'AED'),
-    financial_status: input.cod ? 'pending' : 'paid',
+    // Feature 008: `unpaid` places a manual-payment order waiting to be paid (pay links).
+    financial_status: input.cod || input.unpaid ? 'pending' : 'paid',
     fulfillment_status: null,
     cancelled_at: null,
     created_at: now,
     updated_at: now,
-    payment_gateway_names: input.cod ? ['Cash on Delivery (COD)'] : ['shopify_payments'],
+    payment_gateway_names: input.cod ? ['Cash on Delivery (COD)'] : input.unpaid ? ['manual'] : ['shopify_payments'],
     buyer_accepts_marketing: Boolean(input.marketing),
     customer: { first_name: String(input.firstName ?? 'Layla'), last_name: 'Customer', phone: null },
     shipping_address: phone ? { first_name: String(input.firstName ?? 'Layla'), last_name: 'Customer', phone } : null,
@@ -172,6 +175,14 @@ function graphql(shop: MockShop, query: string, variables: Json): Json {
     shop.cancelled.push(String(variables.orderId));
     return { data: { orderCancel: { job: { id: `gid://shopify/Job/${randomUUID()}` }, orderCancelUserErrors: [] } } };
   }
+  if (query.includes('orderMarkAsPaid')) {
+    const id = String(((variables.input ?? {}) as Json).id ?? '');
+    const node = [...shop.orders.values()].find((o) => o.admin_graphql_api_id === id);
+    if (!node) return { data: { orderMarkAsPaid: { order: null, userErrors: [{ field: ['id'], message: 'Order does not exist' }] } } };
+    shop.paid.push(id);
+    node.financial_status = 'paid';
+    return { data: { orderMarkAsPaid: { order: { id, displayFinancialStatus: 'PAID' }, userErrors: [] } } };
+  }
   if (query.includes('abandonedCheckouts')) return { data: { abandonedCheckouts: { nodes: shop.checkouts } } };
   if (query.includes('order(id')) {
     const node = [...shop.orders.values()].find((o) => o.admin_graphql_api_id === variables.id);
@@ -224,7 +235,7 @@ export async function handleShopify(req: IncomingMessage, res: ServerResponse, u
     const shop = shopOf(parts[2]);
     const action = parts[3];
     if (req.method === 'GET' && !action) {
-      send(res, 200, { subscriptions: shop.subscriptions, tags: Object.fromEntries(shop.tags), metafields: Object.fromEntries(shop.metafields), cancelled: shop.cancelled, deliveries: shop.deliveries, orders: [...shop.orders.values()] });
+      send(res, 200, { subscriptions: shop.subscriptions, tags: Object.fromEntries(shop.tags), metafields: Object.fromEntries(shop.metafields), cancelled: shop.cancelled, paid: shop.paid, deliveries: shop.deliveries, orders: [...shop.orders.values()] });
       return true;
     }
     const body = req.method === 'POST' ? await readJson(req) : {};

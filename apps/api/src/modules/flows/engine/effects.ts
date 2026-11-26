@@ -43,6 +43,8 @@ export type FlowEffect =
   /** A delayed timer carrying the current wait token. */
   | { kind: 'schedule'; stepId: string; purpose: 'delay' | 'timeout'; delayMs: number }
   | { kind: 'callApi'; stepId: string }
+  /** Feature 008: ask for a payment; the amount is resolved to the Stripe currency by the payments service. */
+  | { kind: 'requestPayment'; stepId: string; amount: { minor: number } | { major: number } | null; description: string; expiryMinutes: number }
   | { kind: 'jump'; stepId: string; flowId: string }
   /** Start the agent's AI conversation in the chat (started by the flow, 004 FR-033). */
   | { kind: 'handToAi'; stepId: string; agentId: string }

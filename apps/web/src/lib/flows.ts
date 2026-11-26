@@ -54,10 +54,11 @@ export const STEP_LABELS: Record<StepType, string> = {
   handover: 'Hand over',
   aiAgent: 'Hand to AI agent',
   end: 'End',
+  payment: 'Request payment',
 };
 
 /** Steps available so far; later stories add the rest (hand-over arrives with US3). */
-export const PALETTE: StepType[] = ['message', 'buttons', 'question', 'list', 'tags', 'attributes', 'condition', 'delay', 'api', 'jump', 'aiAgent', 'end'];
+export const PALETTE: StepType[] = ['message', 'buttons', 'question', 'list', 'tags', 'attributes', 'condition', 'delay', 'api', 'payment', 'jump', 'aiAgent', 'end'];
 
 /** A readable name for a branch of a step. */
 export function branchLabel(step: FlowStep, branch: string): string {
@@ -78,6 +79,7 @@ export function branchLabel(step: FlowStep, branch: string): string {
     no: 'No',
     success: 'Success',
     failed: 'Failed',
+    onNotPaid: 'Not paid',
   };
   return names[branch] ?? branch;
 }
@@ -113,6 +115,10 @@ export function stepSummary(step: FlowStep): string {
       return step.agentId ? 'An AI agent answers from here' : 'No agent chosen';
     case 'end':
       return 'The flow ends';
+    case 'payment': {
+      const amount = step.amount.source === 'static' ? `AED ${(step.amount.minor / 100).toFixed(2)}` : step.amount.source === 'answer' ? `the ${step.amount.name} answer` : `the ${step.amount.key} attribute`;
+      return `Ask for ${amount}${step.description.trim() ? `: ${step.description.trim()}` : ''}`;
+    }
   }
 }
 
@@ -178,6 +184,8 @@ export function newStep(type: StepType, id: string, position: { x: number; y: nu
       return { id, type, position, agentId: null };
     case 'end':
       return { id, type, position };
+    case 'payment':
+      return { id, type, position, amount: { source: 'static', minor: 10_000 }, description: '', expiryMinutes: 60, next: null, onNotPaid: null, fallbacks: {} };
     default:
       throw new Error(`The ${type} step is not available yet`);
   }
@@ -204,6 +212,8 @@ export function withBranch(step: FlowStep, branch: string, target: string | null
       return branch === 'yes' || branch === 'no' ? { ...step, [branch]: target } : step;
     case 'api':
       return branch === 'success' || branch === 'failed' ? { ...step, [branch]: target } : step;
+    case 'payment':
+      return branch === 'next' || branch === 'onNotPaid' ? { ...step, [branch]: target } : step;
     default:
       return step;
   }

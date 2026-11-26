@@ -21,7 +21,9 @@ export type ProblemCode =
   | 'LOOP_WITHOUT_WAIT'
   | 'JUMP_TARGET_NOT_PUBLISHED'
   | 'AGENT_NOT_PUBLISHED'
-  | 'NOT_HTTPS';
+  | 'NOT_HTTPS'
+  // Feature 008: a commerce step needs its connection or form.
+  | 'PAYMENTS_NOT_CONNECTED';
 
 export interface Problem {
   code: ProblemCode;
@@ -34,6 +36,8 @@ export interface Problem {
 export interface ValidateOptions {
   /** Opt-out, opt-in and "talk to a person" keywords (FR-021). */
   reservedKeywords?: readonly string[];
+  /** Feature 008 (FR-040): whether Stripe is connected, for payment steps; unknown means not checked. */
+  gatewayConnected?: boolean;
 }
 
 const blank = (value: string | null | undefined) => !value?.trim();
@@ -82,6 +86,8 @@ function contentProblems(step: FlowStep): Problem[] {
       return step.flowId ? [] : missing('Choose the flow to continue in', 'flowId');
     case 'aiAgent':
       return step.agentId ? [] : missing('Choose the AI agent that takes over', 'agentId');
+    case 'payment':
+      return blank(step.description) ? missing('Say what the payment is for', 'description') : [];
     case 'delay':
     case 'handover':
     case 'end':
@@ -112,7 +118,7 @@ function triggerProblems(trigger: FlowTrigger, options: ValidateOptions): Proble
 }
 
 /** Steps that wait for the customer, so a loop through one of them cannot spin on its own (FR-033). */
-const WAITING: ReadonlySet<StepType> = new Set(['question', 'buttons', 'list']);
+const WAITING: ReadonlySet<StepType> = new Set(['question', 'buttons', 'list', 'payment']);
 
 /** One step of each loop (among the given steps) that never waits for the customer. */
 export function loopsWithoutWait(graph: FlowGraph, only?: ReadonlySet<string>): string[] {
@@ -185,6 +191,9 @@ export function validateForPublish(graph: FlowGraph, options: ValidateOptions = 
       continue;
     }
     problems.push(...contentProblems(step));
+    if (step.type === 'payment' && options.gatewayConnected === false) {
+      problems.push(stepProblem(step, 'PAYMENTS_NOT_CONNECTED', 'Connect Stripe (Payments > Gateway) before publishing a payment step'));
+    }
     const answerName = 'answerName' in step ? step.answerName : undefined;
     if (answerName) {
       const owner = answerOwners.get(answerName);

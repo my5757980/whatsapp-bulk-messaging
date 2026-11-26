@@ -11,7 +11,8 @@ import { api } from '@/lib/api-client';
 import { errorMessage } from '@/lib/errors';
 import { growthKeys, type TrackedLinkConfig, type TrackedLinkSet } from '@/lib/growth';
 import { queryKeys } from '@/lib/query';
-import type { CampaignDetail, Estimate, Template, VariableSource, VariableSourceKind } from '@/lib/types';
+import type { CampaignDetail, CampaignPaymentConfig, Estimate, Template, VariableSource, VariableSourceKind } from '@/lib/types';
+import { PAYMENT_VARIABLE_KEYS, PaymentConfigCard, payLinkButtonKey, paymentConfigComplete } from './payment-config';
 
 const SOURCES: Array<{ value: VariableSourceKind; label: string }> = [
   { value: 'column', label: 'Uploaded column' },
@@ -50,7 +51,11 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
   const allowColumn = uploaded || campaign.audienceType === 'RETARGET';
   const columns = uploaded ? (campaign.audienceUpload?.columns ?? []) : [];
   const defaultSource: VariableSourceKind = uploaded ? 'column' : 'field';
-  const sources = allowColumn ? SOURCES : SOURCES.filter((s) => s.value !== 'column');
+  const [payment, setPayment] = useState<CampaignPaymentConfig | null>(campaign.paymentConfig ?? null);
+  // Feature 008: a template with a pay link button can ask every recipient to pay.
+  const payKey = payLinkButtonKey(template.data, linkConfig.data?.baseUrl);
+  const paying = Boolean(payKey && payment);
+  const sources = [...(allowColumn ? SOURCES : SOURCES.filter((s) => s.value !== 'column')), ...(paying ? [{ value: 'payment' as const, label: 'Payment request' }] : [])];
   const [mapping, setMapping] = useState<Record<string, VariableSource>>(campaign.variableMapping ?? {});
   const [tracked, setTracked] = useState<Record<string, TrackedChoice> | null>(null);
   const [previews, setPreviews] = useState<Estimate['previews'] | null>(null);
@@ -83,14 +88,14 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
       const links = tracked ?? {};
       const clean = Object.fromEntries(
         variables
-          .filter(({ key }) => !links[key])
+          .filter(({ key }) => !links[key] && !(paying && key === payKey))
           .map(({ key }) => {
             const m = mapping[key] ?? { source: defaultSource };
             const fallback = m.fallback?.trim() ? m.fallback.trim() : null;
             return [key, m.source === 'static' ? { source: 'static', value: m.value ?? '', fallback } : { source: m.source, key: m.key ?? '', fallback }];
           }),
       );
-      await api(`/campaigns/${campaign.id}`, { method: 'PATCH', json: { variableMapping: clean } });
+      await api(`/campaigns/${campaign.id}`, { method: 'PATCH', json: { variableMapping: clean, paymentConfig: payKey ? payment : null } });
       await api(`/campaigns/${campaign.id}/tracked-links`, {
         method: 'PUT',
         json: { links: Object.entries(links).map(([variableKey, c]) => ({ variableKey, destination: c.destination.trim(), addCampaignTags: c.addCampaignTags })) },
@@ -108,10 +113,14 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
 
   if (template.isLoading || trackedLinks.isLoading) return <p className="text-sm text-muted-foreground">Loading template…</p>;
   const body = template.data?.components.find((c) => c.type.toUpperCase() === 'BODY')?.text ?? '';
-  const ready = variables.every(({ key }) => {
-    const link = tracked?.[key];
-    return link ? destinationOk(link.destination) : isComplete(mapping[key]);
-  });
+  const ready =
+    paymentConfigComplete(payKey ? payment : null) &&
+    variables.every(({ key }) => {
+      if (paying && key === payKey) return true;
+      const link = tracked?.[key];
+      if (link) return destinationOk(link.destination);
+      return isComplete(mapping[key]) && (paying || mapping[key]?.source !== 'payment');
+    });
 
   return (
     <div className="grid max-w-3xl gap-6">
@@ -120,7 +129,16 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
         <p className="whitespace-pre-wrap">{body}</p>
       </div>
       {!variables.length ? <p className="text-sm text-muted-foreground">This template has no variables. Continue to review.</p> : null}
+      {payKey ? <PaymentConfigCard value={payment} onChange={setPayment} /> : null}
       {variables.map(({ key, example }) => {
+        if (paying && key === payKey) {
+          return (
+            <div key={key} className="grid gap-1 rounded-md border p-4" data-testid={`mapping-${key}`}>
+              <div className="font-mono text-sm font-medium">{key}</div>
+              <div className="text-sm text-muted-foreground">Pay link button: each recipient gets their own link.</div>
+            </div>
+          );
+        }
         const m = mapping[key] ?? { source: defaultSource };
         const id = key.replace(/\W/g, '-');
         const t = trackable.get(key);
@@ -204,6 +222,15 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
                     </NativeSelect>
                   ) : m.source === 'attribute' ? (
                     <Input id={`${id}-value`} value={m.key ?? ''} onChange={(e) => update(key, { key: e.target.value })} placeholder="city" />
+                  ) : m.source === 'payment' ? (
+                    <NativeSelect id={`${id}-value`} value={m.key ?? ''} onChange={(e) => update(key, { key: e.target.value })}>
+                      <option value="">Choose…</option>
+                      {PAYMENT_VARIABLE_KEYS.map((p) => (
+                        <option key={p.key} value={p.key}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </NativeSelect>
                   ) : (
                     <Input id={`${id}-value`} value={m.value ?? ''} onChange={(e) => update(key, { value: e.target.value })} />
                   )}

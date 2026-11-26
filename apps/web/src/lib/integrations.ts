@@ -163,7 +163,7 @@ export const RESULT_LABELS: Array<[keyof MessageCounts, string]> = [
 
 export type StorePlatform = 'SHOPIFY' | 'WOOCOMMERCE';
 export type StoreStatus = 'CONNECTED' | 'ERROR' | 'DISCONNECTED';
-export type StoreAutomationKind = 'ORDER_CONFIRMED' | 'ORDER_SHIPPED' | 'ORDER_DELIVERED' | 'ORDER_CANCELLED' | 'COD_CONFIRMATION' | 'CART_REMINDER';
+export type StoreAutomationKind = 'ORDER_CONFIRMED' | 'ORDER_SHIPPED' | 'ORDER_DELIVERED' | 'ORDER_CANCELLED' | 'COD_CONFIRMATION' | 'CART_REMINDER' | 'PAY_LINK';
 export type CodStatus = 'NONE' | 'ASKED' | 'CONFIRMED' | 'CANCELLED' | 'NO_ANSWER' | 'CLOSED';
 export type CartStatus = 'OPEN' | 'REMINDING' | 'RECOVERED' | 'STOPPED' | 'SKIPPED' | 'EXPIRED';
 
@@ -240,6 +240,8 @@ export interface StoreOrderRow {
   paymentKind: 'COD' | 'PREPAID' | 'UNPAID';
   status: string;
   codStatus: CodStatus;
+  /** Feature 008: paid through its pay link. */
+  paidViaLinkAt?: string | null;
   placedAt: string;
   messages: Array<{ kind: string; outcome: 'QUEUED' | 'SKIPPED'; skipReason: string | null; status: string | null }>;
 }
@@ -432,6 +434,7 @@ export const AUTOMATION_KIND_LABEL: Record<StoreAutomationKind, string> = {
   ORDER_CANCELLED: 'Order cancelled',
   COD_CONFIRMATION: 'Cash-on-delivery confirmation',
   CART_REMINDER: 'Cart reminders',
+  PAY_LINK: 'Pay link',
 };
 
 export const COD_STATUS_LABEL: Record<CodStatus, string> = {
@@ -465,6 +468,12 @@ export const SKIP_REASON_LABEL: Record<string, string> = {
   replied: 'The customer wrote to us',
   store_disconnected: 'The store was disconnected',
   deleted: 'The contact was deleted',
+  off: 'Turned off',
+  cod: 'Cash on delivery (not included)',
+  currency_mismatch: 'Another currency than Stripe’s',
+  gateway_not_ready: 'Stripe is not connected',
+  gateway_error: 'Stripe did not make the payment',
+  amount_invalid: 'The total is outside the payment limits',
 };
 
 export const WIZARD_CHECK_LABEL: Record<WizardCheckName, string> = {

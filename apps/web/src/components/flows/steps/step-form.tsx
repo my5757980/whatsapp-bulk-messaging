@@ -17,6 +17,7 @@ import { DelayForm } from './delay-form';
 import { JumpForm } from './jump-form';
 import { ListForm } from './list-form';
 import { MessageForm } from './message-form';
+import { PaymentForm } from './payment-form';
 import { QuestionForm } from './question-form';
 import { TagsForm } from './tags-form';
 
@@ -88,6 +89,7 @@ export function StepForm({ step, graph, isStart, problems, onChange, onSetStart,
       )}
       {step.type === 'end' && <p className="text-sm text-muted-foreground">The flow ends here. The chat stays open for your team.</p>}
       {step.type === 'api' && <ApiStepForm step={step} graph={graph} flowId={flowId} secrets={secrets} onPatch={patch} />}
+      {step.type === 'payment' && <PaymentForm step={step} graph={graph} onPatch={patch} />}
       <div className="flex flex-wrap gap-2 border-t pt-3">
         <Button type="button" size="sm" variant="outline" onClick={onSetStart} disabled={isStart}>
           {isStart ? 'Start step' : 'Make this the start'}

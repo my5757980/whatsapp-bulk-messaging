@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { toast } from '@/components/ui/toaster';
 import { api } from '@/lib/api-client';
 import { toastError } from '@/lib/errors';
 import type { FlowDetail } from '@/lib/flows';
+import { paymentMoney, paymentsKeys, type PaymentRequest } from '@/lib/payments';
 
 const MAX_TEST_NUMBERS = 3;
 const slots = (numbers: string[]) => [...numbers, '', '', ''].slice(0, MAX_TEST_NUMBERS);
@@ -48,6 +49,51 @@ export function TestPanel({ flowId, testNumbers }: { flowId: string; testNumbers
       <Button type="button" size="sm" variant="outline" className="justify-self-start" onClick={() => save.mutate()} disabled={save.isPending}>
         Save test numbers
       </Button>
+      <TestPayments flowId={flowId} />
     </section>
+  );
+}
+
+/**
+ * Payment steps in test chats (feature 008 US3, R13): a test request is never paid for real; these
+ * buttons send the waiting test session down its paid or not-paid branch.
+ */
+function TestPayments({ flowId }: { flowId: string }) {
+  const queryClient = useQueryClient();
+  const filters = { testFlowId: flowId, status: 'WAITING', includeTest: true };
+  const waiting = useQuery({
+    queryKey: paymentsKeys.requests(filters),
+    queryFn: () => api<{ items: PaymentRequest[] }>(`/payments/requests?testFlowId=${flowId}&status=WAITING&includeTest=true`),
+    refetchInterval: 5_000,
+  });
+  const drive = useMutation({
+    mutationFn: ({ id, result }: { id: string; result: 'paid' | 'notPaid' }) => api<PaymentRequest>(`/payments/requests/${id}/test-result`, { method: 'POST', json: { result } }),
+    onSuccess: (_row, { result }) => {
+      toast.success(result === 'paid' ? 'Marked paid: the flow takes the paid branch' : 'Marked not paid: the flow takes the not-paid branch');
+      void queryClient.invalidateQueries({ queryKey: ['payments'] });
+    },
+    onError: toastError,
+  });
+  const items = waiting.data?.items ?? [];
+  if (!items.length) return null;
+  return (
+    <div className="grid gap-2 border-t pt-2">
+      <p className="text-xs font-medium">Test payments waiting</p>
+      {items.map((r) => (
+        <div key={r.id} className="grid gap-1 rounded-md border p-2 text-xs">
+          <span>
+            {paymentMoney(r.amountMinor, r.currency)} · {r.description} · {r.phone ?? 'test chat'}
+          </span>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" onClick={() => drive.mutate({ id: r.id, result: 'paid' })} disabled={drive.isPending}>
+              Mark paid (test)
+            </Button>
+            <Button type="button" size="sm" variant="outline" onClick={() => drive.mutate({ id: r.id, result: 'notPaid' })} disabled={drive.isPending}>
+              Mark not paid (test)
+            </Button>
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }

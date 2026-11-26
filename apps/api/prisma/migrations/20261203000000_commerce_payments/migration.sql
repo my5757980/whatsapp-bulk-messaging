@@ -86,6 +86,12 @@ ALTER TYPE "JourneyEventType" ADD VALUE 'FORM_SUBMITTED';
 -- AlterEnum
 ALTER TYPE "StoreAutomationKind" ADD VALUE 'PAY_LINK';
 
+-- AlterEnum (feature 008: payment campaign recipients without an amount are held back)
+ALTER TYPE "SkipReason" ADD VALUE 'PAYMENT_AMOUNT_MISSING';
+
+-- AlterEnum (feature 008: a store order's Pay now link is sent once)
+ALTER TYPE "StoreMessageKind" ADD VALUE 'PAY_LINK';
+
 -- AlterTable
 ALTER TABLE "campaigns" ADD COLUMN     "payment_config" JSONB;
 
@@ -447,6 +453,11 @@ ALTER TABLE "form_answers" ADD CONSTRAINT "form_answers_form_version_id_fkey" FO
 -- AddForeignKey
 ALTER TABLE "form_answers" ADD CONSTRAINT "form_answers_contact_id_fkey" FOREIGN KEY ("contact_id") REFERENCES "contacts"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+
+-- AlterEnum (feature 008: flow sessions wait for a payment, a cart or a form answer)
+ALTER TYPE "FlowWait" ADD VALUE 'PAYMENT';
+ALTER TYPE "FlowWait" ADD VALUE 'ORDER';
+ALTER TYPE "FlowWait" ADD VALUE 'FORM';
 
 -- Hand-written (feature 008, data-model.md): one-row tables, partial indexes for the payments tick,
 -- trigram search over the catalog copy (pg_trgm is enabled by the init migration), live form names,

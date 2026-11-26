@@ -167,6 +167,8 @@ enum SkipReason {
   INVALID_NUMBER
   DUPLICATE
   MISSING_VARIABLE
+  /// A payment campaign recipient without a valid amount (feature 008, R5).
+  PAYMENT_AMOUNT_MISSING
 }
 
 enum MessageEventType {
@@ -1264,6 +1266,10 @@ enum FlowWait {
   INPUT
   DELAY
   API
+  /// Feature 008: waiting for a payment, a cart (product and catalog steps) or a form answer.
+  PAYMENT
+  ORDER
+  FORM
 }
 
 enum FlowStartedBy {
@@ -2259,6 +2265,8 @@ enum StoreMessageKind {
   COD_REMINDER
   /// The reply after a COD answer; may repeat (a later tap gets the "already answered" reply).
   COD_REPLY
+  /// The order's Pay now link (feature 008).
+  PAY_LINK
 }
 
 enum CartStatus {

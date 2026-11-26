@@ -9,7 +9,7 @@ import type { FlowEffect, FlowSessionResult } from './effects.js';
 /** FR-033: a session that runs this many steps without a customer reply ends as FAILED. */
 export const MAX_STEPS_WITHOUT_INPUT = 50;
 
-export type FlowWait = 'NONE' | 'INPUT' | 'DELAY' | 'API';
+export type FlowWait = 'NONE' | 'INPUT' | 'DELAY' | 'API' | 'PAYMENT' | 'ORDER' | 'FORM';
 
 export interface SessionState {
   sessionId: string;
@@ -28,7 +28,9 @@ export type FlowInput =
   /** A customer message; `replyId` is the id of a tapped button or list row. */
   | { kind: 'message'; text: string | null; replyId: string | null; contentType: string }
   | { kind: 'timer'; token: number }
-  | { kind: 'api'; token: number; ok: boolean; mapped: Record<string, unknown> };
+  | { kind: 'api'; token: number; ok: boolean; mapped: Record<string, unknown> }
+  /** Feature 008: the payment request of a payment step was paid, or expired or was cancelled. */
+  | { kind: 'payment'; token: number; paid: boolean };
 
 /** What condition and attribute steps read about the contact; the session service loads it. */
 export interface FlowFacts {
@@ -156,6 +158,15 @@ class Runner {
 
   render(text: string, fallbacks: Record<string, string>): string {
     return this.ctx.render(text, fallbacks, this.state.answers, this.saved);
+  }
+
+  /** A payment step's amount: fixed in minor units, or an answer or attribute in major units; null when missing. */
+  paymentAmount(step: StepOf<'payment'>): { minor: number } | { major: number } | null {
+    const amount = step.amount;
+    if (amount.source === 'static') return { minor: amount.minor };
+    const raw = amount.source === 'answer' ? this.state.answers[amount.name] : (this.saved[amount.key] ?? this.ctx.facts?.attributes[amount.key]);
+    const value = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw.replace(/[^\d.-]/g, '')) : NaN;
+    return Number.isFinite(value) && value > 0 ? { major: value } : null;
   }
 
   /** Starts waiting for the customer: a new token, so older timers and taps no longer apply. */
@@ -294,6 +305,13 @@ class Runner {
           this.state = { ...this.state, wait: 'API', waitToken: this.state.waitToken + 1 };
           this.effects.push({ kind: 'callApi', stepId: step.id });
           return this.idle();
+        case 'payment': {
+          // Feature 008: the payments service makes and sends the request after commit; its result resumes
+          // the session (paid → next, expired or cancelled → onNotPaid).
+          this.state = { ...this.state, wait: 'PAYMENT', waitToken: this.state.waitToken + 1 };
+          this.effects.push({ kind: 'requestPayment', stepId: step.id, amount: this.paymentAmount(step), description: this.render(step.description, step.fallbacks).trim(), expiryMinutes: step.expiryMinutes });
+          return this.idle();
+        }
         case 'jump':
           if (!step.flowId) return this.end('FAILED', 'no flow to continue in');
           // The session service starts the target flow in the same chat after this session ends.
@@ -403,6 +421,16 @@ export function run(state: SessionState, input: FlowInput, ctx: RunContext): Run
         return runner.advance();
       }
       return runner.idle();
+    }
+    case 'payment': {
+      if (state.wait !== 'PAYMENT' || input.token !== state.waitToken) return runner.idle();
+      const step = runner.step(state.currentStepId);
+      if (step?.type !== 'payment') return runner.idle();
+      if (input.paid) {
+        runner.leave(step, 'next', step.next);
+        return runner.advance();
+      }
+      return runner.leaveOptional(step, 'onNotPaid', step.onNotPaid, 'TIMED_OUT', 'not paid');
     }
     case 'api': {
       if (state.wait !== 'API' || input.token !== state.waitToken) return runner.idle();

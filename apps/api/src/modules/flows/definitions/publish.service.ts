@@ -49,7 +49,9 @@ export class PublishService {
   async publish(id: string, actor: AuditActor) {
     const row = await this.flows.load(id);
     const graph = parseGraph(row.draft);
-    const problems = [...validateForPublish(graph, { reservedKeywords: await this.reserved.list() }), ...(await this.databaseProblems(row, graph))];
+    // Feature 008 (FR-040): payment steps need Stripe connected.
+    const gatewayConnected = graph.steps.some((s) => s.type === 'payment') ? (await this.prisma.paymentGateway.count({ where: { status: 'CONNECTED' } })) > 0 : undefined;
+    const problems = [...validateForPublish(graph, { reservedKeywords: await this.reserved.list(), gatewayConnected }), ...(await this.databaseProblems(row, graph))];
     if (problems.length) {
       throw new AppError(HttpStatus.UNPROCESSABLE_ENTITY, 'PUBLISH_BLOCKED', 'Fix the listed problems before publishing', undefined, { problems });
     }

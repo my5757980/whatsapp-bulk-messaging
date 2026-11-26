@@ -67,7 +67,16 @@ export interface StatusTotals {
   cancelled: number;
 }
 
-export type VariableSourceKind = 'column' | 'field' | 'attribute' | 'static';
+export type VariableSourceKind = 'column' | 'field' | 'attribute' | 'static' | 'payment';
+
+/** Feature 008: a campaign that asks every recipient to pay. */
+export interface CampaignPaymentConfig {
+  amount: { source: 'static'; minor: number } | { source: 'attribute'; attributeKey: string };
+  description: string;
+  expiryMinutes: number;
+  tagId?: string | null;
+  flowId?: string | null;
+}
 
 export interface VariableSource {
   source: VariableSourceKind;
@@ -87,6 +96,7 @@ export interface Campaign {
   retargetStatus?: 'FAILED' | 'NOT_READ' | 'READ' | 'DELIVERED' | 'CLICKED' | 'NOT_CLICKED' | 'REPLIED' | 'NOT_REPLIED' | 'HELD_BACK' | null;
   variableMapping: Record<string, VariableSource>;
   headerMediaAssetId: string | null;
+  paymentConfig?: CampaignPaymentConfig | null;
   state: CampaignState;
   scheduledAt: string | null;
   timezone: string;
@@ -137,7 +147,7 @@ export interface ImportJob {
 
 export interface Estimate {
   eligible: number;
-  excluded: { optedOut: number; noOptIn: number; invalidNumber: number; duplicate: number; missingVariable: number };
+  excluded: { optedOut: number; noOptIn: number; invalidNumber: number; duplicate: number; missingVariable: number; paymentAmountMissing: number };
   messagingLimitWarning: string | null;
   previews: Array<{ phoneMasked: string; text: string }>;
   estimatedCostUsd?: number;

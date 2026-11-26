@@ -4,12 +4,13 @@ import { AppError } from '../../common/errors/app-error.js';
 import { microsToUsd } from '../../common/prisma/prisma-errors.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import type { PageQuery } from '../../common/validation/pagination.js';
-import type { Campaign, Prisma } from '../../generated/prisma/client.js';
+import { Prisma, type Campaign } from '../../generated/prisma/client.js';
 import { AuditService, type AuditActor } from '../audit/audit.service.js';
 import { AudienceFilterSchema, AudienceQueryBuilder } from '../contacts/audience-query.builder.js';
 import { describeMetaError } from '../meta/meta-error-classifier.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { toImportJobDto } from './imports.js';
+import { CampaignPaymentConfigSchema } from './campaign-payments.port.js';
 import { VariableMappingSchema } from './variable-resolver.js';
 
 // Draft campaign CRUD, totals and auto-pause (T091).
@@ -23,6 +24,8 @@ export const CampaignInputSchema = z
     audienceFilter: AudienceFilterSchema.nullable(),
     variableMapping: VariableMappingSchema,
     headerMediaAssetId: z.uuid().nullable(),
+    /** Feature 008: ask every recipient to pay (null: no payment). */
+    paymentConfig: CampaignPaymentConfigSchema.nullable(),
   })
   .partial()
   .strict();
@@ -94,6 +97,7 @@ export function toCampaignDto(c: CampaignWithRefs, totals?: StatusTotals) {
     ...(c.audienceFilter ? { audienceFilter: c.audienceFilter } : {}),
     variableMapping: c.variableMapping ?? {},
     headerMediaAssetId: c.headerMediaAssetId,
+    paymentConfig: c.paymentConfig ?? null,
     state: c.state,
     scheduledAt: iso(c.scheduledAt),
     timezone: c.timezone,
@@ -209,6 +213,9 @@ export class CampaignsService {
     ) {
       details.push({ field: 'headerMediaAssetId', issue: 'Media not found' });
     }
+    const pay = input.paymentConfig;
+    if (pay?.tagId && !(await this.prisma.tag.findUnique({ where: { id: pay.tagId }, select: { id: true } }))) details.push({ field: 'paymentConfig.tagId', issue: 'Tag not found' });
+    if (pay?.flowId && !(await this.prisma.flow.findFirst({ where: { id: pay.flowId, deletedAt: null }, select: { id: true } }))) details.push({ field: 'paymentConfig.flowId', issue: 'Flow not found' });
     if (details.length) throw AppError.validation('Request failed validation', details);
     if (input.audienceFilter) await this.audience.compile(input.audienceFilter);
   }
@@ -222,6 +229,7 @@ export class CampaignsService {
       ...(input.audienceFilter !== undefined ? { audienceFilter: (input.audienceFilter ?? undefined) as Prisma.InputJsonValue | undefined } : {}),
       ...(input.variableMapping !== undefined ? { variableMapping: input.variableMapping as Prisma.InputJsonValue } : {}),
       ...(input.headerMediaAssetId !== undefined ? { headerMediaAssetId: input.headerMediaAssetId } : {}),
+      ...(input.paymentConfig !== undefined ? { paymentConfig: input.paymentConfig === null ? Prisma.DbNull : (input.paymentConfig as Prisma.InputJsonValue) } : {}),
     };
   }
 

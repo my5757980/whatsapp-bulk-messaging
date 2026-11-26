@@ -82,6 +82,7 @@ export const SkipReason = {
   INVALID_NUMBER: 'INVALID_NUMBER',
   DUPLICATE: 'DUPLICATE',
   MISSING_VARIABLE: 'MISSING_VARIABLE',
+  PAYMENT_AMOUNT_MISSING: 'PAYMENT_AMOUNT_MISSING',
 } as const;
 export type SkipReason = (typeof SkipReason)[keyof typeof SkipReason];
 

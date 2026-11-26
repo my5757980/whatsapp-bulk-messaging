@@ -5,6 +5,7 @@ import { CART_FIELDS, COD_DEFAULTS, ORDER_FIELDS, ORDER_FIELD_LABELS, parseVaria
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
+import { payLinkButtonKey } from '@/components/campaigns/wizard/payment-config';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { RequirePermission } from '@/components/require-permission';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +19,7 @@ import { toast } from '@/components/ui/toaster';
 import { api } from '@/lib/api-client';
 import { errorMessage, toastError } from '@/lib/errors';
 import { formatDateTime, titleCase } from '@/lib/format';
+import { growthKeys, type TrackedLinkConfig } from '@/lib/growth';
 import {
   AUTOMATION_KIND_LABEL,
   CART_STATUS_LABEL,
@@ -129,6 +131,8 @@ function StoreView() {
         <AutomationCard store={s} kind="COD_CONFIRMATION" />
         <h3 className="text-base font-semibold">Abandoned carts</h3>
         <CartCard store={s} />
+        <h3 className="text-base font-semibold">Payments</h3>
+        <AutomationCard store={s} kind="PAY_LINK" />
       </div>
 
       <OrdersCard storeId={s.id} />
@@ -261,11 +265,17 @@ function AutomationEditor({
     const buttons = t.components.find((c) => c.type.toUpperCase() === 'BUTTONS')?.buttons ?? [];
     return buttons.length >= 2 && buttons[0]?.type === 'QUICK_REPLY' && buttons[1]?.type === 'QUICK_REPLY';
   };
-  const usable = (templates.data ?? []).filter((t) => (!waba || t.wabaId === waba) && (kind !== 'COD_CONFIRMATION' || codReady(t)));
+  // Feature 008: the pay link template's URL button goes to our pay links and carries the order's code.
+  const linkConfig = useQuery({ queryKey: growthKeys.linkConfig, queryFn: () => api<TrackedLinkConfig>('/tracked-links/config'), staleTime: 5 * 60_000, enabled: kind === 'PAY_LINK' });
+  const payKeyOf = (t: Template | undefined) => (kind === 'PAY_LINK' ? payLinkButtonKey(t, linkConfig.data?.baseUrl) : null);
+  const usable = (templates.data ?? []).filter((t) => (!waba || t.wabaId === waba) && (kind !== 'COD_CONFIRMATION' || codReady(t)) && (kind !== 'PAY_LINK' || payKeyOf(t) !== null));
   const saved = { ...COD_DEFAULTS, ...(automation.settings ?? {}) };
   const [cod, setCod] = useState(saved);
+  const savedPay = automation.settings as { includeCod?: boolean; expiryMinutes?: number } | undefined;
+  const [payLink, setPayLink] = useState({ includeCod: savedPay?.includeCod ?? false, expiryMinutes: savedPay?.expiryMinutes ?? 1440 });
   const template = usable.find((t) => t.id === templateId);
-  const variables = (template?.variables ?? []).map((v) => v.key);
+  const payKey = payKeyOf(template);
+  const variables = (template?.variables ?? []).map((v) => v.key).filter((v) => v !== payKey);
 
   const save = useMutation({
     mutationFn: () =>
@@ -275,6 +285,7 @@ function AutomationEditor({
           enabled,
           steps: [{ templateId, variableMapping: Object.fromEntries(variables.flatMap((v) => (mapping[v] ? [[v, mapping[v]]] : []))) }],
           ...(kind === 'COD_CONFIRMATION' ? { settings: { ...cod, reminderMinutes: Number(cod.reminderMinutes), finalMinutes: Number(cod.finalMinutes) } } : {}),
+          ...(kind === 'PAY_LINK' ? { settings: { includeCod: payLink.includeCod, expiryMinutes: Number(payLink.expiryMinutes) } } : {}),
         },
       }),
     onSuccess: () => {
@@ -370,6 +381,35 @@ function AutomationEditor({
               </div>
             );
           })}
+          {kind === 'PAY_LINK' ? (
+            <div className="grid gap-3 rounded-md border p-3" data-testid="pay-link-settings">
+              <p className="text-xs text-muted-foreground">
+                Unpaid orders get the template with a Pay now link for the order total (Stripe, in the store&apos;s currency). When the customer pays, the order shows paid here and is marked paid in the store.
+              </p>
+              {payKey ? <p className="text-xs text-muted-foreground">The {payKey} button carries the order&apos;s own link.</p> : null}
+              <label className="flex items-start gap-2 text-sm">
+                <input type="checkbox" className="mt-0.5 size-4" checked={payLink.includeCod} onChange={(e) => setPayLink((p) => ({ ...p, includeCod: e.target.checked }))} />
+                <span className="grid gap-0.5">
+                  <span>Also offer cash-on-delivery orders to pay online</span>
+                  <span className="text-xs text-muted-foreground">A waiting COD question closes when they pay.</span>
+                </span>
+              </label>
+              <div className="grid gap-1 sm:max-w-xs">
+                <Label htmlFor="pay-link-expiry">The link expires after (hours)</Label>
+                <Input
+                  id="pay-link-expiry"
+                  type="number"
+                  min={1}
+                  max={720}
+                  value={Math.round((payLink.expiryMinutes / 60) * 100) / 100}
+                  onChange={(e) => {
+                    const minutes = Math.round(Number(e.target.value) * 60);
+                    if (Number.isFinite(minutes) && minutes >= 30 && minutes <= 43_200) setPayLink((p) => ({ ...p, expiryMinutes: minutes }));
+                  }}
+                />
+              </div>
+            </div>
+          ) : null}
           {kind === 'COD_CONFIRMATION' ? (
             <div className="grid gap-3 rounded-md border p-3">
               <p className="text-xs text-muted-foreground">The customer taps the first button to confirm and the second to cancel. The first answer counts.</p>
@@ -483,7 +523,14 @@ function OrdersCard({ storeId }: { storeId: string }) {
                   <TableCell className="tabular-nums">
                     {o.total} {o.currency}
                   </TableCell>
-                  <TableCell>{titleCase(o.paymentKind)}</TableCell>
+                  <TableCell data-testid="order-payment">
+                    {titleCase(o.paymentKind)}
+                    {o.paidViaLinkAt ? (
+                      <Badge variant="success" className="ml-1">
+                        Paid via link
+                      </Badge>
+                    ) : null}
+                  </TableCell>
                   <TableCell className="text-xs" data-testid="order-cod">
                     {COD_STATUS_LABEL[o.codStatus]}
                   </TableCell>
