@@ -19,6 +19,9 @@ import { IntegrationsDomainModule } from './modules/integrations/integrations.mo
 import { AdsDomainModule } from './modules/ads/ads.module.js';
 import { CommerceDomainModule } from './modules/commerce/commerce.module.js';
 import { PaymentsDomainModule } from './modules/payments/payments.module.js';
+import { PaymentEventsProcessor } from './modules/payments/events/payment-events.processor.js';
+import { PaymentsReconcileProcessor } from './modules/payments/events/payments-reconcile.processor.js';
+import { PaymentsTickProcessor } from './modules/payments/tick/payments-tick.processor.js';
 import { AdsAudiencesProcessor } from './modules/ads/audiences/ads-audiences.processor.js';
 import { AdLeadsProcessor } from './modules/ads/leads/ad-leads.processor.js';
 import { LeadgenHandler } from './modules/ads/leads/leadgen.handler.js';
@@ -63,6 +66,9 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
   imports: [DomainModule, WebhooksWorkerModule, InboxDomainModule, FlowsDomainModule, AiDomainModule, GrowthDomainModule, IntegrationsDomainModule, AdsDomainModule, PaymentsDomainModule, CommerceDomainModule],
   providers: [
     StatusHandler,
+    PaymentEventsProcessor,
+    PaymentsTickProcessor,
+    PaymentsReconcileProcessor,
     AdsStatusProcessor,
     AdsInsightsProcessor,
     AdsAudiencesProcessor,

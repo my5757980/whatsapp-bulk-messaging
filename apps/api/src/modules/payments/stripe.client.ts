@@ -135,7 +135,8 @@ export class StripeClient {
     this.baseUrl = config.STRIPE_API_BASE_URL.replace(/\/+$/, '');
     this.version = config.STRIPE_API_VERSION;
     this.timeoutMs = options?.timeoutMs ?? 10_000;
-    this.retryDelaysMs = options?.retryDelaysMs ?? [500, 2_000, 5_000];
+    // Tests use short waits so outage cases stay fast; production waits as research R1 says.
+    this.retryDelaysMs = options?.retryDelaysMs ?? (config.NODE_ENV === 'test' ? [5, 10, 20] : [500, 2_000, 5_000]);
   }
 
   async account(key: string): Promise<StripeAccount> {

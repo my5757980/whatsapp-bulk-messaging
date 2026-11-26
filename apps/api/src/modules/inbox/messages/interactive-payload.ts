@@ -25,6 +25,18 @@ export type GraphInteractive =
       action: { button: string; sections: Array<{ title?: string; rows: Array<{ id: string; title: string; description?: string }> }> };
     };
 
+/** Feature 008: the Pay now message, an interactive cta_url with our pay link (contracts/meta-commerce-graph.md). */
+export interface CtaUrlInteractive {
+  type: 'cta_url';
+  body: { text: string };
+  action: { name: 'cta_url'; parameters: { display_text: string; url: string } };
+}
+
+export function ctaUrlFor(text: string | null, payload: unknown): CtaUrlInteractive {
+  const p = (payload ?? {}) as { buttonText?: string; url?: string };
+  return { type: 'cta_url', body: { text: text ?? '' }, action: { name: 'cta_url', parameters: { display_text: p.buttonText ?? 'Pay now', url: p.url ?? '' } } };
+}
+
 export function interactiveFor(contentType: 'BUTTONS' | 'LIST', text: string | null, payload: unknown): GraphInteractive {
   const p = (payload ?? {}) as ItemPayload;
   const header = p.header ? { header: { type: 'text' as const, text: p.header } } : {};
