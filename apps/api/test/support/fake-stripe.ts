@@ -75,9 +75,8 @@ export class FakeStripe {
 
   install(): this {
     for (const method of ['get', 'post', 'delete'] as const) {
-      nock(STRIPE_BASE)
-        .persist()
-        [method]((p: string) => p.startsWith('/v1/'))
+      const scope = nock(STRIPE_BASE).persist();
+      scope[method]((p: string) => p.startsWith('/v1/'))
         .query(true)
         .reply(async (req: Request) => this.route(req));
     }

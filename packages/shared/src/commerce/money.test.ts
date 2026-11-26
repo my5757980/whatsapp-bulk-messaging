@@ -28,7 +28,7 @@ describe('commerce money', () => {
     expect(formatMinor(15000, 'AED')).toBe('AED 150.00');
     expect(formatMinor(123450, 'aed')).toBe('AED 1,234.50');
     expect(formatMinor(1000, 'USD')).toBe('$10.00');
-    expect(formatMinor(15000, 'AED')).not.toMatch(/[  ]/);
+    expect(formatMinor(15000, 'AED')).not.toMatch(/[\u00a0\u202f]/);
   });
 
   it('keeps the 007 import working (ads/budgets re-exports the same formatter)', () => {

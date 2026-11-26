@@ -71,9 +71,8 @@ export class FakeCommerceGraph {
       );
     };
     for (const method of ['get', 'post', 'delete'] as const) {
-      nock(META_BASE)
-        .persist()
-        [method](commerce)
+      const scope = nock(META_BASE).persist();
+      scope[method](commerce)
         .query(true)
         .reply(async (req: Request) => this.route(req));
     }

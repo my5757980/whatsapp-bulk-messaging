@@ -23,7 +23,7 @@ export const COMMERCE_LIMITS = {
 export function parseCatalogPrice(text: string | null | undefined, currency: string | null | undefined): number | null {
   if (!text || !currency) return null;
   const cleaned = text
-    .replace(/[‎‏  ]/g, ' ')
+    .replace(/[\u200e\u200f\u00a0\u202f]/g, ' ')
     .replace(/[A-Za-z]{3}/g, ' ')
     .replace(/[^\d.,\s-]/g, ' ');
   const match = /\d[\d,]*(?:\.\d+)?/.exec(cleaned);

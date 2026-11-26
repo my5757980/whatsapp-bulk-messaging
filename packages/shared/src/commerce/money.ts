@@ -37,5 +37,5 @@ export function minimumMinor(currency: string): number {
 export function formatMinor(minor: number, currency: string, locale = 'en'): string {
   const format = new Intl.NumberFormat(locale, { style: 'currency', currency: currency.toUpperCase() });
   const digits = format.resolvedOptions().maximumFractionDigits ?? 2;
-  return format.format(minor / 10 ** digits).replace(/[  ]/g, ' ');
+  return format.format(minor / 10 ** digits).replace(/[\u00a0\u202f]/g, ' ');
 }
