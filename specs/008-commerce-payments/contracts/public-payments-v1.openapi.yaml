@@ -49,7 +49,7 @@ paths:
         '201': { description: Made (and sent when send is true), content: { application/json: { schema: { $ref: '#/components/schemas/Payment' } } } }
         '400': { description: invalid_request (field details), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: insufficient_scope or contact_opted_out (template outside the window to an opted-out contact), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '409': { description: gateway_not_ready, window_closed_no_template or idempotency_key_reused (different body), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: 'gateway_not_ready, window_closed_no_template or idempotency_key_reused (different body)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '422': { description: 'amount_too_small, amount_too_large, currency_mismatch or gateway_refused', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '429': { description: rate_limited (Retry-After) }
         '502': { description: gateway_unavailable (nothing sent; safe to retry with the same Idempotency-Key) }
@@ -122,6 +122,6 @@ components:
         refundedMinor: { type: integer }
         expiresAt: { type: string, format: date-time }
         payUrl: { type: string, format: uri }
-        messageId: { type: [string, 'null'], format: uuid, description: The message that carried the link, when sent }
+        messageId: { type: [string, 'null'], format: uuid, description: 'The message that carried the link, when sent' }
         test: { type: boolean }
         createdAt: { type: string, format: date-time }
