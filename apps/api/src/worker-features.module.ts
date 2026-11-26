@@ -17,6 +17,8 @@ import { FlowsDomainModule } from './modules/flows/flows.module.js';
 import { GrowthDomainModule } from './modules/growth/growth.module.js';
 import { IntegrationsDomainModule } from './modules/integrations/integrations.module.js';
 import { AdsDomainModule } from './modules/ads/ads.module.js';
+import { CommerceDomainModule } from './modules/commerce/commerce.module.js';
+import { PaymentsDomainModule } from './modules/payments/payments.module.js';
 import { AdsAudiencesProcessor } from './modules/ads/audiences/ads-audiences.processor.js';
 import { AdLeadsProcessor } from './modules/ads/leads/ad-leads.processor.js';
 import { LeadgenHandler } from './modules/ads/leads/leadgen.handler.js';
@@ -58,7 +60,7 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
  * integration tests, which drive the processors directly with a stub ProcessorRegistry.
  */
 @Module({
-  imports: [DomainModule, WebhooksWorkerModule, InboxDomainModule, FlowsDomainModule, AiDomainModule, GrowthDomainModule, IntegrationsDomainModule, AdsDomainModule],
+  imports: [DomainModule, WebhooksWorkerModule, InboxDomainModule, FlowsDomainModule, AiDomainModule, GrowthDomainModule, IntegrationsDomainModule, AdsDomainModule, PaymentsDomainModule, CommerceDomainModule],
   providers: [
     StatusHandler,
     AdsStatusProcessor,

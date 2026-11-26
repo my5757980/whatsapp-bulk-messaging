@@ -14,6 +14,8 @@ import { FlowsApiModule } from './modules/flows/flows.module.js';
 import { GrowthApiModule } from './modules/growth/growth.module.js';
 import { IntegrationsApiModule } from './modules/integrations/integrations.module.js';
 import { AdsApiModule } from './modules/ads/ads.module.js';
+import { CommerceApiModule } from './modules/commerce/commerce.module.js';
+import { PaymentsApiModule } from './modules/payments/payments.module.js';
 import { InboxApiModule } from './modules/inbox/inbox.module.js';
 import { MetaModule } from './modules/meta/meta.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.service.js';
@@ -43,6 +45,8 @@ import { WebhooksApiModule } from './modules/webhooks/webhooks.module.js';
     GrowthApiModule,
     IntegrationsApiModule,
     AdsApiModule,
+    PaymentsApiModule,
+    CommerceApiModule,
   ],
 })
 export class AppModule {}

@@ -22,6 +22,8 @@ export const ConsentSource = {
   STORE: 'STORE',
   // Feature 007: a lead form answer that ticked the WhatsApp consent box (FR-034).
   LEAD_FORM: 'LEAD_FORM',
+  // Feature 008: a WhatsApp Form opt-in field the customer ticked (FR-035).
+  FORM: 'FORM',
 } as const;
 export type ConsentSource = (typeof ConsentSource)[keyof typeof ConsentSource];
 
@@ -107,6 +109,11 @@ export const NotificationType = {
   AD_REJECTED: 'AD_REJECTED',
   AD_NOT_DELIVERING: 'AD_NOT_DELIVERING',
   ADS_SPEND_CAP_REACHED: 'ADS_SPEND_CAP_REACHED',
+  // Feature 008 commerce and payments
+  PAYMENT_RECEIVED: 'PAYMENT_RECEIVED',
+  PAYMENT_PAID_LATE: 'PAYMENT_PAID_LATE',
+  PAYMENTS_CONNECTION_ERROR: 'PAYMENTS_CONNECTION_ERROR',
+  CATALOG_SYNC_FAILED: 'CATALOG_SYNC_FAILED',
 } as const;
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
 

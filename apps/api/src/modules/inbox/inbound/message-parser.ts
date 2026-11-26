@@ -219,6 +219,25 @@ export function previewOf(item: { contentType: ChatContentType; text: string | n
     case 'FORM_REPLY':
       line = '📝 Form reply';
       break;
+    // Feature 008
+    case 'PAYMENT_REQUEST':
+      line = `💳 ${clean(item.text) || 'Payment request'}`;
+      break;
+    case 'PRODUCT':
+    case 'PRODUCT_LIST':
+      line = `🛍️ ${clean(item.text) || 'Products'}`;
+      break;
+    case 'CATALOG':
+      line = `🛍️ ${clean(item.text) || 'Catalog'}`;
+      break;
+    case 'ORDER': {
+      const count = Array.isArray(p.items) ? p.items.length : 0;
+      line = `🛒 Order${count ? ` (${count} item${count === 1 ? '' : 's'})` : ''}`;
+      break;
+    }
+    case 'FORM':
+      line = `📝 ${clean(item.text) || 'Form'}`;
+      break;
     case 'REACTION':
       line = str(p.emoji) ? `Reacted ${String(p.emoji)}` : 'Removed a reaction';
       break;

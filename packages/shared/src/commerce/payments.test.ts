@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   amountProblem,
   applyPaymentEvent,
-  canTransition,
+  canPaymentTransition,
   expiryProblem,
   parseStripeEvent,
   paymentDisplay,
@@ -166,15 +166,15 @@ describe('applyPaymentEvent', () => {
   });
 
   it('only moves forward between statuses', () => {
-    expect(canTransition('WAITING', 'PAID')).toBe(true);
-    expect(canTransition('WAITING', 'EXPIRED')).toBe(true);
-    expect(canTransition('EXPIRED', 'PAID')).toBe(true);
-    expect(canTransition('CANCELLED', 'PAID')).toBe(true);
-    expect(canTransition('PAID', 'REFUNDED')).toBe(true);
-    expect(canTransition('PAID', 'WAITING')).toBe(false);
-    expect(canTransition('PAID', 'EXPIRED')).toBe(false);
-    expect(canTransition('EXPIRED', 'CANCELLED')).toBe(false);
-    expect(canTransition('REFUNDED', 'PAID')).toBe(false);
+    expect(canPaymentTransition('WAITING', 'PAID')).toBe(true);
+    expect(canPaymentTransition('WAITING', 'EXPIRED')).toBe(true);
+    expect(canPaymentTransition('EXPIRED', 'PAID')).toBe(true);
+    expect(canPaymentTransition('CANCELLED', 'PAID')).toBe(true);
+    expect(canPaymentTransition('PAID', 'REFUNDED')).toBe(true);
+    expect(canPaymentTransition('PAID', 'WAITING')).toBe(false);
+    expect(canPaymentTransition('PAID', 'EXPIRED')).toBe(false);
+    expect(canPaymentTransition('EXPIRED', 'CANCELLED')).toBe(false);
+    expect(canPaymentTransition('REFUNDED', 'PAID')).toBe(false);
   });
 });
 

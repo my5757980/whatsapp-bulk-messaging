@@ -2,7 +2,8 @@
 // same problem next to the same field. Field names match the TemplateInput contract schema.
 
 export type TemplateHeaderFormat = 'TEXT' | 'IMAGE' | 'VIDEO' | 'DOCUMENT';
-export type TemplateButtonType = 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER';
+/** CATALOG, MPM and FLOW buttons: feature 008 (contracts/meta-commerce-graph.md). */
+export type TemplateButtonType = 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER' | 'CATALOG' | 'MPM' | 'FLOW';
 
 export interface TemplateButtonDraft {
   type: TemplateButtonType;
@@ -10,6 +11,8 @@ export interface TemplateButtonDraft {
   url?: string;
   urlExample?: string;
   phoneNumber?: string;
+  /** FLOW: the Meta flow id of a published form version. */
+  flowId?: string;
 }
 
 export interface TemplateDraft {
@@ -130,6 +133,13 @@ export function validateTemplate(draft: TemplateDraft, media?: { mimeType: strin
   else if (buttons.filter((b) => b.type === 'URL').length > TEMPLATE_LIMITS.urlButtonsMax) add('buttons', `at most ${TEMPLATE_LIMITS.urlButtonsMax} website buttons`);
   else if (buttons.filter((b) => b.type === 'PHONE_NUMBER').length > TEMPLATE_LIMITS.phoneButtonsMax) add('buttons', 'at most one phone number button');
 
+  // Feature 008: catalog and multi-product templates are marketing templates with that one button.
+  const productButton = buttons.findIndex((b) => b.type === 'CATALOG' || b.type === 'MPM');
+  if (productButton >= 0) {
+    if (buttons.length !== 1) add(`buttons.${productButton}.type`, 'a catalog or product list button must be the only button');
+    if (draft.category !== 'MARKETING') add('category', 'catalog and product list templates are marketing templates');
+  }
+
   buttons.forEach((button, i) => {
     if (isBlank(button.text)) add(`buttons.${i}.text`, 'enter the button text');
     else if (button.text.length > TEMPLATE_LIMITS.buttonTextMax) add(`buttons.${i}.text`, `must be at most ${TEMPLATE_LIMITS.buttonTextMax} characters`);
@@ -143,10 +153,21 @@ export function validateTemplate(draft: TemplateDraft, media?: { mimeType: strin
         add(`buttons.${i}.url`, 'a link can have one variable, {{1}}, at the very end');
       } else if (names.length === 1 && isBlank(button.urlExample)) add(`buttons.${i}.urlExample`, 'add a sample value for the end of the link');
     }
+    if (button.type === 'FLOW' && !/^[A-Za-z0-9_-]{1,64}$/.test(button.flowId ?? '')) add(`buttons.${i}.flowId`, 'choose a published form');
     if (button.type === 'PHONE_NUMBER' && !/^\+[1-9]\d{6,14}$/.test(button.phoneNumber ?? '')) {
       add(`buttons.${i}.phoneNumber`, 'use international format, e.g. +15550100000');
     }
   });
 
   return issues;
+}
+
+/**
+ * Feature 008 (research R5): the index of a template's pay link button, a URL button whose link is
+ * `${base}/p/{{1}}` (base = PUBLIC_LINK_BASE_URL), or -1. Payment templates need one.
+ */
+export function payLinkButtonIndex(buttons: readonly Pick<TemplateButtonDraft, 'type' | 'url'>[] | undefined, base: string | null | undefined): number {
+  if (!base) return -1;
+  const expected = `${base.replace(/\/+$/, '')}/p/{{1}}`;
+  return (buttons ?? []).findIndex((b) => b.type === 'URL' && (b.url ?? '').replace(/\{\{\s*1\s*\}\}$/, '{{1}}') === expected);
 }

@@ -26,6 +26,13 @@ function toMetaButton(button: TemplateButtonDraft): Component {
         ? { type: 'URL', text: button.text, url, example: [exampleUrl(url, button.urlExample ?? '')] }
         : { type: 'URL', text: button.text, url };
     }
+    // Feature 008 (contracts/meta-commerce-graph.md): catalog, product list and form buttons.
+    case 'CATALOG':
+      return { type: 'CATALOG', text: button.text };
+    case 'MPM':
+      return { type: 'MPM', text: button.text };
+    case 'FLOW':
+      return { type: 'FLOW', text: button.text, flow_id: button.flowId, navigate_screen: 'S1', flow_action: 'navigate' };
   }
 }
 

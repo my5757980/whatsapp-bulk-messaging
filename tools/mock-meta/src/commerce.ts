@@ -54,12 +54,19 @@ function priceText(minor: number, index: number): string {
   }
 }
 
+/** The seeded price of shp-101 … shp-140 in fils (the inbound CLI prices carts with it). */
+export function seededPriceMinor(retailerId: string): number | null {
+  const i = Number(/^shp-(\d+)$/.exec(retailerId)?.[1] ?? NaN) - 100;
+  if (!Number.isInteger(i) || i < 1 || i > 40) return null;
+  return i % 7 === 0 ? 123_450 : 4_500 + i * 2_500;
+}
+
 const products = new Map<string, Product>();
 function seed(): void {
   products.clear();
   for (let i = 1; i <= 40; i++) {
     const retailer = `shp-${100 + i}`;
-    const minor = i % 7 === 0 ? 123_450 : 4_500 + i * 2_500;
+    const minor = seededPriceMinor(retailer) ?? 0;
     products.set(retailer, {
       id: `${7_000_000_000 + i}`,
       retailer_id: retailer,

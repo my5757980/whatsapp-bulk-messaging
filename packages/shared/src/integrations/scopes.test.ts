@@ -4,7 +4,7 @@ import { API_KEY_SCOPES, DEFAULT_API_KEY_SCOPES, SCOPE_LABELS, effectiveScopes, 
 // T011 (feature 006, research R4, FR-010): API key permissions.
 describe('API key scopes', () => {
   it('has the five scopes, with "send messages" alone for keys made before 006', () => {
-    expect(API_KEY_SCOPES).toEqual(['messages.send', 'contacts.read', 'contacts.write', 'campaigns.trigger', 'drips.enrol']);
+    expect(API_KEY_SCOPES).toEqual(['messages.send', 'contacts.read', 'contacts.write', 'campaigns.trigger', 'drips.enrol', 'payments.read', 'payments.write']);
     expect(DEFAULT_API_KEY_SCOPES).toEqual(['messages.send']);
     for (const scope of API_KEY_SCOPES) expect(SCOPE_LABELS[scope]).toMatch(/\w/);
   });

@@ -28,6 +28,10 @@ const table: Array<[string, Permission[], { ADMIN: boolean; MANAGER: boolean; AG
   ['use the team assistant', ['assistant.use'], { ADMIN: true, MANAGER: true, AGENT: false }],
   // Feature 006 integrations (spec FR-056): endpoints get full phone numbers, so only admins add them
   ['webhook endpoints and store connections', ['integrations.manage'], { ADMIN: true, MANAGER: false, AGENT: false }],
+  // Feature 008: managers see every payment and build forms; only admins change payment settings
+  ['all payment requests and totals', ['payments.view'], { ADMIN: true, MANAGER: true, AGENT: false }],
+  ['payment limits, roles, templates and reminders', ['payments.manage'], { ADMIN: true, MANAGER: false, AGENT: false }],
+  ['build and publish WhatsApp Forms', ['forms.manage'], { ADMIN: true, MANAGER: true, AGENT: false }],
 ];
 
 describe('permission matrix (spec.md role table)', () => {
