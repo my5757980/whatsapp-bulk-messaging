@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import type { z } from 'zod';
 import { FORM_LIMITS, FormModelSchema, formChecks, formFields, type FormModel } from './forms.js';
 
 // T012 (feature 008, research R12): our form model and the checks run before publishing.
-const model = (screens: FormModel['screens']): FormModel => FormModelSchema.parse({ screens });
+/** Screens as written (fields may leave out defaults such as `required`). */
+const model = (screens: z.input<typeof FormModelSchema>['screens']): FormModel => FormModelSchema.parse({ screens });
 const good = model([
   {
     title: 'Your details',
