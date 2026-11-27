@@ -15,7 +15,7 @@ import { api } from '@/lib/api-client';
 import { errorMessage } from '@/lib/errors';
 import { paymentsKeys, type PaymentReminder, type PaymentSettings } from '@/lib/payments';
 import { usePermissions } from '@/lib/permissions';
-import type { Template } from '@/lib/types';
+import type { Tag, Template } from '@/lib/types';
 
 const ROLES = ['ADMIN', 'MANAGER', 'AGENT'] as const;
 
@@ -88,6 +88,7 @@ function SettingsForm() {
   const editable = can('payments.manage');
   const settings = useQuery({ queryKey: paymentsKeys.settings, queryFn: () => api<PaymentSettings>('/payments/settings') });
   const templates = useQuery({ queryKey: ['templates', { status: 'APPROVED' }], queryFn: () => api<Template[]>('/templates?status=APPROVED') });
+  const tags = useQuery({ queryKey: ['tags'], queryFn: () => api<Tag[]>('/tags') });
   const [draft, setDraft] = useState<PaymentSettings | null>(null);
   const [maxAmount, setMaxAmount] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -201,6 +202,36 @@ function SettingsForm() {
               ))}
             </NativeSelect>
             <MappingFields id="template-map" template={(templates.data ?? []).find((t) => t.id === draft.templateId)} mapping={draft.templateMapping} onChange={(templateMapping) => set({ templateMapping })} disabled={!editable} />
+          </CardContent>
+        </Card>
+        <Card data-testid="chat-order-settings">
+          <CardHeader>
+            <CardTitle>Carts sent in chat</CardTitle>
+            <CardDescription>A cart becomes a chat order. Automatic: the payment link is sent at once when nothing looks wrong. Review: an agent checks it first.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-1">
+              <Label htmlFor="chat-order-mode">Payment link</Label>
+              <NativeSelect id="chat-order-mode" value={draft.chatOrderMode} disabled={!editable} onChange={(e) => set({ chatOrderMode: e.target.value as PaymentSettings['chatOrderMode'] })}>
+                <option value="REVIEW">After an agent's review</option>
+                <option value="AUTO">Sent automatically</option>
+              </NativeSelect>
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="chat-order-expiry">Link expires after (hours)</Label>
+              <Input id="chat-order-expiry" type="number" min="1" max="720" disabled={!editable} value={Math.round(draft.chatOrderExpiryMinutes / 60)} onChange={(e) => set({ chatOrderExpiryMinutes: Math.max(30, Number(e.target.value) * 60) })} />
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="chat-order-tag">Tag when paid</Label>
+              <NativeSelect id="chat-order-tag" value={draft.chatOrderTagId ?? ''} disabled={!editable} onChange={(e) => set({ chatOrderTagId: e.target.value || null })}>
+                <option value="">No tag</option>
+                {(tags.data ?? []).map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </NativeSelect>
+            </div>
           </CardContent>
         </Card>
         <Card data-testid="reminders">

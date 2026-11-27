@@ -4,14 +4,16 @@ import { useQuery } from '@tanstack/react-query';
 import type { PaymentDisplay } from '@wbm/shared';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api-client';
+import { CHAT_ORDER_STATUS_LABEL, type ChatOrder } from '@/lib/catalog';
 import { PAYMENT_DISPLAY_LABEL, PAYMENT_DISPLAY_TONE, paymentMoney, paymentsKeys, type PaymentRequest } from '@/lib/payments';
 
 const TONE_VARIANT = { neutral: 'secondary', good: 'success', warn: 'warning', bad: 'destructive' } as const;
 
 /** A contact's payment history, newest first (feature 008 US2, FR-016). */
 export function ContactPayments({ contactId }: { contactId: string }) {
-  const query = useQuery({ queryKey: paymentsKeys.contact(contactId), queryFn: () => api<{ requests: PaymentRequest[] }>(`/contacts/${contactId}/payments`) });
+  const query = useQuery({ queryKey: paymentsKeys.contact(contactId), queryFn: () => api<{ requests: PaymentRequest[]; chatOrders?: ChatOrder[] }>(`/contacts/${contactId}/payments`) });
   const requests = query.data?.requests ?? [];
+  const orders = query.data?.chatOrders ?? [];
   return (
     <section className="mb-4" data-testid="contact-payments">
       <h4 className="mb-2 text-xs font-semibold uppercase text-muted-foreground">Payments</h4>
@@ -29,6 +31,20 @@ export function ContactPayments({ contactId }: { contactId: string }) {
           </li>
         ))}
       </ul>
+      {orders.length ? (
+        <>
+          <h4 className="mb-2 mt-3 text-xs font-semibold uppercase text-muted-foreground">Chat orders</h4>
+          <ul className="grid gap-2" data-testid="contact-chat-orders">
+            {orders.slice(0, 10).map((o) => (
+              <li key={o.id} className="flex items-center justify-between gap-2 rounded-md border p-2">
+                <span className="font-medium">{paymentMoney(o.totalMinor, o.currency)}</span>
+                <span className="text-xs text-muted-foreground">{o.items.length} item{o.items.length === 1 ? '' : 's'}</span>
+                <Badge variant="outline">{CHAT_ORDER_STATUS_LABEL[o.status]}</Badge>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
     </section>
   );
 }

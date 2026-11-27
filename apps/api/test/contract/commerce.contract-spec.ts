@@ -3,11 +3,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { CatalogService } from '../../src/modules/commerce/catalog/catalog.service.js';
 import { PaymentEventsProcessor } from '../../src/modules/payments/events/payment-events.processor.js';
-import { clearCommerce, seedGateway, seedOpenChat, seedPaymentSettings } from '../support/commerce.js';
+import { WebhooksProcessor } from '../../src/modules/webhooks/webhooks.processor.js';
+import { clearCommerce, orderMessage, seedCatalog, seedGateway, seedOpenChat, seedPaymentSettings } from '../support/commerce.js';
 import { FAKE_CATALOG_ID, FakeCommerceGraph } from '../support/fake-commerce-graph.js';
 import { FakeStripe, STRIPE_TEST_KEY } from '../support/fake-stripe.js';
 import { restoreNetwork, seedNumber, useNockLocalOnly } from '../support/fixtures.js';
-import { createTestContext, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
+import { createTestContext, postSignedWebhook, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
 import { expectMatchesContract } from './openapi-validator.js';
 
 // 008 contract tests (T024 and later stories): responses match contracts/commerce-api.openapi.yaml.
@@ -164,6 +165,26 @@ describe('Commerce API contract', () => {
       await check('delete', '/catalog/connection', await call('delete', '/catalog/connection'), 204);
       await check('delete', '/catalog/connection', await call('delete', '/catalog/connection'), 404);
       await check('get', '/catalog/products', await call('get', '/catalog/products'), 409);
+    });
+  });
+
+  describe('US6 chat orders', () => {
+    it('list, read, edit, send the link and cancel', async () => {
+      await seedGateway(ctx);
+      await seedPaymentSettings(ctx, { chatOrderMode: 'REVIEW' });
+      await seedCatalog(ctx, { count: 3 });
+      const number = await seedNumber(ctx);
+      await ctx.app.get(WebhooksProcessor).process(await postSignedWebhook(ctx, orderMessage(number.phoneNumberId, `97150${Date.now().toString().slice(-7)}`, [{ retailerId: 'shp-101', quantity: 2, price: 51 }, { retailerId: 'shp-102', quantity: 1, price: 52 }])));
+      const order = await ctx.prisma.chatOrder.findFirstOrThrow({ orderBy: { createdAt: 'desc' } });
+      await check('get', '/chat-orders', await call('get', '/chat-orders?status=RECEIVED'), 200);
+      await check('get', '/chat-orders/{id}', await call('get', `/chat-orders/${order.id}`), 200);
+      await check('get', '/chat-orders/{id}', await call('get', '/chat-orders/0196f1f0-0000-7000-8000-00000000dead'), 404);
+      await check('patch', '/chat-orders/{id}', await call('patch', `/chat-orders/${order.id}`, { items: [{ retailerId: 'shp-101', quantity: 1 }] }), 200);
+      await check('patch', '/chat-orders/{id}', await call('patch', `/chat-orders/${order.id}`, { items: [{ retailerId: 'shp-999', quantity: 1 }] }), 422);
+      await check('post', '/chat-orders/{id}/send-link', await call('post', `/chat-orders/${order.id}/send-link`), 201);
+      await check('patch', '/chat-orders/{id}', await call('patch', `/chat-orders/${order.id}`, { items: [{ retailerId: 'shp-101', quantity: 2 }] }), 409);
+      await check('post', '/chat-orders/{id}/cancel', await call('post', `/chat-orders/${order.id}/cancel`), 200);
+      await check('post', '/chat-orders/{id}/cancel', await call('post', `/chat-orders/${order.id}/cancel`), 409);
     });
   });
 

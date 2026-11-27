@@ -3,6 +3,7 @@
 import { formatMinor } from '@wbm/shared';
 import type { AiItemPayload, ChatItem, ChatItemStatus } from '@/lib/inbox-types';
 import { cn } from '@/lib/utils';
+import { ChatOrderCard } from './chat-order-card';
 import { PaymentCard } from './payment-card';
 
 const mediaUrl = (id: string) => `/api/inbox/media/${id}`;
@@ -179,6 +180,9 @@ function Body({ item }: { item: ChatItem }) {
         </div>
       );
     }
+    // A cart sent in chat (feature 008 US6).
+    case 'ORDER':
+      return str(p.chatOrderId) ? <ChatOrderCard orderId={String(p.chatOrderId)} /> : <p className="text-sm">🛒 Cart sent</p>;
     // Product messages (feature 008 US5): one product, a product list or the catalog.
     case 'PRODUCT':
     case 'PRODUCT_LIST':
