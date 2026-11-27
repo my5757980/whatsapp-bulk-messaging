@@ -103,6 +103,17 @@ function parseContent(type: string, m: Json): Content | null {
       const title = str(button?.text) ?? '';
       return { contentType: 'BUTTON_REPLY', text: title, payload: compact({ payload: str(button?.payload), title }), media: null };
     }
+    // Feature 008 (US6, R11): a cart sent from the catalog.
+    case 'order': {
+      const order = obj(m.order);
+      const items = (Array.isArray(order?.product_items) ? order.product_items : [])
+        .map((raw) => {
+          const item = obj(raw);
+          return { retailerId: str(item?.product_retailer_id) ?? '', quantity: num(item?.quantity) ?? 1, itemPrice: Number(item?.item_price ?? 0), currency: (str(item?.currency) ?? '').toLowerCase() };
+        })
+        .filter((item) => item.retailerId);
+      return { contentType: 'ORDER', text: str(order?.text), payload: compact({ catalogId: str(order?.catalog_id), items }), media: null };
+    }
     case 'reaction': {
       const reaction = obj(m.reaction);
       const targetWaId = str(reaction?.message_id);

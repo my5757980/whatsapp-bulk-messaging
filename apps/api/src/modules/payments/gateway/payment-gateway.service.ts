@@ -213,7 +213,7 @@ export class PaymentGatewayService {
     const state = (row?.notificationCheck ?? {}) as unknown as NotificationCheckState;
     if (!row || state.status !== 'PENDING' || state.sessionId !== sessionId) return false;
     const fix = row.webhookEndpointId
-      ? `No notification arrived. Check that the Stripe endpoint ${this.webhookUrl()} is enabled and that this server can be reached from the internet.`
+      ? `No notification arrived. Check that the Stripe endpoint for the address ${this.webhookUrl()} is enabled and that this server can be reached from the internet.`
       : `No notification arrived. In Stripe, add ${this.webhookUrl()} with the six events listed here, and paste that endpoint's signing secret.`;
     const failed: NotificationCheckState = { ...state, status: 'FAILED', fix };
     await this.prisma.paymentGateway.update({ where: { id: row.id }, data: { notificationCheck: failed as unknown as Prisma.InputJsonValue } });

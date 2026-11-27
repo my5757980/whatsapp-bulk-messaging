@@ -94,16 +94,14 @@ components:
       description: API key created in Settings > API keys (format wbk_...)
   schemas:
     Error:
+      description: The public API error shape of 001 and 006.
       type: object
-      required: [error]
+      required: [code, message]
       properties:
-        error:
-          type: object
-          required: [code, message]
-          properties:
-            code: { type: string }
-            message: { type: string }
-            details: { type: array, items: { type: object, properties: { field: { type: string }, issue: { type: string } } } }
+        code: { type: string }
+        message: { type: string }
+        details: { type: array, items: { type: object, properties: { field: { type: string }, issue: { type: string } } } }
+        requestId: { type: string }
     Payment:
       type: object
       required: [id, contactId, phone, amountMinor, currency, description, status, expiresAt, payUrl, createdAt, test]

@@ -190,7 +190,8 @@ describe('Shopify stores (006 US4)', () => {
     const res = await connect(shopHost);
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     expect(res.body).toMatchObject({ platform: 'SHOPIFY', name: 'Test Shop', baseUrl: shopHost, status: 'CONNECTED', consentIsWhatsapp: false, customerTag: 'shopify' });
-    expect(res.body.automations).toHaveLength(6);
+    // Six 006 automations and the 008 pay link.
+    expect(res.body.automations).toHaveLength(7);
     expect(JSON.stringify(res.body)).not.toContain(SECRET);
     expect(JSON.stringify((await dashboard('get', `/stores/${res.body.id}`)).body)).not.toContain('shpat_');
     expect(shop.subscriptions.map((s) => s.topic).sort()).toEqual(

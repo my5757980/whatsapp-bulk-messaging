@@ -227,8 +227,22 @@ export class PaymentRequestsService {
   }
 
   /** Overridden by US6 to list chat orders; empty until then. */
-  protected async chatOrdersOf(_contactId: string): Promise<unknown[]> {
-    return [];
+  protected async chatOrdersOf(contactId: string): Promise<unknown[]> {
+    const rows = await this.prisma.chatOrder.findMany({ where: { contactId }, include: { paymentRequests: { select: { id: true, createdAt: true }, orderBy: { createdAt: 'desc' }, take: 1 } }, orderBy: { createdAt: 'desc' }, take: 100 });
+    return rows.map((o) => ({
+      id: o.id,
+      contactId: o.contactId,
+      conversationId: o.conversationId,
+      customerText: o.customerText,
+      items: Array.isArray(o.items) ? o.items : [],
+      currency: o.currency,
+      totalMinor: Number(o.totalMinor),
+      warnings: Array.isArray(o.warnings) ? o.warnings : [],
+      mode: o.mode,
+      status: o.status,
+      paymentRequestId: o.paymentRequests[0]?.id ?? null,
+      createdAt: o.createdAt.toISOString(),
+    }));
   }
 
   /** Cancel a waiting request (FR-014): its open session is expired at Stripe. Callers check who may. */
