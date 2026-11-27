@@ -47,7 +47,7 @@ export class ProductMessagesService {
     if (!isLive(chat.lastCustomerMessageAt)) throw AppError.conflict('The 24-hour reply window has closed. Use a catalog template instead.', 'WINDOW_CLOSED');
     const connection = await this.catalog.requireConnection();
     const number = await this.prisma.whatsAppNumber.findUniqueOrThrow({ where: { id: chat.number.id }, select: { wabaId: true } });
-    if (!this.catalog.numberHasCatalog(connection, number.wabaId)) throw AppError.conflict("This number's WhatsApp account has no catalog connected in Commerce Manager", 'NUMBER_NO_CATALOG');
+    if (!(await this.catalog.ensureNumberHasCatalog(connection, number.wabaId))) throw AppError.conflict("This number's WhatsApp account has no catalog connected in Commerce Manager", 'NUMBER_NO_CATALOG');
 
     const ids = input.kind === 'product' ? [input.retailerId] : input.kind === 'list' ? input.sections.flatMap((s) => s.retailerIds) : input.thumbnailRetailerId ? [input.thumbnailRetailerId] : [];
     if (input.kind === 'list') {

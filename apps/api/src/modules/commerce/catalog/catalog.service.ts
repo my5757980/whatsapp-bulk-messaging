@@ -149,6 +149,25 @@ export class CatalogService {
     return ((Array.isArray(connection.wabaChecks) ? connection.wabaChecks : []) as Array<{ wabaId: string; connected: boolean }>).some((c) => c.wabaId === wabaId && c.connected);
   }
 
+  /**
+   * True when the number's account has the connected catalog; an account added since the last check
+   * (a new number) is asked once and remembered.
+   */
+  async ensureNumberHasCatalog(connection: CatalogConnection, wabaId: string): Promise<boolean> {
+    const checks = (Array.isArray(connection.wabaChecks) ? connection.wabaChecks : []) as Array<{ wabaId: string; connected: boolean }>;
+    if (checks.some((c) => c.wabaId === wabaId)) return this.numberHasCatalog(connection, wabaId);
+    const refreshed = await this.refreshWabaChecks(connection);
+    return refreshed.some((c) => c.wabaId === wabaId && c.connected);
+  }
+
+  /** Which of our accounts have the connected catalog, saved on the connection. */
+  async refreshWabaChecks(connection: Pick<CatalogConnection, 'id' | 'catalogId'>): Promise<Array<{ wabaId: string; connected: boolean }>> {
+    const found = await this.found(await this.liveNumbers());
+    const checks = found.map((f) => ({ wabaId: f.wabaId, connected: f.catalogs.some((c) => c.id === connection.catalogId) }));
+    await this.prisma.catalogConnection.update({ where: { id: connection.id }, data: { wabaChecks: checks as Prisma.InputJsonValue } });
+    return checks;
+  }
+
   /** GET /catalog/connection. */
   async state() {
     const connection = await this.connection();
@@ -210,7 +229,8 @@ export class CatalogService {
     const connection = await this.connection();
     if (!connection) return { products: 0 };
     try {
-      const token = await this.tokenFor(connection);
+      await this.refreshWabaChecks(connection);
+      const token = await this.tokenFor(await this.requireConnection());
       const seen = new Set<string>();
       let after: string | null = null;
       for (let page = 0; page < 1000; page += 1) {
