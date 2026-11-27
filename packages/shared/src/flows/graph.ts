@@ -271,14 +271,14 @@ const PaymentStep = z.strictObject({
  * Feature 008 US8 (R10, R11): send products (one product, or a list in sections) or the whole catalog,
  * then wait for the customer's cart (`next`, the cart saved as {answer:cart}) or a timeout.
  */
-const ProductSection = z.strictObject({ title: z.string().max(24).default(''), retailerIds: z.array(z.string().min(1).max(100)).min(1).max(30) });
+const ProductSection = z.strictObject({ title: z.string().max(24).default(''), retailerIds: z.array(z.string().min(1).max(100)).max(30).default([]) });
 const ProductStep = z.strictObject({
   ...common,
   type: z.literal('product'),
   header: z.string().max(60).default(''),
   body: z.string().max(1024).default(''),
   footer: z.string().max(60).default(''),
-  sections: z.array(ProductSection).min(1).max(10).default([{ title: '', retailerIds: [] as unknown as [string] }]),
+  sections: z.array(ProductSection).min(1).max(10).default([{ title: '', retailerIds: [] }]),
   timeoutMinutes,
   next: branch,
   onTimeout: branch,

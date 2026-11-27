@@ -22,7 +22,7 @@ Settings (`.env`):
 - `MOCK_STRIPE_WEBHOOK_URL=http://localhost:3001/api/payments/stripe/webhook`. This is for
   mock-meta only, when the endpoint is registered by hand.
 
-Stripe keys are entered on **Payments → Gateway**, never in `.env`.
+Stripe keys are entered on **Payments → Stripe connection**, never in `.env`.
 
 ## 2. The mock gateway and mock Meta
 
@@ -30,6 +30,7 @@ Stripe keys are entered on **Payments → Gateway**, never in `.env`.
   - `rk_test_mockOK1234` works with every permission
   - `rk_test_mockOKnoperm` cannot register endpoints or read events
   - `rk_test_mockXXnockout` is rejected
+  - `rk_live_mockOK1234` works like the first in live mode (test-mode requests are left out of totals)
 - **The fake payment page:** a pay link opens `http://localhost:4010/stripe/pay/<session>` with
   **Pay**, **Decline** and **Refund half**. Each one sends a signed notification to the api.
 - **Control routes:**
@@ -47,7 +48,8 @@ Stripe keys are entered on **Payments → Gateway**, never in `.env`.
 ## 3. Try each story
 
 1. **US1:**
-   - Payments → Gateway: paste `rk_test_mockOK1234` and choose "Register the endpoint for me".
+   - Payments → Stripe connection: paste `rk_test_mockOK1234` and tick "Register the notification
+     address for me".
    - Every check passes, and the screen shows **Test mode** and AED.
    - **Test notifications** turns to "Notifications working" within seconds.
 2. **US2:**
@@ -80,7 +82,8 @@ Stripe keys are entered on **Payments → Gateway**, never in `.env`.
      to attributes, add a tag, then publish.
    - Send it in live chat, and answer with the CLI using the flow token from the mock message log.
 8. **US8:**
-   - Build a flow with **Send product list** → **Request payment** (cart total) → **Send form**.
+   - Build a flow with **Send products** (two or more SKUs send a list) → **Request payment** (the
+     cart total) → **Send form**.
    - Run it in the test panel.
 
 ## 4. Tests

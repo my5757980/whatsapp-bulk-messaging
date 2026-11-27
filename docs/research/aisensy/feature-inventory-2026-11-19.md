@@ -9,7 +9,7 @@
 - Where a page leaves a detail out, we choose a sensible default and mark it "default". Nothing undocumented is claimed as "identical".
 
 **Status legend:**
-- ✅ built (features 001 to 006)
+- ✅ built (features 001 to 008)
 - 🟡 partly built
 - ❌ missing
 - ➖ not applicable to a single company running its own WhatsApp account
@@ -55,7 +55,7 @@
 | 3.10 | Opt-in/opt-out keyword automation: up to 5 keywords each, configurable response message (template or regular) | 🟡 Keywords work; configurable response messages and the keyword limit need checking | Contacts & settings |
 | 3.11 | **Block a contact** ("block all messages"): stops their incoming messages; you can still message them | ❌ | 002 |
 | 3.12 | Contact deletion | ✅ with anonymisation | – |
-| 3.13 | Payment history on the contact profile | ❌ | Commerce |
+| 3.13 | Payment history on the contact profile | ✅ The contact's Payments tab with requests and chat orders, and payments in the journey (008) | 008 Commerce and payments |
 
 ## 4. Templates
 
@@ -68,7 +68,7 @@
 | 4.5 | **Authentication / OTP templates** with copy-code button and automation | ❌ | Templates & growth |
 | 4.6 | **Template TTL**: stop delivery attempts after a time window | ❌ | Templates & growth |
 | 4.7 | Media-link templates (media from a URL) | 🟡 We upload media; sending media by URL is missing for campaigns | Templates & growth |
-| 4.8 | Catalog / product templates (multi-product) | ❌ needs a catalog | Commerce |
+| 4.8 | Catalog / product templates (multi-product) | ✅ Catalog and multi-product template buttons, with the products chosen per campaign (008) | 008 Commerce and payments |
 | 4.9 | Sample template library (100+ samples by industry) | ❌ We will write our own originals | Templates & growth |
 | 4.10 | AI template generator | ❌ | AI agent |
 | 4.11 | Template guidelines and broadcast error meanings (help content) | 🟡 Error reasons are shown; guidelines are missing | Templates & growth |
@@ -107,7 +107,7 @@
 | 6.9 | **Canned messages**: name; type text or media (up to 4,096 chars; *bold*/_italic_); variables ($FirstName, $Name, $MobileNumber, $LastName, custom attributes, and {{1}} filled at send); media from a URL or the media library; personal favourites; insert with "/" or the bookmark icon; max 200 | ❌ | 002 |
 | 6.10 | **Welcome and off-hours messages**: welcome inside working hours, off-hours outside; template or regular text/image/file; time zone; hours per weekday | ❌ | 002 |
 | 6.11 | **Chat profile panel**: status, last active, template and session message counts, unresolved queries count, source (Organic/API/custom), first-message tag (editable), campaigns with read ticks, attributes (editable), tags (add/create), **customer journey** (timestamped log of interventions, tag changes, campaigns) | ❌ | 002 |
-| 6.12 | Send payment requests, catalog items and forms from live chat | ❌ | Commerce |
+| 6.12 | Send payment requests, catalog items and forms from live chat | ✅ Payment requests, one product, product lists, the catalog and forms from a chat; carts become chat orders (008) | 008 Commerce and payments |
 | 6.13 | Notification preferences (2.5) and push notifications | ❌ | 002 |
 | 6.14 | Media library (reusable uploaded media) | 🟡 Media assets exist; a library screen is missing | 002 |
 
@@ -118,7 +118,7 @@
 | 7.1 | Build by drag-and-drop canvas, from a template (60+ by industry), or with an AI generator from a prompt | 🟡 Canvas and 6 starter flows of our own (003); the team assistant drafts a flow from a prompt (004); fewer starters than 60 | 003 Flow builder (AI generator in 004 AI agent) |
 | 7.2 | **Triggers**: keywords, regex, template-message buttons, QR codes, Click-to-WhatsApp ads | 🟡 Keywords, patterns (regex), template quick-reply buttons and first-message rules (003); QR codes through chat links (006); ads not yet | 003 Flow builder, 006 Integrations (ads in Ads) |
 | 7.3 | **Message nodes**: text/media, reply buttons, list menus | ✅ (003) | 003 Flow builder |
-| 7.4 | **Commerce nodes**: product cards, catalog, cart, payments, native forms | ❌ | Commerce |
+| 7.4 | **Commerce nodes**: product cards, catalog, cart, payments, native forms | ✅ Send products and Send catalog (waiting for the cart), Send form, and Request payment with the cart total (008) | 008 Commerce and payments |
 | 7.5 | **Logic**: save answers to attributes; conditions; API request (live data such as order status); time delay; timeout fallback; fallback reply for unknown input | ✅ Questions with validation and retries, attributes, tags, conditions, safe API calls with secrets, delays, timeouts and invalid-answer branches (003) | 003 Flow builder |
 | 7.6 | **Request Intervention** node: hands off to live chat (Requesting state) with history | ✅ Hand-over step (003) | 003 Flow builder (with 002) |
 | 7.7 | Test on up to 3 test numbers, then set the flow Active | ✅ Up to 3 test numbers run the draft; versions and restore (003) | 003 Flow builder |
@@ -128,10 +128,10 @@
 
 | # | Capability | Our status | Planned in |
 |---|---|---|---|
-| 8.1 | **Catalog**: connect a Meta catalog ("Connect Catalog" / "Manage Catalog"), up to 500 products; products from Shopify | ❌ | Commerce |
-| 8.2 | Product and catalog messages; cart; orders placed in chat | ❌ | Commerce |
-| 8.3 | **WhatsApp Payments**: Razorpay, PayU and others; UPI, cards and net banking; payment messages from broadcast, live chat or a flow; pending vs paid tracking; retarget non-payers; payments dashboard. Only in India, Brazil and Singapore. | ❌ | Commerce (country-limited; payment links as the alternative elsewhere) |
-| 8.4 | **WhatsApp Forms** (Meta WhatsApp Flows): multi-step in-chat forms with buttons, quick replies and text inputs; responses to attributes, CRM or webhook | ❌ | Commerce |
+| 8.1 | **Catalog**: connect a Meta catalog ("Connect Catalog" / "Manage Catalog"), up to 500 products; products from Shopify | ✅ The Meta catalog connected and copied every hour, commerce settings per number, and filling it from Shopify or WooCommerce (008) | 008 Commerce and payments |
+| 8.2 | Product and catalog messages; cart; orders placed in chat | ✅ Product, product list and catalog messages; carts become chat orders with a payment link, sent automatically or after review (008) | 008 Commerce and payments |
+| 8.3 | **WhatsApp Payments**: Razorpay, PayU and others; UPI, cards and net banking; payment messages from broadcast, live chat or a flow; pending vs paid tracking; retarget non-payers; payments dashboard. Only in India, Brazil and Singapore. | ✅ As Stripe payment links (Meta's payments are not offered in the UAE): from campaigns, live chat, flows, the API and store orders, with paid and pending tracking, reminders, retargeting of non-payers and a payments page (008) | 008 Commerce and payments |
+| 8.4 | **WhatsApp Forms** (Meta WhatsApp Flows): multi-step in-chat forms with buttons, quick replies and text inputs; responses to attributes, CRM or webhook | ✅ Forms of up to 10 screens published to Meta, sent from live chat, flows and templates; answers to attributes, tags, consent and webhooks (008) | 008 Commerce and payments |
 | 8.5 | **Webviews**: web pages and landing pages opened inside WhatsApp | ❌ | Commerce |
 
 ## 9. AI
@@ -167,7 +167,7 @@
 | 11.5 | WooCommerce, OpenCart | ✅ WooCommerce with the same automations; unpaid orders get the cart reminders with their payment link (006). OpenCart not planned. | 006 Integrations |
 | 11.6 | Zapier, Pabbly, Integrately, viaSocket ("2000+ apps") | ✅ Through their webhook and HTTP steps: signed events out, the API in (006); no app listed in their directories | 006 Integrations |
 | 11.7 | CRMs and engagement tools: WebEngage, CleverTap, MoEngage, LeadSquared, Kylas, Superleap and others | 🟡 Generic webhooks and the API connect any of them (006); named connectors only on request | 006 Integrations |
-| 11.8 | Razorpay and PayU payment notifications | ❌ | Commerce |
+| 11.8 | Razorpay and PayU payment notifications | ✅ As Stripe's signed notifications with a 15-minute reconciler, and `payment.*` events for outbound webhooks (008) | 008 Commerce and payments |
 
 ## 12. Growth tools and apps
 
@@ -190,10 +190,10 @@
 
 ## Roadmap to full functional parity
 
-Feature numbers follow the order specs are started. 002 to 007 are built; each remaining row gets the
+Feature numbers follow the order specs are started. 002 to 008 are built; each remaining row gets the
 next free number when its spec starts. Agreed order: the AI agent, campaign growth (click tracking
-and drips), integrations and click-to-WhatsApp ads are built; next payments; the other rows are
-scheduled around them.
+and drips), integrations, click-to-WhatsApp ads and payments are built; the other rows are scheduled
+around them.
 
 | Feature | Scope | Depends on |
 |---|---|---|
@@ -204,7 +204,7 @@ scheduled around them.
 | **006 Integrations and developer platform** ✅ built | Items 1.1 (guided connect), 5.9, 5.10 (chat links and QR codes, also the QR trigger of 7.2) and 11.2–11.7: signed webhooks, key permissions and the contacts API, API campaigns, Shopify and WooCommerce notifications, COD confirmation and cart reminders. Still open: Dialogflow (7.8, optional) and named CRM connectors (11.7) | 002, 003 |
 | **Templates and campaign growth** | Items 4.1, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9 and 4.11; 5.3, 5.6 (replied column), 5.13 and 5.14; 12.1 and 12.2 | 001 |
 | **007 Ads manager** ✅ built | Items 10.1–10.4 and the texts of 9.7: connection with checks, chat, lead form and website ads with Meta's review, chats from ads with the free window, flows and tags, results and a spending cap, audiences and lookalikes, lead forms. Still open: AI images and videos (9.7) and website visitor audiences (10.2) | 003, 006 |
-| **Commerce, forms and payments** | Items 3.13, 4.8, 6.12, 7.4 and 8.1–8.5; 11.8 | 003 |
+| **008 Commerce and payments** ✅ built | Items 3.13, 4.8, 6.12, 7.4, 8.1–8.4 (8.3 as Stripe payment links) and 11.8: payment requests from chat, flows, campaigns, the API and store orders with statuses, reminders, reports and retargeting; the Meta catalog with product messages and carts into chat orders; WhatsApp Forms; commerce flow steps. Still open: webviews (8.5, optional) | 003, 006 |
 | **Contacts, settings and security** | Items 1.3, 1.4, 1.6 and 2.3; 3.2, 3.3, 3.5, 3.8, 3.9 and 3.10 (3.7 first-message tags came with 003); 5.11 (birthday and date automations) | 001 |
 | **Mobile (installable app with push)** | Item 12.4 | 002 |
 
@@ -213,7 +213,7 @@ scheduled around them.
 - display-name and Blue Tick approval
 - template approvals
 - Ads Manager access (an ad account with billing)
-- WhatsApp Payments, which are only offered in India, Brazil and Singapore. Our numbers are in the UAE, so payments would use payment links.
+- WhatsApp Payments, which are only offered in India, Brazil and Singapore. Our numbers are in the UAE, so payments use Stripe payment links (008).
 - Catalog through Commerce Manager
 
 ## Sources (read 2026-11-19)

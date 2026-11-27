@@ -1,3 +1,4 @@
+import { productListProblem } from '../commerce/catalog.js';
 import { opNeedsValue, opsFor } from './conditions.js';
 import { branchesOf, type FlowGraph, type FlowStep, type FlowTrigger, type StepType } from './graph.js';
 import { isReservedKeyword, unsafePatternReason } from './triggers.js';
@@ -98,6 +99,10 @@ function contentProblems(step: FlowStep): Problem[] {
       if (step.sections.some((s) => !s.retailerIds.length)) return missing('Choose at least one product', 'sections');
       if (step.sections.flatMap((s) => s.retailerIds).length > 1 && (blank(step.header) || blank(step.body))) return missing('A product list needs a header and a text', blank(step.header) ? 'header' : 'body');
       if (step.sections.length > 1 && step.sections.some((s) => blank(s.title))) return missing('Give every section a title', 'sections');
+      if (step.sections.flatMap((s) => s.retailerIds).length > 1) {
+        const problem = productListProblem(step.sections);
+        if (problem) return [stepProblem(step, 'LIMIT_EXCEEDED', problem, 'sections')];
+      }
       return [];
     case 'catalog':
       return blank(step.body) ? missing('Write the text sent with the catalog', 'body') : [];

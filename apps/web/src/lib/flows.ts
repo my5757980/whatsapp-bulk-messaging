@@ -73,6 +73,11 @@ export function branchLabel(step: FlowStep, branch: string): string {
     const row = step.sections.flatMap((s) => s.rows).find((r) => r.key === branch);
     if (row) return row.title.trim() || 'Untitled option';
   }
+  if (step.type === 'product' || step.type === 'catalog') {
+    if (branch === 'next') return 'Cart sent';
+    if (branch === 'onTimeout') return 'No cart';
+  }
+  if (step.type === 'form' && branch === 'next') return 'Answered';
   const names: Record<string, string> = {
     next: 'Next',
     onTimeout: 'No answer',
@@ -205,7 +210,7 @@ export function newStep(type: StepType, id: string, position: { x: number; y: nu
     case 'payment':
       return { id, type, position, amount: { source: 'static', minor: 10_000 }, description: '', expiryMinutes: 60, next: null, onNotPaid: null, fallbacks: {} };
     case 'product':
-      return { id, type, position, header: '', body: '', footer: '', sections: [{ title: '', retailerIds: [] as unknown as [string] }], timeoutMinutes: 60, next: null, onTimeout: null, fallbacks: {} };
+      return { id, type, position, header: '', body: '', footer: '', sections: [{ title: '', retailerIds: [] }], timeoutMinutes: 60, next: null, onTimeout: null, fallbacks: {} };
     case 'catalog':
       return { id, type, position, body: '', footer: '', thumbnailRetailerId: null, timeoutMinutes: 60, next: null, onTimeout: null, fallbacks: {} };
     case 'form':

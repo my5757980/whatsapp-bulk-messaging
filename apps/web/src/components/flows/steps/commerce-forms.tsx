@@ -1,11 +1,13 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { FLOW_LIMITS, type FlowGraph, type StepOf } from '@wbm/shared';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { api } from '@/lib/api-client';
+import { catalogKeys, type CatalogProduct } from '@/lib/catalog';
 import { formsKeys, type FormSummary } from '@/lib/forms';
 import { TEXTAREA_CLASS, cleanAnswerName } from './form-bits';
 import { GoesToSelect } from './goes-to-select';
@@ -48,6 +50,39 @@ function TimeoutAndBranches<T extends Waiting>({ step, graph, onPatch, waitsFor 
   );
 }
 
+/** Finds sendable catalog products by name or SKU and adds one to a section. */
+function ProductFinder({ id, onAdd }: { id: string; onAdd: (retailerId: string) => void }) {
+  const [search, setSearch] = useState('');
+  const term = search.trim();
+  const products = useQuery({
+    queryKey: catalogKeys.products(term, 1, true),
+    queryFn: () => api<{ items: CatalogProduct[]; total: number }>(`/catalog/products?pageSize=8&sendable=true&search=${encodeURIComponent(term)}`),
+    enabled: term.length >= 2,
+  });
+  return (
+    <div className="grid gap-1">
+      <Label htmlFor={id}>Find a product</Label>
+      <Input id={id} placeholder="Name or SKU" value={search} onChange={(e) => setSearch(e.target.value)} />
+      {products.data?.items.length ? (
+        <ul className="grid gap-1 text-sm">
+          {products.data.items.map((p) => (
+            <li key={p.retailerId} className="flex items-center justify-between gap-2">
+              <span className="truncate">
+                {p.name} <span className="text-muted-foreground">({p.retailerId})</span>
+              </span>
+              <button type="button" className="text-primary hover:underline" onClick={() => onAdd(p.retailerId)}>
+                Add
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : term.length >= 2 && products.isSuccess ? (
+        <p className="text-xs text-muted-foreground">No sendable products match.</p>
+      ) : null}
+    </div>
+  );
+}
+
 /** Send one product or a product list (sections of SKUs), then wait for the cart ({answer:cart_total}). */
 export function ProductStepForm({ step, graph, onPatch }: { step: ProductStep; graph: FlowGraph; onPatch: StepPatch<ProductStep> }) {
   const setSection = (i: number, patch: Partial<ProductStep['sections'][number]>) => onPatch({ sections: step.sections.map((s, j) => (j === i ? { ...s, ...patch } : s)) }, 'sections');
@@ -71,10 +106,16 @@ export function ProductStepForm({ step, graph, onPatch }: { step: ProductStep; g
             <Label htmlFor={`product-section-${i}-ids`}>Section {i + 1} SKUs</Label>
             <Input id={`product-section-${i}-ids`} placeholder="shp-101, shp-102" value={section.retailerIds.join(', ')} onChange={(e) => setSection(i, { retailerIds: ids(e.target.value) })} />
           </div>
+          <ProductFinder
+            id={`product-section-${i}-find`}
+            onAdd={(retailerId) => {
+              if (!section.retailerIds.includes(retailerId)) setSection(i, { retailerIds: [...section.retailerIds, retailerId] });
+            }}
+          />
         </div>
       ))}
       {step.sections.length < 10 ? (
-        <button type="button" className="justify-self-start text-sm text-primary hover:underline" onClick={() => onPatch({ sections: [...step.sections, { title: '', retailerIds: [] as unknown as [string] }] }, 'sections')}>
+        <button type="button" className="justify-self-start text-sm text-primary hover:underline" onClick={() => onPatch({ sections: [...step.sections, { title: '', retailerIds: [] }] }, 'sections')}>
           Add section
         </button>
       ) : null}

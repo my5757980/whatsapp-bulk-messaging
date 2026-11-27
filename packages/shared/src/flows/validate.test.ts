@@ -24,6 +24,39 @@ describe('validateForPublish: payment steps (feature 008, T045)', () => {
   });
 });
 
+describe('validateForPublish: commerce steps (feature 008, T086)', () => {
+  const formId = '0190a000-0000-7000-8000-0000000000f1';
+  const flow = (step: Record<string, unknown>) => graph({ start: 's', triggers: [], steps: [{ id: 's', next: 'ok', ...step }, { id: 'ok', type: 'message', text: 'Thanks' }] });
+  const ids = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => `${prefix}${i}`);
+  it('needs products, a list header and text, the catalog text and the form', () => {
+    expect(validateForPublish(flow({ type: 'product', sections: [{ title: '', retailerIds: ['shp-101'] }] }))).toEqual([]);
+    expect(codes(validateForPublish(flow({ type: 'product' })))).toEqual(['MISSING_CONTENT:s']);
+    expect(codes(validateForPublish(flow({ type: 'product', sections: [{ title: '', retailerIds: ['a', 'b'] }] })))).toEqual(['MISSING_CONTENT:s']);
+    expect(validateForPublish(flow({ type: 'product', header: 'New', body: 'Pick', sections: [{ title: '', retailerIds: ['a', 'b'] }] }))).toEqual([]);
+    expect(codes(validateForPublish(flow({ type: 'catalog' })))).toEqual(['MISSING_CONTENT:s']);
+    expect(validateForPublish(flow({ type: 'catalog', body: 'Browse' }))).toEqual([]);
+    expect(codes(validateForPublish(flow({ type: 'form', body: 'Tell us' })))).toEqual(['MISSING_CONTENT:s']);
+    expect(validateForPublish(flow({ type: 'form', formId, body: 'Tell us' }))).toEqual([]);
+  });
+  it('refuses a product list over 30 products or with a product twice', () => {
+    const list = (sections: unknown[]) => flow({ type: 'product', header: 'New', body: 'Pick', sections });
+    expect(codes(validateForPublish(list([{ title: 'A', retailerIds: ids('a', 20) }, { title: 'B', retailerIds: ids('b', 11) }])))).toEqual(['LIMIT_EXCEEDED:s']);
+    expect(codes(validateForPublish(list([{ title: '', retailerIds: ['a', 'a'] }])))).toEqual(['LIMIT_EXCEEDED:s']);
+    expect(validateForPublish(list([{ title: 'A', retailerIds: ids('a', 15) }, { title: 'B', retailerIds: ids('b', 15) }]))).toEqual([]);
+  });
+  it('needs the catalog connected and the form published when the caller says so', () => {
+    expect(codes(validateForPublish(flow({ type: 'catalog', body: 'Browse' }), { catalogConnected: false }))).toEqual(['CATALOG_NOT_CONNECTED:s']);
+    expect(codes(validateForPublish(flow({ type: 'product', sections: [{ title: '', retailerIds: ['a'] }] }), { catalogConnected: false }))).toEqual(['CATALOG_NOT_CONNECTED:s']);
+    expect(validateForPublish(flow({ type: 'catalog', body: 'Browse' }), { catalogConnected: true })).toEqual([]);
+    expect(codes(validateForPublish(flow({ type: 'form', formId, body: 'Tell us' }), { publishedFormIds: [] }))).toEqual(['FORM_NOT_PUBLISHED:s']);
+    expect(validateForPublish(flow({ type: 'form', formId, body: 'Tell us' }), { publishedFormIds: [formId] })).toEqual([]);
+  });
+  it('counts them as waiting, so a retry loop through them is allowed', () => {
+    const loop = graph({ start: 'cat', triggers: [], steps: [{ id: 'cat', type: 'catalog', body: 'Browse', next: 'ok', onTimeout: 'again' }, { id: 'again', type: 'message', text: 'Still there?', next: 'cat' }, { id: 'ok', type: 'end' }] });
+    expect(validateForPublish(loop)).toEqual([]);
+  });
+});
+
 describe('validateForPublish', () => {
   it('accepts a complete flow', () => {
     const g = graph({

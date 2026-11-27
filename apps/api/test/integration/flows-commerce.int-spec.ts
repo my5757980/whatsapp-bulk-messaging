@@ -89,6 +89,35 @@ describe('Commerce steps in flows (008 US8)', () => {
     expect((await ctx.prisma.chatOrder.findUniqueOrThrow({ where: { id: order.id } })).status).toBe('PAID');
   });
 
+  it('runs the steps in a test session, with the test request marked paid as from the test panel', async () => {
+    await seedCatalog(ctx, { count: 5 });
+    const shop = await flow('Shop test', {
+      version: 1,
+      start: 'list',
+      triggers: [{ id: 'kw', kind: 'KEYWORD', match: 'EXACT', phrases: [`try${suffix}`], canInterrupt: false }],
+      steps: [
+        { id: 'list', type: 'product', body: 'Our best seller', sections: [{ title: '', retailerIds: ['shp-101'] }], timeoutMinutes: 30, next: 'pay', onTimeout: null },
+        { id: 'pay', type: 'payment', amount: { source: 'cartTotal' }, description: 'Your order', expiryMinutes: 120, next: 'thanks', onNotPaid: null },
+        { id: 'thanks', type: 'message', text: 'Paid {answer:cart_total}, thank you' },
+      ],
+    });
+    expect((await shop.publish()).status).toBe(200);
+    const phone = uaePhone();
+    const contact = await ctx.prisma.contact.create({ data: { phoneE164: phone, countryCode: 'AE', name: 'Tester', consentStatus: 'OPTED_IN', consentSource: 'MANUAL' } });
+    const conversation = await ctx.prisma.conversation.create({ data: { contactId: contact.id, numberId: number.id, lastCustomerMessageAt: new Date(), lastInboundAt: new Date() } });
+    const { FlowSessionService } = await import('../../src/modules/flows/engine/session.service.js');
+    const version = await ctx.prisma.flow.findUniqueOrThrow({ where: { id: shop.id }, select: { publishedVersionId: true } });
+    await ctx.app.get(FlowSessionService).start({ flowId: shop.id, versionId: version.publishedVersionId, conversationId: conversation.id, startedBy: 'MEMBER', isTest: true });
+    expect((await sent(phone)).map((i) => i.contentType)).toEqual(['PRODUCT']);
+
+    await deliver(orderMessage(number.phoneNumberId, phone.slice(1), [{ retailerId: 'shp-101', quantity: 1, price: 51 }]));
+    const request = await ctx.prisma.paymentRequest.findFirstOrThrow({ where: { conversationId: conversation.id } });
+    expect(request).toMatchObject({ isTest: true, source: 'FLOW', amountMinor: 5100n });
+    const res = await api('post', `/payments/requests/${request.id}/test-result`, { result: 'paid' });
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect((await sent(phone)).at(-1)).toMatchObject({ contentType: 'TEXT', text: 'Paid 51.00, thank you' });
+  });
+
   it("uses a form step's answers in a later message", async () => {
     const formId = (await api('post', '/forms', { name: `Lead ${suffix}`, category: 'LEAD_GENERATION' })).body.id as string;
     await api('put', `/forms/${formId}`, { name: `Lead ${suffix}`, category: 'LEAD_GENERATION', draft: { screens: [{ title: 'You', button: 'Submit', fields: [{ key: 'name', type: 'shortText', label: 'Name', required: true }] }] }, mapping: [], tagIds: [] });
