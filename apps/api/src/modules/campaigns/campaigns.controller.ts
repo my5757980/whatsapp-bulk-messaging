@@ -30,6 +30,7 @@ import {
 } from './campaigns.service.js';
 import { EstimateService } from './estimate.service.js';
 import { LaunchSchema, LaunchService, type LaunchInput } from './launch.service.js';
+import { MediaCheckService } from './media-check.service.js';
 import { RetargetSchema, RetargetService, type RetargetInput } from './retarget.service.js';
 import { ScheduleService } from './schedule.service.js';
 
@@ -46,6 +47,7 @@ export class CampaignsController {
     private readonly control: CampaignControlService,
     private readonly schedules: ScheduleService,
     private readonly retargets: RetargetService,
+    private readonly mediaChecks: MediaCheckService,
   ) {}
 
   private actor(user: RequestUser, req: AuthedRequest) {
@@ -101,6 +103,14 @@ export class CampaignsController {
   @HttpCode(200)
   estimate(@Param('id', ParseUUIDPipe) id: string) {
     return this.estimates.estimate(id);
+  }
+
+  /** Feature 009 (research R6, R9): card files and media addresses, checked as launch will. */
+  @Post(':id/media-check')
+  @Require('campaigns.manage')
+  @HttpCode(200)
+  mediaCheck(@Param('id', ParseUUIDPipe) id: string) {
+    return this.mediaChecks.checkById(id);
   }
 
   @Post(':id/launch')

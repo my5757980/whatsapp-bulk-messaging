@@ -1,4 +1,4 @@
-import { extractTemplateVariables, parseVariableKey, type MetaTemplateComponent } from '@wbm/shared';
+import { OFFER_CODE_PARAM, bodyPlaceholders, cardReplyPayload, extractTemplateVariables, parseVariableKey, type MetaTemplateComponent } from '@wbm/shared';
 import { e164ToWaRecipient } from '../../common/phone/phone.js';
 import type { TemplateMessagePayload } from '../meta/meta-graph.client.js';
 
@@ -18,6 +18,9 @@ export const PRODUCTS_PARAM = '$products';
 
 /** Feature 008 (US7): resolved_params key holding the signed token of a template's form (FLOW) button. */
 export const FLOW_TOKEN_PARAM = '$flowToken';
+
+/** Feature 009 (research R7): resolved_params key holding an offer's end as Unix milliseconds. */
+export const OFFER_ENDS_PARAM = '$offerEndsAt';
 
 interface ProductChoices {
   thumbnailRetailerId?: string | null;
@@ -45,6 +48,8 @@ export interface PayloadInput {
   };
   params: Record<string, string>;
   headerMedia?: { type: HeaderMediaType; id: string } | { type: HeaderMediaType; link: string };
+  /** Feature 009 (research R6): each carousel card's media, uploaded to the sending number. */
+  cardMedia?: Array<{ type: 'image' | 'video'; id: string }>;
 }
 
 const MEDIA_FORMATS: Record<string, HeaderMediaType> = { IMAGE: 'image', VIDEO: 'video', DOCUMENT: 'document' };
@@ -111,6 +116,34 @@ export function buildTemplatePayload(input: PayloadInput): TemplateMessagePayloa
 
   if (body.length) {
     components.push({ type: 'body', parameters: body.map((p) => textParam(input.params[`BODY.${p}`] ?? '', p, named)) });
+  }
+
+  // Feature 009 (research R7): an offer's end and the copy-code button's code.
+  const offer = input.template.components.find((c) => c.type.toUpperCase() === 'LIMITED_TIME_OFFER') as unknown as { limited_time_offer?: { has_expiration?: boolean } } | undefined;
+  if (offer) {
+    if (offer.limited_time_offer?.has_expiration) components.push({ type: 'limited_time_offer', parameters: [{ type: 'limited_time_offer', limited_time_offer: { expiration_time_ms: Number(input.params[OFFER_ENDS_PARAM] ?? 0) } }] });
+    components.push({ type: 'button', sub_type: 'copy_code', index: 0, parameters: [{ type: 'coupon_code', coupon_code: input.params[OFFER_CODE_PARAM] ?? '' }] });
+  }
+
+  // Feature 009 (research R6): every card with its media, card text and buttons; quick replies say which card.
+  const carousel = input.template.components.find((c) => c.type.toUpperCase() === 'CAROUSEL');
+  if (carousel) {
+    const cards = (carousel.cards ?? []).map((card, i) => {
+      const media = input.cardMedia?.[i];
+      if (!media) throw new Error(`Template "${input.template.name}" needs media for card ${i + 1}`);
+      const parts = card.components ?? [];
+      const cardComponents: Array<Record<string, unknown>> = [{ type: 'header', parameters: [{ type: media.type, [media.type]: { id: media.id } }] }];
+      const cardBody = parts.find((p) => p.type.toUpperCase() === 'BODY');
+      const names = bodyPlaceholders(cardBody?.text ?? '').sort((a, b) => Number(a) - Number(b));
+      if (names.length) cardComponents.push({ type: 'body', parameters: names.map((n) => ({ type: 'text', text: input.params[`CARD.${i}.BODY.${n}`] ?? '' })) });
+      (parts.find((p) => p.type.toUpperCase() === 'BUTTONS')?.buttons ?? []).forEach((button, b) => {
+        const type = button.type.toUpperCase();
+        if (type === 'QUICK_REPLY') cardComponents.push({ type: 'button', sub_type: 'quick_reply', index: String(b), parameters: [{ type: 'payload', payload: cardReplyPayload(i, b) }] });
+        else if (type === 'URL' && /\{\{\s*1\s*\}\}/.test(button.url ?? '')) cardComponents.push({ type: 'button', sub_type: 'url', index: String(b), parameters: [{ type: 'text', text: input.params[`CARD.${i}.BUTTON.${b}.1`] ?? '' }] });
+      });
+      return { card_index: i, components: cardComponents };
+    });
+    components.push({ type: 'carousel', cards });
   }
 
   for (const [index, placeholders] of [...buttons.entries()].sort(([a], [b]) => a - b)) {

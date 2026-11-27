@@ -24,7 +24,7 @@ paths:
         Accepted at once and sent ahead of campaign and chat traffic on the number (R5). The template
         and number default to the admin's code settings. Codes are 4 - 15 letters or digits.
       parameters:
-        - { name: Idempotency-Key, in: header, schema: { type: string, maxLength: 120 }, description: 'As in 006: a repeat with the same key and body returns the first response; a different body gets IDEMPOTENCY_CONFLICT' }
+        - { name: Idempotency-Key, in: header, schema: { type: string, maxLength: 120 }, description: 'As in 006: a repeat with the same key and body returns the first response; a different body gets IDEMPOTENCY_KEY_REUSED' }
       requestBody:
         required: true
         content:
@@ -48,7 +48,7 @@ paths:
         '202': { description: Accepted, content: { application/json: { schema: { $ref: '#/components/schemas/OtpAccepted' } } } }
         '401': { description: 'API_KEY_INVALID', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '403': { description: 'SCOPE_MISSING (otp.send)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '409': { description: IDEMPOTENCY_CONFLICT, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: IDEMPOTENCY_KEY_REUSED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '422':
           description: >
             VALIDATION_FAILED (the code format), INVALID_NUMBER, RECIPIENT_BLOCKED, NO_DEFAULT_TEMPLATE,

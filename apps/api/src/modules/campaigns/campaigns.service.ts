@@ -26,6 +26,18 @@ export const CampaignInputSchema = z
     headerMediaAssetId: z.uuid().nullable(),
     /** Feature 008: ask every recipient to pay (null: no payment). */
     paymentConfig: CampaignPaymentConfigSchema.nullable(),
+    /** Feature 009 (research R6): carousel card files; cards not listed use the template's samples. */
+    cardMedia: z.array(z.object({ cardIndex: z.number().int().min(0).max(9), mediaAssetId: z.uuid() }).strict()).max(10).nullable(),
+    /** Feature 009 (research R7): a limited-time offer's end and where each recipient's code comes from. */
+    offerConfig: z
+      .object({
+        endsAt: z.iso.datetime({ offset: true }),
+        code: z.object({ source: z.enum(['static', 'column', 'attribute']), value: z.string().trim().max(15).optional(), key: z.string().trim().max(100).optional() }).strict(),
+      })
+      .strict()
+      .nullable(),
+    /** Feature 009 (research R10): one message per upload row, even when a number repeats. */
+    allowDuplicateRows: z.boolean(),
   })
   .partial()
   .strict();
@@ -46,10 +58,12 @@ export interface StatusTotals {
   failed: number;
   skipped: number;
   cancelled: number;
+  /** Feature 009: not sent or not delivered in time, or after the offer ended. */
+  expired: number;
 }
 
 export function emptyTotals(): StatusTotals {
-  return { pending: 0, queued: 0, sent: 0, delivered: 0, read: 0, failed: 0, skipped: 0, cancelled: 0 };
+  return { pending: 0, queued: 0, sent: 0, delivered: 0, read: 0, failed: 0, skipped: 0, cancelled: 0, expired: 0 };
 }
 
 function normaliseTotals(value: unknown): StatusTotals {
@@ -98,6 +112,9 @@ export function toCampaignDto(c: CampaignWithRefs, totals?: StatusTotals) {
     variableMapping: c.variableMapping ?? {},
     headerMediaAssetId: c.headerMediaAssetId,
     paymentConfig: c.paymentConfig ?? null,
+    cardMedia: c.cardMedia ?? null,
+    offerConfig: c.offerConfig ?? null,
+    allowDuplicateRows: c.allowDuplicateRows,
     state: c.state,
     scheduledAt: iso(c.scheduledAt),
     timezone: c.timezone,
@@ -168,6 +185,9 @@ export class CampaignsService {
         case 'CANCELLED':
           totals.cancelled += n;
           break;
+        case 'EXPIRED':
+          totals.expired += n;
+          break;
       }
     }
     return totals;
@@ -216,6 +236,11 @@ export class CampaignsService {
     const pay = input.paymentConfig;
     if (pay?.tagId && !(await this.prisma.tag.findUnique({ where: { id: pay.tagId }, select: { id: true } }))) details.push({ field: 'paymentConfig.tagId', issue: 'Tag not found' });
     if (pay?.flowId && !(await this.prisma.flow.findFirst({ where: { id: pay.flowId, deletedAt: null }, select: { id: true } }))) details.push({ field: 'paymentConfig.flowId', issue: 'Flow not found' });
+    for (const card of input.cardMedia ?? []) {
+      if (!(await this.prisma.mediaAsset.findUnique({ where: { id: card.mediaAssetId }, select: { id: true } }))) details.push({ field: `cardMedia.${card.cardIndex}`, issue: 'Media not found' });
+    }
+    const offer = input.offerConfig;
+    if (offer && offer.code.source === 'static' ? !offer.code.value : offer ? !offer.code.key : false) details.push({ field: 'offerConfig.code', issue: 'give the code, or the column or attribute it comes from' });
     if (details.length) throw AppError.validation('Request failed validation', details);
     if (input.audienceFilter) await this.audience.compile(input.audienceFilter);
   }
@@ -230,6 +255,9 @@ export class CampaignsService {
       ...(input.variableMapping !== undefined ? { variableMapping: input.variableMapping as Prisma.InputJsonValue } : {}),
       ...(input.headerMediaAssetId !== undefined ? { headerMediaAssetId: input.headerMediaAssetId } : {}),
       ...(input.paymentConfig !== undefined ? { paymentConfig: input.paymentConfig === null ? Prisma.DbNull : (input.paymentConfig as Prisma.InputJsonValue) } : {}),
+      ...(input.cardMedia !== undefined ? { cardMedia: input.cardMedia === null ? Prisma.DbNull : (input.cardMedia as Prisma.InputJsonValue) } : {}),
+      ...(input.offerConfig !== undefined ? { offerConfig: input.offerConfig === null ? Prisma.DbNull : (input.offerConfig as Prisma.InputJsonValue) } : {}),
+      ...(input.allowDuplicateRows !== undefined ? { allowDuplicateRows: input.allowDuplicateRows } : {}),
     };
   }
 

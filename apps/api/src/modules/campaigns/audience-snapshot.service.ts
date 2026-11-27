@@ -9,7 +9,9 @@ import { TrackedLinkCodes } from '../growth/links/link-codes.js';
 import { paymentWords } from '../payments/requests/payment-views.js';
 import { campaignPaymentConfig, type CampaignPaymentConfig, type CampaignPaymentContext, type RecipientPayment } from './campaign-payments.port.js';
 import { retargetCondition, type RetargetGroup } from './retarget.service.js';
-import { resolveVariables, type VariableMapping } from './variable-resolver.js';
+import { HEADER_MEDIA_KEY, OFFER_CODE_PARAM } from '@wbm/shared';
+import { HEADER_MEDIA_URL_PARAM, OFFER_ENDS_PARAM } from '../sending/template-payload.builder.js';
+import { resolveVariables, type VariableMapping, type VariableSource } from './variable-resolver.js';
 
 // Recipient evaluation shared by the estimate (T095) and the launch snapshot (T096). Consent is
 // enforced here first (research R11): opted-out contacts are skipped, and MARKETING templates
@@ -33,6 +35,12 @@ interface PaymentPlan {
   config: CampaignPaymentConfig;
   context: CampaignPaymentContext;
   buttonKey: string;
+}
+
+/** Feature 009 (research R7): a limited-time offer's end and where each recipient's code comes from. */
+export interface CampaignOfferConfig {
+  endsAt: string;
+  code: { source: 'static' | 'column' | 'attribute'; value?: string; key?: string };
 }
 
 /** `{name}` and `{attr:key}` in a campaign's payment description. */
@@ -112,7 +120,7 @@ export class AudienceSnapshotService {
 
   /** Yields recipient decisions in batches, in upload order. */
   async *evaluate(
-    campaign: Pick<Campaign, 'id' | 'audienceType' | 'audienceFilter' | 'variableMapping' | 'sourceCampaignId' | 'retargetStatus' | 'paymentConfig'>,
+    campaign: Pick<Campaign, 'id' | 'audienceType' | 'audienceFilter' | 'variableMapping' | 'sourceCampaignId' | 'retargetStatus' | 'paymentConfig'> & { offerConfig?: unknown },
     template: Pick<Template, 'category' | 'variables'>,
     db: Db = this.prisma,
     payment: CampaignPaymentContext | null = null,
@@ -126,7 +134,8 @@ export class AudienceSnapshotService {
     const samples = Object.fromEntries([...tracked].map((key) => [key, this.codes.sampleValue(key)]));
     const mapping = (campaign.variableMapping ?? {}) as VariableMapping;
     const marketing = template.category === 'MARKETING';
-    const decide = (c: AudienceContact, row: Record<string, unknown>) => this.decide(c, row, variables, mapping, marketing, samples, plan);
+    const offer = (campaign.offerConfig ?? null) as CampaignOfferConfig | null;
+    const decide = (c: AudienceContact, row: Record<string, unknown>) => this.decide(c, row, variables, mapping, marketing, samples, plan, offer);
 
     if (campaign.audienceType === 'RETARGET') {
       // Uploaded columns of the source campaign still feed "column" variables.
@@ -192,6 +201,7 @@ export class AudienceSnapshotService {
     marketing: boolean,
     samples: Record<string, string>,
     plan: PaymentPlan | null = null,
+    offer: CampaignOfferConfig | null = null,
   ): RecipientDecision {
     const base = { contactId: contact.id, phoneE164: contact.phone_e164, countryCode: contact.country_code, params: {}, customerName: contact.name };
     if (contact.consent_status === 'OPTED_OUT') return { ...base, status: 'SKIPPED', skipReason: 'OPTED_OUT' };
@@ -208,10 +218,33 @@ export class AudienceSnapshotService {
       ...(payment && plan ? { payment: paymentWords({ ...payment, amountMinor: BigInt(payment.amountMinor), currency: plan.context.currency, reference: null }, plan.context.linkBase, plan.context.timeZone) } : {}),
     });
     if (!resolved.ok) return { ...base, status: 'SKIPPED', skipReason: 'MISSING_VARIABLE' };
+    // Feature 009: the recipient's offer code and the offer's end (research R7), and a media address (R9).
+    const extra: Record<string, string> = {};
+    if (offer) {
+      const code = this.sourced(offer.code, contact, row);
+      if (!code) return { ...base, status: 'SKIPPED', skipReason: 'OFFER_CODE_MISSING' };
+      extra[OFFER_CODE_PARAM] = code.slice(0, 15);
+      extra[OFFER_ENDS_PARAM] = String(Date.parse(offer.endsAt));
+    }
+    const mediaSource = mapping[HEADER_MEDIA_KEY];
+    if (mediaSource) {
+      const url = this.sourced(mediaSource, contact, row);
+      if (!url) return { ...base, status: 'SKIPPED', skipReason: 'MEDIA_URL_MISSING' };
+      extra[HEADER_MEDIA_URL_PARAM] = url;
+    }
     // Feature 008: catalog and multi-product templates carry the campaign's product choices.
     const products = mapping['$products'];
-    const params = { ...resolved.params, ...samples, ...(payment && plan ? { [plan.buttonKey]: payment.code } : {}), ...(products?.source === 'static' && products.value ? { $products: products.value } : {}) };
+    const params = { ...resolved.params, ...samples, ...extra, ...(payment && plan ? { [plan.buttonKey]: payment.code } : {}), ...(products?.source === 'static' && products.value ? { $products: products.value } : {}) };
     return { ...base, status: 'PENDING', skipReason: null, params, ...(payment ? { payment } : {}) };
+  }
+
+  /** A value from one value, an upload column or a contact attribute (feature 009 offer codes and media addresses). */
+  private sourced(source: { source: string; value?: string; key?: string } | VariableSource, contact: AudienceContact, row: Record<string, unknown>): string {
+    const text = (v: unknown) => (typeof v === 'string' ? v.trim() : typeof v === 'number' ? String(v) : '');
+    if (source.source === 'static') return text(source.value);
+    if (source.source === 'column') return text(row[source.key ?? '']);
+    if (source.source === 'attribute') return text(((contact.attributes ?? {}) as Record<string, unknown>)[source.key ?? '']);
+    return '';
   }
 
   /** A recipient's amount in minor units: fixed, or a positive number attribute in major units; null when missing or outside the limits. */

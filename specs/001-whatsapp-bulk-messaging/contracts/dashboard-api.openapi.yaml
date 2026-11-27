@@ -1320,6 +1320,11 @@ components:
             examples: { type: array, items: { type: string } }
         footer: { type: [string, 'null'], maxLength: 60 }
         buttons: { type: array, items: { $ref: '#/components/schemas/TemplateButton' }, maxItems: 10 }
+        kind: { type: string, enum: [STANDARD, CAROUSEL, LIMITED_TIME_OFFER, AUTHENTICATION], description: 'Feature 009; see TemplateKindFields in specs/009-templates-growth/contracts/templates-growth-api.openapi.yaml' }
+        ttlSeconds: { type: [integer, 'null'], description: 'Feature 009: codes 30-900, utility 30-43200, marketing 43200-2592000' }
+        auth: { type: [object, 'null'], description: Feature 009 code options }
+        cards: { type: [array, 'null'], items: { type: object }, description: Feature 009 carousel cards }
+        offer: { type: [object, 'null'], description: Feature 009 limited-time offer details }
     Template:
       type: object
       properties:
@@ -1340,6 +1345,10 @@ components:
               key: { type: string, examples: [BODY.1, HEADER.1, BUTTON.0.1] }
               example: { type: string }
         lastSyncedAt: { type: [string, 'null'], format: date-time }
+        kind: { type: string, enum: [STANDARD, CAROUSEL, LIMITED_TIME_OFFER, AUTHENTICATION] }
+        ttlSeconds: { type: [integer, 'null'] }
+        ttlAppliedBy: { type: [string, 'null'], enum: [META, PLATFORM, null] }
+        options: { type: object, additionalProperties: true }
     CampaignState:
       type: string
       enum: [DRAFT, SCHEDULED, RUNNING, PAUSED, COMPLETED, CANCELLED]
@@ -1392,7 +1401,7 @@ components:
         cancelled: { type: integer }
     MessageStatus:
       type: string
-      enum: [PENDING, QUEUED, SENDING, SENT, DELIVERED, READ, FAILED, SKIPPED, CANCELLED]
+      enum: [PENDING, QUEUED, SENDING, SENT, DELIVERED, READ, FAILED, SKIPPED, CANCELLED, EXPIRED]
     Message:
       type: object
       properties:

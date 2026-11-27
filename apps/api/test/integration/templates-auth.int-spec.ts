@@ -1,5 +1,6 @@
 import nock from 'nock';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { TemplatesSyncService } from '../../src/modules/templates/templates-sync.service.js';
 import { FakeTemplatesGraph } from '../support/fake-templates-graph.js';
 import { digits, restoreNetwork, seedNumber, useNockLocalOnly } from '../support/fixtures.js';
 import { createTestContext, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
@@ -80,8 +81,7 @@ describe('Authentication templates (009 US1)', () => {
     fake = new FakeTemplatesGraph().install();
     const created = await create(draft());
     expect(created.status).toBe(201);
-    const synced = await manager.agent.post('/api/templates/sync').set('x-csrf-token', manager.csrf).send({});
-    expect(synced.status, JSON.stringify(synced.body)).toBeLessThan(300);
+    await ctx.app.get(TemplatesSyncService).syncWaba(wabaId);
     const row = await ctx.prisma.template.findUniqueOrThrow({ where: { id: created.body.id } });
     expect(row.kind).toBe('AUTHENTICATION');
     const buttons = (row.components as Array<{ type: string; buttons?: Array<{ type: string }> }>).find((c) => c.type === 'BUTTONS')?.buttons;

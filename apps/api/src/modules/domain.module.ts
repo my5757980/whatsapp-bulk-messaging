@@ -11,6 +11,7 @@ import { CampaignsService } from './campaigns/campaigns.service.js';
 import { DispatchScheduler } from './campaigns/dispatch-scheduler.js';
 import { EstimateService } from './campaigns/estimate.service.js';
 import { LaunchService } from './campaigns/launch.service.js';
+import { MediaCheckService } from './campaigns/media-check.service.js';
 import { RetargetService } from './campaigns/retarget.service.js';
 import { ScheduleService } from './campaigns/schedule.service.js';
 import { AttributesController } from './contacts/attributes.controller.js';
@@ -63,6 +64,7 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     AudienceUploadService,
     EstimateService,
     LaunchService,
+    MediaCheckService,
     CampaignControlService,
     DispatchScheduler,
     AudienceQueryBuilder,
@@ -91,6 +93,7 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     AudienceUploadService,
     EstimateService,
     LaunchService,
+    MediaCheckService,
     CampaignControlService,
     DispatchScheduler,
     AudienceQueryBuilder,

@@ -1,11 +1,12 @@
 'use client';
 
-import { bodyPlaceholders, validateTemplate, type TemplateButtonDraft, type TemplateDraft, type TemplateHeaderFormat } from '@wbm/shared';
+import { bodyPlaceholders, validateTemplate, type TemplateButtonDraft, type TemplateDraft, type TemplateHeaderFormat, type TemplateKind } from '@wbm/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { RequirePermission } from '@/components/require-permission';
+import { CarouselCards, CodeOptions, DEFAULT_AUTH, OfferFields, TtlField, defaultCard } from '@/components/templates/kind-fields';
 import { TemplatePreview } from '@/components/templates/template-preview';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +18,7 @@ import { ApiError, api } from '@/lib/api-client';
 import { errorMessage } from '@/lib/errors';
 import { growthKeys, type TrackedLinkConfig } from '@/lib/growth';
 import { queryKeys } from '@/lib/query';
+import { KIND_HINTS, KIND_LABELS } from '@/lib/templates';
 import type { Template, WhatsAppNumber } from '@/lib/types';
 
 /** Sample code for a tracked link button; each recipient gets their own code when a campaign sends (feature 005). */
@@ -139,7 +141,8 @@ function Editor() {
     mutationFn: () => {
       const payload = {
         ...draft,
-        footer: draft.footer?.trim() ? draft.footer.trim() : null,
+        kind,
+        footer: kind === 'STANDARD' && draft.footer?.trim() ? draft.footer.trim() : null,
         body: { text: draft.body.text, examples: (draft.body.examples ?? []).slice(0, variables.length) },
       };
       return api<Template>('/templates', { method: 'POST', json: payload });
@@ -167,6 +170,16 @@ function Editor() {
 
   const headerFormat = draft.header?.format ?? 'NONE';
   const buttons = draft.buttons ?? [];
+  const kind: TemplateKind = draft.kind ?? 'STANDARD';
+  /** Feature 009: each kind starts from its own defaults. */
+  function chooseKind(next: TemplateKind) {
+    setMediaInfo(null);
+    const common = { kind: next, header: null, footer: '', auth: null, cards: null, offer: null, ttlSeconds: null } satisfies Partial<TemplateDraft>;
+    if (next === 'AUTHENTICATION') update({ ...common, category: 'AUTHENTICATION', body: { text: '', examples: [] }, buttons: [], auth: DEFAULT_AUTH, ttlSeconds: 600 });
+    else if (next === 'CAROUSEL') update({ ...common, category: 'MARKETING', buttons: [], cards: [defaultCard(), defaultCard()] });
+    else if (next === 'LIMITED_TIME_OFFER') update({ ...common, category: 'MARKETING', buttons: [{ type: 'URL', text: 'Shop now', url: '' }], offer: { offerText: '', showsEndTime: true, codeExample: '' } });
+    else update({ ...common, category: 'MARKETING' });
+  }
 
   return (
     <div className="grid gap-6">
@@ -197,23 +210,48 @@ function Editor() {
               <Field id="tpl-name" label="Template name" error={errors.name}>
                 <Input id="tpl-name" value={draft.name} onChange={(e) => update({ name: e.target.value })} placeholder="summer_offer_2026" onBlur={() => setTouched(true)} />
               </Field>
+              <Field id="tpl-kind" label="Type" error={errors.kind}>
+                <NativeSelect id="tpl-kind" value={kind} onChange={(e) => chooseKind(e.target.value as TemplateKind)}>
+                  {(Object.keys(KIND_LABELS) as TemplateKind[]).map((k) => (
+                    <option key={k} value={k}>
+                      {KIND_LABELS[k]}
+                    </option>
+                  ))}
+                </NativeSelect>
+                <p className="text-xs text-muted-foreground">{KIND_HINTS[kind]}</p>
+              </Field>
               <Field id="tpl-category" label="Category" error={errors.category}>
-                <NativeSelect id="tpl-category" value={draft.category} onChange={(e) => update({ category: e.target.value as TemplateDraft['category'] })}>
+                <NativeSelect id="tpl-category" value={draft.category} disabled={kind !== 'STANDARD'} onChange={(e) => update({ category: e.target.value as TemplateDraft['category'], ttlSeconds: null })}>
                   <option value="MARKETING">Marketing</option>
                   <option value="UTILITY">Utility</option>
+                  {kind === 'AUTHENTICATION' ? <option value="AUTHENTICATION">Authentication</option> : null}
                 </NativeSelect>
               </Field>
               <Field id="tpl-language" label="Language" error={errors.language}>
                 <Input id="tpl-language" value={draft.language} onChange={(e) => update({ language: e.target.value })} placeholder="en_US" />
               </Field>
+              <TtlField draft={draft} update={update} errors={errors} />
             </CardContent>
           </Card>
 
+          {kind === 'AUTHENTICATION' ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Code options</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CodeOptions draft={draft} update={update} errors={errors} />
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {kind !== 'AUTHENTICATION' ? (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Content</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4">
+              {kind !== 'CAROUSEL' ? (
               <Field id="tpl-header" label="Header" error={errors['header.text'] ?? errors['header.mediaAssetId']}>
                 <NativeSelect
                   id="tpl-header"
@@ -225,12 +263,13 @@ function Editor() {
                   }}
                 >
                   <option value="NONE">None</option>
-                  <option value="TEXT">Text</option>
+                  {kind === 'STANDARD' ? <option value="TEXT">Text</option> : null}
                   <option value="IMAGE">Image</option>
                   <option value="VIDEO">Video</option>
-                  <option value="DOCUMENT">Document</option>
+                  {kind === 'STANDARD' ? <option value="DOCUMENT">Document</option> : null}
                 </NativeSelect>
               </Field>
+              ) : null}
               {draft.header?.format === 'TEXT' ? (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field id="tpl-header-text" label="Header text (up to 60 characters)" error={errors['header.text']}>
@@ -293,15 +332,31 @@ function Editor() {
                   ))}
                 </div>
               ) : null}
+              {kind === 'STANDARD' ? (
               <Field id="tpl-footer" label="Footer (optional)" error={errors.footer}>
                 <Input id="tpl-footer" value={draft.footer ?? ''} onChange={(e) => update({ footer: e.target.value })} placeholder="Reply STOP to unsubscribe" />
               </Field>
+              ) : null}
+              {kind === 'LIMITED_TIME_OFFER' ? <OfferFields draft={draft} update={update} errors={errors} /> : null}
             </CardContent>
           </Card>
+          ) : null}
 
+          {kind === 'CAROUSEL' ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Cards</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <CarouselCards draft={draft} update={update} errors={errors} />
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {kind === 'STANDARD' || kind === 'LIMITED_TIME_OFFER' ? (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Buttons (optional)</CardTitle>
+              <CardTitle className="text-base">{kind === 'LIMITED_TIME_OFFER' ? 'Website button (the copy-code button is added for you)' : 'Buttons (optional)'}</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-4">
               <FieldError message={errors.buttons} />
@@ -359,6 +414,7 @@ function Editor() {
                 </div>
                 );
               })}
+              {kind === 'STANDARD' ? (
               <div className="flex flex-wrap gap-2">
                 <Button type="button" variant="outline" size="sm" onClick={() => update({ buttons: [...buttons, { type: 'QUICK_REPLY', text: '' }] })}>
                   Add quick reply
@@ -396,8 +452,10 @@ function Editor() {
                   Add pay link button
                 </Button>
               </div>
+              ) : null}
             </CardContent>
           </Card>
+          ) : null}
 
           {formError ? (
             <p role="alert" className="text-sm text-destructive">

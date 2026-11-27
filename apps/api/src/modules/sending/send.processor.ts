@@ -14,6 +14,8 @@ import { NumbersService } from '../numbers/numbers.service.js';
 import { DripLeaving } from '../growth/drips/drip-leaving.js';
 import { StatusHandler } from '../webhooks/handlers/status.handler.js';
 import { decideSendFailure, preSendCheck } from './send-outcome.js';
+import { sendExpiry } from './send-expiry.js';
+import { OFFER_ENDS_PARAM } from './template-payload.builder.js';
 import { FLOW_TOKEN_PARAM, HEADER_MEDIA_URL_PARAM, authenticationPayload, buildTemplatePayload, headerMediaType } from './template-payload.builder.js';
 import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
 import { TEMPLATE_FORM_TOKENS, type TemplateFormTokensPort } from './template-form-tokens.port.js';
@@ -87,7 +89,7 @@ export class SendProcessor {
     const m = await this.prisma.message.findUnique({
       where: { id: messageId },
       include: {
-        campaign: { select: { id: true, state: true, headerMediaAssetId: true } },
+        campaign: { select: { id: true, state: true, headerMediaAssetId: true, cardMedia: true } },
         number: true,
         template: true,
         contact: { select: { consentStatus: true } },
@@ -133,6 +135,15 @@ export class SendProcessor {
       return { result: 'requeued' };
     }
 
+    // Feature 009 (research R7, R8): past the time-to-live in our queue, or after the offer's end: not sent.
+    const offerEnds = Number(((m.resolvedParams ?? {}) as Record<string, string>)[OFFER_ENDS_PARAM] ?? NaN);
+    const expiry = sendExpiry({ queuedAt: m.queuedAt, createdAt: m.createdAt, ttlSeconds: m.template.ttlSeconds, offerEndsAtMs: Number.isFinite(offerEnds) ? offerEnds : null }, new Date());
+    if (expiry.expire) {
+      await this.transition(m.id, 'QUEUED', { status: 'EXPIRED', expiredReason: expiry.reason }, 'EXPIRED', `${m.id}:expired`, { reason: expiry.reason });
+      this.metrics.messagesTotal.inc({ status: 'EXPIRED', number: m.number.phoneNumberId });
+      return { result: 'cancelled' };
+    }
+
     // Claim before calling Meta: only one job can move QUEUED -> SENDING.
     const claimed = await this.prisma.message.updateMany({
       where: { id: m.id, status: 'QUEUED' },
@@ -162,11 +173,14 @@ export class SendProcessor {
         ({ waMessageId } = await this.meta.sendTemplate(this.cipher.decrypt(m.number.accessTokenEnc), m.number.phoneNumberId, authenticationPayload(m.phoneE164, m.template, this.cipher.decrypt(codeEnc))));
         return this.sent(m, waMessageId);
       }
+      // Feature 009 (research R6): carousel cards, from the campaign's choice or the template's samples.
+      const cardMedia = m.template.kind === 'CAROUSEL' ? await this.cardMedia(m.template, (m.campaign?.cardMedia ?? null) as Array<{ cardIndex: number; mediaAssetId: string }> | null, m.number) : undefined;
       const payload = buildTemplatePayload({
         to: m.phoneE164,
         template: { name: m.template.name, language: m.template.language, parameterFormat: m.template.parameterFormat, components },
         params: { ...((m.resolvedParams ?? {}) as Record<string, string>), ...(flowToken ? { [FLOW_TOKEN_PARAM]: flowToken } : {}) },
         ...(headerMedia ? { headerMedia } : {}),
+        ...(cardMedia ? { cardMedia } : {}),
       });
       ({ waMessageId } = await this.meta.sendTemplate(this.cipher.decrypt(m.number.accessTokenEnc), m.number.phoneNumberId, payload));
     } catch (error) {
@@ -190,6 +204,21 @@ export class SendProcessor {
       this.logger.warn({ messageId: m.id, err: (error as Error).message }, 'Could not add the message to live chat'),
     );
     return { result: 'sent', waMessageId };
+  }
+
+  /** The Meta media id of each carousel card on this number (the 001 media cache). */
+  private async cardMedia(template: { components: unknown; options: unknown }, chosen: Array<{ cardIndex: number; mediaAssetId: string }> | null, number: Parameters<MediaService['ensureMetaMediaId']>[1]) {
+    const components = (Array.isArray(template.components) ? template.components : []) as Array<{ type: string; cards?: Array<{ components?: Array<{ type: string; format?: string }> }> }>;
+    const cards = components.find((c) => c.type.toUpperCase() === 'CAROUSEL')?.cards ?? [];
+    const samples = (((template.options ?? {}) as { cards?: Array<{ sampleMediaAssetId?: string | null }> }).cards ?? []);
+    const result: Array<{ type: 'image' | 'video'; id: string }> = [];
+    for (const [i, card] of cards.entries()) {
+      const assetId = chosen?.find((c) => c.cardIndex === i)?.mediaAssetId ?? samples[i]?.sampleMediaAssetId;
+      if (!assetId) throw new Error(`Card ${i + 1} has no media`);
+      const format = (card.components ?? []).find((p) => p.type.toUpperCase() === 'HEADER')?.format?.toUpperCase();
+      result.push({ type: format === 'VIDEO' ? 'video' : 'image', id: await this.media.ensureMetaMediaId(assetId, number) });
+    }
+    return result;
   }
 
   private async handleFailure(

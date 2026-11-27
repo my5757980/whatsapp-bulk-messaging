@@ -192,6 +192,8 @@ enum MessageEventType {
   SKIPPED
   CANCELLED
   REQUEUED
+  /// Feature 009: dropped by the time-to-live or an offer's end (research R8).
+  EXPIRED
 }
 
 enum RateCategory {

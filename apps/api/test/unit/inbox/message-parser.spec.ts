@@ -108,6 +108,11 @@ describe('parseInboundMessage', () => {
     });
   });
 
+  it('reads carousel card quick replies with their card (feature 009)', () => {
+    const reply = parse({ type: 'button', button: { text: 'Tell me more', payload: 'wbm:c1:b0' } });
+    expect(reply).toMatchObject({ contentType: 'BUTTON_REPLY', text: 'Tell me more', payload: { payload: 'wbm:c1:b0', title: 'Tell me more', card: { cardIndex: 1, buttonIndex: 0 } } });
+  });
+
   it('reads form replies', () => {
     expect(parse({ type: 'interactive', interactive: { type: 'nfm_reply', nfm_reply: { name: 'flow', body: 'Sent', response_json: '{"size":"M"}' } } })).toMatchObject({
       contentType: 'FORM_REPLY',

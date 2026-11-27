@@ -60,6 +60,8 @@ const HISTORY_STATUS: Record<MessageEventType, string> = {
   SKIPPED: 'SKIPPED',
   CANCELLED: 'CANCELLED',
   REQUEUED: 'QUEUED',
+  // Feature 009: the 001 public history has no EXPIRED value.
+  EXPIRED: 'FAILED',
 };
 
 export interface Accepted {

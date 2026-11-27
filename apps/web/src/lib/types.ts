@@ -70,6 +70,8 @@ export interface StatusTotals {
   failed: number;
   skipped: number;
   cancelled: number;
+  /** Feature 009: not sent or not delivered in time, or after an offer ended. */
+  expired?: number;
 }
 
 export type VariableSourceKind = 'column' | 'field' | 'attribute' | 'static' | 'payment';

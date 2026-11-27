@@ -1,4 +1,4 @@
-import { parseAdReferral, type AdReferral } from '@wbm/shared';
+import { parseAdReferral, parseCardReplyPayload, type AdReferral } from '@wbm/shared';
 import { cutText, PREVIEW_MAX, type ChatContentType } from '../inbox-common.js';
 
 // Turns one entry of a Meta `value.messages[]` webhook into a chat item
@@ -101,7 +101,10 @@ function parseContent(type: string, m: Json): Content | null {
     case 'button': {
       const button = obj(m.button);
       const title = str(button?.text) ?? '';
-      return { contentType: 'BUTTON_REPLY', text: title, payload: compact({ payload: str(button?.payload), title }), media: null };
+      // Feature 009 (research R6): a carousel card's quick reply says which card and button.
+      const card = parseCardReplyPayload(str(button?.payload));
+      // The text stays the button's, so template button triggers (003) match as before; live chat shows the card.
+      return { contentType: 'BUTTON_REPLY', text: title, payload: compact({ payload: str(button?.payload), title, ...(card ? { card } : {}) }), media: null };
     }
     // Feature 008 (US6, R11): a cart sent from the catalog.
     case 'order': {

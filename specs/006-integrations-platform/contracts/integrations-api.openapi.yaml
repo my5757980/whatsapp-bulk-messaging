@@ -52,7 +52,7 @@ paths:
                   properties:
                     type: { type: string, examples: [message.status] }
                     label: { type: string }
-                    group: { type: string, enum: [messages, contacts, links, drips, live_chat, api_campaigns, stores, ads, payments, commerce, forms, test] }
+                    group: { type: string, enum: [messages, contacts, links, drips, live_chat, api_campaigns, stores, ads, payments, commerce, forms, otp, test] }
 
   /webhook-endpoints:
     get:
@@ -801,7 +801,7 @@ components:
         requestId: { type: string }
     EventType:
       type: string
-      enum: [message.status, message.received, contact.created, contact.updated, contact.deleted, contact.tags_changed, contact.opted_in, contact.opted_out, link.clicked, drip.joined, drip.finished, drip.left, chat.assigned, chat.closed, api_campaign.triggered, store.notification_sent, store.cod_answered, store.cart_recovered, ad.chat_started, ad.lead_received]
+      enum: [message.status, message.received, contact.created, contact.updated, contact.deleted, contact.tags_changed, contact.opted_in, contact.opted_out, link.clicked, drip.joined, drip.finished, drip.left, chat.assigned, chat.closed, api_campaign.triggered, store.notification_sent, store.cod_answered, store.cart_recovered, ad.chat_started, ad.lead_received, payment.requested, payment.paid, payment.failed, payment.expired, payment.refunded, payment.cancelled, chat_order.received, chat_order.paid, form.submitted, otp.status]
     WebhookEndpointInput:
       type: object
       required: [name, url, eventTypes]
@@ -858,7 +858,7 @@ components:
         createdAt: { type: string, format: date-time }
     ApiKeyScope:
       type: string
-      enum: [messages.send, contacts.read, contacts.write, campaigns.trigger, drips.enrol]
+      enum: [messages.send, contacts.read, contacts.write, campaigns.trigger, drips.enrol, payments.read, payments.write, otp.send]
     ApiCampaignStatus:
       type: string
       enum: [DRAFT, LIVE, PAUSED, STOPPED]
