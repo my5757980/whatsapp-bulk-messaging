@@ -16,6 +16,9 @@ export const HEADER_MEDIA_URL_PARAM = '$headerMediaUrl';
  */
 export const PRODUCTS_PARAM = '$products';
 
+/** Feature 008 (US7): resolved_params key holding the signed token of a template's form (FLOW) button. */
+export const FLOW_TOKEN_PARAM = '$flowToken';
+
 interface ProductChoices {
   thumbnailRetailerId?: string | null;
   sections?: Array<{ title?: string | null; retailerIds?: string[] }>;
@@ -117,6 +120,8 @@ export function buildTemplatePayload(input: PayloadInput): TemplateMessagePayloa
     const kind = button.type.toUpperCase();
     if (kind === 'CATALOG') {
       components.push({ type: 'button', sub_type: 'CATALOG', index: String(index), parameters: choices.thumbnailRetailerId ? [{ type: 'action', action: { thumbnail_product_retailer_id: choices.thumbnailRetailerId } }] : [] });
+    } else if (kind === 'FLOW') {
+      components.push({ type: 'button', sub_type: 'flow', index: String(index), parameters: [{ type: 'action', action: { flow_token: input.params[FLOW_TOKEN_PARAM] ?? 'unused' } }] });
     } else if (kind === 'MPM') {
       const sections = (choices.sections ?? []).map((s) => ({ ...(s.title ? { title: s.title } : {}), product_items: (s.retailerIds ?? []).map((id) => ({ product_retailer_id: id })) }));
       components.push({ type: 'button', sub_type: 'mpm', index: String(index), parameters: [{ type: 'action', action: { ...(choices.thumbnailRetailerId ? { thumbnail_product_retailer_id: choices.thumbnailRetailerId } : {}), sections } }] });

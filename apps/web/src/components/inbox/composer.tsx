@@ -13,6 +13,7 @@ import { MediaPicker } from './media-picker';
 import { NoteComposer } from './note-composer';
 import { SavedReplyPicker } from './saved-reply-picker';
 import { PaymentRequestDialog } from './payment-request-dialog';
+import { FormSender } from './form-sender';
 import { ProductPicker } from './product-picker';
 import { TemplateSender } from './template-sender';
 
@@ -178,6 +179,7 @@ function ReplyComposer({
           <MediaPicker disabled={send.isPending} onSend={(item, caption) => send.mutate({ type: 'media', mediaAssetId: item.id, ...(caption.trim() ? { text: caption.trim() } : {}) })} />
           <PaymentRequestDialog chat={chat} />
           <ProductPicker chat={chat} />
+          <FormSender chat={chat} />
           <TemplateSender chat={chat} variant="outline" />
           <Button type="submit" size="sm" disabled={!draft.trim() || picking || send.isPending}>
             {send.isPending ? 'Sending…' : 'Send'}

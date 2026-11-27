@@ -153,8 +153,34 @@ function Body({ item }: { item: ChatItem }) {
           {str(p.description) ? <span className="text-muted-foreground"> — {str(p.description)}</span> : null}
         </p>
       );
-    case 'FORM_REPLY':
-      return <pre className="max-w-full overflow-x-auto whitespace-pre-wrap text-xs">{JSON.stringify(p.response ?? {}, null, 2)}</pre>;
+    case 'FORM_REPLY': {
+      // Answers to our forms (feature 008 US7) are saved; the others are shown as they came.
+      const response = { ...((p.response ?? {}) as Record<string, unknown>) };
+      delete response.flow_token;
+      return (
+        <div className="grid gap-1 text-sm" data-testid="form-reply">
+          {str(p.formName) ? <p className="text-xs text-muted-foreground">Answer to {str(p.formName)}</p> : null}
+          <dl className="grid grid-cols-[auto_1fr] gap-x-2 text-xs">
+            {Object.entries(response).map(([key, value]) => (
+              <div key={key} className="contents">
+                <dt className="font-mono text-muted-foreground">{key}</dt>
+                <dd className="break-words">{Array.isArray(value) ? value.join(', ') : String(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      );
+    }
+    // A WhatsApp Form we sent (feature 008 US7).
+    case 'FORM':
+      return (
+        <div className="grid gap-1 text-sm" data-testid="form-message">
+          {str(p.header) && <p className="font-medium">{str(p.header)}</p>}
+          <p className="whitespace-pre-wrap break-words">{item.text}</p>
+          <span className="rounded border bg-background px-2 py-1 text-center text-xs">📝 {str(p.cta) ?? 'Open form'}</span>
+          {str(p.formName) ? <span className="text-xs text-muted-foreground">Form {str(p.formName)}</span> : null}
+        </div>
+      );
     case 'REACTION':
       return <p className="text-sm">{str(p.emoji) ? `Reacted ${String(p.emoji)} to a message` : 'Removed a reaction'}</p>;
     case 'BUTTONS':

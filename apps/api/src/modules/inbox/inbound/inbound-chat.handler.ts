@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, Optional, type OnModuleInit } from '@nestjs/common';
 import { CHAT_ORDERS, type ChatOrdersPort } from './chat-orders.port.js';
+import { FORM_ANSWERS, type FormAnswersPort } from './form-answers.port.js';
 import { v7 as uuidv7 } from 'uuid';
 import { normalizePhone, waIdToE164 } from '../../../common/phone/phone.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
@@ -69,6 +70,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly chatLinks: ChatLinkMatcher,
     private readonly adChats: AdChatMatcher,
     @Optional() @Inject(CHAT_ORDERS) private readonly chatOrders?: ChatOrdersPort,
+    @Optional() @Inject(FORM_ANSWERS) private readonly formAnswers?: FormAnswersPort,
   ) {}
 
   onModuleInit(): void {
@@ -205,6 +207,10 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     // COD answers (feature 006 US5): a cod1: button tap is answered here, before flows and the AI agent.
     const tappedPayload = typeof msg.payload.payload === 'string' ? msg.payload.payload : null;
     if (tappedPayload && (await this.cod.handleButton(tappedPayload, { conversationId: outcome.conversationId, contactId: contact.id }))) return;
+    // Answers to our WhatsApp Forms (feature 008 US7); a reply without our token stays a plain FORM_REPLY.
+    if (msg.contentType === 'FORM_REPLY' && this.formAnswers) {
+      if (await this.formAnswers.received({ conversationId: outcome.conversationId, contactId: contact.id, chatItemId: itemId, payload: msg.payload })) return;
+    }
     // Carts sent in chat (feature 008 US6) become chat orders; flows and the AI agent do not answer them.
     if (msg.contentType === 'ORDER' && this.chatOrders) {
       await this.chatOrders.received({ conversationId: outcome.conversationId, contactId: contact.id, numberId, chatItemId: itemId, text: msg.text, payload: msg.payload });

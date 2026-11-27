@@ -7,6 +7,12 @@ import { MetaCommerceClient } from './meta-commerce.client.js';
 import { ProductMessagesController, ProductMessagesService } from './messages/product-messages.js';
 import { ChatOrderService, ChatOrdersController } from './orders/chat-orders.js';
 import { CHAT_ORDERS } from '../inbox/inbound/chat-orders.port.js';
+import { FORM_ANSWERS } from '../inbox/inbound/form-answers.port.js';
+import { TEMPLATE_FORM_TOKENS } from '../sending/template-form-tokens.port.js';
+import { FormAnswersService } from './forms/form-answers.js';
+import { FormTokens } from './forms/form-tokens.js';
+import { FormsController, FormsService } from './forms/forms.js';
+import { TemplateFormTokens } from './forms/template-form-tokens.js';
 
 // Commerce (feature 008, plan Structure Decision): the Meta catalog and product messages, chat orders
 // and WhatsApp Forms. The global domain module holds what the worker's inbound handler and the flow
@@ -20,6 +26,12 @@ const DOMAIN: Provider[] = [
   ChatOrderService,
   // The port the inbound handler calls for carts (the inbox never imports commerce).
   { provide: CHAT_ORDERS, useExisting: ChatOrderService },
+  FormTokens,
+  FormAnswersService,
+  // The ports for form answers (inbound) and form buttons of templates (sending).
+  { provide: FORM_ANSWERS, useExisting: FormAnswersService },
+  TemplateFormTokens,
+  { provide: TEMPLATE_FORM_TOKENS, useExisting: TemplateFormTokens },
 ];
 
 /** Commerce services shared by the HTTP app and the worker. */
@@ -27,8 +39,8 @@ const DOMAIN: Provider[] = [
 @Module({ providers: DOMAIN, exports: DOMAIN })
 export class CommerceDomainModule {}
 
-const API_PROVIDERS: Provider[] = [ProductMessagesService];
-const CONTROLLERS: Type[] = [CatalogController, ProductMessagesController, ChatOrdersController];
+const API_PROVIDERS: Provider[] = [ProductMessagesService, FormsService];
+const CONTROLLERS: Type[] = [CatalogController, ProductMessagesController, ChatOrdersController, FormsController];
 
 /** The catalog, product messages, chat orders and forms endpoints (HTTP app only). */
 @Module({

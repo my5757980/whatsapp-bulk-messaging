@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { batchData, priceText, shopifyItems, wooItems } from '../../../src/modules/commerce/catalog/catalog-fill.js';
-import { commerceInteractiveFor } from '../../../src/modules/inbox/messages/interactive-payload.js';
-import { PRODUCTS_PARAM, buildTemplatePayload } from '../../../src/modules/sending/template-payload.builder.js';
+import { commerceInteractiveFor, flowInteractiveFor } from '../../../src/modules/inbox/messages/interactive-payload.js';
+import { FLOW_TOKEN_PARAM, PRODUCTS_PARAM, buildTemplatePayload } from '../../../src/modules/sending/template-payload.builder.js';
 
 // T064 and T070 (feature 008 US5, research R9, R10): product messages, catalog and multi-product
 // template buttons, and the store fill mapping.
@@ -32,6 +32,26 @@ describe('product messages (interactive)', () => {
       body: { text: 'Browse' },
       action: { name: 'catalog_message', parameters: { thumbnail_product_retailer_id: 'shp-1' } },
     });
+  });
+});
+
+describe('WhatsApp Forms (US7)', () => {
+  it('sends a form as an interactive flow message with its token', () => {
+    expect(flowInteractiveFor('Book a visit', { flowId: 'FLOW1', cta: 'Book now', token: 'wf1.x.y', header: 'Bookings' })).toEqual({
+      type: 'flow',
+      header: { type: 'text', text: 'Bookings' },
+      body: { text: 'Book a visit' },
+      action: { name: 'flow', parameters: { flow_message_version: '3', flow_id: 'FLOW1', flow_cta: 'Book now', flow_token: 'wf1.x.y', flow_action: 'navigate', flow_action_payload: { screen: 'S1' } } },
+    });
+  });
+
+  it('sends a template form button with the recipient token', () => {
+    const payload = buildTemplatePayload({
+      to: '+971501234567',
+      template: { name: 'book', language: 'en_US', parameterFormat: 'POSITIONAL', components: [{ type: 'BODY', text: 'Book your visit' }, { type: 'BUTTONS', buttons: [{ type: 'FLOW', text: 'Book', flow_id: 'FLOW1' } as never] }] },
+      params: { [FLOW_TOKEN_PARAM]: 'wf1.a.b' },
+    });
+    expect(payload.template.components).toEqual([{ type: 'button', sub_type: 'flow', index: '0', parameters: [{ type: 'action', action: { flow_token: 'wf1.a.b' } }] }]);
   });
 });
 

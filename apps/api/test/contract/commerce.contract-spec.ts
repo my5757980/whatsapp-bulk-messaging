@@ -188,6 +188,33 @@ describe('Commerce API contract', () => {
     });
   });
 
+  describe('US7 forms', () => {
+    it('the forms routes and sending a form', async () => {
+      new FakeCommerceGraph(0).install();
+      const number = await seedNumber(ctx);
+      const name = `Contract form ${Date.now()}`;
+      const made = await call('post', '/forms', { name, category: 'SIGN_UP' });
+      await check('post', '/forms', made, 201);
+      await check('post', '/forms', await call('post', '/forms', { name, category: 'SIGN_UP' }), 409);
+      const id = String(made.body.id);
+      const draft = { screens: [{ title: 'Join', button: 'Submit', fields: [{ key: 'name', type: 'shortText', label: 'Name', required: true }] }] };
+      await check('put', '/forms/{id}', await call('put', `/forms/${id}`, { name, category: 'SIGN_UP', draft, mapping: [], tagIds: [] }), 200);
+      await check('get', '/forms/{id}', await call('get', `/forms/${id}`), 200);
+      await check('post', '/forms/{id}/check', await call('post', `/forms/${id}/check`), 200);
+      await check('post', '/forms/{id}/publish', await call('post', `/forms/${id}/publish`), 201);
+      await check('post', '/forms/{id}/publish', await call('post', `/forms/${id}/publish`), 409);
+      await check('get', '/forms', await call('get', '/forms'), 200);
+      const { conversation } = await seedOpenChat(ctx, { numberId: number.id });
+      await check('post', '/inbox/conversations/{id}/forms', await call('post', `/inbox/conversations/${conversation.id}/forms`, { formId: id, body: 'Join us', cta: 'Join' }), 201);
+      const closed = await seedOpenChat(ctx, { numberId: number.id, minutesAgo: 25 * 60 });
+      await check('post', '/inbox/conversations/{id}/forms', await call('post', `/inbox/conversations/${closed.conversation.id}/forms`, { formId: id, body: 'Join us', cta: 'Join' }), 409);
+      await check('get', '/forms/{id}/answers', await call('get', `/forms/${id}/answers`), 200);
+      await check('delete', '/forms/{id}', await call('delete', `/forms/${id}`), 409);
+      await check('post', '/forms/{id}/archive', await call('post', `/forms/${id}/archive`), 200);
+      await check('get', '/forms/{id}', await call('get', '/forms/0196f1f0-0000-7000-8000-00000000dead'), 404);
+    });
+  });
+
   describe('US3 test results', () => {
     beforeEach(async () => {
       await seedGateway(ctx);

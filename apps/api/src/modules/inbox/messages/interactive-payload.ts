@@ -57,6 +57,20 @@ export function commerceInteractiveFor(contentType: 'PRODUCT' | 'PRODUCT_LIST' |
   return { type: 'catalog_message', body: { text: text ?? '' }, ...footer, action: { name: 'catalog_message', ...(p.thumbnailRetailerId ? { parameters: { thumbnail_product_retailer_id: p.thumbnailRetailerId } } : {}) } };
 }
 
+/** Feature 008 (US7, R12): a WhatsApp Form as an interactive flow message with its signed token. */
+export function flowInteractiveFor(text: string | null, payload: unknown): Record<string, unknown> {
+  const p = (payload ?? {}) as { header?: string; flowId?: string; cta?: string; token?: string };
+  return {
+    type: 'flow',
+    ...(p.header ? { header: { type: 'text', text: p.header } } : {}),
+    body: { text: text ?? '' },
+    action: {
+      name: 'flow',
+      parameters: { flow_message_version: '3', flow_id: p.flowId ?? '', flow_cta: p.cta ?? 'Open', flow_token: p.token ?? '', flow_action: 'navigate', flow_action_payload: { screen: 'S1' } },
+    },
+  };
+}
+
 export function ctaUrlFor(text: string | null, payload: unknown): CtaUrlInteractive {
   const p = (payload ?? {}) as { buttonText?: string; url?: string };
   return { type: 'cta_url', body: { text: text ?? '' }, action: { name: 'cta_url', parameters: { display_text: p.buttonText ?? 'Pay now', url: p.url ?? '' } } };
