@@ -53,9 +53,8 @@ export class FakeTemplatesGraph {
       return edge === 'message_templates' || edge === 'media' || edge === 'messages' || edge === 'uploads' || id.startsWith('upload:') || (!edge && this.templates.has(id));
     };
     for (const method of ['get', 'post'] as const) {
-      nock(META_BASE)
-        .persist()
-        [method](ours)
+      const scope = nock(META_BASE).persist();
+      scope[method](ours)
         .query(true)
         .reply(async (req: Request) => this.route(req));
     }
