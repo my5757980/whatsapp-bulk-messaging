@@ -127,7 +127,7 @@ describe('Campaign send-now flow', () => {
 
     const campaign = await admin.agent.get(`/api/campaigns/${campaignId}`);
     expect(campaign.body.state).toBe('COMPLETED');
-    expect(campaign.body.totals).toEqual({ pending: 0, queued: 0, sent: 0, delivered: 1, read: 2, failed: 1, skipped: 0, cancelled: 0 });
+    expect(campaign.body.totals).toEqual({ pending: 0, queued: 0, sent: 0, delivered: 1, read: 2, failed: 1, skipped: 0, cancelled: 0, expired: 0 });
     expect(await ctx.prisma.notification.count({ where: { userId: admin.userId, type: 'CAMPAIGN_COMPLETED', link: `/campaigns/${campaignId}` } })).toBe(1);
 
     const messages = await admin.agent.get(`/api/campaigns/${campaignId}/messages`).query({ status: 'FAILED' });

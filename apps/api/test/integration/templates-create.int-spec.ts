@@ -139,6 +139,9 @@ describe('Template authoring', () => {
       body: { text: 'Hi {{1}}, our sale starts today!', examples: ['Sara'] },
       footer: 'Reply STOP to unsubscribe',
       buttons: [{ type: 'URL', text: 'Shop now', url: 'https://shop.example.com/{{1}}', urlExample: 'https://shop.example.com/summer' }],
+      // Feature 009: the kind and the time-to-live come with the copy.
+      kind: 'STANDARD',
+      ttlSeconds: null,
     });
   });
 
