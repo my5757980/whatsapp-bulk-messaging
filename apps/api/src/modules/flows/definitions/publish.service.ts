@@ -51,7 +51,11 @@ export class PublishService {
     const graph = parseGraph(row.draft);
     // Feature 008 (FR-040): payment steps need Stripe connected.
     const gatewayConnected = graph.steps.some((s) => s.type === 'payment') ? (await this.prisma.paymentGateway.count({ where: { status: 'CONNECTED' } })) > 0 : undefined;
-    const problems = [...validateForPublish(graph, { reservedKeywords: await this.reserved.list(), gatewayConnected }), ...(await this.databaseProblems(row, graph))];
+    // Feature 008 US8: product and catalog steps need the catalog; form steps need published forms.
+    const catalogConnected = graph.steps.some((s) => s.type === 'product' || s.type === 'catalog') ? (await this.prisma.catalogConnection.count()) > 0 : undefined;
+    const formIds = graph.steps.flatMap((s) => (s.type === 'form' && s.formId ? [s.formId] : []));
+    const publishedFormIds = formIds.length ? (await this.prisma.form.findMany({ where: { id: { in: formIds }, status: 'PUBLISHED' }, select: { id: true } })).map((f) => f.id) : undefined;
+    const problems = [...validateForPublish(graph, { reservedKeywords: await this.reserved.list(), gatewayConnected, catalogConnected, publishedFormIds }), ...(await this.databaseProblems(row, graph))];
     if (problems.length) {
       throw new AppError(HttpStatus.UNPROCESSABLE_ENTITY, 'PUBLISH_BLOCKED', 'Fix the listed problems before publishing', undefined, { problems });
     }

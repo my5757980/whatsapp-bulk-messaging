@@ -55,10 +55,13 @@ export const STEP_LABELS: Record<StepType, string> = {
   aiAgent: 'Hand to AI agent',
   end: 'End',
   payment: 'Request payment',
+  product: 'Send products',
+  catalog: 'Send catalog',
+  form: 'Send form',
 };
 
 /** Steps available so far; later stories add the rest (hand-over arrives with US3). */
-export const PALETTE: StepType[] = ['message', 'buttons', 'question', 'list', 'tags', 'attributes', 'condition', 'delay', 'api', 'payment', 'jump', 'aiAgent', 'end'];
+export const PALETTE: StepType[] = ['message', 'buttons', 'question', 'list', 'tags', 'attributes', 'condition', 'delay', 'api', 'product', 'catalog', 'form', 'payment', 'jump', 'aiAgent', 'end'];
 
 /** A readable name for a branch of a step. */
 export function branchLabel(step: FlowStep, branch: string): string {
@@ -116,9 +119,24 @@ export function stepSummary(step: FlowStep): string {
     case 'end':
       return 'The flow ends';
     case 'payment': {
-      const amount = step.amount.source === 'static' ? `AED ${(step.amount.minor / 100).toFixed(2)}` : step.amount.source === 'answer' ? `the ${step.amount.name} answer` : `the ${step.amount.key} attribute`;
+      const amount =
+        step.amount.source === 'static'
+          ? `AED ${(step.amount.minor / 100).toFixed(2)}`
+          : step.amount.source === 'answer'
+            ? `the ${step.amount.name} answer`
+            : step.amount.source === 'cartTotal'
+              ? 'the cart total'
+              : `the ${step.amount.key} attribute`;
       return `Ask for ${amount}${step.description.trim() ? `: ${step.description.trim()}` : ''}`;
     }
+    case 'product': {
+      const count = step.sections.flatMap((s) => s.retailerIds).length;
+      return count ? `Send ${count} product${count === 1 ? '' : 's'} and wait for a cart` : 'No products chosen';
+    }
+    case 'catalog':
+      return 'Send the catalog and wait for a cart';
+    case 'form':
+      return step.formId ? 'Send a form and wait for the answer' : 'No form chosen';
   }
 }
 
@@ -186,6 +204,12 @@ export function newStep(type: StepType, id: string, position: { x: number; y: nu
       return { id, type, position };
     case 'payment':
       return { id, type, position, amount: { source: 'static', minor: 10_000 }, description: '', expiryMinutes: 60, next: null, onNotPaid: null, fallbacks: {} };
+    case 'product':
+      return { id, type, position, header: '', body: '', footer: '', sections: [{ title: '', retailerIds: [] as unknown as [string] }], timeoutMinutes: 60, next: null, onTimeout: null, fallbacks: {} };
+    case 'catalog':
+      return { id, type, position, body: '', footer: '', thumbnailRetailerId: null, timeoutMinutes: 60, next: null, onTimeout: null, fallbacks: {} };
+    case 'form':
+      return { id, type, position, formId: null, header: '', body: '', cta: 'Open form', answerPrefix: 'form', timeoutMinutes: 60, next: null, onTimeout: null, fallbacks: {} };
     default:
       throw new Error(`The ${type} step is not available yet`);
   }
@@ -214,6 +238,10 @@ export function withBranch(step: FlowStep, branch: string, target: string | null
       return branch === 'success' || branch === 'failed' ? { ...step, [branch]: target } : step;
     case 'payment':
       return branch === 'next' || branch === 'onNotPaid' ? { ...step, [branch]: target } : step;
+    case 'product':
+    case 'catalog':
+    case 'form':
+      return branch === 'next' || branch === 'onTimeout' ? { ...step, [branch]: target } : step;
     default:
       return step;
   }

@@ -13,6 +13,8 @@ import { FormAnswersService } from './forms/form-answers.js';
 import { FormTokens } from './forms/form-tokens.js';
 import { FormsController, FormsService } from './forms/forms.js';
 import { TemplateFormTokens } from './forms/template-form-tokens.js';
+import { FLOW_COMMERCE } from '../flows/engine/ports.js';
+import { FlowCommerce } from './flows/flow-commerce.js';
 
 // Commerce (feature 008, plan Structure Decision): the Meta catalog and product messages, chat orders
 // and WhatsApp Forms. The global domain module holds what the worker's inbound handler and the flow
@@ -32,6 +34,9 @@ const DOMAIN: Provider[] = [
   { provide: FORM_ANSWERS, useExisting: FormAnswersService },
   TemplateFormTokens,
   { provide: TEMPLATE_FORM_TOKENS, useExisting: TemplateFormTokens },
+  FlowCommerce,
+  // The port the flow engine uses for product, catalog and form steps.
+  { provide: FLOW_COMMERCE, useExisting: FlowCommerce },
 ];
 
 /** Commerce services shared by the HTTP app and the worker. */

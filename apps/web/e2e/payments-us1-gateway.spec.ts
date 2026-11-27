@@ -17,7 +17,8 @@ test('US1: connects Stripe with checks and proves notifications arrive', async (
   // 1. A key Stripe rejects is refused and nothing is saved.
   await page.getByLabel('Stripe key').fill(STRIPE_KEY_REJECTED);
   await page.getByRole('button', { name: 'Save and check' }).click();
-  await expect(page.getByRole('alert')).toContainText('Stripe does not accept this key');
+  // Next's route announcer is also role="alert"; ours is the paragraph with the message.
+  await expect(page.getByRole('alert').filter({ hasText: 'Stripe does not accept this key' })).toBeVisible();
 
   // 2. The good key, with the address registered for us: every check passes.
   await page.getByLabel('Stripe key').fill(STRIPE_KEY_OK);

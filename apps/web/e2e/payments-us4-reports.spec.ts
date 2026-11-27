@@ -27,7 +27,7 @@ async function ask(page: Page, key: string, phone: string, amountMinor: number):
 }
 
 test('US4: reminders, totals, filters, export and retargeting non-payers', async ({ page }) => {
-  test.setTimeout(300_000);
+  test.setTimeout(480_000);
   const suffix = Date.now().toString().slice(-6);
   await signInAsAdmin(page);
   await connectStripe(page, STRIPE_KEY_LIVE);

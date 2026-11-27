@@ -30,7 +30,11 @@ export type FlowInput =
   | { kind: 'timer'; token: number }
   | { kind: 'api'; token: number; ok: boolean; mapped: Record<string, unknown> }
   /** Feature 008: the payment request of a payment step was paid, or expired or was cancelled. */
-  | { kind: 'payment'; token: number; paid: boolean };
+  | { kind: 'payment'; token: number; paid: boolean }
+  /** Feature 008 US8: the cart the customer sent to a product or catalog step. */
+  | { kind: 'order'; token: number; cart: { chatOrderId: string; totalMinor: number; currency: string; items: unknown[] } }
+  /** Feature 008 US8: the verified answer to a form step's form. */
+  | { kind: 'form'; token: number; answers: Record<string, unknown> };
 
 /** What condition and attribute steps read about the contact; the session service loads it. */
 export interface FlowFacts {
@@ -88,7 +92,7 @@ type ListStep = StepOf<'list'>;
 type QuestionStep = StepOf<'question'>;
 type MessageInput = Extract<FlowInput, { kind: 'message' }>;
 /** Steps that wait for the customer and have a timeout. */
-type WaitingStep = ButtonsStep | ListStep | QuestionStep;
+type WaitingStep = ButtonsStep | ListStep | QuestionStep | StepOf<'product'> | StepOf<'catalog'> | StepOf<'form'>;
 
 class Runner {
   readonly effects: FlowEffect[] = [];
@@ -164,6 +168,10 @@ class Runner {
   paymentAmount(step: StepOf<'payment'>): { minor: number } | { major: number } | null {
     const amount = step.amount;
     if (amount.source === 'static') return { minor: amount.minor };
+    if (amount.source === 'cartTotal') {
+      const cart = this.state.answers.cart as { totalMinor?: unknown } | undefined;
+      return typeof cart?.totalMinor === 'number' && cart.totalMinor > 0 ? { minor: cart.totalMinor } : null;
+    }
     const raw = amount.source === 'answer' ? this.state.answers[amount.name] : (this.saved[amount.key] ?? this.ctx.facts?.attributes[amount.key]);
     const value = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw.replace(/[^\d.-]/g, '')) : NaN;
     return Number.isFinite(value) && value > 0 ? { major: value } : null;
@@ -309,9 +317,28 @@ class Runner {
           // Feature 008: the payments service makes and sends the request after commit; its result resumes
           // the session (paid → next, expired or cancelled → onNotPaid).
           this.state = { ...this.state, wait: 'PAYMENT', waitToken: this.state.waitToken + 1 };
-          this.effects.push({ kind: 'requestPayment', stepId: step.id, amount: this.paymentAmount(step), description: this.render(step.description, step.fallbacks).trim(), expiryMinutes: step.expiryMinutes });
+          // A cart total pays the cart's chat order (US8).
+          const cartOrder = step.amount.source === 'cartTotal' ? ((this.state.answers.cart as { chatOrderId?: string } | undefined)?.chatOrderId ?? null) : null;
+          this.effects.push({ kind: 'requestPayment', stepId: step.id, amount: this.paymentAmount(step), description: this.render(step.description, step.fallbacks).trim(), expiryMinutes: step.expiryMinutes, chatOrderId: cartOrder });
           return this.idle();
         }
+        // Feature 008 US8: send products or the catalog and wait for a cart; send a form and wait for its answer.
+        case 'product':
+          this.state = { ...this.state, wait: 'ORDER', waitToken: this.state.waitToken + 1 };
+          this.effects.push({ kind: 'send', stepId: step.id, message: { type: 'products', header: this.render(step.header, step.fallbacks).trim(), body: this.render(step.body, step.fallbacks).trim(), footer: step.footer, sections: step.sections } });
+          this.scheduleTimeout(step);
+          return this.idle();
+        case 'catalog':
+          this.state = { ...this.state, wait: 'ORDER', waitToken: this.state.waitToken + 1 };
+          this.effects.push({ kind: 'send', stepId: step.id, message: { type: 'catalog', body: this.render(step.body, step.fallbacks).trim(), footer: step.footer, thumbnailRetailerId: step.thumbnailRetailerId } });
+          this.scheduleTimeout(step);
+          return this.idle();
+        case 'form':
+          if (!step.formId) return this.end('FAILED', 'no form to send');
+          this.state = { ...this.state, wait: 'FORM', waitToken: this.state.waitToken + 1 };
+          this.effects.push({ kind: 'send', stepId: step.id, message: { type: 'form', formId: step.formId, header: this.render(step.header, step.fallbacks).trim(), body: this.render(step.body, step.fallbacks).trim(), cta: step.cta } });
+          this.scheduleTimeout(step);
+          return this.idle();
         case 'jump':
           if (!step.flowId) return this.end('FAILED', 'no flow to continue in');
           // The session service starts the target flow in the same chat after this session ends.
@@ -420,7 +447,28 @@ export function run(state: SessionState, input: FlowInput, ctx: RunContext): Run
         runner.leave(step, 'next', step.next);
         return runner.advance();
       }
+      if ((state.wait === 'ORDER' && (step.type === 'product' || step.type === 'catalog')) || (state.wait === 'FORM' && step.type === 'form')) {
+        return runner.leaveOptional(step, 'onTimeout', step.onTimeout, 'TIMED_OUT');
+      }
       return runner.idle();
+    }
+    case 'order': {
+      if (state.wait !== 'ORDER' || input.token !== state.waitToken) return runner.idle();
+      const step = runner.step(state.currentStepId);
+      if (step?.type !== 'product' && step?.type !== 'catalog') return runner.idle();
+      // {answer:cart_total} reads as an amount; a payment step with cartTotal charges it.
+      runner.state = { ...runner.state, answers: { ...runner.state.answers, cart: input.cart, cart_total: (input.cart.totalMinor / 100).toFixed(2), cart_currency: input.cart.currency.toUpperCase() } };
+      runner.leave(step, 'next', step.next);
+      return runner.advance();
+    }
+    case 'form': {
+      if (state.wait !== 'FORM' || input.token !== state.waitToken) return runner.idle();
+      const step = runner.step(state.currentStepId);
+      if (step?.type !== 'form') return runner.idle();
+      const answers = Object.fromEntries(Object.entries(input.answers).map(([key, value]) => [`${step.answerPrefix}_${key}`, Array.isArray(value) ? value.join(', ') : value]));
+      runner.state = { ...runner.state, answers: { ...runner.state.answers, ...answers } };
+      runner.leave(step, 'next', step.next);
+      return runner.advance();
     }
     case 'payment': {
       if (state.wait !== 'PAYMENT' || input.token !== state.waitToken) return runner.idle();

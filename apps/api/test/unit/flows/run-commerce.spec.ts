@@ -37,7 +37,7 @@ function started(g: FlowGraph, answers: Record<string, unknown> = { day: 'Friday
 describe('payment step', () => {
   it('asks for the payment with the rendered text and waits', () => {
     const { state, effects } = started(graph(steps));
-    expect(requestOf(effects)).toEqual({ kind: 'requestPayment', stepId: 'pay', amount: { minor: 9900 }, description: 'Booking for Friday', expiryMinutes: 120 });
+    expect(requestOf(effects)).toEqual({ kind: 'requestPayment', stepId: 'pay', amount: { minor: 9900 }, description: 'Booking for Friday', expiryMinutes: 120, chatOrderId: null });
     expect(state).toMatchObject({ currentStepId: 'pay', wait: 'PAYMENT', ended: false });
     expect(sendsOf(effects)).toEqual([]);
   });
@@ -74,5 +74,53 @@ describe('payment step', () => {
     expect(requestOf(fromAttribute.effects)).toMatchObject({ amount: { major: 250.5 } });
     const missing = started(graph([{ ...steps[0], amount: { source: 'answer', name: 'quote' } }, steps[1], steps[2]]), {});
     expect(requestOf(missing.effects)).toMatchObject({ amount: null });
+  });
+});
+
+// T086 (feature 008 US8): products and the catalog wait for a cart, forms for their answer.
+describe('commerce steps', () => {
+  const cart = { chatOrderId: '0196f1f0-0000-7000-8000-0000000000aa', totalMinor: 15400, currency: 'aed', items: [] };
+  const shop = [
+    { id: 'list', type: 'product', header: 'New in', body: 'Pick what you like', sections: [{ title: '', retailerIds: ['shp-101', 'shp-102'] }], timeoutMinutes: 30, next: 'pay', onTimeout: 'bye' },
+    { id: 'pay', type: 'payment', amount: { source: 'cartTotal' }, description: 'Your order', expiryMinutes: 120, next: 'thanks', onNotPaid: 'bye' },
+    { id: 'thanks', type: 'message', text: 'Thank you, {answer:cart_total} received' },
+    { id: 'bye', type: 'message', text: 'Maybe next time' },
+  ];
+
+  it('sends the product list, waits for the cart, then charges the cart total for its order', () => {
+    const g = graph(shop, 'list');
+    const { state, effects } = started(g, {});
+    expect(effects).toContainEqual({ kind: 'send', stepId: 'list', message: { type: 'products', header: 'New in', body: 'Pick what you like', footer: '', sections: [{ title: '', retailerIds: ['shp-101', 'shp-102'] }] } });
+    expect(effects).toContainEqual({ kind: 'schedule', stepId: 'list', purpose: 'timeout', delayMs: 30 * 60_000 });
+    expect(state.wait).toBe('ORDER');
+    expect(run(state, { kind: 'message', text: 'hi', replyId: null, contentType: 'TEXT' }, ctx(g)).effects).toEqual([]);
+    const after = run(state, { kind: 'order', token: state.waitToken, cart }, ctx(g));
+    expect(requestOf(after.effects)).toEqual({ kind: 'requestPayment', stepId: 'pay', amount: { minor: 15400 }, description: 'Your order', expiryMinutes: 120, chatOrderId: cart.chatOrderId });
+    expect(after.state.answers).toMatchObject({ cart_total: '154.00', cart_currency: 'AED' });
+  });
+
+  it('takes the timeout branch when no cart arrives, and ignores stale carts', () => {
+    const g = graph(shop, 'list');
+    const { state } = started(g, {});
+    expect(run(state, { kind: 'order', token: state.waitToken - 1, cart }, ctx(g)).effects).toEqual([]);
+    expect(sendsOf(run(state, { kind: 'timer', token: state.waitToken }, ctx(g)).effects)).toEqual(['Maybe next time']);
+  });
+
+  it('sends the catalog and waits for a cart', () => {
+    const g = graph([{ id: 'cat', type: 'catalog', body: 'Browse', thumbnailRetailerId: 'shp-101', timeoutMinutes: 60, next: 'thanks', onTimeout: null }, shop[2]], 'cat');
+    const { state, effects } = started(g, {});
+    expect(effects).toContainEqual({ kind: 'send', stepId: 'cat', message: { type: 'catalog', body: 'Browse', footer: '', thumbnailRetailerId: 'shp-101' } });
+    expect(sendsOf(run(state, { kind: 'order', token: state.waitToken, cart }, ctx(g)).effects)).toEqual(['Thank you, 154.00 received']);
+  });
+
+  it('sends a form, waits for its answer, and keeps the answers under the prefix', () => {
+    const formId = '0196f1f0-0000-7000-8000-0000000000bb';
+    const g = graph([{ id: 'ask', type: 'form', formId, body: 'Tell us about you', cta: 'Open', answerPrefix: 'lead', timeoutMinutes: 60, next: 'hello', onTimeout: null }, { id: 'hello', type: 'message', text: 'Hello {answer:lead_name}' }], 'ask');
+    const { state, effects } = started(g, {});
+    expect(effects).toContainEqual({ kind: 'send', stepId: 'ask', message: { type: 'form', formId, header: '', body: 'Tell us about you', cta: 'Open' } });
+    expect(state.wait).toBe('FORM');
+    expect(sendsOf(run(state, { kind: 'form', token: state.waitToken, answers: { name: 'Sara', topics: ['a', 'b'] } }, ctx(g)).effects)).toEqual(['Hello Sara']);
+    const timedOut = run(state, { kind: 'timer', token: state.waitToken }, ctx(g));
+    expect(timedOut.ended).toBe(true);
   });
 });

@@ -17,7 +17,7 @@ import { requestSendWorkerSync, sessionSendJob } from '../../sending/send-jobs.j
 import { SettingsService } from '../../settings/settings.service.js';
 import { FLOW_API_JOB, FLOW_TIMER_JOB, flowApiJobId, flowTimerJobId, todayIn, type FlowApiData, type FlowTimerData } from '../steps/flow-jobs.js';
 import type { FlowOutboundMessage, FlowSessionResult } from './effects.js';
-import { FLOW_PAYMENTS, type FlowPaymentRequest, type FlowPaymentsPort } from './ports.js';
+import { FLOW_COMMERCE, FLOW_PAYMENTS, type FlowCommercePort, type FlowPaymentRequest, type FlowPaymentsPort } from './ports.js';
 import { renderFlowText } from './render.js';
 import { newSessionState, run, type FlowFacts, type FlowInput, type RunResult, type SessionState } from './run.js';
 import { DripEvents } from '../../growth/drips/drip-events.js';
@@ -97,6 +97,7 @@ export class FlowSessionService {
     private readonly dripEvents: DripEvents,
     private readonly platformEvents: PlatformEvents,
     @Optional() @Inject(FLOW_PAYMENTS) private readonly flowPayments?: FlowPaymentsPort,
+    @Optional() @Inject(FLOW_COMMERCE) private readonly flowCommerce?: FlowCommercePort,
   ) {}
 
   /** Starts a flow for a chat; refuses when a session is already running unless asked to replace it. */
@@ -170,7 +171,7 @@ export class FlowSessionService {
   }
 
   /** A timer or an API result for a session; stale tokens do nothing (research R10). */
-  async resume(sessionId: string, input: Extract<FlowInput, { kind: 'timer' | 'api' | 'payment' }>): Promise<void> {
+  async resume(sessionId: string, input: Extract<FlowInput, { kind: 'timer' | 'api' | 'payment' | 'order' | 'form' }>): Promise<void> {
     const session = await this.prisma.flowSession.findUnique({ where: { id: sessionId }, select: { conversationId: true } });
     if (!session) return;
     await this.inConversation(session.conversationId, async (tx, after) => {
@@ -433,6 +434,7 @@ export class FlowSessionService {
             description: effect.description,
             expiryMinutes: effect.expiryMinutes,
             isTest: row.isTest,
+            chatOrderId: effect.chatOrderId ?? null,
           });
           break;
         case 'end':
@@ -642,7 +644,7 @@ export class FlowSessionService {
   private async createItem(tx: Tx, row: SessionRow, flow: FlowMeta, stepId: string, message: FlowOutboundMessage, now: Date): Promise<string | null> {
     const id = uuidv7();
     const flowInfo = { flowId: flow.id, flowName: flow.name, sessionId: row.id, stepId, test: row.isTest };
-    let contentType: 'TEXT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT' | 'BUTTONS' | 'LIST' = 'TEXT';
+    let contentType: 'TEXT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT' | 'BUTTONS' | 'LIST' | 'PRODUCT' | 'PRODUCT_LIST' | 'CATALOG' | 'FORM' = 'TEXT';
     let text: string | null = null;
     let mediaAssetId: string | null = null;
     let payload: Record<string, unknown> = { flow: flowInfo };
@@ -675,6 +677,22 @@ export class FlowSessionService {
         text = message.text;
         payload = { ...payload, header: message.header ?? null, footer: message.footer ?? null, buttonLabel: message.buttonLabel, sections: message.sections };
         break;
+      // Feature 008 US8: the commerce module builds products, catalog and form items (or none: the step times out).
+      case 'products':
+      case 'catalog':
+      case 'form': {
+        if (!this.flowCommerce) return null;
+        const chat = await tx.conversation.findUnique({ where: { id: row.conversationId }, select: { contactId: true, numberId: true } });
+        const item = chat ? await this.flowCommerce.itemFor(message, { contactId: chat.contactId, sessionId: row.id, numberId: chat.numberId }) : null;
+        if (!item) {
+          this.logger.warn({ sessionId: row.id, stepId, type: message.type }, 'The flow commerce message cannot be sent; the step waits for its timeout');
+          return null;
+        }
+        contentType = item.contentType;
+        text = item.text;
+        payload = { ...payload, ...item.payload };
+        break;
+      }
     }
     await tx.chatMessage.create({
       data: { id, conversationId: row.conversationId, kind: 'SESSION_OUT', origin: 'AUTOMATIC', contentType, text, mediaAssetId, payload: payload as Prisma.InputJsonValue, status: 'QUEUED', occurredAt: now },

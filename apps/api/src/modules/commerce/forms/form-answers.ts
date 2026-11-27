@@ -1,4 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { FlowSessionService } from '../../flows/engine/session.service.js';
 import { FormModelSchema, formFields, type FormField } from '@wbm/shared';
 import { normalizePhone } from '../../../common/phone/phone.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
@@ -37,6 +39,7 @@ export class FormAnswersService implements FormAnswersPort {
     private readonly events: PlatformEvents,
     private readonly dripEvents: DripEvents,
     private readonly settings: SettingsService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   async received(reply: InboundFormReply): Promise<boolean> {
@@ -118,6 +121,12 @@ export class FormAnswersService implements FormAnswersPort {
       if (contact && contact.consentStatus !== 'OPTED_IN') await this.consent.setStatus(reply.contactId, 'OPTED_IN', 'FORM', { note: `Ticked the opt-in of the form "${version.form.name}"`.slice(0, 500) });
     }
     await this.journey.recordForContact(reply.contactId, { type: 'FORM_SUBMITTED', actorType: 'CUSTOMER', data: { form: version.form.name, formAnswerId: answer.id, problems: problems.length } });
+    if (token.ref === 'session') {
+      const session = await this.prisma.flowSession.findUnique({ where: { id: token.refId }, select: { status: true, wait: true, waitToken: true, conversationId: true } });
+      if (session?.status === 'RUNNING' && session.wait === 'FORM' && session.conversationId === reply.conversationId) {
+        await this.moduleRef.get(FlowSessionService, { strict: false }).resume(token.refId, { kind: 'form', token: session.waitToken, answers });
+      }
+    }
     return true;
   }
 

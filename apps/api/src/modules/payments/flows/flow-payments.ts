@@ -64,6 +64,7 @@ export class FlowPayments implements FlowPaymentsPort, OnModuleInit {
         customerName: chat.contact.name,
         flowSessionId: input.sessionId,
         isTest: input.isTest,
+        chatOrderId: input.chatOrderId ?? null,
       });
       if (live) await this.sender.automatic(input.conversationId, chat.numberId, row, settings);
       else await this.sender.template({ conversationId: input.conversationId, numberId: chat.numberId, contactId: chat.contact.id }, row, template!, settings.templateMapping, { automatic: true });

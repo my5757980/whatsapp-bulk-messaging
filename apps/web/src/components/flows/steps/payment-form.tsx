@@ -25,15 +25,18 @@ export function PaymentForm({ step, graph, onPatch }: { step: PaymentStep; graph
           value={amount.source}
           onChange={(e) => {
             const source = e.target.value as PaymentStep['amount']['source'];
-            onPatch({ amount: source === 'static' ? { source, minor: 10_000 } : source === 'answer' ? { source, name: 'amount' } : { source, key: 'amount' } }, 'amount');
+            onPatch({ amount: source === 'static' ? { source, minor: 10_000 } : source === 'answer' ? { source, name: 'amount' } : source === 'cartTotal' ? { source } : { source, key: 'amount' } }, 'amount');
           }}
         >
           <option value="static">A fixed amount</option>
           <option value="answer">An answer in this flow</option>
           <option value="attribute">A contact attribute</option>
+          <option value="cartTotal">The cart total (after Send products or Send catalog)</option>
         </NativeSelect>
       </div>
-      {amount.source === 'static' ? (
+      {amount.source === 'cartTotal' ? (
+        <p className="text-xs text-muted-foreground">Charges the total of the cart the customer sent; the payment pays that chat order.</p>
+      ) : amount.source === 'static' ? (
         <div className="grid gap-1">
           <Label htmlFor="pay-amount-fixed">Amount (AED)</Label>
           <Input

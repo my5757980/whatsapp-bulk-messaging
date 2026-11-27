@@ -1,4 +1,6 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Injectable, Logger, Param, ParseUUIDPipe, Patch, Post, Query, Req, type OnModuleInit } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
+import { FlowSessionService } from '../../flows/engine/session.service.js';
 import { buildCart, type CartItemInput } from '@wbm/shared';
 import { z } from 'zod';
 import { Require } from '../../../common/auth/permissions.guard.js';
@@ -72,6 +74,7 @@ export class ChatOrderService implements ChatOrdersPort, OnModuleInit {
     private readonly effects: PaymentEffects,
     private readonly journey: JourneyService,
     private readonly events: PlatformEvents,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   onModuleInit(): void {
@@ -90,6 +93,9 @@ export class ChatOrderService implements ChatOrdersPort, OnModuleInit {
       return c ? { name: c.name, priceMinor: c.salePriceMinor !== null ? Number(c.salePriceMinor) : c.priceMinor !== null ? Number(c.priceMinor) : null, currency: c.currency, removed: c.removedAt !== null } : undefined;
     }, access?.currency ?? 'aed');
     const settings = await this.settings.row();
+    // A flow waiting for a cart (US8) takes it: no automatic link, the flow's payment step charges it.
+    const session = await this.prisma.flowSession.findFirst({ where: { conversationId: input.conversationId, status: 'RUNNING', wait: 'ORDER' }, select: { id: true, waitToken: true } });
+    const mode = session ? ('FLOW' as const) : settings.chatOrderMode;
     const order = await this.prisma.$transaction(async (tx) => {
       const created = await tx.chatOrder.create({
         data: {
@@ -102,7 +108,7 @@ export class ChatOrderService implements ChatOrdersPort, OnModuleInit {
           currency: cart.currency,
           totalMinor: BigInt(cart.totalMinor),
           warnings: cart.warnings as unknown as Prisma.InputJsonValue,
-          mode: settings.chatOrderMode,
+          mode,
         },
       });
       // The chat item shows the order card.
@@ -111,6 +117,11 @@ export class ChatOrderService implements ChatOrdersPort, OnModuleInit {
       return created;
     });
     await this.journey.recordForContact(input.contactId, { type: 'CHAT_ORDER_RECEIVED', actorType: 'CUSTOMER', data: { chatOrderId: order.id, totalMinor: cart.totalMinor, currency: cart.currency, items: cart.items.length } });
+    if (session) {
+      const sessions = this.moduleRef.get(FlowSessionService, { strict: false });
+      await sessions.resume(session.id, { kind: 'order', token: session.waitToken, cart: { chatOrderId: order.id, totalMinor: cart.totalMinor, currency: cart.currency, items: cart.items } });
+      return;
+    }
     if (settings.chatOrderMode === 'AUTO' && !cart.warnings.length && access?.row.status === 'CONNECTED') {
       try {
         await this.sendLink(order.id, null);

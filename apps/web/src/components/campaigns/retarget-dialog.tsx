@@ -50,7 +50,7 @@ export function RetargetDialog({ campaignId, open, onOpenChange }: { campaignId:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Retarget</DialogTitle>
           <DialogDescription>Choose who gets the new campaign. Contacts who opted out are left out when it starts.</DialogDescription>
@@ -58,7 +58,8 @@ export function RetargetDialog({ campaignId, open, onOpenChange }: { campaignId:
         {groups.isLoading ? <p className="text-sm text-muted-foreground">Counting…</p> : null}
         {groups.error ? <p className="text-sm text-destructive">{errorMessage(groups.error)}</p> : null}
         <div className="grid gap-2" role="radiogroup" aria-label="Retarget group">
-          {GROUPS.map((g) => {
+          {GROUPS.filter((g) => (g.status !== 'PAID' && g.status !== 'NOT_PAID') || (sizes.get(g.status)?.count ?? 0) > 0).map((g) => {
+            // Paid and Not paid: only campaigns that asked for payment (feature 008).
             const size = sizes.get(g.status);
             const available = size?.available ?? false;
             return (
