@@ -120,6 +120,9 @@ describe('Retargeting by click, reply and held back (005 US2)', () => {
       REPLIED: [1, true],
       NOT_REPLIED: [3, true],
       HELD_BACK: [1, true],
+      // Feature 008: payment campaigns only.
+      PAID: [0, false],
+      NOT_PAID: [0, false],
     });
     expect((await api(agent, 'get', '/campaigns/00000000-0000-7000-8000-000000000000/retarget-groups')).status).toBe(404);
   });

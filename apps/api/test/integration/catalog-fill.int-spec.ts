@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import nock from 'nock';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { QUEUES } from '../../src/common/queue/queue.constants.js';
 import { QueueRegistry } from '../../src/common/queue/queue.module.js';
 import { CatalogFill } from '../../src/modules/commerce/catalog/catalog-fill.js';
@@ -22,6 +22,7 @@ describe('Catalog fill from a store (008 US5)', () => {
   let admin: SignedInAgent;
   let graph: FakeCommerceGraph;
   let numberId: string;
+  const made: string[] = [];
 
   const api = (method: 'get' | 'post' | 'put', url: string, body?: object) => {
     const req = admin.agent[method](`/api${url}`);
@@ -58,6 +59,7 @@ describe('Catalog fill from a store (008 US5)', () => {
       });
     const res = await api('post', '/stores', { platform: 'SHOPIFY', baseUrl: host, numberId, defaultCountry: 'AE', customerTag: 'shopify', credentials: { clientId: 'cid', clientSecret: 'shopify-client-secret-for-tests' } });
     expect(res.status, JSON.stringify(res.body)).toBe(201);
+    made.push(res.body.id as string);
     return res.body.id as string;
   }
 
@@ -85,6 +87,11 @@ describe('Catalog fill from a store (008 US5)', () => {
     await ctx.app.get(QueueRegistry).get(QUEUES.CATALOG).drain(true);
     graph = new FakeCommerceGraph(0).install();
     expect((await api('post', '/catalog/connection', { catalogId: FAKE_CATALOG_ID })).status).toBe(201);
+  });
+
+  afterEach(async () => {
+    // At most 5 stores may be connected across the test files.
+    await ctx.prisma.storeConnection.updateMany({ where: { id: { in: made } }, data: { status: 'DISCONNECTED' } });
   });
 
   afterAll(async () => {
@@ -177,6 +184,7 @@ describe('Catalog fill from a store (008 US5)', () => {
       ]);
     const res = await api('post', '/stores', { platform: 'WOOCOMMERCE', baseUrl: host, numberId, defaultCountry: 'AE', customerTag: 'woo', credentials: { consumerKey: 'ck_test_0123456789abcdef', consumerSecret: 'cs_test_0123456789abcdef' } });
     expect(res.status, JSON.stringify(res.body)).toBe(201);
+    made.push(res.body.id as string);
     await api('put', '/catalog/fill', { enabled: true, storeId: res.body.id });
     expect(await fill()).toEqual({ sent: 3, deleted: 0 });
     const data = lastRequests().map((r) => (r as { data: Json }).data);

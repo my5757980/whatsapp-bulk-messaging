@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import nock from 'nock';
 import request from 'supertest';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { QUEUES } from '../../src/common/queue/queue.constants.js';
 import { QueueRegistry } from '../../src/common/queue/queue.module.js';
 import { CodService } from '../../src/modules/integrations/stores/cod.service.js';
@@ -28,6 +28,7 @@ describe('Store order pay links (008 US3)', () => {
   let number: Awaited<ReturnType<typeof seedNumber>>;
   let payTemplateId: string;
   let n = 500;
+  const made: string[] = [];
 
   const dashboard = (method: 'get' | 'post' | 'put', url: string, body?: object) =>
     method === 'get' ? admin.agent.get(`/api${url}`) : admin.agent[method](`/api${url}`).set('X-CSRF-Token', admin.csrf).send(body ?? {});
@@ -61,6 +62,7 @@ describe('Store order pay links (008 US3)', () => {
     const shop = fakeShop(host, refuse);
     const res = await dashboard('post', '/stores', { platform: 'SHOPIFY', baseUrl: host, numberId: number.id, defaultCountry: 'AE', customerTag: 'shopify', credentials: { clientId: 'cid', clientSecret: SECRET } });
     expect(res.status, JSON.stringify(res.body)).toBe(201);
+    made.push(res.body.id as string);
     const step = { templateId: payTemplateId, variableMapping: { 'BODY.1': { source: 'order', key: 'order_number' }, 'BODY.2': { source: 'order', key: 'total' } } };
     const saved = await dashboard('put', `/stores/${res.body.id}/automations/PAY_LINK`, { enabled: true, steps: [step], settings });
     expect(saved.status, JSON.stringify(saved.body)).toBe(200);
@@ -155,6 +157,11 @@ describe('Store order pay links (008 US3)', () => {
     await seedPaymentSettings(ctx);
   });
 
+  afterEach(async () => {
+    // At most 5 stores may be connected across the test files.
+    await ctx.prisma.storeConnection.updateMany({ where: { id: { in: made } }, data: { status: 'DISCONNECTED' } });
+  });
+
   afterAll(async () => {
     restoreNetwork();
     await clearCommerce(ctx);
@@ -242,6 +249,7 @@ describe('Store order pay links (008 US3)', () => {
       });
     const res = await dashboard('post', '/stores', { platform: 'WOOCOMMERCE', baseUrl: host, numberId: number.id, defaultCountry: 'AE', customerTag: 'woo', credentials: { consumerKey: 'ck_test_0123456789abcdef', consumerSecret: 'cs_test_0123456789abcdef' } });
     expect(res.status, JSON.stringify(res.body)).toBe(201);
+    made.push(res.body.id as string);
     const step = { templateId: payTemplateId, variableMapping: { 'BODY.1': { source: 'order', key: 'order_number' }, 'BODY.2': { source: 'order', key: 'total' } } };
     expect((await dashboard('put', `/stores/${res.body.id}/automations/PAY_LINK`, { enabled: true, steps: [step], settings: { includeCod: true } })).status).toBe(200);
     const gmt = new Date().toISOString().slice(0, 19);
