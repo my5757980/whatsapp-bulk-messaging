@@ -2,7 +2,7 @@ import { Injectable, Logger, type OnApplicationBootstrap, type OnModuleInit } fr
 import { ProcessorRegistry } from '../../../common/queue/processor.registry.js';
 import { QUEUES } from '../../../common/queue/queue.constants.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
-import { CodService, STORE_ACTION_JOB, type StoreActionData } from './cod.service.js';
+import { CodService, STORE_ACTION_JOB, STORE_MARK_PAID_JOB, type StoreActionData } from './cod.service.js';
 import { StoreCarts } from './store-carts.js';
 
 // The store tick (feature 006 US5 and US6, research R10 - R11): every 30 seconds it handles the COD
@@ -27,6 +27,9 @@ export class StoreTickProcessor implements OnModuleInit, OnApplicationBootstrap 
     this.registry.registerHandler(QUEUES.STORES, TICK_JOB, () => this.tick());
     this.registry.registerHandler(QUEUES.STORES, STORE_ACTION_JOB, async (job) => {
       await this.cod.runAction(job.data as StoreActionData);
+    });
+    this.registry.registerHandler(QUEUES.STORES, STORE_MARK_PAID_JOB, async (job) => {
+      await this.cod.markPaid((job.data as { orderId: string }).orderId);
     });
   }
 

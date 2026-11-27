@@ -1,10 +1,13 @@
+import { randomInt } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import type { SkipReason } from '@wbm/shared';
+import { amountProblem, makeLinkCode, toMinorUnits, type SkipReason } from '@wbm/shared';
 import { AppError } from '../../common/errors/app-error.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { Prisma, type Campaign, type ImportJob, type Template } from '../../generated/prisma/client.js';
 import { AudienceQueryBuilder, type AudienceContact, type AudienceFilter, type FilterAudience } from '../contacts/audience-query.builder.js';
 import { TrackedLinkCodes } from '../growth/links/link-codes.js';
+import { paymentWords } from '../payments/requests/payment-views.js';
+import { campaignPaymentConfig, type CampaignPaymentConfig, type CampaignPaymentContext, type RecipientPayment } from './campaign-payments.port.js';
 import { retargetCondition, type RetargetGroup } from './retarget.service.js';
 import { resolveVariables, type VariableMapping } from './variable-resolver.js';
 
@@ -20,6 +23,23 @@ export interface RecipientDecision {
   status: 'PENDING' | 'SKIPPED';
   skipReason: SkipReason | null;
   params: Record<string, string>;
+  customerName?: string | null;
+  /** The payment request this recipient gets (campaigns with a payment config, feature 008). */
+  payment?: RecipientPayment;
+}
+
+/** A payment campaign's settings for the snapshot. */
+interface PaymentPlan {
+  config: CampaignPaymentConfig;
+  context: CampaignPaymentContext;
+  buttonKey: string;
+}
+
+/** `{name}` and `{attr:key}` in a campaign's payment description. */
+function fillDescription(text: string, contact: AudienceContact): string {
+  const attributes = (contact.attributes ?? {}) as Record<string, unknown>;
+  const filled = text.replace(/\{name\}/g, contact.name ?? '').replace(/\{attr:([a-z0-9_]+)\}/gi, (_m, key: string) => String(attributes[key] ?? ''));
+  return filled.trim().slice(0, 250) || text.slice(0, 250);
 }
 
 type Db = PrismaService | Prisma.TransactionClient;
@@ -92,17 +112,21 @@ export class AudienceSnapshotService {
 
   /** Yields recipient decisions in batches, in upload order. */
   async *evaluate(
-    campaign: Pick<Campaign, 'id' | 'audienceType' | 'audienceFilter' | 'variableMapping' | 'sourceCampaignId' | 'retargetStatus'>,
+    campaign: Pick<Campaign, 'id' | 'audienceType' | 'audienceFilter' | 'variableMapping' | 'sourceCampaignId' | 'retargetStatus' | 'paymentConfig'>,
     template: Pick<Template, 'category' | 'variables'>,
     db: Db = this.prisma,
+    payment: CampaignPaymentContext | null = null,
   ): AsyncGenerator<RecipientDecision[]> {
     const all = (Array.isArray(template.variables) ? template.variables : []) as Array<{ key: string }>;
     const tracked = await this.trackedKeys(campaign.id, all, db);
-    const variables = all.filter((v) => !tracked.has(v.key));
+    const config = payment ? campaignPaymentConfig(campaign.paymentConfig) : null;
+    const plan: PaymentPlan | null = config && payment ? { config, context: payment, buttonKey: `BUTTON.${payment.buttonIndex}.1` } : null;
+    // The pay link button needs no mapping: it carries each recipient's request code.
+    const variables = all.filter((v) => !tracked.has(v.key) && v.key !== plan?.buttonKey);
     const samples = Object.fromEntries([...tracked].map((key) => [key, this.codes.sampleValue(key)]));
     const mapping = (campaign.variableMapping ?? {}) as VariableMapping;
     const marketing = template.category === 'MARKETING';
-    const decide = (c: AudienceContact, row: Record<string, unknown>) => this.decide(c, row, variables, mapping, marketing, samples);
+    const decide = (c: AudienceContact, row: Record<string, unknown>) => this.decide(c, row, variables, mapping, marketing, samples, plan);
 
     if (campaign.audienceType === 'RETARGET') {
       // Uploaded columns of the source campaign still feed "column" variables.
@@ -167,16 +191,40 @@ export class AudienceSnapshotService {
     mapping: VariableMapping,
     marketing: boolean,
     samples: Record<string, string>,
+    plan: PaymentPlan | null = null,
   ): RecipientDecision {
-    const base = { contactId: contact.id, phoneE164: contact.phone_e164, countryCode: contact.country_code, params: {} };
+    const base = { contactId: contact.id, phoneE164: contact.phone_e164, countryCode: contact.country_code, params: {}, customerName: contact.name };
     if (contact.consent_status === 'OPTED_OUT') return { ...base, status: 'SKIPPED', skipReason: 'OPTED_OUT' };
     if (marketing && contact.consent_status !== 'OPTED_IN') return { ...base, status: 'SKIPPED', skipReason: 'NO_OPT_IN' };
+    let payment: RecipientPayment | undefined;
+    if (plan) {
+      const amountMinor = this.paymentAmount(plan, contact);
+      if (amountMinor === null) return { ...base, status: 'SKIPPED', skipReason: 'PAYMENT_AMOUNT_MISSING' };
+      payment = { code: makeLinkCode(randomInt), amountMinor, description: fillDescription(plan.config.description, contact), expiresAt: new Date(Date.now() + plan.config.expiryMinutes * 60_000) };
+    }
     const resolved = resolveVariables(variables, mapping, {
       contact: { name: contact.name, phone: contact.phone_e164, attributes: contact.attributes },
       row,
+      ...(payment && plan ? { payment: paymentWords({ ...payment, amountMinor: BigInt(payment.amountMinor), currency: plan.context.currency, reference: null }, plan.context.linkBase, plan.context.timeZone) } : {}),
     });
-    return resolved.ok
-      ? { ...base, status: 'PENDING', skipReason: null, params: { ...resolved.params, ...samples } }
-      : { ...base, status: 'SKIPPED', skipReason: 'MISSING_VARIABLE' };
+    if (!resolved.ok) return { ...base, status: 'SKIPPED', skipReason: 'MISSING_VARIABLE' };
+    // Feature 008: catalog and multi-product templates carry the campaign's product choices.
+    const products = mapping['$products'];
+    const params = { ...resolved.params, ...samples, ...(payment && plan ? { [plan.buttonKey]: payment.code } : {}), ...(products?.source === 'static' && products.value ? { $products: products.value } : {}) };
+    return { ...base, status: 'PENDING', skipReason: null, params, ...(payment ? { payment } : {}) };
+  }
+
+  /** A recipient's amount in minor units: fixed, or a positive number attribute in major units; null when missing or outside the limits. */
+  private paymentAmount(plan: PaymentPlan, contact: AudienceContact): number | null {
+    const amount = plan.config.amount;
+    let minor: number;
+    if (amount.source === 'static') minor = amount.minor;
+    else {
+      const raw = ((contact.attributes ?? {}) as Record<string, unknown>)[amount.attributeKey];
+      const major = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' ? Number(raw.trim()) : Number.NaN;
+      if (!Number.isFinite(major) || major <= 0) return null;
+      minor = toMinorUnits(major, plan.context.currency);
+    }
+    return amountProblem(minor, plan.context.currency, plan.context.maxAmountMinor) ? null : minor;
   }
 }

@@ -77,7 +77,26 @@ export type ChatContentType =
   | 'UNSUPPORTED'
   // Reply buttons and lists sent by chatbot flows (feature 003)
   | 'BUTTONS'
-  | 'LIST';
+  | 'LIST'
+  // Feature 008: the Pay now message, product messages, the inbound cart and the outbound form
+  | 'PAYMENT_REQUEST'
+  | 'PRODUCT'
+  | 'PRODUCT_LIST'
+  | 'CATALOG'
+  | 'ORDER'
+  | 'FORM';
+
+/** The payment request a chat item carries (feature 008, contracts/commerce-api.openapi.yaml). */
+export interface ChatPaymentSummary {
+  id: string;
+  amountMinor: number;
+  currency: string;
+  description: string;
+  status: string;
+  display: string;
+  expiresAt: string;
+  payUrl: string;
+}
 
 export type ChatItemStatus = 'QUEUED' | 'SENDING' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED';
 
@@ -109,6 +128,8 @@ export interface ChatItem {
   firstClickAt?: string | null;
   /** The drip and step that sent this template message (feature 005). */
   drip?: { id: string; name: string; step: number } | null;
+  /** The payment request this message carries (feature 008). */
+  payment?: ChatPaymentSummary | null;
   occurredAt: string;
 }
 

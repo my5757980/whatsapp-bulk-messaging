@@ -67,8 +67,22 @@ jobs:
       - run: npm run db:generate -w @wbm/api
       - run: npm run typecheck
       - run: npm test
-      - run: npm run test:integration
-      - run: npm run test:contract
+      # The JSON reports let the next steps list every failure (logs need admin rights; a step shows 10 annotations).
+      - name: Integration tests
+        id: integration
+        working-directory: apps/api
+        run: npx vitest run --project integration --passWithNoTests --reporter=default --reporter=github-actions --reporter=json --outputFile.json=../../vitest-integration.json
+      - name: List the failed integration tests
+        if: failure() && steps.integration.outcome == 'failure'
+        run: node tools/ci/vitest-failures.mjs vitest-integration.json integration
+      - name: Contract tests
+        id: contract
+        if: success() || steps.integration.outcome == 'failure'
+        working-directory: apps/api
+        run: npx vitest run --project contract --passWithNoTests --reporter=default --reporter=github-actions --reporter=json --outputFile.json=../../vitest-contract.json
+      - name: List the failed contract tests
+        if: failure() && steps.contract.outcome == 'failure'
+        run: node tools/ci/vitest-failures.mjs vitest-contract.json contract
 
   e2e-smoke:
     runs-on: ubuntu-latest
@@ -101,6 +115,8 @@ jobs:
       PUBLIC_LINK_BASE_URL: http://localhost:4000/l
       # Feature 006: webhook endpoints and mock stores live on mock-meta at http://localhost:4010.
       OUTBOUND_ALLOW_LOCAL: 'true'
+      # Feature 008: the mock Stripe gateway on mock-meta; it posts signed events to APP_URL.
+      STRIPE_API_BASE_URL: http://localhost:4010/stripe
       APP_URL: http://localhost:3000
       COOKIE_SECURE: 'false'
       S3_ENDPOINT: http://localhost:9000

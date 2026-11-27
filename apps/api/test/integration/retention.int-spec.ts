@@ -362,6 +362,42 @@ describe('Retention', () => {
     expect(await ctx.prisma.adLinkOpen.findUnique({ where: { id: newVisit.id } })).not.toBeNull();
   });
 
+  it('purges commerce records: notifications after 30 days, form answers after 12 months, removed products after 90 days, requests and orders after 5 years (008 T092)', async () => {
+    const recent = new Date(Date.now() - DAY);
+    const event = (receivedAt: Date) => ctx.prisma.paymentEvent.create({ data: { stripeEventId: `evt_${randomUUID()}`, type: 'checkout.session.completed', signatureValid: true, result: 'APPLIED', receivedAt } });
+    const [oldEvent, newEvent] = [await event(new Date(Date.now() - 31 * DAY)), await event(recent)];
+    const contact = await seedContact(ctx, uaePhone());
+    const form = await ctx.prisma.form.create({ data: { name: `Retention form ${randomUUID()}`, category: 'OTHER', status: 'PUBLISHED' } });
+    const version = await ctx.prisma.formVersion.create({ data: { formId: form.id, number: 1, model: { screens: [] }, flowJson: {} } });
+    const answer = (submittedAt: Date) => ctx.prisma.formAnswer.create({ data: { formId: form.id, formVersionId: version.id, contactId: contact.id, source: 'INBOX', answers: { name: 'x' }, submittedAt } });
+    const [oldAnswer, newAnswer] = [await answer(monthsAgo(13)), await answer(recent)];
+    const product = (removedAt: Date | null) => ctx.prisma.catalogProduct.create({ data: { retailerId: `ret-${randomUUID()}`, name: 'Old lamp', availability: 'in stock', removedAt } });
+    const [gone, justRemoved, listed] = [await product(new Date(Date.now() - 91 * DAY)), await product(recent), await product(null)];
+    const order = (createdAt: Date) => ctx.prisma.chatOrder.create({ data: { catalogId: '900000000000001', items: [], currency: 'AED', totalMinor: 1_000n, mode: 'AUTO', createdAt } });
+    const [oldOrder, newOrder] = [await order(monthsAgo(61)), await order(monthsAgo(59))];
+    const request = (createdAt: Date, chatOrderId: string) =>
+      ctx.prisma.paymentRequest.create({ data: { code: randomUUID().replace(/-/g, '').slice(0, 12), source: 'CHAT_ORDER', status: 'PAID', amountMinor: 1_000n, currency: 'AED', description: 'Order', expiresAt: createdAt, chatOrderId, createdAt } });
+    const [oldRequest, newRequest] = [await request(monthsAgo(61), oldOrder.id), await request(monthsAgo(59), newOrder.id)];
+    await ctx.prisma.paymentEvent.update({ where: { id: newEvent.id }, data: { paymentRequestId: oldRequest.id } });
+
+    const result = await retention.purgeCommerce(new Date());
+    for (const key of ['paymentEvents', 'formAnswers', 'removedProducts', 'paymentRequests', 'chatOrders'] as const) expect(result[key], key).toBeGreaterThanOrEqual(1);
+    expect(await ctx.prisma.paymentEvent.findUnique({ where: { id: oldEvent.id } })).toBeNull();
+    expect(await ctx.prisma.paymentEvent.findUniqueOrThrow({ where: { id: newEvent.id } })).toMatchObject({ paymentRequestId: null });
+    expect(await ctx.prisma.formAnswer.findUnique({ where: { id: oldAnswer.id } })).toBeNull();
+    expect(await ctx.prisma.formAnswer.findUnique({ where: { id: newAnswer.id } })).not.toBeNull();
+    expect(await ctx.prisma.catalogProduct.findUnique({ where: { id: gone.id } })).toBeNull();
+    expect(await ctx.prisma.catalogProduct.count({ where: { id: { in: [justRemoved.id, listed.id] } } })).toBe(2);
+    expect(await ctx.prisma.paymentRequest.findUnique({ where: { id: oldRequest.id } })).toBeNull();
+    expect(await ctx.prisma.paymentRequest.findUnique({ where: { id: newRequest.id } })).not.toBeNull();
+    expect(await ctx.prisma.chatOrder.findUnique({ where: { id: oldOrder.id } })).toBeNull();
+    expect(await ctx.prisma.chatOrder.findUnique({ where: { id: newOrder.id } })).not.toBeNull();
+    await ctx.prisma.paymentRequest.delete({ where: { id: newRequest.id } });
+    await ctx.prisma.chatOrder.delete({ where: { id: newOrder.id } });
+    await ctx.prisma.catalogProduct.deleteMany({ where: { id: { in: [justRemoved.id, listed.id] } } });
+    await ctx.prisma.form.delete({ where: { id: form.id } });
+  });
+
   it('runs every step daily on the maintenance queue', async () => {
     expect(await retention.run()).toEqual({
       linkClicks: expect.any(Number),
@@ -392,6 +428,11 @@ describe('Retention', () => {
       adLeads: expect.any(Number),
       adChatStarts: expect.any(Number),
       adLinkOpens: expect.any(Number),
+      paymentEvents: expect.any(Number),
+      formAnswers: expect.any(Number),
+      removedProducts: expect.any(Number),
+      paymentRequests: expect.any(Number),
+      chatOrders: expect.any(Number),
     });
     const scheduler = await ctx.app.get(QueueRegistry).get(QUEUES.MAINTENANCE).getJobScheduler('retention');
     expect(scheduler?.pattern).toBe('15 3 * * *');

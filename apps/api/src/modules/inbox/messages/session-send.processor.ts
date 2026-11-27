@@ -15,7 +15,7 @@ import { NUMBER_BLOCKING } from '../../sending/send.processor.js';
 import { StatusHandler } from '../../webhooks/handlers/status.handler.js';
 import { isLive } from '../conversations/window.js';
 import { InboxPublisher } from '../realtime/inbox-publisher.js';
-import { interactiveFor } from './interactive-payload.js';
+import { commerceInteractiveFor, ctaUrlFor, flowInteractiveFor, interactiveFor } from './interactive-payload.js';
 
 export const WINDOW_CLOSED_REASON = 'The 24-hour reply window has closed — send a template';
 
@@ -109,6 +109,14 @@ export class SessionSendProcessor implements OnModuleInit {
     if (item.contentType === 'TEXT') return { to, type: 'text', text: { body: item.text ?? '', preview_url: true } };
     // Reply buttons and lists from chatbot flows (feature 003).
     if (item.contentType === 'BUTTONS' || item.contentType === 'LIST') return { to, type: 'interactive', interactive: { ...interactiveFor(item.contentType, item.text, item.payload) } };
+    // The Pay now message (feature 008).
+    if (item.contentType === 'PAYMENT_REQUEST') return { to, type: 'interactive', interactive: { ...ctaUrlFor(item.text, item.payload) } };
+    // WhatsApp Forms (feature 008 US7).
+    if (item.contentType === 'FORM') return { to, type: 'interactive', interactive: flowInteractiveFor(item.text, item.payload) };
+    // Product messages (feature 008 US5).
+    if (item.contentType === 'PRODUCT' || item.contentType === 'PRODUCT_LIST' || item.contentType === 'CATALOG') {
+      return { to, type: 'interactive', interactive: commerceInteractiveFor(item.contentType, item.text, item.payload) };
+    }
     const data = (item.payload ?? {}) as { link?: string; fileName?: string };
     const source = item.mediaAssetId ? { id: await this.media.ensureMetaMediaId(item.mediaAssetId, number) } : { link: data.link };
     switch (item.contentType) {

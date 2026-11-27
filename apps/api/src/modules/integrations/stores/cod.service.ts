@@ -23,7 +23,7 @@ import { JourneyService } from '../../inbox/journey/journey.service.js';
 import { NotificationsService } from '../../notifications/notifications.service.js';
 import { PlatformEvents } from '../webhooks/platform-events.js';
 import { ShopifyClient } from './shopify/shopify.client.js';
-import { StoreHttp, type WooCredentials } from './store-http.js';
+import { StoreApiError, StoreHttp, type WooCredentials } from './store-http.js';
 import { StoreMessages } from './store-messages.js';
 import { WooClient } from './woocommerce/woo.client.js';
 
@@ -33,6 +33,8 @@ import { WooClient } from './woocommerce/woo.client.js';
 // when the store chose automatic cancel) as retried jobs on the `stores` queue.
 
 export const STORE_ACTION_JOB = 'store-action';
+/** Feature 008: an order paid through its pay link is marked paid in the store. */
+export const STORE_MARK_PAID_JOB = 'store-mark-paid';
 
 interface Step {
   templateId: string;
@@ -237,6 +239,31 @@ export class CodService {
       const credentials = this.http.open<WooCredentials>(order.store.credentialsEncrypted);
       await this.woo.addNote(order.store, credentials, order.externalId, `WhatsApp COD confirmation: ${word}.`);
       await this.woo.updateOrder(order.store, credentials, order.externalId, { meta_data: [{ key: '_whatsapp_cod_status', value: word }], ...(data.cancel ? { status: 'cancelled' } : {}) });
+    }
+  }
+
+  /**
+   * Feature 008 (R5): an order paid through its pay link is marked paid in the store. A refusal (the store
+   * says no, or our access lacks the permission) is kept as the connection's warning and not retried;
+   * other failures throw to be retried.
+   */
+  async markPaid(orderId: string): Promise<void> {
+    const order = await this.prisma.storeOrder.findUnique({ where: { id: orderId }, include: { store: true } });
+    if (!order || order.store.status === 'DISCONNECTED') return;
+    try {
+      if (order.store.platform === 'SHOPIFY') {
+        const token = await this.shopify.tokenFor(order.store);
+        await this.shopify.markOrderPaid(order.store, token, order.externalId);
+      } else {
+        const credentials = this.http.open<WooCredentials>(order.store.credentialsEncrypted);
+        await this.woo.updateOrder(order.store, credentials, order.externalId, { set_paid: true });
+      }
+    } catch (error) {
+      const refused = error instanceof StoreApiError && (error.status === null || (error.status >= 400 && error.status < 500 && error.status !== 429));
+      if (!refused) throw error;
+      const reason = `Order ${order.orderNumber} was paid on WhatsApp, but the store did not mark it paid: ${error.message}`.slice(0, 200);
+      await this.prisma.storeConnection.update({ where: { id: order.storeId }, data: { lastError: reason } });
+      this.logger.warn({ orderId, storeId: order.storeId }, 'The store refused to mark a paid order paid');
     }
   }
 }

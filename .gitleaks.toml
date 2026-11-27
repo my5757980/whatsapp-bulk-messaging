@@ -47,3 +47,31 @@ regexes = [
   '''ck_contract_0123456789''',
   '''cs_contract_0123456789''',
 ]
+
+[[allowlists]]
+description = "Feature 008: made-up Stripe keys of the mock gateway (tools/mock-meta/src/stripe.ts), the e2e helpers and the api tests; they only reach mock-meta and nock fakes, never Stripe"
+regexTarget = "line"
+regexes = [
+  '''rk_test_mockOK1234''',
+  '''rk_test_mockOKnoperm''',
+  '''rk_test_mockXXnockout''',
+  '''rk_live_mockOK1234''',
+  '''rk_test_wrong00000000001''',
+  '''rk_test_unit0000000001''',
+  '''rk_test_fake0000000001''',
+  '''rk_test_fake0000000002''',
+  '''sk_test_fake0000000001''',
+  '''sk_test_abcdefghij12''',
+  '''sk_live_abcdefghij12''',
+]
+
+[[allowlists]]
+description = "Feature 008: made-up Stripe webhook signing secrets and idempotency keys in the mock gateway and the api tests (signatures checked against fakes only)"
+regexTarget = "line"
+regexes = [
+  '''whsec_abc123def456''',
+  '''whsec_fake000000000000000001''',
+  '''whsec_wrong0000000000000001''',
+  '''whsec_test_secret_000[01]''',
+  '''idempotencyKey: .wbm-(endpoint|check)-1.''',
+]

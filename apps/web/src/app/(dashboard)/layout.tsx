@@ -25,6 +25,9 @@ const NAV: Array<{ href: string; label: string; permission: Permission }> = [
   { href: '/ai-usage', label: 'AI usage', permission: 'ai.usage' },
   { href: '/api-messages', label: 'API messages', permission: 'campaigns.view' },
   { href: '/ads', label: 'Ads', permission: 'campaigns.view' },
+  { href: '/payments', label: 'Payments', permission: 'payments.view' },
+  { href: '/catalog', label: 'Catalog', permission: 'integrations.manage' },
+  { href: '/forms', label: 'Forms', permission: 'forms.manage' },
   { href: '/integrations/stores', label: 'Integrations', permission: 'campaigns.view' },
   { href: '/settings/numbers', label: 'Settings', permission: 'settings.view' },
 ];

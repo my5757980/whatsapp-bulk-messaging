@@ -1,7 +1,10 @@
 'use client';
 
+import { formatMinor } from '@wbm/shared';
 import type { AiItemPayload, ChatItem, ChatItemStatus } from '@/lib/inbox-types';
 import { cn } from '@/lib/utils';
+import { ChatOrderCard } from './chat-order-card';
+import { PaymentCard } from './payment-card';
 
 const mediaUrl = (id: string) => `/api/inbox/media/${id}`;
 const str = (value: unknown): string | null => (typeof value === 'string' && value ? value : null);
@@ -150,8 +153,34 @@ function Body({ item }: { item: ChatItem }) {
           {str(p.description) ? <span className="text-muted-foreground"> — {str(p.description)}</span> : null}
         </p>
       );
-    case 'FORM_REPLY':
-      return <pre className="max-w-full overflow-x-auto whitespace-pre-wrap text-xs">{JSON.stringify(p.response ?? {}, null, 2)}</pre>;
+    case 'FORM_REPLY': {
+      // Answers to our forms (feature 008 US7) are saved; the others are shown as they came.
+      const response = { ...((p.response ?? {}) as Record<string, unknown>) };
+      delete response.flow_token;
+      return (
+        <div className="grid gap-1 text-sm" data-testid="form-reply">
+          {str(p.formName) ? <p className="text-xs text-muted-foreground">Answer to {str(p.formName)}</p> : null}
+          <dl className="grid grid-cols-[auto_1fr] gap-x-2 text-xs">
+            {Object.entries(response).map(([key, value]) => (
+              <div key={key} className="contents">
+                <dt className="font-mono text-muted-foreground">{key}</dt>
+                <dd className="break-words">{Array.isArray(value) ? value.join(', ') : String(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      );
+    }
+    // A WhatsApp Form we sent (feature 008 US7).
+    case 'FORM':
+      return (
+        <div className="grid gap-1 text-sm" data-testid="form-message">
+          {str(p.header) && <p className="font-medium">{str(p.header)}</p>}
+          <p className="whitespace-pre-wrap break-words">{item.text}</p>
+          <span className="rounded border bg-background px-2 py-1 text-center text-xs">📝 {str(p.cta) ?? 'Open form'}</span>
+          {str(p.formName) ? <span className="text-xs text-muted-foreground">Form {str(p.formName)}</span> : null}
+        </div>
+      );
     case 'REACTION':
       return <p className="text-sm">{str(p.emoji) ? `Reacted ${String(p.emoji)} to a message` : 'Removed a reaction'}</p>;
     case 'BUTTONS':
@@ -177,10 +206,45 @@ function Body({ item }: { item: ChatItem }) {
         </div>
       );
     }
+    // A cart sent in chat (feature 008 US6).
+    case 'ORDER':
+      return str(p.chatOrderId) ? <ChatOrderCard orderId={String(p.chatOrderId)} /> : <p className="text-sm">🛒 Cart sent</p>;
+    // Product messages (feature 008 US5): one product, a product list or the catalog.
+    case 'PRODUCT':
+    case 'PRODUCT_LIST':
+    case 'CATALOG': {
+      const products = (Array.isArray(p.products) ? p.products : []) as Array<{ retailerId?: string; name?: string; priceMinor?: number | null; currency?: string | null; imageUrl?: string | null }>;
+      return (
+        <div className="grid gap-1 text-sm" data-testid={`product-message-${item.contentType}`}>
+          {str(p.header) && <p className="font-medium">{str(p.header)}</p>}
+          {item.text ? <p className="whitespace-pre-wrap break-words">{item.text}</p> : null}
+          {item.contentType === 'CATALOG' ? <p className="text-xs text-muted-foreground">🛍 View catalog</p> : null}
+          <ul className="grid gap-1" aria-label="Products">
+            {products.map((product, i) => (
+              <li key={product.retailerId ?? i} className="flex items-center gap-2 rounded border bg-background px-2 py-1 text-xs">
+                {product.imageUrl ? <img src={product.imageUrl} alt="" className="size-8 rounded object-cover" /> : null}
+                <span className="flex-1">{product.name ?? product.retailerId}</span>
+                {typeof product.priceMinor === 'number' && product.currency ? <span>{formatMinor(product.priceMinor, product.currency)}</span> : null}
+              </li>
+            ))}
+          </ul>
+          {str(p.footer) && <p className="text-xs text-muted-foreground">{str(p.footer)}</p>}
+        </div>
+      );
+    }
+    // The Pay now message (feature 008 US2).
+    case 'PAYMENT_REQUEST':
+      return (
+        <div className="grid gap-1 text-sm">
+          <p className="whitespace-pre-wrap break-words">{item.text}</p>
+          {item.payment ? <PaymentCard payment={item.payment} /> : null}
+        </div>
+      );
     case 'TEMPLATE':
       return (
         <div className="grid gap-1 text-sm">
           <p className="whitespace-pre-wrap break-words">{item.template?.renderedText}</p>
+          {item.payment ? <PaymentCard payment={item.payment} /> : null}
           <span className="text-xs text-muted-foreground">
             Template {item.template?.name}
             {item.campaign ? ` · Campaign "${item.campaign.name}"` : item.origin === 'API' ? ' · API' : ''}

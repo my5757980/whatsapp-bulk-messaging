@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import type { MetaTemplateComponent } from '@wbm/shared';
 import { TokenCipher } from '../../common/crypto/token-cipher.js';
 import { MetricsService } from '../../common/metrics/metrics.service.js';
@@ -14,7 +14,8 @@ import { NumbersService } from '../numbers/numbers.service.js';
 import { DripLeaving } from '../growth/drips/drip-leaving.js';
 import { StatusHandler } from '../webhooks/handlers/status.handler.js';
 import { decideSendFailure, preSendCheck } from './send-outcome.js';
-import { HEADER_MEDIA_URL_PARAM, buildTemplatePayload, headerMediaType } from './template-payload.builder.js';
+import { FLOW_TOKEN_PARAM, HEADER_MEDIA_URL_PARAM, buildTemplatePayload, headerMediaType } from './template-payload.builder.js';
+import { TEMPLATE_FORM_TOKENS, type TemplateFormTokensPort } from './template-form-tokens.port.js';
 import { HEADER_MEDIA_ASSET_PARAM } from './template-send-rules.js';
 
 /** Blocking codes caused by the number's credentials or account (research R9). */
@@ -58,6 +59,7 @@ export class SendProcessor {
     private readonly numbers: NumbersService,
     private readonly timeline: ChatTimelineService,
     private readonly drips: DripLeaving,
+    @Optional() @Inject(TEMPLATE_FORM_TOKENS) private readonly formTokens?: TemplateFormTokensPort,
   ) {}
 
   /** @param attempt 1-based attempt number of this job */
@@ -131,10 +133,13 @@ export class SendProcessor {
             : mediaType && params[HEADER_MEDIA_URL_PARAM]
               ? { type: mediaType, link: params[HEADER_MEDIA_URL_PARAM] }
               : undefined;
+      // A form (FLOW) button carries the recipient's signed form token (feature 008 US7).
+      const flowButton = ((components.find((c) => c.type.toUpperCase() === 'BUTTONS') as unknown as { buttons?: Array<{ type: string; flow_id?: string }> } | undefined)?.buttons ?? []).find((b) => b.type.toUpperCase() === 'FLOW');
+      const flowToken = flowButton?.flow_id && m.contactId && this.formTokens ? await this.formTokens.forMessage(m.id, m.contactId, flowButton.flow_id) : null;
       const payload = buildTemplatePayload({
         to: m.phoneE164,
         template: { name: m.template.name, language: m.template.language, parameterFormat: m.template.parameterFormat, components },
-        params: (m.resolvedParams ?? {}) as Record<string, string>,
+        params: { ...((m.resolvedParams ?? {}) as Record<string, string>), ...(flowToken ? { [FLOW_TOKEN_PARAM]: flowToken } : {}) },
         ...(headerMedia ? { headerMedia } : {}),
       });
       ({ waMessageId } = await this.meta.sendTemplate(this.cipher.decrypt(m.number.accessTokenEnc), m.number.phoneNumberId, payload));

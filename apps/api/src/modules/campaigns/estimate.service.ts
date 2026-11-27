@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { MetaTemplateComponent } from '@wbm/shared';
 import { AppError } from '../../common/errors/app-error.js';
 import { maskPhone } from '../../common/phone/phone.js';
@@ -6,6 +6,7 @@ import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { RateCardService } from '../rate-card/rate-card.controller.js';
 import { microsToUsdNumber, rateCategory } from '../reports/cost-calculator.js';
 import { AudienceSnapshotService } from './audience-snapshot.service.js';
+import { CAMPAIGN_PAYMENTS, campaignPaymentConfig, type CampaignPaymentsPort } from './campaign-payments.port.js';
 import { renderBodyPreview } from './variable-resolver.js';
 
 // POST /campaigns/{id}/estimate (T095): eligible/excluded counts and three rendered previews.
@@ -31,6 +32,7 @@ export class EstimateService {
     private readonly prisma: PrismaService,
     private readonly snapshot: AudienceSnapshotService,
     private readonly rateCard: RateCardService,
+    @Optional() @Inject(CAMPAIGN_PAYMENTS) private readonly payments?: CampaignPaymentsPort,
   ) {}
 
   async estimate(campaignId: string) {
@@ -38,7 +40,7 @@ export class EstimateService {
     if (!campaign) throw AppError.notFound('Campaign not found');
     if (!campaign.template) throw AppError.validation('Choose a template first', [{ field: 'templateId', issue: 'is required' }]);
 
-    const excluded = { optedOut: 0, noOptIn: 0, invalidNumber: 0, duplicate: 0, missingVariable: 0 };
+    const excluded = { optedOut: 0, noOptIn: 0, invalidNumber: 0, duplicate: 0, missingVariable: 0, paymentAmountMissing: 0 };
     if (campaign.audienceType === 'UPLOAD') {
       const { job, rows } = await this.snapshot.readyUpload(campaignId);
       excluded.invalidNumber = job.errorCount;
@@ -51,7 +53,9 @@ export class EstimateService {
     const previews: Array<{ phoneMasked: string; text: string }> = [];
     const text = bodyText(campaign.template.components);
 
-    for await (const batch of this.snapshot.evaluate(campaign, campaign.template)) {
+    // Feature 008: a payment campaign holds back recipients without an amount (Stripe not ready: no count).
+    const payment = campaignPaymentConfig(campaign.paymentConfig) && this.payments ? await this.payments.context(campaign.template).catch(() => null) : null;
+    for await (const batch of this.snapshot.evaluate(campaign, campaign.template, undefined, payment)) {
       for (const r of batch) {
         if (r.status === 'PENDING') {
           eligible++;
@@ -60,6 +64,7 @@ export class EstimateService {
         } else if (r.skipReason === 'OPTED_OUT') excluded.optedOut++;
         else if (r.skipReason === 'NO_OPT_IN') excluded.noOptIn++;
         else if (r.skipReason === 'MISSING_VARIABLE') excluded.missingVariable++;
+        else if (r.skipReason === 'PAYMENT_AMOUNT_MISSING') excluded.paymentAmountMissing++;
       }
     }
 

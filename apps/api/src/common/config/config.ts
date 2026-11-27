@@ -113,6 +113,22 @@ const EnvSchema = z.object({
    * chat as information. It never changes what may be sent.
    */
   ADS_FREE_WINDOW_HOURS: z.coerce.number().int().min(1).max(168).default(72),
+  /**
+   * Payments (feature 008, research R1): Stripe's API address (mock-meta in local runs and e2e) and the
+   * pinned API version, upgraded on purpose like META_GRAPH_API_VERSION. Stripe keys are entered on
+   * Payments → Gateway and stored encrypted, never in the environment.
+   */
+  STRIPE_API_BASE_URL: z
+    .string()
+    .trim()
+    .url()
+    .default('https://api.stripe.com')
+    .transform((v) => v.replace(/\/+$/, '')),
+  STRIPE_API_VERSION: z
+    .string()
+    .trim()
+    .regex(/^\d{4}-\d{2}-\d{2}\.[a-z]+$/, 'must look like 2026-09-30.endive')
+    .default('2026-09-30.endive'),
 }).superRefine((env, ctx) => {
   const pushKeys = [env.WEB_PUSH_PUBLIC_KEY, env.WEB_PUSH_PRIVATE_KEY, env.WEB_PUSH_SUBJECT].filter(Boolean).length;
   if (pushKeys > 0 && pushKeys < 3) {

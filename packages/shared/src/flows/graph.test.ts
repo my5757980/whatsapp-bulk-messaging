@@ -31,6 +31,55 @@ const example = (): FlowGraph =>
 const parse = (graph: unknown) => FlowGraphSchema.safeParse(graph);
 const withStep = (step: Record<string, unknown>) => ({ ...example(), steps: [...example().steps, step] });
 
+// Feature 008 (T045): the payment step.
+describe('payment step', () => {
+  const parse = (step: Record<string, unknown>) => FlowGraphSchema.safeParse({ version: 1, start: 'pay', triggers: [], steps: [{ id: 'pay', type: 'payment', ...step }, { id: 'thanks', type: 'message', text: 'Thanks' }] });
+  it('takes a fixed, answer or attribute amount with paid and not-paid branches', () => {
+    expect(parse({ amount: { source: 'static', minor: 9900 }, description: 'Booking fee', next: 'thanks' }).success).toBe(true);
+    expect(parse({ amount: { source: 'answer', name: 'quote' }, description: 'Quote', next: 'thanks', onNotPaid: 'thanks' }).success).toBe(true);
+    expect(parse({ amount: { source: 'attribute', key: 'balance' }, description: 'Balance' }).success).toBe(true);
+    const parsed = parse({ description: 'x' });
+    expect(parsed.success && parsed.data.steps[0]).toMatchObject({ amount: { source: 'static', minor: 10000 }, expiryMinutes: 60, next: null, onNotPaid: null });
+  });
+  it('keeps the expiry within the 24-hour window and refuses bad amounts', () => {
+    expect(parse({ description: 'x', expiryMinutes: 1380 }).success).toBe(true);
+    expect(parse({ description: 'x', expiryMinutes: 1381 }).success).toBe(false);
+    expect(parse({ description: 'x', expiryMinutes: 29 }).success).toBe(false);
+    expect(parse({ description: 'x', amount: { source: 'static', minor: 0 } }).success).toBe(false);
+    expect(parse({ description: 'x', amount: { source: 'answer', name: 'Bad Name' } }).success).toBe(false);
+    expect(parse({ description: 'x'.repeat(251) }).success).toBe(false);
+  });
+});
+
+// Feature 008 (T086): the commerce steps.
+describe('commerce steps', () => {
+  const parse = (step: Record<string, unknown>) => FlowGraphSchema.safeParse({ version: 1, start: 's', triggers: [], steps: [{ id: 's', ...step }, { id: 'done', type: 'end' }] });
+  it('takes product, catalog and form steps with a timeout branch, and saves incomplete drafts', () => {
+    const product = parse({ type: 'product', header: 'New in', body: 'Pick', sections: [{ title: '', retailerIds: ['shp-101', 'shp-102'] }], next: 'done', onTimeout: 'done' });
+    expect(product.success, JSON.stringify(product.error?.issues)).toBe(true);
+    expect(branchesOf(product.data!.steps[0]!)).toEqual([
+      { branch: 'next', target: 'done', required: true },
+      { branch: 'onTimeout', target: 'done', required: false },
+    ]);
+    expect(parse({ type: 'product' }).data?.steps[0]).toMatchObject({ sections: [{ title: '', retailerIds: [] }], timeoutMinutes: 60, next: null, onTimeout: null });
+    expect(parse({ type: 'catalog' }).data?.steps[0]).toMatchObject({ body: '', thumbnailRetailerId: null, next: null, onTimeout: null });
+    expect(parse({ type: 'form' }).data?.steps[0]).toMatchObject({ formId: null, cta: 'Open form', answerPrefix: 'form' });
+  });
+  it('keeps lists, sections and forms within the limits', () => {
+    expect(parse({ type: 'product', sections: Array.from({ length: 11 }, (_, i) => ({ title: `S${i}`, retailerIds: [`p${i}`] })) }).success).toBe(false);
+    expect(parse({ type: 'product', sections: [{ title: '', retailerIds: Array.from({ length: 31 }, (_, i) => `p${i}`) }] }).success).toBe(false);
+    expect(parse({ type: 'product', sections: [] }).success).toBe(false);
+    expect(parse({ type: 'form', formId: 'not-a-uuid' }).success).toBe(false);
+    expect(parse({ type: 'form', answerPrefix: 'Bad Prefix' }).success).toBe(false);
+    expect(parse({ type: 'form', cta: 'x'.repeat(31) }).success).toBe(false);
+  });
+  it('charges the cart total in a payment step', () => {
+    const parsed = parse({ type: 'payment', amount: { source: 'cartTotal' }, description: 'Your order', next: 'done' });
+    expect(parsed.success && parsed.data.steps[0]).toMatchObject({ amount: { source: 'cartTotal' } });
+    expect(parse({ type: 'payment', amount: { source: 'cartTotal', minor: 500 }, description: 'x' }).success).toBe(false);
+  });
+});
+
 describe('FlowGraphSchema', () => {
   it('accepts the contract example and an empty draft', () => {
     expect(parse(example()).success).toBe(true);

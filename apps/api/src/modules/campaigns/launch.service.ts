@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { MetaTemplateComponent } from '@wbm/shared';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
@@ -12,6 +12,7 @@ import { RateCardService } from '../rate-card/rate-card.controller.js';
 import { rateCategory } from '../reports/cost-calculator.js';
 import { headerMediaType } from '../sending/template-payload.builder.js';
 import { AudienceSnapshotService } from './audience-snapshot.service.js';
+import { CAMPAIGN_PAYMENTS, campaignPaymentConfig, type CampaignPaymentContext, type CampaignPaymentsPort } from './campaign-payments.port.js';
 import { CampaignsService, toCampaignDto } from './campaigns.service.js';
 import { DispatchScheduler } from './dispatch-scheduler.js';
 import { unmappedVariables, type VariableMapping } from './variable-resolver.js';
@@ -46,7 +47,14 @@ export class LaunchService {
     private readonly rateCard: RateCardService,
     private readonly trackedLinks: TrackedLinksService,
     private readonly codes: TrackedLinkCodes,
+    @Optional() @Inject(CAMPAIGN_PAYMENTS) private readonly payments?: CampaignPaymentsPort,
   ) {}
+
+  /** A payment campaign's context (feature 008): Stripe ready and a pay link button, or an error. */
+  private async paymentContext(template: Template): Promise<CampaignPaymentContext> {
+    if (!this.payments) throw AppError.conflict('Payments are not available here', 'GATEWAY_NOT_READY');
+    return this.payments.context(template);
+  }
 
   async load(campaignId: string): Promise<LaunchableCampaign> {
     const campaign = await this.prisma.campaign.findUnique({ where: { id: campaignId }, include: { template: true, number: true } });
@@ -75,8 +83,10 @@ export class LaunchService {
     const variables = (Array.isArray(template.variables) ? template.variables : []) as Array<{ key: string }>;
     // Tracked-link variables (feature 005) carry each recipient's code instead of a mapping.
     const tracked = await this.snapshot.trackedKeys(campaign.id, variables);
+    // A payment campaign's pay link button carries each recipient's code (feature 008).
+    const payButton = campaignPaymentConfig(campaign.paymentConfig) ? `BUTTON.${(await this.paymentContext(template)).buttonIndex}.1` : null;
     const unmapped = unmappedVariables(
-      variables.filter((v) => !tracked.has(v.key)),
+      variables.filter((v) => !tracked.has(v.key) && v.key !== payButton),
       (campaign.variableMapping ?? {}) as VariableMapping,
     );
     if (unmapped.length) {
@@ -107,6 +117,8 @@ export class LaunchService {
     let costMicros = 0n;
     const table = await this.rateCard.table();
     const category = rateCategory(null, template.category);
+    const paymentConfig = campaignPaymentConfig(campaign.paymentConfig);
+    const payment = paymentConfig ? await this.paymentContext(template) : null;
     await this.prisma.$transaction(
       async (tx) => {
         const { count } = await tx.campaign.updateMany({
@@ -120,7 +132,7 @@ export class LaunchService {
         const trackedKeys = await this.snapshot.trackedKeys(campaignId, variables, tx);
         const targets = (await this.trackedLinks.targetsOf(campaignId, tx)).filter((t) => trackedKeys.has(t.variableKey));
 
-        for await (const batch of this.snapshot.evaluate(campaign, template, tx)) {
+        for await (const batch of this.snapshot.evaluate(campaign, template, tx, payment)) {
           for (let i = 0; i < batch.length; i += INSERT_BATCH) {
             const slice = batch.slice(i, i + INSERT_BATCH).map((r) => ({ ...r, id: uuidv7() }));
             const plan = targets.length
@@ -142,14 +154,23 @@ export class LaunchService {
               status: r.status,
               skipReason: r.skipReason,
             }));
-            if (plan) {
+            if (plan || payment) {
               const inserted = await tx.message.createManyAndReturn({ data, skipDuplicates: true, select: { id: true } });
               const ids = new Set(inserted.map((m) => m.id));
-              await this.codes.save(
-                tx,
-                plan.links.filter((l) => ids.has(l.messageId)),
-                targets,
-              );
+              if (plan) {
+                await this.codes.save(
+                  tx,
+                  plan.links.filter((l) => ids.has(l.messageId)),
+                  targets,
+                );
+              }
+              if (payment && paymentConfig && this.payments) {
+                // Feature 008: one request per recipient, with the recipient's message (no Stripe call yet).
+                const recipients = slice.flatMap((r) =>
+                  r.status === 'PENDING' && r.payment && ids.has(r.id) ? [{ messageId: r.id, contactId: r.contactId, phoneE164: r.phoneE164, customerName: r.customerName ?? null, payment: r.payment }] : [],
+                );
+                await this.payments.createMany(tx, { id: campaignId, config: paymentConfig, context: payment }, recipients);
+              }
             } else {
               await tx.message.createMany({ data, skipDuplicates: true });
             }

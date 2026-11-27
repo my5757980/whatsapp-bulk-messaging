@@ -39,3 +39,14 @@ export * from './ads/referral.js';
 export * from './ads/hashing.js';
 export * from './ads/limits.js';
 export * from './ads/checks.js';
+// Feature 008: commerce and payments
+export * from './commerce/money.js';
+export * from './commerce/payments.js';
+export * from './commerce/stripe-signature.js';
+export * from './commerce/reminders.js';
+export * from './commerce/gateway-checks.js';
+export * from './commerce/catalog.js';
+export * from './commerce/carts.js';
+export * from './commerce/forms.js';
+export * from './commerce/flow-json.js';
+export * from './commerce/form-token.js';

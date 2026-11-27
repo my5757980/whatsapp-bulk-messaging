@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bodyPlaceholders, validateTemplate, type TemplateDraft } from './template-rules.js';
+import { bodyPlaceholders, payLinkButtonIndex, validateTemplate, type TemplateDraft } from './template-rules.js';
 
 // T132: template rules shared by the editor and the API (FR-018).
 const valid: TemplateDraft = {
@@ -86,6 +86,41 @@ describe('validateTemplate', () => {
   it('returns readable issues', () => {
     const [issue] = validateTemplate({ ...valid, name: 'Bad Name' });
     expect(issue?.issue).toMatch(/lower-case letters, numbers and underscores/);
+  });
+});
+
+// T014 (feature 008, contracts/meta-commerce-graph.md): catalog, product list and form buttons.
+describe('commerce buttons', () => {
+  const body = { text: 'See what is new this week.' };
+  it('allows a catalog or product list button as the only button of a marketing template', () => {
+    expect(validateTemplate({ ...valid, header: null, body, buttons: [{ type: 'CATALOG', text: 'View catalog' }] })).toEqual([]);
+    expect(validateTemplate({ ...valid, header: { format: 'TEXT', text: 'New in' }, body, buttons: [{ type: 'MPM', text: 'View items' }] })).toEqual([]);
+  });
+
+  it('refuses them beside other buttons or in a utility template', () => {
+    expect(fields({ header: null, body, buttons: [{ type: 'CATALOG', text: 'View catalog' }, { type: 'QUICK_REPLY', text: 'Stop' }] })).toContain('buttons.0.type');
+    expect(fields({ header: null, body, category: 'UTILITY', buttons: [{ type: 'MPM', text: 'View items' }] })).toContain('category');
+  });
+
+  it('needs a published form for a FLOW button, with the usual text limit', () => {
+    expect(validateTemplate({ ...valid, category: 'UTILITY', header: null, body, buttons: [{ type: 'FLOW', text: 'Book now', flowId: 'MOCKFLOW1764000000000001' }] })).toEqual([]);
+    expect(fields({ header: null, body, buttons: [{ type: 'FLOW', text: 'Book now' }] })).toContain('buttons.0.flowId');
+    expect(fields({ header: null, body, buttons: [{ type: 'FLOW', text: 'x'.repeat(26), flowId: '123' }] })).toContain('buttons.0.text');
+  });
+});
+
+describe('payLinkButtonIndex', () => {
+  const base = 'https://go.example.com/l';
+  it('finds the URL button that ends in /p/{{1}} on the pay link base', () => {
+    expect(payLinkButtonIndex([{ type: 'QUICK_REPLY' }, { type: 'URL', url: 'https://go.example.com/l/p/{{1}}' }], base)).toBe(1);
+    expect(payLinkButtonIndex([{ type: 'URL', url: 'https://go.example.com/l/p/{{ 1 }}' }], `${base}/`)).toBe(0);
+  });
+
+  it('refuses other links and a missing base', () => {
+    expect(payLinkButtonIndex([{ type: 'URL', url: 'https://go.example.com/l/{{1}}' }], base)).toBe(-1);
+    expect(payLinkButtonIndex([{ type: 'URL', url: 'https://other.example.com/l/p/{{1}}' }], base)).toBe(-1);
+    expect(payLinkButtonIndex([{ type: 'URL', url: 'https://go.example.com/l/p/{{1}}' }], null)).toBe(-1);
+    expect(payLinkButtonIndex(undefined, base)).toBe(-1);
   });
 });
 

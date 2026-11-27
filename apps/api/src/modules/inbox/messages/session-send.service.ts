@@ -40,7 +40,7 @@ export const SendMessageSchema = z
 export type SendMessageInput = z.infer<typeof SendMessageSchema>;
 
 /** What will be sent: a text, or a file with an optional caption (data-model §3 payloads). */
-interface Outgoing {
+export interface Outgoing {
   contentType: ChatContentType;
   text: string | null;
   mediaAssetId: string | null;
@@ -76,9 +76,19 @@ export class SessionSendService {
   ) {}
 
   async send(viewer: Viewer, conversationId: string, input: SendMessageInput): Promise<ChatItemDto> {
+    const chat = await this.prepare(viewer, conversationId);
+    return this.deliver(viewer, chat, await this.resolve(chat, input));
+  }
+
+  /**
+   * The checks of a member reply: the chat is visible, the contact exists, the number can send and
+   * nobody else has taken the chat; the 24-hour window too unless `requireWindow` is false (feature
+   * 008 decides between a session message and a template itself).
+   */
+  async prepare(viewer: Viewer, conversationId: string, opts: { requireWindow?: boolean } = {}): Promise<ConversationRow> {
     const chat = await this.conversations.loadVisible(viewer, conversationId);
     if (!chat.contact?.phoneE164) throw AppError.validation('This contact was deleted, so the chat cannot be answered');
-    if (!isLive(chat.lastCustomerMessageAt)) {
+    if ((opts.requireWindow ?? true) && !isLive(chat.lastCustomerMessageAt)) {
       throw AppError.validation('The 24-hour reply window has closed. Send a template instead.', [], 'WINDOW_CLOSED');
     }
     if (chat.number.connectionStatus !== 'CONNECTED' || !chat.number.sendingEnabled) {
@@ -88,7 +98,17 @@ export class SessionSendService {
       const owner = chat.intervenedBy?.name ?? 'Another member';
       throw new AppError(HttpStatus.CONFLICT, 'ALREADY_TAKEN', `${owner} has taken this chat`, [{ field: 'intervenedBy', issue: owner }]);
     }
-    const outgoing = await this.resolve(chat, input);
+    return chat;
+  }
+
+  /** Feature 008: a prepared session message (a Pay now message, products, a form) sent like a member reply. */
+  async sendPrepared(viewer: Viewer, chat: ConversationRow, outgoing: Outgoing): Promise<ChatItemDto> {
+    if (!isLive(chat.lastCustomerMessageAt)) throw AppError.validation('The 24-hour reply window has closed. Send a template instead.', [], 'WINDOW_CLOSED');
+    return this.deliver(viewer, chat, outgoing);
+  }
+
+  private async deliver(viewer: Viewer, chat: ConversationRow, outgoing: Outgoing): Promise<ChatItemDto> {
+    const conversationId = chat.id;
     // A member's reply stops the flow answering the chat, also one the member started (003 FR-026),
     // and the AI agent; a reply it is preparing is not sent (004 FR-026).
     await this.flows.stopForConversation(conversationId);

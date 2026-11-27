@@ -131,6 +131,9 @@ function applyToCaches(queryClient: QueryClient, event: InboxEvent): void {
     case 'message.status':
     case 'note.created':
       if (conversationId) void queryClient.invalidateQueries({ queryKey: queryKeys.inboxItems(conversationId) });
+      // Feature 008: a payment that changes republishes its chat item; its journey and history follow.
+      if (conversationId && event.type === 'message.created') void queryClient.invalidateQueries({ queryKey: ['journey', conversationId] });
+      if (event.type === 'message.created') void queryClient.invalidateQueries({ queryKey: ['payments'] });
       void queryClient.invalidateQueries({ queryKey: queryKeys.inboxLists });
       void queryClient.invalidateQueries({ queryKey: queryKeys.inboxUnread });
       return;

@@ -11,6 +11,8 @@ import { handleShopify } from './shopify.js';
 import { handleWoo } from './woocommerce.js';
 import { handleWizard } from './wizard.js';
 import { handleAds } from './ads.js';
+import { commerceInteractiveProblem, handleCommerce } from './commerce.js';
+import { handleStripe } from './stripe.js';
 import { postSigned, statusPayload, templateStatusPayload } from './webhook-emitter.js';
 
 interface MockTemplate {
@@ -37,6 +39,8 @@ interface SentMessage {
   text?: string;
   /** Reply buttons or list rows of an interactive message, so tests can tap them (feature 003). */
   options?: Array<{ id: string; title: string }>;
+  /** The interactive object as sent, so tests can read cta_url links and flow tokens (feature 008). */
+  interactive?: unknown;
   at: string;
 }
 
@@ -59,6 +63,9 @@ const within = (value: unknown, min: number, max: number): boolean => typeof val
 /** Meta's limits for reply buttons and lists; returns the problem or undefined. */
 function interactiveProblem(interactive: InteractiveBody | undefined): string | undefined {
   if (!interactive) return "Param interactive is required";
+  // Feature 008: product, product_list, catalog_message, cta_url and flow messages (src/commerce.ts).
+  const commerce = commerceInteractiveProblem(interactive);
+  if (commerce !== null) return commerce;
   if (!within(interactive.body?.text, 1, 1024)) return "Param interactive['body']['text'] must have 1 to 1024 characters";
   if (interactive.header !== undefined && !within(interactive.header.text, 1, 60)) return "Param interactive['header']['text'] must have 1 to 60 characters";
   if (interactive.footer !== undefined && !within(interactive.footer.text, 1, 60)) return "Param interactive['footer']['text'] must have 1 to 60 characters";
@@ -215,6 +222,8 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   if (req.method === 'GET' && url.pathname === '/mock/sent') return send(res, 200, { count: sent.length, messages: sent });
   if (req.method === 'GET' && url.pathname === '/mock/reads') return send(res, 200, { count: reads.length, reads });
 
+  // Feature 008: the mock Stripe gateway and its hosted page (src/stripe.ts).
+  if (await handleStripe(req, res, url)) return;
   // Feature 006: mock Shopify and WooCommerce stores (src/shopify.ts, src/woocommerce.ts).
   if (await handleShopify(req, res, url)) return;
   if (await handleWoo(req, res, url)) return;
@@ -223,6 +232,8 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   if (await handleAds(req, res, url)) return;
   // Feature 006 US8: the number connection wizard's Graph routes, for the wizard tokens (src/wizard.ts).
   if (await handleWizard(req, res, url)) return;
+  // Feature 008: catalog, commerce settings, items_batch and WhatsApp Flows (src/commerce.ts).
+  if (await handleCommerce(req, res, url)) return;
 
   // Feature 006: the request catcher for outbound webhooks (src/catch.ts).
   const caughtAt = catchName(url.pathname);
@@ -354,7 +365,7 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       ...(type === 'template' && body.template?.components ? { components: body.template.components } : {}),
       type,
       text: type === 'text' ? body.text?.body : interactive ? interactive.body?.text : caption,
-      ...(interactive ? { options: interactiveOptions(interactive) } : {}),
+      ...(interactive ? { options: interactiveOptions(interactive), interactive } : {}),
       at: new Date().toISOString(),
     });
 

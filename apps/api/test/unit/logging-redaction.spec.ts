@@ -129,4 +129,18 @@ describe('sanitizeLogObject: integrations (feature 006)', () => {
     expect(out.page).toEqual({ id: 'P1', pageToken: '[REDACTED]', page_token: '[REDACTED]' });
     expect(out.connection).toEqual({ adAccountId: '111', tokenEnc: '[REDACTED]', pageTokenEnc: '[REDACTED]' });
   });
+
+  it('removes Stripe keys, signing secrets and the Stripe signature, and hides pay link codes (feature 008)', () => {
+    const out = sanitizeLogObject({
+      body: { secretKey: 'rk_live_abc', webhookSecret: 'whsec_abc', registerEndpoint: true },
+      gateway: { id: 'g1', secretKeyEnc: 'v1:a', webhookSecretEnc: 'v1:b', previousWebhookSecretEnc: 'v1:c', currency: 'aed' },
+      headers: { 'stripe-signature': 't=1,v1=abc', 'content-type': 'application/json' },
+    }) as Record<string, Record<string, unknown>>;
+    expect(out.body).toEqual({ secretKey: '[REDACTED]', webhookSecret: '[REDACTED]', registerEndpoint: true });
+    expect(out.gateway).toEqual({ id: 'g1', secretKeyEnc: '[REDACTED]', webhookSecretEnc: '[REDACTED]', previousWebhookSecretEnc: '[REDACTED]', currency: 'aed' });
+    expect(out.headers).toEqual({ 'stripe-signature': '[REDACTED]', 'content-type': 'application/json' });
+    expect(redactRequestPath('/l/p/Ab12Cd34?paid=1')).toBe('/l/[REDACTED]');
+    expect(redactRequestPath('/l/c/Zz99')).toBe('/l/[REDACTED]');
+    expect(redactRequestPath('/l/AbCdEf1234')).toBe('/l/[REDACTED]');
+  });
 });

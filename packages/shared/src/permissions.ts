@@ -38,6 +38,10 @@ export const ALL_PERMISSIONS = [
   'assistant.use',
   // Feature 006 integrations (spec FR-056, contracts/integrations-api.openapi.yaml header): admins only
   'integrations.manage',
+  // Feature 008 commerce and payments (contracts/commerce-api.openapi.yaml header)
+  'payments.view',
+  'payments.manage',
+  'forms.manage',
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];
@@ -64,6 +68,8 @@ const MANAGER_PERMISSIONS: readonly Permission[] = [
   'flows.manage',
   'ai.manage',
   'assistant.use',
+  'payments.view',
+  'forms.manage',
 ];
 
 const AGENT_PERMISSIONS: readonly Permission[] = ['contacts.view', 'templates.view', 'campaigns.view', 'inbox.view', 'inbox.reply'];

@@ -1,0 +1,125 @@
+openapi: 3.1.0
+info:
+  title: WhatsApp Platform - Public API v1 (feature 008 payment additions)
+  version: 1.2.0
+  description: >
+    Additions to the public API (001, extended by 006) for payment requests (feature 008, FR-010,
+    FR-015, research R5). Same rules as 001 and 006:
+    - authenticate with `Authorization: Bearer wbk_...`
+    - requests are limited per key (default 60 per minute, with `Retry-After` on 429)
+    - `Idempotency-Key` is required on POST here; a repeated key within 24 hours returns the first
+      answer (the 006 idempotency service)
+    Each operation's `x-scope` names the key permission it needs (new: payments.read,
+    payments.write); other keys answer 403 `insufficient_scope`. Money is integer minor units of the
+    Stripe connection currency (lower-case ISO code). Status changes are also sent as outbound
+    webhook events (payment.requested, payment.paid, payment.failed, payment.expired,
+    payment.refunded, payment.cancelled). Phones are E.164; numbers without a country code are read
+    with the company's default country.
+servers:
+  - url: /api/v1
+security:
+  - apiKey: []
+paths:
+  /payments:
+    post:
+      summary: Make a payment request for a phone number and send it (in the window as a Pay now message, otherwise with the payment template)
+      x-scope: payments.write
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 255 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, amountMinor, description]
+              properties:
+                phone: { type: string, description: E.164 or national with the default country }
+                name: { type: string, maxLength: 120, description: Used when the contact is new }
+                amountMinor: { type: integer, minimum: 1 }
+                currency: { type: string, pattern: '^[a-z]{3}$', description: Optional; must equal the connection currency }
+                description: { type: string, minLength: 1, maxLength: 250 }
+                reference: { type: string, maxLength: 80 }
+                expiresInMinutes: { type: integer, minimum: 30, maximum: 43200 }
+                tagId: { type: string, format: uuid }
+                flowId: { type: string, format: uuid }
+                numberId: { type: string, format: uuid, description: Sending number; default is the contact's last chat number or the default number }
+                send: { type: boolean, default: true, description: false makes the request and returns payUrl without sending a message }
+      responses:
+        '201': { description: Made (and sent when send is true), content: { application/json: { schema: { $ref: '#/components/schemas/Payment' } } } }
+        '400': { description: invalid_request (field details), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: insufficient_scope or contact_opted_out (template outside the window to an opted-out contact), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: 'gateway_not_ready, window_closed_no_template or idempotency_key_reused (different body)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: 'amount_too_small, amount_too_large, currency_mismatch or gateway_refused', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '429': { description: rate_limited (Retry-After) }
+        '502': { description: gateway_unavailable (nothing sent; safe to retry with the same Idempotency-Key) }
+    get:
+      summary: Find payment requests by reference or contact phone, newest first
+      x-scope: payments.read
+      parameters:
+        - { name: reference, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: phone, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [WAITING, PAID, EXPIRED, CANCELLED, REFUNDED] } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        '200': { description: Page, content: { application/json: { schema: { type: object, required: [data, nextCursor], properties: { data: { type: array, items: { $ref: '#/components/schemas/Payment' } }, nextCursor: { type: [string, 'null'] } } } } } }
+        '403': { description: insufficient_scope }
+  /payments/{id}:
+    get:
+      summary: One payment request
+      x-scope: payments.read
+      parameters: [{ name: id, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Payment, content: { application/json: { schema: { $ref: '#/components/schemas/Payment' } } } }
+        '403': { description: insufficient_scope }
+        '404': { description: not_found }
+  /payments/{id}/cancel:
+    post:
+      summary: Cancel a waiting request; its link stops taking payments
+      x-scope: payments.write
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 8, maxLength: 255 } }
+      responses:
+        '200': { description: Cancelled, content: { application/json: { schema: { $ref: '#/components/schemas/Payment' } } } }
+        '403': { description: insufficient_scope }
+        '404': { description: not_found }
+        '409': { description: not_waiting, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+components:
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      description: API key created in Settings > API keys (format wbk_...)
+  schemas:
+    Error:
+      description: The public API error shape of 001 and 006.
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: array, items: { type: object, properties: { field: { type: string }, issue: { type: string } } } }
+        requestId: { type: string }
+    Payment:
+      type: object
+      required: [id, contactId, phone, amountMinor, currency, description, status, expiresAt, payUrl, createdAt, test]
+      properties:
+        id: { type: string, format: uuid }
+        contactId: { type: string, format: uuid }
+        phone: { type: string }
+        amountMinor: { type: integer }
+        currency: { type: string }
+        description: { type: string }
+        reference: { type: [string, 'null'] }
+        status: { type: string, enum: [WAITING, PAID, EXPIRED, CANCELLED, REFUNDED] }
+        failedAttempts: { type: integer }
+        paidAt: { type: [string, 'null'], format: date-time }
+        paidLate: { type: boolean }
+        refundedMinor: { type: integer }
+        expiresAt: { type: string, format: date-time }
+        payUrl: { type: string, format: uri }
+        messageId: { type: [string, 'null'], format: uuid, description: 'The message that carried the link, when sent' }
+        test: { type: boolean }
+        createdAt: { type: string, format: date-time }

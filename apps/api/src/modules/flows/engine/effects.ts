@@ -30,7 +30,11 @@ export type FlowOutboundMessage =
       footer?: string;
       buttonLabel: string;
       sections: Array<{ title?: string; rows: Array<{ id: string; title: string; description?: string }> }>;
-    };
+    }
+  // Feature 008 US8: products, the catalog and forms; the commerce module builds their chat items.
+  | { type: 'products'; header: string; body: string; footer: string; sections: Array<{ title: string; retailerIds: string[] }> }
+  | { type: 'catalog'; body: string; footer: string; thumbnailRetailerId: string | null }
+  | { type: 'form'; formId: string; header: string; body: string; cta: string };
 
 export type FlowEffect =
   | { kind: 'stepEntered'; stepId: string }
@@ -43,6 +47,8 @@ export type FlowEffect =
   /** A delayed timer carrying the current wait token. */
   | { kind: 'schedule'; stepId: string; purpose: 'delay' | 'timeout'; delayMs: number }
   | { kind: 'callApi'; stepId: string }
+  /** Feature 008: ask for a payment; the amount is resolved to the Stripe currency by the payments service. */
+  | { kind: 'requestPayment'; stepId: string; amount: { minor: number } | { major: number } | null; description: string; expiryMinutes: number; chatOrderId?: string | null }
   | { kind: 'jump'; stepId: string; flowId: string }
   /** Start the agent's AI conversation in the chat (started by the flow, 004 FR-033). */
   | { kind: 'handToAi'; stepId: string; agentId: string }

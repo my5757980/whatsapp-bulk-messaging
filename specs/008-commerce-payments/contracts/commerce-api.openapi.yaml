@@ -1,0 +1,895 @@
+openapi: 3.1.0
+info:
+  title: WhatsApp Platform - Commerce and Payments API
+  version: 0.1.0
+  description: >
+    The Stripe connection, payment settings and requests, the payments page, the Meta catalog and
+    product messages, chat orders and WhatsApp Forms for the Next.js dashboard (feature
+    008-commerce-payments). Same conventions as 001–007: httpOnly session cookie, an X-CSRF-Token
+    header on every mutating request, an x-permission on every operation, and the error shape
+    {code, message, details, requestId}. Permissions:
+      integrations.manage  ADMIN                 - Stripe and catalog connections, catalog fill, commerce settings
+      payments.manage      ADMIN                 - payment settings (new)
+      payments.view        ADMIN, MANAGER        - all payment requests, totals (new)
+      forms.manage         ADMIN, MANAGER        - building and publishing forms, answers (new)
+      inbox.view           ADMIN, MANAGER, AGENT - products, chat orders and published forms for chats
+      inbox.reply          ADMIN, MANAGER, AGENT - requesting payments (also limited by
+                                                   settings.requestRoles), sending products and forms
+      contacts.view        ADMIN, MANAGER, AGENT - a contact's payment history
+      data.export          ADMIN, MANAGER        - CSV exports (phones masked without phones.full)
+
+    Public routes (x-permission: public, skipped by the RBAC test): GET /l/p/{code} is served
+    outside /api (servers override); POST /payments/stripe/webhook takes no session and is
+    authenticated by the Stripe-Signature header (research R3).
+    Money is integer minor units of the Stripe connection currency (lower-case ISO code), never
+    converted. Agents see payment requests through chat items and contact history, not the list.
+servers:
+  - url: /api
+security:
+  - sessionCookie: []
+tags:
+  - name: payments-gateway
+  - name: payments-settings
+  - name: payment-requests
+  - name: payments-reports
+  - name: catalog
+  - name: chat-orders
+  - name: forms
+  - name: public
+paths:
+  /payments/gateway:
+    get:
+      tags: [payments-gateway]
+      summary: The Stripe connection with its last checks (null when not connected)
+      x-permission: payments.view
+      responses:
+        '200': { description: Connection, content: { application/json: { schema: { type: object, required: [gateway], properties: { gateway: { oneOf: [{ $ref: '#/components/schemas/PaymentGateway' }, { type: 'null' }] } } } } } }
+    put:
+      tags: [payments-gateway]
+      summary: Save or replace the Stripe keys and run the checks (FR-001 - FR-003, R4)
+      description: >
+        A key Stripe rejects is not saved (KEY_INVALID). Other failed checks save the connection
+        with status ERROR so the admin can fix them in Stripe and run the checks again.
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [secretKey, registerEndpoint]
+              properties:
+                secretKey: { type: string, pattern: '^(rk|sk)_(live|test)_[A-Za-z0-9]{10,}$', writeOnly: true }
+                registerEndpoint: { type: boolean, description: 'true: the platform creates the webhook endpoint (needs Webhook Endpoints write)' }
+                webhookSecret: { type: string, pattern: '^whsec_[A-Za-z0-9]{10,}$', writeOnly: true, description: Required when registerEndpoint is false }
+      responses:
+        '200': { description: Saved (status CONNECTED or ERROR), content: { application/json: { schema: { $ref: '#/components/schemas/PaymentGateway' } } } }
+        '422': { description: KEY_INVALID or VALIDATION_FAILED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      tags: [payments-gateway]
+      summary: Disconnect; deletes the endpoint we registered; pay links show "paused" for new sessions
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Disconnected }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /payments/gateway/recheck:
+    post:
+      tags: [payments-gateway]
+      summary: Run the connection checks again
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: Checked, content: { application/json: { schema: { $ref: '#/components/schemas/PaymentGateway' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /payments/gateway/notification-check:
+    post:
+      tags: [payments-gateway]
+      summary: Start the notification check (a check session made and expired at once; US1 scenario 3)
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '202': { description: Started; poll GET /payments/gateway for notificationCheck, content: { application/json: { schema: { $ref: '#/components/schemas/PaymentGateway' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '502': { description: GATEWAY_UNAVAILABLE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /payments/settings:
+    get:
+      tags: [payments-settings]
+      summary: Payment settings
+      x-permission: payments.view
+      responses:
+        '200': { description: Settings, content: { application/json: { schema: { $ref: '#/components/schemas/PaymentSettings' } } } }
+    put:
+      tags: [payments-settings]
+      summary: Change limits, roles, texts, the payment template, reminders and the chat order mode (FR-008, FR-017, FR-027)
+      x-permission: payments.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PaymentSettingsInput' } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/PaymentSettings' } } } }
+        '422': { description: VALIDATION_FAILED or TEMPLATE_NOT_PAY_LINK (the template has no pay link URL button), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /inbox/conversations/{id}/payment-requests:
+    post:
+      tags: [payment-requests]
+      summary: Request a payment in a chat (US2); a cta_url message in the window, the payment template outside it
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amountMinor, description]
+              properties:
+                amountMinor: { type: integer, minimum: 1 }
+                description: { type: string, minLength: 1, maxLength: 250 }
+                reference: { type: string, maxLength: 80 }
+                expiresInMinutes: { type: integer, minimum: 30, maximum: 43200 }
+                tagId: { type: string, format: uuid }
+                flowId: { type: string, format: uuid }
+      responses:
+        '201': { description: Made and sent, content: { application/json: { schema: { $ref: '#/components/schemas/PaymentRequest' } } } }
+        '403': { description: ROLE_NOT_ALLOWED (settings.requestRoles) or not allowed to reply in this chat, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'GATEWAY_NOT_READY, or WINDOW_CLOSED_NO_TEMPLATE (window closed and no payment template set)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: 'VALIDATION_FAILED, AMOUNT_TOO_SMALL, AMOUNT_TOO_LARGE, or GATEWAY_REFUSED (Stripe refused the session)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '502': { description: GATEWAY_UNAVAILABLE (nothing was sent; US2 scenario 6), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /payments/requests:
+    get:
+      tags: [payment-requests]
+      summary: All payment requests with filters (FR-019)
+      x-permission: payments.view
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/PaymentStatus' } }
+        - { name: source, in: query, schema: { $ref: '#/components/schemas/PaymentSource' } }
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+        - { name: createdById, in: query, schema: { type: string, format: uuid } }
+        - { name: contactId, in: query, schema: { type: string, format: uuid } }
+        - { name: campaignId, in: query, schema: { type: string, format: uuid } }
+        - { name: reference, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: includeTest, in: query, schema: { type: boolean, default: false } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200': { description: Page, content: { application/json: { schema: { type: object, required: [items, total], properties: { items: { type: array, items: { $ref: '#/components/schemas/PaymentRequest' } }, total: { type: integer } } } } } }
+  /payments/requests/{id}:
+    get:
+      tags: [payment-requests]
+      summary: One request with its event history
+      x-permission: payments.view
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Request, content: { application/json: { schema: { $ref: '#/components/schemas/PaymentRequestDetail' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /payments/requests/{id}/cancel:
+    post:
+      tags: [payment-requests]
+      summary: Cancel a waiting request; its open Stripe session is expired (FR-014)
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Cancelled, content: { application/json: { schema: { $ref: '#/components/schemas/PaymentRequest' } } } }
+        '403': { description: 'Not the maker, not allowed in the chat, and no payments.manage', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_WAITING, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /payments/requests/{id}/resend:
+    post:
+      tags: [payment-requests]
+      summary: Send a waiting request again after a delivery failure (same request and link)
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Sent, content: { application/json: { schema: { $ref: '#/components/schemas/PaymentRequest' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_WAITING or WINDOW_CLOSED_NO_TEMPLATE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /payments/requests/{id}/test-result:
+    post:
+      tags: [payment-requests]
+      summary: Drive a flow test session's payment step (test requests only; R13)
+      x-permission: flows.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [result], properties: { result: { type: string, enum: [paid, notPaid] } } } } }
+      responses:
+        '200': { description: Applied, content: { application/json: { schema: { $ref: '#/components/schemas/PaymentRequest' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_TEST or NOT_WAITING, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /payments/summary:
+    get:
+      tags: [payments-reports]
+      summary: Totals by status, day and source for a period; test requests excluded (FR-019)
+      x-permission: payments.view
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: source, in: query, schema: { $ref: '#/components/schemas/PaymentSource' } }
+        - { name: createdById, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Totals, content: { application/json: { schema: { $ref: '#/components/schemas/PaymentsSummary' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /payments/export.csv:
+    get:
+      tags: [payments-reports]
+      summary: Export requests with their chat orders (audited payments.exported; FR-020)
+      x-permission: data.export
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, format: date } }
+        - { name: to, in: query, required: true, schema: { type: string, format: date } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/PaymentStatus' } }
+        - { name: source, in: query, schema: { $ref: '#/components/schemas/PaymentSource' } }
+      responses:
+        '200': { description: CSV, content: { text/csv: { schema: { type: string } } } }
+  /contacts/{id}/payments:
+    get:
+      tags: [payment-requests]
+      summary: A contact's payment history, newest first (FR-016)
+      x-permission: contacts.view
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200':
+          description: History
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [requests, chatOrders]
+                properties:
+                  requests: { type: array, items: { $ref: '#/components/schemas/PaymentRequest' } }
+                  chatOrders: { type: array, items: { $ref: '#/components/schemas/ChatOrder' } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /payments/stripe/webhook:
+    post:
+      tags: [public]
+      summary: Stripe notifications, verified by Stripe-Signature over the raw body (R3)
+      x-permission: public
+      security: []
+      parameters:
+        - { name: Stripe-Signature, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object } } }
+      responses:
+        '200': { description: Stored (or a duplicate), content: { application/json: { schema: { type: object, required: [received], properties: { received: { type: boolean } } } } } }
+        '400': { description: 'SIGNATURE_INVALID (recorded, nothing changes)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /l/p/{code}:
+    servers: [{ url: / }]
+    get:
+      tags: [public]
+      summary: The pay link; redirects to the open Stripe Checkout Session or shows the request's state (R2)
+      x-permission: public
+      security: []
+      parameters:
+        - { name: code, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9]{6,16}$' } }
+        - { name: paid, in: query, schema: { type: string, enum: ['1'] }, description: Stripe's success_url return }
+      responses:
+        '302': { description: To the Stripe hosted page }
+        '200': { description: 'HTML page: paid, expired, cancelled, paused, or the return page', content: { text/html: { schema: { type: string } } } }
+        '404': { description: Unknown code (HTML), content: { text/html: { schema: { type: string } } } }
+        '429': { description: Too many opens from one address (005 link rate limiter) }
+  /catalog/connection:
+    get:
+      tags: [catalog]
+      summary: The catalog connection, catalogs found per WhatsApp account, and per-number commerce state (R8)
+      x-permission: integrations.manage
+      responses:
+        '200':
+          description: State
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [connection, found, numbers]
+                properties:
+                  connection: { oneOf: [{ $ref: '#/components/schemas/CatalogConnection' }, { type: 'null' }] }
+                  found:
+                    type: array
+                    items: { type: object, required: [wabaId, catalogs], properties: { wabaId: { type: string }, catalogs: { type: array, items: { type: object, required: [id, name], properties: { id: { type: string }, name: { type: string } } } } } }
+                  numbers:
+                    type: array
+                    items: { $ref: '#/components/schemas/CommerceNumber' }
+    post:
+      tags: [catalog]
+      summary: Connect a catalog and start the first product copy (FR-021)
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [catalogId], properties: { catalogId: { type: string, pattern: '^[0-9]{5,30}$' } } } } }
+      responses:
+        '201': { description: Connected, content: { application/json: { schema: { $ref: '#/components/schemas/CatalogConnection' } } } }
+        '409': { description: ALREADY_CONNECTED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: CATALOG_NOT_FOUND (not connected to any of our WhatsApp accounts) or META_REFUSED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      tags: [catalog]
+      summary: Disconnect; product sending stops, the copy is kept 90 days
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Disconnected }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /catalog/sync:
+    post:
+      tags: [catalog]
+      summary: Copy the products now
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '202': { description: Queued }
+        '409': { description: CATALOG_NOT_CONNECTED or SYNC_RUNNING, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /catalog/numbers/{id}/commerce-settings:
+    put:
+      tags: [catalog]
+      summary: Turn the cart and the catalog button on or off for a number
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [cartEnabled, catalogVisible], properties: { cartEnabled: { type: boolean }, catalogVisible: { type: boolean } } } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/CommerceNumber' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { description: META_REFUSED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /catalog/fill:
+    put:
+      tags: [catalog]
+      summary: Fill the catalog from a 006 store, hourly (FR-022, R9)
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [enabled], properties: { enabled: { type: boolean }, storeId: { type: [string, 'null'], format: uuid } } } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/CatalogConnection' } } } }
+        '409': { description: CATALOG_NOT_CONNECTED or STORE_NOT_CONNECTED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /catalog/fill/run:
+    post:
+      tags: [catalog]
+      summary: Fill now
+      x-permission: integrations.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '202': { description: Queued }
+        '409': { description: FILL_NOT_ENABLED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /catalog/products:
+    get:
+      tags: [catalog]
+      summary: Search the product copy (SC-006)
+      x-permission: inbox.view
+      parameters:
+        - { name: search, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: sendable, in: query, schema: { type: boolean } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200': { description: Page, content: { application/json: { schema: { type: object, required: [items, total], properties: { items: { type: array, items: { $ref: '#/components/schemas/CatalogProduct' } }, total: { type: integer } } } } } }
+        '409': { description: CATALOG_NOT_CONNECTED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /inbox/conversations/{id}/products:
+    post:
+      tags: [catalog]
+      summary: Send one product, a product list or the catalog in the 24-hour window (FR-023)
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ProductMessageInput' } } }
+      responses:
+        '201': { description: Queued, content: { application/json: { schema: { type: object, required: [chatItemId], properties: { chatItemId: { type: string, format: uuid } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'WINDOW_CLOSED, CATALOG_NOT_CONNECTED or NUMBER_NO_CATALOG', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: VALIDATION_FAILED or PRODUCT_NOT_SENDABLE (details name the products), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /chat-orders:
+    get:
+      tags: [chat-orders]
+      summary: Chat orders (agents see those of chats they can see)
+      x-permission: inbox.view
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ChatOrderStatus' } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200': { description: Page, content: { application/json: { schema: { type: object, required: [items, total], properties: { items: { type: array, items: { $ref: '#/components/schemas/ChatOrder' } }, total: { type: integer } } } } } }
+  /chat-orders/{id}:
+    get:
+      tags: [chat-orders]
+      summary: One chat order
+      x-permission: inbox.view
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Order, content: { application/json: { schema: { $ref: '#/components/schemas/ChatOrder' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [chat-orders]
+      summary: Change quantities or remove items before the link is sent (review mode; FR-027)
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items: { type: array, minItems: 1, maxItems: 30, items: { type: object, required: [retailerId, quantity], properties: { retailerId: { type: string }, quantity: { type: integer, minimum: 1, maximum: 999 } } } }
+      responses:
+        '200': { description: Changed, content: { application/json: { schema: { $ref: '#/components/schemas/ChatOrder' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NOT_EDITABLE (link already sent), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /chat-orders/{id}/send-link:
+    post:
+      tags: [chat-orders]
+      summary: Make and send the payment link for the order total
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        content: { application/json: { schema: { type: object, properties: { expiresInMinutes: { type: integer, minimum: 30, maximum: 43200 } } } } }
+      responses:
+        '201': { description: Sent, content: { application/json: { schema: { $ref: '#/components/schemas/ChatOrder' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'NOT_EDITABLE, GATEWAY_NOT_READY or WINDOW_CLOSED_NO_TEMPLATE', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: 'CURRENCY_MISMATCH, AMOUNT_TOO_SMALL or AMOUNT_TOO_LARGE', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '502': { description: GATEWAY_UNAVAILABLE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /chat-orders/{id}/cancel:
+    post:
+      tags: [chat-orders]
+      summary: Cancel the order (and its waiting request)
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Cancelled, content: { application/json: { schema: { $ref: '#/components/schemas/ChatOrder' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'NOT_CANCELLABLE (paid, expired or cancelled)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /forms:
+    get:
+      tags: [forms]
+      summary: Forms (agents see published ones)
+      x-permission: inbox.view
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] } }
+      responses:
+        '200': { description: Forms, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/FormSummary' } } } } } } }
+    post:
+      tags: [forms]
+      summary: Start a form
+      x-permission: forms.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [name, category], properties: { name: { type: string, minLength: 1, maxLength: 80 }, category: { $ref: '#/components/schemas/FormCategory' } } } } }
+      responses:
+        '201': { description: Made, content: { application/json: { schema: { $ref: '#/components/schemas/Form' } } } }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /forms/{id}:
+    get:
+      tags: [forms]
+      summary: One form with its draft and versions
+      x-permission: inbox.view
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Form, content: { application/json: { schema: { $ref: '#/components/schemas/Form' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [forms]
+      summary: Save the draft (screens, fields, mapping, tags)
+      x-permission: forms.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, category, draft, mapping, tagIds]
+              properties:
+                name: { type: string, minLength: 1, maxLength: 80 }
+                category: { $ref: '#/components/schemas/FormCategory' }
+                draft: { $ref: '#/components/schemas/FormModel' }
+                mapping: { type: array, maxItems: 50, items: { type: object, required: [fieldKey, attributeKey], properties: { fieldKey: { type: string }, attributeKey: { type: string } } } }
+                tagIds: { type: array, maxItems: 20, items: { type: string, format: uuid } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/Form' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: ARCHIVED or NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [forms]
+      summary: Delete a form that was never published
+      x-permission: forms.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: PUBLISHED_USE_ARCHIVE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /forms/{id}/check:
+    post:
+      tags: [forms]
+      summary: Check the draft without publishing (FR-031)
+      x-permission: forms.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Problems (empty when ready), content: { application/json: { schema: { type: object, required: [problems], properties: { problems: { type: array, items: { $ref: '#/components/schemas/FormProblem' } } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /forms/{id}/publish:
+    post:
+      tags: [forms]
+      summary: Publish the draft as a new version to each WhatsApp account (FR-031, FR-032)
+      x-permission: forms.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '201': { description: Published, content: { application/json: { schema: { $ref: '#/components/schemas/FormVersion' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: ARCHIVED or NO_CHANGES, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: FORM_PROBLEMS (ours) or META_REFUSED (Meta's validation errors mapped to screens and fields in details), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /forms/{id}/archive:
+    post:
+      tags: [forms]
+      summary: Archive; its Meta flows are deprecated and it can no longer be sent
+      x-permission: forms.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Archived, content: { application/json: { schema: { $ref: '#/components/schemas/Form' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: IN_USE (a published flow or a running campaign uses it), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /forms/{id}/answers:
+    get:
+      tags: [forms]
+      summary: The form's answers, newest first (FR-034)
+      x-permission: forms.manage
+      parameters:
+        - { $ref: '#/components/parameters/Id' }
+        - { name: versionId, in: query, schema: { type: string, format: uuid } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200': { description: Page, content: { application/json: { schema: { type: object, required: [items, total], properties: { items: { type: array, items: { $ref: '#/components/schemas/FormAnswer' } }, total: { type: integer } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /forms/{id}/answers/export.csv:
+    get:
+      tags: [forms]
+      summary: Export answers (audited form_answers.exported)
+      x-permission: data.export
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: CSV, content: { text/csv: { schema: { type: string } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /inbox/conversations/{id}/forms:
+    post:
+      tags: [forms]
+      summary: Send a published form in the 24-hour window (FR-033)
+      x-permission: inbox.reply
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [formId, body, cta]
+              properties:
+                formId: { type: string, format: uuid }
+                header: { type: string, maxLength: 60 }
+                body: { type: string, minLength: 1, maxLength: 1024 }
+                cta: { type: string, minLength: 1, maxLength: 30 }
+      responses:
+        '201': { description: Queued, content: { application/json: { schema: { type: object, required: [chatItemId], properties: { chatItemId: { type: string, format: uuid } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'WINDOW_CLOSED, FORM_NOT_PUBLISHED or NUMBER_NO_FORM (not published to this number''s account)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: sid }
+    csrfHeader: { type: apiKey, in: header, name: X-CSRF-Token }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+  responses:
+    NotFound:
+      description: Not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationFailed:
+      description: VALIDATION_FAILED, with field details
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [VALIDATION_FAILED, KEY_INVALID, GATEWAY_NOT_READY, GATEWAY_UNAVAILABLE, GATEWAY_REFUSED, ROLE_NOT_ALLOWED, WINDOW_CLOSED, WINDOW_CLOSED_NO_TEMPLATE, AMOUNT_TOO_SMALL, AMOUNT_TOO_LARGE, CURRENCY_MISMATCH, NOT_WAITING, NOT_TEST, TEMPLATE_NOT_PAY_LINK, SIGNATURE_INVALID, CATALOG_NOT_CONNECTED, CATALOG_NOT_FOUND, NUMBER_NO_CATALOG, PRODUCT_NOT_SENDABLE, SYNC_RUNNING, FILL_NOT_ENABLED, STORE_NOT_CONNECTED, NOT_EDITABLE, NOT_CANCELLABLE, FORM_PROBLEMS, FORM_NOT_PUBLISHED, NUMBER_NO_FORM, META_REFUSED, NAME_TAKEN, ARCHIVED, NO_CHANGES, IN_USE, PUBLISHED_USE_ARCHIVE] }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: object, properties: { field: { type: string }, issue: { type: string } } }
+        requestId: { type: string }
+    Check:
+      type: object
+      required: [check, result, detail]
+      properties:
+        check: { type: string, enum: [KEY_FORMAT, KEY_KIND, ACCOUNT_READ, ACCOUNT_COUNTRY, ACCOUNT_CURRENCY, CHARGES_ENABLED, CHECKOUT_ACCESS, WEBHOOK_ENDPOINT] }
+        result: { type: string, enum: [PASSED, FAILED, WARNING] }
+        detail: { type: string }
+        fix: { type: string }
+    PaymentGateway:
+      type: object
+      required: [provider, mode, currency, status, checks, notificationCheck, keyKind]
+      properties:
+        provider: { type: string, enum: [STRIPE] }
+        mode: { type: string, enum: [LIVE, TEST] }
+        accountId: { type: [string, 'null'] }
+        accountName: { type: [string, 'null'] }
+        country: { type: [string, 'null'] }
+        currency: { type: string, examples: [aed] }
+        keyKind: { type: string, enum: [restricted, secret] }
+        endpointRegistered: { type: boolean }
+        status: { type: string, enum: [CONNECTED, ERROR] }
+        checks: { type: array, items: { $ref: '#/components/schemas/Check' } }
+        notificationCheck: { type: object, required: [status], properties: { status: { type: string, enum: [NOT_RUN, PENDING, PASSED, FAILED] }, startedAt: { type: [string, 'null'], format: date-time }, passedAt: { type: [string, 'null'], format: date-time }, fix: { type: [string, 'null'] } } }
+        webhookUrl: { type: string, format: uri, description: The address to register in Stripe when not registered automatically }
+        lastCheckedAt: { type: [string, 'null'], format: date-time }
+        lastEventAt: { type: [string, 'null'], format: date-time }
+    Reminder:
+      type: object
+      required: [beforeMinutes, templateId]
+      properties:
+        beforeMinutes: { type: integer, minimum: 15, maximum: 43170 }
+        templateId: { type: string, format: uuid }
+        mapping: { type: object, description: 001 variable mapping with the payment source }
+    PaymentSettingsInput:
+      type: object
+      required: [maxAmountMinor, defaultExpiryMinutes, requestRoles, sessionText, buttonText, reminders, chatOrderMode, chatOrderExpiryMinutes]
+      properties:
+        maxAmountMinor: { type: integer, minimum: 200 }
+        defaultExpiryMinutes: { type: integer, minimum: 30, maximum: 43200 }
+        requestRoles: { type: array, minItems: 1, items: { type: string, enum: [ADMIN, MANAGER, AGENT] } }
+        sessionText: { type: string, minLength: 1, maxLength: 1024 }
+        buttonText: { type: string, minLength: 1, maxLength: 20 }
+        templateId: { type: [string, 'null'], format: uuid }
+        templateMapping: { type: object }
+        reminders: { type: array, maxItems: 2, items: { $ref: '#/components/schemas/Reminder' } }
+        chatOrderMode: { type: string, enum: [AUTO, REVIEW] }
+        chatOrderExpiryMinutes: { type: integer, minimum: 30, maximum: 43200 }
+        chatOrderTagId: { type: [string, 'null'], format: uuid }
+    PaymentSettings:
+      allOf:
+        - { $ref: '#/components/schemas/PaymentSettingsInput' }
+        - type: object
+          properties:
+            templateName: { type: [string, 'null'] }
+            updatedAt: { type: string, format: date-time }
+    PaymentStatus: { type: string, enum: [WAITING, PAID, EXPIRED, CANCELLED, REFUNDED] }
+    PaymentSource: { type: string, enum: [INBOX, FLOW, CAMPAIGN, API, STORE_ORDER, CHAT_ORDER] }
+    PaymentDisplay: { type: string, enum: [WAITING, FAILED_ATTEMPT, PAID, PAID_LATE, PARTLY_REFUNDED, REFUNDED, EXPIRED, CANCELLED, NOT_DELIVERED] }
+    PaymentRequest:
+      type: object
+      required: [id, amountMinor, currency, description, status, display, source, expiresAt, isTest, createdAt, payUrl]
+      properties:
+        id: { type: string, format: uuid }
+        contactId: { type: [string, 'null'], format: uuid }
+        conversationId: { type: [string, 'null'], format: uuid }
+        contactName: { type: [string, 'null'] }
+        phone: { type: [string, 'null'], description: Masked without phones.full }
+        amountMinor: { type: integer }
+        currency: { type: string }
+        description: { type: string }
+        reference: { type: [string, 'null'] }
+        status: { $ref: '#/components/schemas/PaymentStatus' }
+        display: { $ref: '#/components/schemas/PaymentDisplay' }
+        source: { $ref: '#/components/schemas/PaymentSource' }
+        createdBy: { type: [object, 'null'], properties: { id: { type: string, format: uuid }, name: { type: string } } }
+        expiresAt: { type: string, format: date-time }
+        paidAt: { type: [string, 'null'], format: date-time }
+        paidLate: { type: boolean }
+        failedAttempts: { type: integer }
+        lastFailureCode: { type: [string, 'null'] }
+        refundedMinor: { type: integer }
+        cancelledAt: { type: [string, 'null'], format: date-time }
+        remindersSent: { type: integer }
+        opens: { type: integer }
+        isTest: { type: boolean }
+        payUrl: { type: string, format: uri, description: 'Our link, ${PUBLIC_LINK_BASE_URL}/p/{code}' }
+        campaignId: { type: [string, 'null'], format: uuid }
+        chatOrderId: { type: [string, 'null'], format: uuid }
+        storeOrderId: { type: [string, 'null'], format: uuid }
+        createdAt: { type: string, format: date-time }
+    PaymentRequestDetail:
+      allOf:
+        - { $ref: '#/components/schemas/PaymentRequest' }
+        - type: object
+          required: [events]
+          properties:
+            delivery: { type: [string, 'null'], description: The carrying message's status }
+            events:
+              type: array
+              items: { type: object, required: [type, result, receivedAt], properties: { type: { type: string }, result: { type: string }, source: { type: string }, receivedAt: { type: string, format: date-time } } }
+    PaymentsSummary:
+      type: object
+      required: [currency, totals, days, sources]
+      properties:
+        currency: { type: string }
+        totals: { $ref: '#/components/schemas/Totals' }
+        days: { type: array, items: { allOf: [{ $ref: '#/components/schemas/Totals' }, { type: object, required: [day], properties: { day: { type: string, format: date } } }] } }
+        sources: { type: array, items: { allOf: [{ $ref: '#/components/schemas/Totals' }, { type: object, required: [source], properties: { source: { $ref: '#/components/schemas/PaymentSource' } } }] } }
+    Totals:
+      type: object
+      required: [requestedMinor, requestedCount, paidMinor, paidCount, waitingMinor, waitingCount, expiredMinor, expiredCount, refundedMinor, refundedCount]
+      properties:
+        requestedMinor: { type: integer }
+        requestedCount: { type: integer }
+        paidMinor: { type: integer }
+        paidCount: { type: integer }
+        waitingMinor: { type: integer }
+        waitingCount: { type: integer }
+        expiredMinor: { type: integer }
+        expiredCount: { type: integer }
+        refundedMinor: { type: integer }
+        refundedCount: { type: integer }
+    CatalogConnection:
+      type: object
+      required: [catalogId, name, syncStatus, productCount, fillEnabled]
+      properties:
+        catalogId: { type: string }
+        name: { type: string }
+        syncStatus: { type: string, enum: [IDLE, RUNNING, FAILED] }
+        lastSyncedAt: { type: [string, 'null'], format: date-time }
+        lastSyncError: { type: [string, 'null'] }
+        productCount: { type: integer }
+        fillEnabled: { type: boolean }
+        fillStoreId: { type: [string, 'null'], format: uuid }
+        lastFilledAt: { type: [string, 'null'], format: date-time }
+        fillErrors: { type: array, items: { type: object, properties: { retailerId: { type: string }, message: { type: string } } } }
+    CommerceNumber:
+      type: object
+      required: [numberId, phone, wabaId, catalogConnected]
+      properties:
+        numberId: { type: string, format: uuid }
+        phone: { type: string }
+        wabaId: { type: string }
+        catalogConnected: { type: boolean }
+        cartEnabled: { type: [boolean, 'null'] }
+        catalogVisible: { type: [boolean, 'null'] }
+    CatalogProduct:
+      type: object
+      required: [retailerId, name, availability, sendable]
+      properties:
+        retailerId: { type: string }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        priceMinor: { type: [integer, 'null'] }
+        salePriceMinor: { type: [integer, 'null'] }
+        currency: { type: [string, 'null'] }
+        imageUrl: { type: [string, 'null'] }
+        availability: { type: string }
+        sendable: { type: boolean }
+        notSendableReason: { type: [string, 'null'], enum: [OUT_OF_STOCK, REMOVED, REJECTED, HIDDEN, null] }
+    ProductMessageInput:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [product, list, catalog] }
+        retailerId: { type: string, description: kind product }
+        header: { type: string, maxLength: 60, description: Required for kind list }
+        body: { type: string, maxLength: 1024, description: Required for list and catalog }
+        footer: { type: string, maxLength: 60 }
+        sections:
+          type: array
+          minItems: 1
+          maxItems: 10
+          description: kind list; at most 30 products in total
+          items: { type: object, required: [retailerIds], properties: { title: { type: string, maxLength: 24 }, retailerIds: { type: array, minItems: 1, maxItems: 30, items: { type: string } } } }
+        thumbnailRetailerId: { type: string, description: kind catalog }
+    ChatOrderStatus: { type: string, enum: [RECEIVED, LINK_SENT, PAID, EXPIRED, CANCELLED, REFUNDED] }
+    ChatOrder:
+      type: object
+      required: [id, items, currency, totalMinor, warnings, mode, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        contactId: { type: [string, 'null'], format: uuid }
+        conversationId: { type: [string, 'null'], format: uuid }
+        customerText: { type: [string, 'null'] }
+        items: { type: array, items: { type: object, required: [retailerId, quantity, itemPriceMinor, currency], properties: { retailerId: { type: string }, name: { type: [string, 'null'] }, quantity: { type: integer }, itemPriceMinor: { type: integer }, currency: { type: string } } } }
+        currency: { type: string }
+        totalMinor: { type: integer }
+        warnings: { type: array, items: { type: object, required: [kind], properties: { kind: { type: string, enum: [NOT_IN_CATALOG, CURRENCY, MIXED_CURRENCY, PRICE_CHANGED] }, retailerId: { type: string }, detail: { type: string } } } }
+        mode: { type: string, enum: [AUTO, REVIEW, FLOW] }
+        status: { $ref: '#/components/schemas/ChatOrderStatus' }
+        paymentRequestId: { type: [string, 'null'], format: uuid }
+        createdAt: { type: string, format: date-time }
+    FormCategory: { type: string, enum: [SIGN_UP, APPOINTMENT_BOOKING, LEAD_GENERATION, CONTACT_US, CUSTOMER_SUPPORT, SURVEY, OTHER] }
+    FormField:
+      type: object
+      required: [key, type, label, required]
+      properties:
+        key: { type: string, pattern: '^[a-z][a-z0-9_]{0,39}$' }
+        type: { type: string, enum: [shortText, longText, email, phone, number, singleChoice, multipleChoice, dropdown, date, optIn] }
+        label: { type: string, minLength: 1, description: Limits per type in FORM_LIMITS (verify) }
+        helper: { type: string }
+        required: { type: boolean }
+        options: { type: array, maxItems: 200, items: { type: object, required: [id, title], properties: { id: { type: string, pattern: '^[a-z0-9_]{1,30}$' }, title: { type: string } } } }
+    FormModel:
+      type: object
+      required: [screens]
+      properties:
+        screens:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            type: object
+            required: [title, fields, button]
+            properties:
+              title: { type: string, minLength: 1 }
+              heading: { type: string }
+              text: { type: string }
+              fields: { type: array, maxItems: 10, items: { $ref: '#/components/schemas/FormField' } }
+              button: { type: string, minLength: 1, description: Footer label (Continue / Submit) }
+    FormProblem:
+      type: object
+      required: [message]
+      properties:
+        screen: { type: [integer, 'null'] }
+        fieldKey: { type: [string, 'null'] }
+        message: { type: string }
+    FormVersion:
+      type: object
+      required: [id, number, status, publishedAt]
+      properties:
+        id: { type: string, format: uuid }
+        number: { type: integer }
+        status: { type: string, enum: [PUBLISHED, FAILED, DEPRECATED] }
+        accounts: { type: array, items: { type: object, properties: { wabaId: { type: string }, status: { type: string } } } }
+        publishedAt: { type: string, format: date-time }
+    FormSummary:
+      type: object
+      required: [id, name, category, status, changedSincePublish, answers]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        category: { $ref: '#/components/schemas/FormCategory' }
+        status: { type: string, enum: [DRAFT, PUBLISHED, ARCHIVED] }
+        changedSincePublish: { type: boolean }
+        currentVersion: { type: [integer, 'null'] }
+        answers: { type: integer }
+    Form:
+      allOf:
+        - { $ref: '#/components/schemas/FormSummary' }
+        - type: object
+          required: [draft, mapping, tagIds, versions]
+          properties:
+            draft: { $ref: '#/components/schemas/FormModel' }
+            mapping: { type: array, items: { type: object, properties: { fieldKey: { type: string }, attributeKey: { type: string } } } }
+            tagIds: { type: array, items: { type: string, format: uuid } }
+            versions: { type: array, items: { $ref: '#/components/schemas/FormVersion' } }
+    FormAnswer:
+      type: object
+      required: [id, versionNumber, answers, problems, submittedAt]
+      properties:
+        id: { type: string, format: uuid }
+        versionNumber: { type: integer }
+        contactId: { type: [string, 'null'], format: uuid }
+        contactName: { type: [string, 'null'] }
+        phone: { type: [string, 'null'], description: Masked without phones.full }
+        source: { type: string, enum: [INBOX, FLOW, TEMPLATE, CAMPAIGN] }
+        answers: { type: object }
+        problems: { type: array, items: { type: object, properties: { fieldKey: { type: string }, reason: { type: string } } } }
+        submittedAt: { type: string, format: date-time }

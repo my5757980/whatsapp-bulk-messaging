@@ -120,6 +120,20 @@ export const AUDIT_ACTIONS = [
   'ad_audience.deleted',
   'ad_lead_form.created',
   'ad_leads.exported',
+  // Feature 008 commerce and payments (research R14)
+  'payments.gateway_connected',
+  'payments.gateway_keys_replaced',
+  'payments.gateway_disconnected',
+  'payments.settings_changed',
+  'payment_request.cancelled',
+  'catalog.connected',
+  'catalog.disconnected',
+  'catalog.fill_changed',
+  'catalog.commerce_settings_changed',
+  'form.published',
+  'form.archived',
+  'payments.exported',
+  'form_answers.exported',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

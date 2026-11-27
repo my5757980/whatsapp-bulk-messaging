@@ -25,6 +25,16 @@ export const EVENT_TYPES = [
   // Feature 007 ads
   'ad.chat_started',
   'ad.lead_received',
+  // Feature 008 commerce and payments (research R14); never with keys or card details
+  'payment.requested',
+  'payment.paid',
+  'payment.failed',
+  'payment.expired',
+  'payment.refunded',
+  'payment.cancelled',
+  'chat_order.received',
+  'chat_order.paid',
+  'form.submitted',
   'test.ping',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -32,7 +42,7 @@ export type EventType = (typeof EVENT_TYPES)[number];
 /** Types an endpoint can choose (the test ping is sent on request only). */
 export const SUBSCRIBABLE_EVENT_TYPES = EVENT_TYPES.filter((t) => t !== 'test.ping') as Exclude<EventType, 'test.ping'>[];
 
-export type EventGroup = 'messages' | 'contacts' | 'links' | 'drips' | 'live_chat' | 'api_campaigns' | 'stores' | 'ads' | 'test';
+export type EventGroup = 'messages' | 'contacts' | 'links' | 'drips' | 'live_chat' | 'api_campaigns' | 'stores' | 'ads' | 'payments' | 'commerce' | 'forms' | 'test';
 
 export const EVENT_GROUPS: Record<EventType, EventGroup> = {
   'message.status': 'messages',
@@ -55,6 +65,15 @@ export const EVENT_GROUPS: Record<EventType, EventGroup> = {
   'store.cart_recovered': 'stores',
   'ad.chat_started': 'ads',
   'ad.lead_received': 'ads',
+  'payment.requested': 'payments',
+  'payment.paid': 'payments',
+  'payment.failed': 'payments',
+  'payment.expired': 'payments',
+  'payment.refunded': 'payments',
+  'payment.cancelled': 'payments',
+  'chat_order.received': 'commerce',
+  'chat_order.paid': 'commerce',
+  'form.submitted': 'forms',
   'test.ping': 'test',
 };
 
@@ -79,6 +98,15 @@ export const EVENT_LABELS: Record<EventType, string> = {
   'store.cart_recovered': 'Cart recovered',
   'ad.chat_started': 'Chat started from an ad',
   'ad.lead_received': 'Lead received from a lead form',
+  'payment.requested': 'Payment requested',
+  'payment.paid': 'Payment received',
+  'payment.failed': 'Payment attempt failed',
+  'payment.expired': 'Payment request expired',
+  'payment.refunded': 'Payment refunded',
+  'payment.cancelled': 'Payment request cancelled',
+  'chat_order.received': 'Order received in chat',
+  'chat_order.paid': 'Chat order paid',
+  'form.submitted': 'WhatsApp Form answered',
   'test.ping': 'Test event',
 };
 

@@ -10,6 +10,30 @@ export type HeaderMediaType = 'image' | 'video' | 'document';
 /** resolved_params key holding the public header media URL of an API message. */
 export const HEADER_MEDIA_URL_PARAM = '$headerMediaUrl';
 
+/**
+ * Feature 008 (R10): resolved_params key holding a catalog or multi-product template's product choices,
+ * as JSON {thumbnailRetailerId, sections: [{title, retailerIds}]}; a campaign maps it as static text.
+ */
+export const PRODUCTS_PARAM = '$products';
+
+/** Feature 008 (US7): resolved_params key holding the signed token of a template's form (FLOW) button. */
+export const FLOW_TOKEN_PARAM = '$flowToken';
+
+interface ProductChoices {
+  thumbnailRetailerId?: string | null;
+  sections?: Array<{ title?: string | null; retailerIds?: string[] }>;
+}
+
+function productChoices(raw: string | undefined): ProductChoices {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as ProductChoices;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 export interface PayloadInput {
   /** Recipient in E.164. */
   to: string;
@@ -88,6 +112,21 @@ export function buildTemplatePayload(input: PayloadInput): TemplateMessagePayloa
   for (const [index, payload] of quickReplies) {
     components.push({ type: 'button', sub_type: 'quick_reply', index, parameters: [{ type: 'payload', payload }] });
   }
+
+  // Catalog and multi-product buttons (feature 008): their action carries the product choices.
+  const templateButtons = (input.template.components.find((c) => c.type.toUpperCase() === 'BUTTONS') as unknown as { buttons?: Array<{ type: string }> } | undefined)?.buttons ?? [];
+  const choices = productChoices(input.params[PRODUCTS_PARAM]);
+  templateButtons.forEach((button, index) => {
+    const kind = button.type.toUpperCase();
+    if (kind === 'CATALOG') {
+      components.push({ type: 'button', sub_type: 'CATALOG', index: String(index), parameters: choices.thumbnailRetailerId ? [{ type: 'action', action: { thumbnail_product_retailer_id: choices.thumbnailRetailerId } }] : [] });
+    } else if (kind === 'FLOW') {
+      components.push({ type: 'button', sub_type: 'flow', index: String(index), parameters: [{ type: 'action', action: { flow_token: input.params[FLOW_TOKEN_PARAM] ?? 'unused' } }] });
+    } else if (kind === 'MPM') {
+      const sections = (choices.sections ?? []).map((s) => ({ ...(s.title ? { title: s.title } : {}), product_items: (s.retailerIds ?? []).map((id) => ({ product_retailer_id: id })) }));
+      components.push({ type: 'button', sub_type: 'mpm', index: String(index), parameters: [{ type: 'action', action: { ...(choices.thumbnailRetailerId ? { thumbnail_product_retailer_id: choices.thumbnailRetailerId } : {}), sections } }] });
+    }
+  });
 
   return {
     to: e164ToWaRecipient(input.to),

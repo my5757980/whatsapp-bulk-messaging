@@ -42,6 +42,9 @@ export const FLOW_LIMITS = {
   handoverNote: 500,
   /** Opening message of a Hand to AI agent step (004 FR-033); WhatsApp's caption limit. */
   aiOpeningMessage: 1024,
+  /** Feature 008: what a payment step asks for (Stripe's product name limit). */
+  paymentDescription: 250,
+  paymentExpiryMinutesMin: 30,
   templateButtonText: 25,
   textMaxLength: 1000,
 } as const;
@@ -240,6 +243,73 @@ const AiAgentStep = z.strictObject({
 });
 const EndStep = z.strictObject({ ...common, type: z.literal('end') });
 
+/**
+ * Feature 008 (research R13): ask for a payment and wait. The amount is fixed (minor units), an answer
+ * or a contact attribute (major units, e.g. a quote saved earlier); paid goes to `next`, an expired or
+ * cancelled request to `onNotPaid`. The request expires within the 24-hour window.
+ */
+export const PaymentAmountSchema = z.discriminatedUnion('source', [
+  z.strictObject({ source: z.literal('static'), minor: z.int().min(1).max(10_000_000_000) }),
+  z.strictObject({ source: z.literal('answer'), name: AnswerNameSchema }),
+  z.strictObject({ source: z.literal('attribute'), key: z.string().min(1).max(60) }),
+  // Feature 008 US8: the total of the cart a product or catalog step received.
+  z.strictObject({ source: z.literal('cartTotal') }),
+]);
+export type PaymentAmountSpec = z.infer<typeof PaymentAmountSchema>;
+const PaymentStep = z.strictObject({
+  ...common,
+  type: z.literal('payment'),
+  amount: PaymentAmountSchema.default({ source: 'static', minor: 10_000 }),
+  description: z.string().max(FLOW_LIMITS.paymentDescription).default(''),
+  expiryMinutes: z.int().min(FLOW_LIMITS.paymentExpiryMinutesMin).max(FLOW_LIMITS.timeoutMinutesMax).default(60),
+  next: branch,
+  onNotPaid: branch,
+  fallbacks,
+});
+
+/**
+ * Feature 008 US8 (R10, R11): send products (one product, or a list in sections) or the whole catalog,
+ * then wait for the customer's cart (`next`, the cart saved as {answer:cart}) or a timeout.
+ */
+const ProductSection = z.strictObject({ title: z.string().max(24).default(''), retailerIds: z.array(z.string().min(1).max(100)).max(30).default([]) });
+const ProductStep = z.strictObject({
+  ...common,
+  type: z.literal('product'),
+  header: z.string().max(60).default(''),
+  body: z.string().max(1024).default(''),
+  footer: z.string().max(60).default(''),
+  sections: z.array(ProductSection).min(1).max(10).default([{ title: '', retailerIds: [] }]),
+  timeoutMinutes,
+  next: branch,
+  onTimeout: branch,
+  fallbacks,
+});
+const CatalogStep = z.strictObject({
+  ...common,
+  type: z.literal('catalog'),
+  body: z.string().max(1024).default(''),
+  footer: z.string().max(60).default(''),
+  thumbnailRetailerId: z.string().max(100).nullable().default(null),
+  timeoutMinutes,
+  next: branch,
+  onTimeout: branch,
+  fallbacks,
+});
+/** Feature 008 US8 (R12): send a published WhatsApp Form and wait for its answer ({answer:<prefix>_<field>}). */
+const FormStep = z.strictObject({
+  ...common,
+  type: z.literal('form'),
+  formId: z.uuid().nullable().default(null),
+  header: z.string().max(60).default(''),
+  body: z.string().max(1024).default(''),
+  cta: z.string().max(30).default('Open form'),
+  answerPrefix: AnswerNameSchema.default('form'),
+  timeoutMinutes,
+  next: branch,
+  onTimeout: branch,
+  fallbacks,
+});
+
 export const FlowStepSchema = z.discriminatedUnion('type', [
   MessageStep,
   ButtonsStep,
@@ -254,11 +324,15 @@ export const FlowStepSchema = z.discriminatedUnion('type', [
   HandoverStep,
   AiAgentStep,
   EndStep,
+  PaymentStep,
+  ProductStep,
+  CatalogStep,
+  FormStep,
 ]);
 export type FlowStep = z.infer<typeof FlowStepSchema>;
 export type StepType = FlowStep['type'];
 export type StepOf<T extends StepType> = Extract<FlowStep, { type: T }>;
-export const STEP_TYPES: readonly StepType[] = ['message', 'buttons', 'list', 'question', 'tags', 'attributes', 'condition', 'delay', 'api', 'jump', 'handover', 'aiAgent', 'end'];
+export const STEP_TYPES: readonly StepType[] = ['message', 'buttons', 'list', 'question', 'tags', 'attributes', 'condition', 'delay', 'api', 'jump', 'handover', 'aiAgent', 'end', 'payment', 'product', 'catalog', 'form'];
 
 const phrases = z.array(z.string().max(FLOW_LIMITS.phraseLength)).max(FLOW_LIMITS.phrases).default([]);
 const match = z.enum(['EXACT', 'CONTAINS']).default('CONTAINS');
@@ -323,6 +397,18 @@ export function branchesOf(step: FlowStep): Branch[] {
       return [
         { branch: 'success', target: step.success, required: true },
         { branch: 'failed', target: step.failed, required: true },
+      ];
+    case 'payment':
+      return [
+        { branch: 'next', target: step.next, required: true },
+        { branch: 'onNotPaid', target: step.onNotPaid, required: false },
+      ];
+    case 'product':
+    case 'catalog':
+    case 'form':
+      return [
+        { branch: 'next', target: step.next, required: true },
+        { branch: 'onTimeout', target: step.onTimeout, required: false },
       ];
     case 'jump':
     case 'handover':

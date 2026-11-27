@@ -16,7 +16,7 @@ import { WooClient } from './woocommerce/woo.client.js';
 // connect with an access test and the store's webhooks, change, disconnect and sync. Credentials are
 // sealed and never returned.
 
-export const STORE_AUTOMATION_KINDS = ['ORDER_CONFIRMED', 'ORDER_SHIPPED', 'ORDER_DELIVERED', 'ORDER_CANCELLED', 'COD_CONFIRMATION', 'CART_REMINDER'] as const;
+export const STORE_AUTOMATION_KINDS = ['ORDER_CONFIRMED', 'ORDER_SHIPPED', 'ORDER_DELIVERED', 'ORDER_CANCELLED', 'COD_CONFIRMATION', 'CART_REMINDER', 'PAY_LINK'] as const;
 export type StoreAutomationKindName = (typeof STORE_AUTOMATION_KINDS)[number];
 
 const CredentialsSchema = z

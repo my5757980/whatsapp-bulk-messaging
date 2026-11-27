@@ -8,7 +8,8 @@ import { AUDIT_ACTIONS } from '../../src/modules/audit/audit-actions.js';
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
 /** Actions listed before the code that records them exists (feature 006 T014; each story removes its own). */
 /** Actions listed before the code that records them exists (empty: every action is recorded). */
-const PENDING = new Set<string>([]);
+const PENDING = new Set<string>([
+]);
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -134,6 +135,19 @@ describe('audit coverage', () => {
       'ad_audience.deleted',
       'ad_lead_form.created',
       'ad_leads.exported',
+      'payments.gateway_connected',
+      'payments.gateway_keys_replaced',
+      'payments.gateway_disconnected',
+      'payments.settings_changed',
+      'payment_request.cancelled',
+      'catalog.connected',
+      'catalog.disconnected',
+      'catalog.fill_changed',
+      'catalog.commerce_settings_changed',
+      'form.published',
+      'form.archived',
+      'payments.exported',
+      'form_answers.exported',
     ]);
   });
 

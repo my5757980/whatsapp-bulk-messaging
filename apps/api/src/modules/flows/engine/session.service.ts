@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { checkChatMedia, FlowGraphSchema, type AnswerContext, type FlowGraph, type StepOf } from '@wbm/shared';
 import { v7 as uuidv7 } from 'uuid';
 import { MetricsService } from '../../../common/metrics/metrics.service.js';
@@ -17,6 +17,7 @@ import { requestSendWorkerSync, sessionSendJob } from '../../sending/send-jobs.j
 import { SettingsService } from '../../settings/settings.service.js';
 import { FLOW_API_JOB, FLOW_TIMER_JOB, flowApiJobId, flowTimerJobId, todayIn, type FlowApiData, type FlowTimerData } from '../steps/flow-jobs.js';
 import type { FlowOutboundMessage, FlowSessionResult } from './effects.js';
+import { FLOW_COMMERCE, FLOW_PAYMENTS, type FlowCommercePort, type FlowPaymentRequest, type FlowPaymentsPort } from './ports.js';
 import { renderFlowText } from './render.js';
 import { newSessionState, run, type FlowFacts, type FlowInput, type RunResult, type SessionState } from './run.js';
 import { DripEvents } from '../../growth/drips/drip-events.js';
@@ -67,6 +68,8 @@ interface AfterCommit {
   requested: boolean;
   /** Notes added by hand-over steps, shown live after commit. */
   noteIds: string[];
+  /** Feature 008: payment steps' requests, made after commit (a Stripe call never runs in the lock). */
+  payments: FlowPaymentRequest[];
 }
 
 type SessionRow = Prisma.FlowSessionGetPayload<object>;
@@ -93,6 +96,8 @@ export class FlowSessionService {
     private readonly aiConversations: AiConversationsService,
     private readonly dripEvents: DripEvents,
     private readonly platformEvents: PlatformEvents,
+    @Optional() @Inject(FLOW_PAYMENTS) private readonly flowPayments?: FlowPaymentsPort,
+    @Optional() @Inject(FLOW_COMMERCE) private readonly flowCommerce?: FlowCommercePort,
   ) {}
 
   /** Starts a flow for a chat; refuses when a session is already running unless asked to replace it. */
@@ -166,7 +171,7 @@ export class FlowSessionService {
   }
 
   /** A timer or an API result for a session; stale tokens do nothing (research R10). */
-  async resume(sessionId: string, input: Extract<FlowInput, { kind: 'timer' | 'api' }>): Promise<void> {
+  async resume(sessionId: string, input: Extract<FlowInput, { kind: 'timer' | 'api' | 'payment' | 'order' | 'form' }>): Promise<void> {
     const session = await this.prisma.flowSession.findUnique({ where: { id: sessionId }, select: { conversationId: true } });
     if (!session) return;
     await this.inConversation(session.conversationId, async (tx, after) => {
@@ -282,7 +287,7 @@ export class FlowSessionService {
   // ---------- internals ----------
 
   private async inConversation<T>(conversationId: string, work: (tx: Tx, after: AfterCommit) => Promise<T>): Promise<T> {
-    const after: AfterCommit = { numberId: '', conversationId, sendItemIds: [], timers: [], apiCalls: [], touched: false, contactChanged: null, requested: false, noteIds: [] };
+    const after: AfterCommit = { numberId: '', conversationId, sendItemIds: [], timers: [], apiCalls: [], touched: false, contactChanged: null, requested: false, noteIds: [], payments: [] };
     const result = await this.prisma.$transaction(
       async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`flow-conversation:${conversationId}`}::text))`;
@@ -339,7 +344,7 @@ export class FlowSessionService {
       render: (text, fallbacks, answers, saved) =>
         renderFlowText(text, saved ? { ...contact, attributes: { ...contact.attributes, ...saved } } : contact, fallbacks, answers),
       answers: input.kind === 'message' ? await this.answerContext() : { today: todayIn('UTC'), normalizePhone: () => null },
-      ...(flow.graph.steps.some((st) => st.type === 'condition' || st.type === 'attributes') ? { facts: await this.factsFor(tx, row, contact) } : {}),
+      ...(flow.graph.steps.some((st) => st.type === 'condition' || st.type === 'attributes' || (st.type === 'payment' && st.amount.source === 'attribute')) ? { facts: await this.factsFor(tx, row, contact) } : {}),
     });
     await this.apply(tx, row, flow, result, conversation.lastCustomerMessageAt, after);
   }
@@ -416,6 +421,21 @@ export class FlowSessionService {
           break;
         case 'callApi':
           after.apiCalls.push({ sessionId: row.id, token: state.waitToken });
+          break;
+        case 'requestPayment':
+          after.payments.push({
+            sessionId: row.id,
+            token: state.waitToken,
+            conversationId: row.conversationId,
+            numberId: after.numberId,
+            contactId: row.contactId,
+            stepId: effect.stepId,
+            amount: effect.amount,
+            description: effect.description,
+            expiryMinutes: effect.expiryMinutes,
+            isTest: row.isTest,
+            chatOrderId: effect.chatOrderId ?? null,
+          });
           break;
         case 'end':
           ended = effect.reason ? { result: effect.result, reason: effect.reason } : { result: effect.result };
@@ -624,7 +644,7 @@ export class FlowSessionService {
   private async createItem(tx: Tx, row: SessionRow, flow: FlowMeta, stepId: string, message: FlowOutboundMessage, now: Date): Promise<string | null> {
     const id = uuidv7();
     const flowInfo = { flowId: flow.id, flowName: flow.name, sessionId: row.id, stepId, test: row.isTest };
-    let contentType: 'TEXT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT' | 'BUTTONS' | 'LIST' = 'TEXT';
+    let contentType: 'TEXT' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT' | 'BUTTONS' | 'LIST' | 'PRODUCT' | 'PRODUCT_LIST' | 'CATALOG' | 'FORM' = 'TEXT';
     let text: string | null = null;
     let mediaAssetId: string | null = null;
     let payload: Record<string, unknown> = { flow: flowInfo };
@@ -657,6 +677,22 @@ export class FlowSessionService {
         text = message.text;
         payload = { ...payload, header: message.header ?? null, footer: message.footer ?? null, buttonLabel: message.buttonLabel, sections: message.sections };
         break;
+      // Feature 008 US8: the commerce module builds products, catalog and form items (or none: the step times out).
+      case 'products':
+      case 'catalog':
+      case 'form': {
+        if (!this.flowCommerce) return null;
+        const chat = await tx.conversation.findUnique({ where: { id: row.conversationId }, select: { contactId: true, numberId: true } });
+        const item = chat ? await this.flowCommerce.itemFor(message, { contactId: chat.contactId, sessionId: row.id, numberId: chat.numberId }) : null;
+        if (!item) {
+          this.logger.warn({ sessionId: row.id, stepId, type: message.type }, 'The flow commerce message cannot be sent; the step waits for its timeout');
+          return null;
+        }
+        contentType = item.contentType;
+        text = item.text;
+        payload = { ...payload, ...item.payload };
+        break;
+      }
     }
     await tx.chatMessage.create({
       data: { id, conversationId: row.conversationId, kind: 'SESSION_OUT', origin: 'AUTOMATIC', contentType, text, mediaAssetId, payload: payload as Prisma.InputJsonValue, status: 'QUEUED', occurredAt: now },
@@ -689,6 +725,14 @@ export class FlowSessionService {
       if (after.contactChanged) await this.publisher.contactUpdated(after.contactChanged);
       for (const timer of after.timers) await this.queueTimer(timer);
       for (const call of after.apiCalls) await this.queueApiCall(call);
+      // Feature 008: a payment that cannot be made sends the session on its not-paid branch.
+      for (const payment of after.payments) {
+        const made = this.flowPayments ? await this.flowPayments.request(payment).catch((error: Error) => ({ ok: false as const, reason: error.message })) : { ok: false as const, reason: 'payments are not available' };
+        if (!made.ok) {
+          this.logger.warn({ sessionId: payment.sessionId, reason: made.reason }, 'A flow payment request could not be made');
+          await this.resume(payment.sessionId, { kind: 'payment', token: payment.token, paid: false });
+        }
+      }
     } catch (error) {
       this.logger.error({ err: (error as Error).message, conversationId: after.conversationId }, 'Could not queue flow work after commit');
     }

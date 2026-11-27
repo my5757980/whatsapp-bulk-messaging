@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { basename, extname, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import { MOCK_CATALOG_ID, seededPriceMinor } from './commerce.js';
 import { env } from './env.js';
 import { inboundMessagePayload, postSigned, type InboundMessage } from './webhook-emitter.js';
 
@@ -25,6 +26,8 @@ Content (exactly one):
   --quick-reply <text> [--context <wamid>]    (a template quick-reply button; --context names the template message)
   --button-payload <payload> [--button-text <text>]   (a quick-reply tap with its own payload, e.g. cod1:<orderId>:Y)
   --form-reply '<json>'          --reaction <emoji> --to-wamid <wamid>   (an empty emoji removes it)
+  --form-reply <flow_token> --answers '<json>'   (a WhatsApp Form answer for the form sent with that token; feature 008)
+  --order "<retailerId>:<qty>,..." [--order-text <note>] [--order-price-change]   (a cart from the mock catalog; feature 008)
   --unsupported
 
 Options:
@@ -71,6 +74,7 @@ const CONTENT_FLAGS = [
   'button-payload',
   'list-reply',
   'form-reply',
+  'order',
   'reaction',
   'unsupported',
 ] as const;
@@ -109,6 +113,10 @@ const { values } = parseArgs({
     context: { type: 'string' },
     description: { type: 'string' },
     'form-reply': { type: 'string' },
+    answers: { type: 'string' },
+    order: { type: 'string' },
+    'order-text': { type: 'string' },
+    'order-price-change': { type: 'boolean', default: false },
     reaction: { type: 'string' },
     'to-wamid': { type: 'string' },
     unsupported: { type: 'boolean', default: false },
@@ -221,13 +229,26 @@ async function buildContent(): Promise<Record<string, unknown>> {
       return { type: 'interactive', interactive: { type: 'list_reply', list_reply: { id: values['list-id'] ?? slug(title), title, ...description } } };
     }
     case 'form-reply': {
-      const json = values['form-reply']!;
+      // Feature 008: --form-reply <flow_token> --answers '<json>' puts the token next to the answers.
+      const json = values.answers !== undefined ? values.answers : values['form-reply']!;
+      let parsed: Record<string, unknown> = {};
       try {
-        JSON.parse(json);
+        parsed = JSON.parse(json) as Record<string, unknown>;
       } catch {
-        fail('--form-reply must be JSON, e.g. \'{"name":"Sara"}\'');
+        fail(values.answers !== undefined ? '--answers must be JSON, e.g. \'{"name":"Sara"}\'' : '--form-reply must be JSON, e.g. \'{"name":"Sara"}\'');
       }
-      return { type: 'interactive', interactive: { type: 'nfm_reply', nfm_reply: { name: 'flow', body: 'Sent', response_json: json } } };
+      const response = values.answers !== undefined ? JSON.stringify({ flow_token: values['form-reply'], ...parsed }) : json;
+      return { type: 'interactive', interactive: { type: 'nfm_reply', nfm_reply: { name: 'flow', body: 'Sent', response_json: response } } };
+    }
+    case 'order': {
+      const items = values.order!.split(',').map((part, index) => {
+        const [retailerId = '', qty = '1'] = part.trim().split(':');
+        const minor = seededPriceMinor(retailerId);
+        if (minor === null) fail(`--order: ${retailerId} is not a mock catalog product (shp-101 … shp-140)`);
+        const price = (index === 0 && values['order-price-change'] ? Math.round(minor * 1.1) : minor) / 100;
+        return { product_retailer_id: retailerId, quantity: Number(qty) || 1, item_price: price, currency: 'AED' };
+      });
+      return { type: 'order', order: { catalog_id: MOCK_CATALOG_ID, ...(values['order-text'] ? { text: values['order-text'] } : {}), product_items: items } };
     }
     case 'reaction':
       if (!values['to-wamid']) fail('--reaction needs --to-wamid <wamid of the message reacted to>');

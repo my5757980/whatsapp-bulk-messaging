@@ -144,6 +144,9 @@ const SCOPE_HELP: Record<ApiKeyScope, string> = {
   'contacts.write': 'Create and update contacts, add and remove tags, and record opt-ins (with a source note) and opt-outs',
   'campaigns.trigger': 'Send the template of a live API campaign to one phone number',
   'drips.enrol': 'Add a contact to an active drip by its name or id, or take them out of it',
+  // Feature 008 (contracts/public-payments-v1.openapi.yaml)
+  'payments.read': 'Read payment requests by id, reference or phone number',
+  'payments.write': 'Make and send payment requests, and cancel waiting ones',
 };
 
 function PermissionsDialog({ keyRow, onSaved }: { keyRow: ApiKeyRow; onSaved: () => void }) {

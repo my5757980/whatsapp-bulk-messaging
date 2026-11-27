@@ -30,6 +30,13 @@ export const QUEUES = {
    * the lead catch-up (feature 007, plan Technical Context).
    */
   ADS: 'ads',
+  /**
+   * Payments: Stripe notifications, the 60-second tick for expiry and reminders, the 15-minute
+   * reconciler and the notification check timeout (feature 008, research R3, R4, R6).
+   */
+  PAYMENTS: 'payments',
+  /** Catalog: the hourly product copy and the store fill (feature 008, research R8, R9). */
+  CATALOG: 'catalog',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];

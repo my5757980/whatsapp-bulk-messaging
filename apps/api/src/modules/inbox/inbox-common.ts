@@ -23,6 +23,13 @@ export const CHAT_CONTENT_TYPES = [
   // Reply buttons and lists sent by chatbot flows (feature 003)
   'BUTTONS',
   'LIST',
+  // Feature 008: the Pay now message, product messages, the inbound cart and the outbound form
+  'PAYMENT_REQUEST',
+  'PRODUCT',
+  'PRODUCT_LIST',
+  'CATALOG',
+  'ORDER',
+  'FORM',
 ] as const;
 
 export type ChatContentType = (typeof CHAT_CONTENT_TYPES)[number];

@@ -22,6 +22,9 @@ const GROUP_LABEL: Record<string, string> = {
   api_campaigns: 'API campaigns',
   stores: 'Stores',
   ads: 'Ads',
+  payments: 'Payments',
+  commerce: 'Chat orders',
+  forms: 'WhatsApp Forms',
 };
 
 const GROUPS = Object.keys(GROUP_LABEL).map((group) => ({ group, types: SUBSCRIBABLE_EVENT_TYPES.filter((t) => EVENT_GROUPS[t] === group) })).filter((g) => g.types.length > 0);

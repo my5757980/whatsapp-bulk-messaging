@@ -10,7 +10,7 @@ import { CampaignsService } from './campaigns.service.js';
 // out since are excluded by the usual consent rules. Feature 005 (US2, research R6) adds the
 // groups Clicked, Not clicked, Replied, Not replied and Held back, and their sizes beforehand.
 
-export const RETARGET_GROUPS = ['FAILED', 'NOT_READ', 'READ', 'DELIVERED', 'CLICKED', 'NOT_CLICKED', 'REPLIED', 'NOT_REPLIED', 'HELD_BACK'] as const;
+export const RETARGET_GROUPS = ['FAILED', 'NOT_READ', 'READ', 'DELIVERED', 'CLICKED', 'NOT_CLICKED', 'REPLIED', 'NOT_REPLIED', 'HELD_BACK', 'PAID', 'NOT_PAID'] as const;
 export type RetargetGroup = (typeof RETARGET_GROUPS)[number];
 
 export const RetargetSchema = z.object({ status: z.enum(RETARGET_GROUPS) }).strict();
@@ -26,6 +26,8 @@ const LABEL: Record<RetargetGroup, string> = {
   REPLIED: 'replied',
   NOT_REPLIED: 'not replied',
   HELD_BACK: 'held back',
+  PAID: 'paid',
+  NOT_PAID: 'not paid',
 };
 
 /** Hours after delivery in which a message from the contact counts as a reply (FR-012). */
@@ -38,6 +40,10 @@ const REPLIED = Prisma.sql`EXISTS (
    WHERE cv.contact_id = m.contact_id AND cv.number_id = m.number_id AND cm.kind = 'INBOUND'
      AND cm.occurred_at >= COALESCE(m.delivered_at, m.read_at)
      AND cm.occurred_at < COALESCE(m.delivered_at, m.read_at) + ${Prisma.raw(`interval '${REPLY_WINDOW_HOURS} hours'`)})`;
+
+// Feature 008 (US4): the recipient's payment request from a campaign with a payment config.
+const PAID = Prisma.sql`EXISTS (SELECT 1 FROM payment_requests pr WHERE pr.message_id = m.id AND pr.status IN ('PAID', 'REFUNDED'))`;
+const NOT_PAID = Prisma.sql`EXISTS (SELECT 1 FROM payment_requests pr WHERE pr.message_id = m.id AND pr.status IN ('WAITING', 'EXPIRED', 'CANCELLED'))`;
 
 /** Which messages (alias `m`) of the source campaign belong to a group. */
 export function retargetCondition(group: RetargetGroup): Prisma.Sql {
@@ -61,6 +67,11 @@ export function retargetCondition(group: RetargetGroup): Prisma.Sql {
     case 'HELD_BACK':
       // Meta's per-person marketing limit (131049): never retried within 24 hours (FR-014).
       return Prisma.sql`m.status = 'FAILED' AND m.failure_code = 131049`;
+    case 'PAID':
+      return PAID;
+    case 'NOT_PAID':
+      // Only those who got the request: a failed send is the FAILED group.
+      return Prisma.sql`${DELIVERED} AND ${NOT_PAID}`;
   }
 }
 
@@ -103,6 +114,8 @@ export class RetargetService {
         retargetStatus: input.status,
         variableMapping: (source.variableMapping ?? {}) as Prisma.InputJsonValue,
         headerMediaAssetId: source.headerMediaAssetId,
+        // Feature 008: a payment campaign asks again (new links), except the payers.
+        ...(source.paymentConfig && input.status !== 'PAID' ? { paymentConfig: source.paymentConfig as Prisma.InputJsonValue } : {}),
         timezone: source.timezone,
         createdById: userId,
         // Tracked links keep their destinations, so the draft can be sent as it is (feature 005).

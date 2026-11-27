@@ -19,6 +19,7 @@ WhatsApp Cloud API. One company, a small team, prices in USD.
 | Campaign growth (feature 005) | Tracked links with a click count for each recipient, retargeting by clicked, replied and held back, retry rounds for failures that may pass, and drips: timed template steps that contacts join by hand or on events and leave when they reply. See [Campaign growth](#campaign-growth). |
 | Integrations (feature 006) | Signed webhooks for other systems, API key permissions and a contacts API, API campaigns, Shopify and WooCommerce order notifications, COD confirmation and cart reminders, QR chat links, and a guided number connection wizard. See [Integrations](#integrations). |
 | Ads (feature 007) | Click-to-WhatsApp, lead form and website ads from the company's own Meta ad account: a connection with checks, a guided builder with AI texts, Meta's review, chats from ads with the free window, flows and tags, hourly results with cost per chat, a monthly spending cap, audiences from contacts and lookalikes, and lead forms that become contacts. See [Ads](#ads). |
+| Commerce and payments (feature 008) | Stripe payment links from live chat, flows, campaigns, the API and store orders, with live statuses, reminders, a payments page and retargeting of non-payers; the Meta catalog with product, list and catalog messages; carts in chat that become orders with a payment link; WhatsApp Forms; and product, catalog, form and payment steps in flows. See [Commerce and payments](#commerce-and-payments). |
 
 ## Architecture
 
@@ -352,6 +353,89 @@ Feature 007 ([spec](specs/007-ads-manager/spec.md), [quickstart](specs/007-ads-m
   `wbm_ad_leads_total{result}` and `wbm_ads_spend_cap_pauses_total`; the alert `WbmAdsSyncFailing`
   fires when more than half of the reads from Meta fail for 30 minutes.
 
+## Commerce and payments
+
+Feature 008 ([spec](specs/008-commerce-payments/spec.md), [quickstart](specs/008-commerce-payments/quickstart.md)).
+Meta's own WhatsApp Payments is not offered in the UAE, so customers pay through Stripe payment
+links. Card details are typed on Stripe's page and never reach the platform.
+
+- **Stripe connection:** in the company's Stripe account (UAE, AED, charges enabled), create a
+  restricted key with *Checkout Sessions: Write*, *Events: Read*, account details read and, for
+  automatic registration, *Webhook Endpoints: Write* ([contracts/stripe.md](specs/008-commerce-payments/contracts/stripe.md)).
+  Paste it on *Payments → Stripe connection* (admins only). The key is stored encrypted and never
+  shown again; keys never go in `.env`. The checks cover the key, its permissions, the account's
+  charges and currency, and test or live mode. *Register the notification address for me* creates
+  Stripe's endpoint for `${APP_URL}/api/payments/stripe/webhook` with the six events
+  (`checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+  `checkout.session.async_payment_failed`, `checkout.session.expired`,
+  `payment_intent.payment_failed` and `charge.refunded`); otherwise register it by hand and paste
+  its signing secret. *Test notifications* proves that signed notifications arrive.
+- **Payment requests:** an amount in AED, a description, an optional order reference and an expiry
+  (24 hours by default, 30 minutes to 30 days), up to the maximum amount in *Payments → Settings*.
+  The customer gets `<PUBLIC_LINK_BASE_URL>/p/<code>` (answered by the api at `/l/p/<code>`),
+  which opens Stripe Checkout; a link opened after Stripe's 24-hour session limit gets a new
+  session. Requests come from:
+  - **live chat:** *Request payment* in an open chat (for the roles chosen in the settings), shown
+    in the chat as a card with its status
+  - **flows:** the *Request payment* step with a fixed amount, an answer, an attribute or the cart
+    total, with paid and not paid branches; test numbers use *Mark paid (test)* in the test panel
+  - **campaigns:** a payment template with a URL button `…/p/{{1}}`; each recipient gets their own
+    link
+  - **the API:** `POST /api/v1/payments` with an `Idempotency-Key` and a key with
+    `payments.write` (`payments.read` lists and reads requests)
+  - **store orders:** the store automation *Pay link* sends a link for unpaid Shopify or WooCommerce
+    orders and marks the order paid in the store (Shopify needs `write_orders`)
+- **Statuses:** Stripe's signed notifications set paid, failed attempt, expired and refunded (in full
+  or in part), once each and in any order. A reconciler reads Stripe's event list every 15 minutes in
+  case one was missed, and a 60-second tick expires links with their Stripe sessions. A payment that
+  arrives after expiry or cancel shows as *Paid late* and admins and managers are told. The agent who
+  asked is notified, and the contact's *Payments* tab and the journey list each request. Requests
+  made in Stripe's test mode are marked and left out of totals.
+- **Reminders and reports:** up to two reminders per request, hours before the link expires, with
+  an approved template (sent only when the first message was delivered). *Payments* shows totals by
+  status, day and source, with filters and a CSV export; a payment campaign can be retargeted to its
+  *Paid* or *Not paid* group.
+- **Catalog:** *Catalog* connects the WhatsApp account's Meta catalog (made in Commerce Manager and
+  linked in WhatsApp Manager; the system user token needs `catalog_management`), copies its
+  products every hour or on *Copy products now*, and sets each number's commerce settings (cart on,
+  catalog visible). The catalog can also be filled every hour from a connected Shopify
+  (`read_products`) or WooCommerce store through Meta's `items_batch`. Live chat sends one
+  product, a list of up to 30 products in up to 10 sections, or the whole catalog, and templates can
+  carry catalog and multi-product buttons.
+- **Carts and chat orders:** a cart sent in chat becomes a chat order with its items, total and
+  warnings (a product not in the catalog, a changed price, another currency). In automatic mode the
+  payment link goes out within a minute; in review mode an agent edits the order and sends the link;
+  a flow waiting for a cart takes it instead. Orders show in the chat, on the contact and in the
+  order list, and follow their payment.
+- **WhatsApp Forms:** *Forms* builds forms of up to 10 screens (short and long text, email, phone,
+  number, single and multiple choice, dropdown, date and an opt-in), maps fields to contact attributes
+  and adds tags. Publishing compiles Meta's Flow JSON and publishes a numbered version to every
+  connected WhatsApp account (Meta may ask for business verification first). A published form is
+  archived rather than deleted, and not while a flow uses it. Forms are sent from live chat, flows
+  and templates (flow buttons) with a signed token, so only answers to the platform's own sends
+  count. Answers are checked by field type, saved to attributes and tags, opt the contact in (source
+  `FORM`) only when the opt-in is ticked, and show in the journey and on the form's answers page,
+  with a CSV export.
+- **Flow steps:** *Send products* and *Send catalog* wait for a cart (saved as `{answer:cart_total}`
+  and charged by *Request payment* with the cart total); *Send form* waits for the answers (saved as
+  `{answer:<prefix>_<field>}`). Each has a timeout branch. Publishing a flow needs the catalog
+  connected and its forms published.
+- **Permissions:** only admins connect Stripe and the catalog (`integrations.manage`) and change the
+  payment settings (`payments.manage`); managers and admins see payments and build forms
+  (`payments.view`, `forms.manage`); agents request payments, send products and forms and handle
+  chat orders in their chats (`inbox.reply`); exports need `data.export`.
+- **Data handling:** payment requests and chat orders are kept 5 years, Stripe notifications 30 days
+  (stored without card or customer details), form answers 12 months, and removed catalog products 90
+  days. Deleting a contact cancels their waiting links, keeps requests and orders without their name
+  or phone, and deletes their form answers. New events for outbound webhooks: `payment.requested`,
+  `payment.paid`, `payment.failed`, `payment.expired`, `payment.cancelled`,
+  `payment.refunded`, `chat_order.received`, `chat_order.paid` and `form.submitted`.
+- **Monitoring:** `wbm_payment_links_total{result}`, `wbm_payment_events_total{type,result,source}`,
+  `wbm_payments_total{status}`, `wbm_chat_orders_total{mode}`, `wbm_form_answers_total{result}` and
+  `wbm_catalog_sync_total{job,result}`. The alert `WbmPaymentLinksFailing` fires when more than half
+  of the links fail in 15 minutes, and `WbmPaymentNotificationsMissing` when the reconciler finds
+  missed payments or no notification arrives in 24 hours while links are being made.
+
 ## Getting started
 
 Prerequisites: Node.js 26, npm 11 and Docker Desktop. The full walkthrough, including how to
@@ -412,7 +496,8 @@ the web proxy.
   events and uploaded files after 30 days. AI conversations, AI reply records, unanswered-question
   occurrences and assistant requests also go after 12 months, and so do link clicks and drip
   enrolments (12 months after they end). Integration records follow the rules in
-  [Integrations](#integrations). Audit logs are kept. Deleting a contact erases its chat content and
+  [Integrations](#integrations), and commerce records those in
+  [Commerce and payments](#commerce-and-payments). Audit logs are kept. Deleting a contact erases its chat content and
   AI conversation details but keeps anonymous counts.
 - **AI service:** set `ANTHROPIC_API_KEY` from the company's Anthropic account (leave
   `ANTHROPIC_BASE_URL` empty in production). The `WbmAiFailing` alert fires when more than 20% of AI
@@ -428,6 +513,10 @@ the web proxy.
   than 5 minutes (for 15 minutes), and `WbmStoreEventsFailing` when over 20% of store events fail
   in 15 minutes. Before go-live, work through
   [the 006 release checklist](specs/006-integrations-platform/checklists/release.md).
+- **Payments:** Stripe posts to `${APP_URL}/api/payments/stripe/webhook`, and pay links use
+  `PUBLIC_LINK_BASE_URL` (`/p/<code>` goes to the api's `/l/p/<code>`). Leave `STRIPE_API_BASE_URL`
+  unset in production; `STRIPE_API_VERSION` is upgraded on purpose. Before go-live, work through
+  [the 008 release checklist](specs/008-commerce-payments/checklists/release.md).
 - **Real numbers:** to connect a real WhatsApp number, use *Connect with checks* or follow
   quickstart §5. Check each step against Meta's current documentation.
 
@@ -483,6 +572,15 @@ the web proxy.
   [Meta ads Graph calls](specs/007-ads-manager/contracts/meta-ads-graph.md),
   [quickstart](specs/007-ads-manager/quickstart.md), [tasks](specs/007-ads-manager/tasks.md) and
   [release checklist](specs/007-ads-manager/checklists/release.md)
+- Commerce and payments (feature 008): [spec](specs/008-commerce-payments/spec.md),
+  [plan](specs/008-commerce-payments/plan.md), [research](specs/008-commerce-payments/research.md),
+  [data model](specs/008-commerce-payments/data-model.md),
+  [commerce API](specs/008-commerce-payments/contracts/commerce-api.openapi.yaml),
+  [payments API v1](specs/008-commerce-payments/contracts/public-payments-v1.openapi.yaml),
+  [Stripe calls](specs/008-commerce-payments/contracts/stripe.md),
+  [Meta commerce Graph calls](specs/008-commerce-payments/contracts/meta-commerce-graph.md),
+  [quickstart](specs/008-commerce-payments/quickstart.md), [tasks](specs/008-commerce-payments/tasks.md) and
+  [release checklist](specs/008-commerce-payments/checklists/release.md)
 - Architecture decisions:
   - [ADR-0001 Frontend stack](history/adr/0001-frontend-stack.md)
   - [ADR-0002 Backend runtime, process model and monorepo](history/adr/0002-backend-runtime-process-model-and-monorepo.md)

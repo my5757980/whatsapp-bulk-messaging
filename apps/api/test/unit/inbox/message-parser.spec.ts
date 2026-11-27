@@ -128,7 +128,35 @@ describe('parseInboundMessage', () => {
       contentType: 'UNSUPPORTED',
       payload: { rawType: 'unsupported', errorCode: 131051, errorTitle: 'Message type unknown' },
     });
-    expect(parse({ type: 'order', order: { catalog_id: 'x' } })).toMatchObject({ contentType: 'UNSUPPORTED', payload: { rawType: 'order' } });
+    expect(parse({ type: 'ephemeral' })).toMatchObject({ contentType: 'UNSUPPORTED', payload: { rawType: 'ephemeral' } });
+  });
+
+  // T072 (feature 008 US6, R11): a cart sent from the catalog.
+  it('parses order messages with their items, decimal prices, lower-case currency and the customer text', () => {
+    expect(
+      parse({
+        type: 'order',
+        order: {
+          catalog_id: '900000000000001',
+          text: 'Deliver after 6pm',
+          product_items: [
+            { product_retailer_id: 'shp-101', quantity: 2, item_price: 75.5, currency: 'AED' },
+            { product_retailer_id: 'shp-102', quantity: '1', item_price: '120', currency: 'AED' },
+            { quantity: 1, item_price: 1, currency: 'AED' },
+          ],
+        },
+      }),
+    ).toMatchObject({
+      contentType: 'ORDER',
+      text: 'Deliver after 6pm',
+      payload: {
+        catalogId: '900000000000001',
+        items: [
+          { retailerId: 'shp-101', quantity: 2, itemPrice: 75.5, currency: 'aed' },
+          { retailerId: 'shp-102', quantity: 1, itemPrice: 120, currency: 'aed' },
+        ],
+      },
+    });
   });
 
   it('works without a profile name', () => {

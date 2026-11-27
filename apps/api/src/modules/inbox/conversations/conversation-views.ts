@@ -119,7 +119,21 @@ export interface ChatItemDto {
   firstClickAt: string | null;
   /** The drip and step that sent this template message (feature 005). */
   drip: { id: string; name: string; step: number } | null;
+  /** The payment request this message carries (feature 008), kept current in the item's payload. */
+  payment: ChatPaymentSummary | null;
   occurredAt: string;
+}
+
+/** Feature 008 (contracts/commerce-api.openapi.yaml, 002 contract update). */
+export interface ChatPaymentSummary {
+  id: string;
+  amountMinor: number;
+  currency: string;
+  description: string;
+  status: string;
+  display: string;
+  expiresAt: string;
+  payUrl: string;
 }
 
 function firstClickOf(ref: ChatItemRow['message']): string | null {
@@ -146,10 +160,19 @@ function refStatus(status: string): ItemStatus {
   }
 }
 
+/** The payment summary kept in a chat item's payload; a waiting request whose message failed shows as not delivered. */
+function paymentOf(payload: Record<string, unknown>, status: ItemStatus | null): ChatPaymentSummary | null {
+  const p = payload.payment;
+  if (!p || typeof p !== 'object') return null;
+  const summary = p as ChatPaymentSummary;
+  return { ...summary, display: summary.status === 'WAITING' && status === 'FAILED' ? 'NOT_DELIVERED' : summary.display };
+}
+
 export function toItemDto(row: ChatItemRow): ChatItemDto {
   const ref = row.message;
   const payload = (row.payload ?? {}) as Record<string, unknown>;
   const mediaState = row.mediaState ?? (row.mediaAsset ? 'READY' : null);
+  const status: ItemStatus | null = row.kind === 'SESSION_OUT' ? ((row.status as ItemStatus | null) ?? null) : ref ? refStatus(ref.status) : null;
   return {
     id: row.id,
     kind: row.kind,
@@ -165,7 +188,7 @@ export function toItemDto(row: ChatItemRow): ChatItemDto {
           state: mediaState,
         }
       : null,
-    status: row.kind === 'SESSION_OUT' ? ((row.status as ItemStatus | null) ?? null) : ref ? refStatus(ref.status) : null,
+    status,
     failureReason: row.kind === 'SESSION_OUT' ? row.failureReason : (ref?.failureReason ?? null),
     sentBy: row.sentBy ?? ref?.sentBy ?? null,
     template: ref
@@ -178,6 +201,7 @@ export function toItemDto(row: ChatItemRow): ChatItemDto {
     campaign: ref?.campaign ? { id: ref.campaign.id, name: ref.campaign.name } : null,
     firstClickAt: firstClickOf(ref),
     drip: ref?.dripStep ? { id: ref.dripStep.drip.id, name: ref.dripStep.drip.name, step: ref.dripStep.position } : null,
+    payment: paymentOf(payload, status),
     occurredAt: row.occurredAt.toISOString(),
   };
 }

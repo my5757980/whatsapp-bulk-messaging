@@ -220,6 +220,48 @@ describe('Contact deletion', () => {
     await ctx.prisma.adAudience.delete({ where: { id: audience.id } });
   });
 
+  it('cancels their waiting payment links, keeps requests and orders without their details, and deletes their form answers (008 FR-044)', async () => {
+    const phone = uaePhone();
+    const contact = await seedContact(ctx, phone, { name: 'Payer Person' });
+    const order = await ctx.prisma.chatOrder.create({ data: { contactId: contact.id, catalogId: '900000000000001', customerText: 'Deliver to 5 Palm St', items: [], currency: 'AED', totalMinor: 4_500n, mode: 'AUTO', status: 'LINK_SENT' } });
+    const request = (data: { status: 'WAITING' | 'PAID'; sessionId: string | null; chatOrderId?: string }) =>
+      ctx.prisma.paymentRequest.create({
+        data: {
+          code: randomUUID().replace(/-/g, '').slice(0, 12),
+          contactId: contact.id,
+          phoneE164: phone,
+          customerName: 'Payer Person',
+          source: data.chatOrderId ? 'CHAT_ORDER' : 'INBOX',
+          status: data.status,
+          amountMinor: 4_500n,
+          currency: 'AED',
+          description: 'Order',
+          expiresAt: new Date(Date.now() + 3_600_000),
+          nextReminderAt: data.status === 'WAITING' ? new Date(Date.now() + 600_000) : null,
+          sessionId: data.sessionId,
+          chatOrderId: data.chatOrderId ?? null,
+          ...(data.status === 'PAID' ? { paidAt: new Date(), paidAmountMinor: 4_500n } : {}),
+        },
+      });
+    const waiting = await request({ status: 'WAITING', sessionId: `cs_test_${randomUUID().replace(/-/g, '')}`, chatOrderId: order.id });
+    const lazy = await request({ status: 'WAITING', sessionId: null });
+    const paid = await request({ status: 'PAID', sessionId: `cs_test_${randomUUID().replace(/-/g, '')}` });
+    const form = await ctx.prisma.form.create({ data: { name: `Erase form ${randomUUID()}`, category: 'OTHER', status: 'PUBLISHED' } });
+    const version = await ctx.prisma.formVersion.create({ data: { formId: form.id, number: 1, model: { screens: [] }, flowJson: {} } });
+    await ctx.prisma.formAnswer.create({ data: { formId: form.id, formVersionId: version.id, contactId: contact.id, source: 'INBOX', answers: { address: '5 Palm St' } } });
+
+    expect((await admin.agent.delete(`/api/contacts/${contact.id}`).set('x-csrf-token', admin.csrf)).status).toBe(204);
+    const cleared = { contactId: null, phoneE164: null, customerName: null, amountMinor: 4_500n };
+    expect(await ctx.prisma.paymentRequest.findUniqueOrThrow({ where: { id: waiting.id } })).toMatchObject({ ...cleared, status: 'CANCELLED', nextReminderAt: null, sessionExpirePending: true });
+    expect(await ctx.prisma.paymentRequest.findUniqueOrThrow({ where: { id: lazy.id } })).toMatchObject({ ...cleared, status: 'CANCELLED', sessionExpirePending: false });
+    expect(await ctx.prisma.paymentRequest.findUniqueOrThrow({ where: { id: paid.id } })).toMatchObject({ ...cleared, status: 'PAID', sessionExpirePending: false, paidAmountMinor: 4_500n });
+    expect(await ctx.prisma.chatOrder.findUniqueOrThrow({ where: { id: order.id } })).toMatchObject({ contactId: null, customerText: null, totalMinor: 4_500n });
+    expect(await ctx.prisma.formAnswer.count({ where: { formId: form.id } })).toBe(0);
+    await ctx.prisma.paymentRequest.deleteMany({ where: { id: { in: [waiting.id, lazy.id, paid.id] } } });
+    await ctx.prisma.chatOrder.delete({ where: { id: order.id } });
+    await ctx.prisma.form.delete({ where: { id: form.id } });
+  });
+
   it('is admin-only and returns 404 for unknown contacts', async () => {
     const contact = await seedContact(ctx, uaePhone());
     const manager = await signIn(ctx, 'MANAGER');

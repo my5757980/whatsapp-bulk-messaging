@@ -55,6 +55,8 @@ enum ConsentSource {
   STORE
   /// A lead form consent question that names WhatsApp (feature 007, FR-037).
   LEAD_FORM
+  /// A WhatsApp Form opt-in field the customer ticked (feature 008, FR-035).
+  FORM
 }
 
 enum AttributeType {
@@ -131,6 +133,9 @@ enum RetargetStatus {
   REPLIED
   NOT_REPLIED
   HELD_BACK
+  /// Feature 008 (US4): payment campaigns
+  PAID
+  NOT_PAID
 }
 
 enum MessageOrigin {
@@ -143,6 +148,8 @@ enum MessageOrigin {
   STORE
   /// A lead form welcome template (feature 007).
   ADS
+  /// A payment template, a payment reminder or a store pay link (feature 008).
+  PAYMENTS
 }
 
 enum MessageStatus {
@@ -163,6 +170,8 @@ enum SkipReason {
   INVALID_NUMBER
   DUPLICATE
   MISSING_VARIABLE
+  /// A payment campaign recipient without a valid amount (feature 008, R5).
+  PAYMENT_AMOUNT_MISSING
 }
 
 enum MessageEventType {
@@ -209,6 +218,12 @@ enum NotificationType {
   AD_REJECTED
   AD_NOT_DELIVERING
   ADS_SPEND_CAP_REACHED
+  /// Feature 008: a payment arrived, a payment arrived after expiry or cancel, the Stripe connection
+  /// failed, and the catalog copy failed.
+  PAYMENT_RECEIVED
+  PAYMENT_PAID_LATE
+  PAYMENTS_CONNECTION_ERROR
+  CATALOG_SYNC_FAILED
 }
 
 // ---------- Live chat enums (feature 002) ----------
@@ -252,6 +267,13 @@ enum ChatContentType {
   /// Outbound interactive reply buttons and lists sent by flows (feature 003).
   BUTTONS
   LIST
+  /// Feature 008: the Pay now cta_url message, product messages, the inbound cart and the outbound form.
+  PAYMENT_REQUEST
+  PRODUCT
+  PRODUCT_LIST
+  CATALOG
+  ORDER
+  FORM
 }
 
 enum MediaState {
@@ -288,6 +310,13 @@ enum JourneyEventType {
   // Feature 007
   AD_CHAT_STARTED
   LEAD_RECEIVED
+  // Feature 008
+  PAYMENT_REQUESTED
+  PAYMENT_PAID
+  PAYMENT_EXPIRED
+  PAYMENT_REFUNDED
+  CHAT_ORDER_RECEIVED
+  FORM_SUBMITTED
 }
 
 enum JourneyActor {
@@ -384,6 +413,7 @@ model User {
   createdAdCampaigns      AdCampaign[]            @relation("AdCampaignCreatedBy")
   createdAdAudiences      AdAudience[]            @relation("AdAudienceCreatedBy")
   createdAdLeadForms      AdLeadForm[]            @relation("AdLeadFormCreatedBy")
+  paymentRequestsCreated  PaymentRequest[]        @relation("PaymentRequestCreatedBy")
 
   @@map("users")
 }
@@ -538,6 +568,9 @@ model Contact {
   // Feature 007
   adChatStarts        AdChatStart[]
   adLeads             AdLead[]
+  paymentRequests     PaymentRequest[]
+  chatOrders          ChatOrder[]
+  formAnswers         FormAnswer[]
 
   @@index([consentStatus])
   @@index([attributes], type: Gin)
@@ -558,10 +591,11 @@ model Tag {
   flowFirstMessageRules FlowTrigger[] @relation("FlowTriggerFirstMessageTag")
   dripTriggers          DripTrigger[]
 
-  chatLinks   ChatLink[]
+  chatLinks       ChatLink[]
   // Feature 007
-  adCampaigns AdCampaign[]
-  adLeadForms AdLeadForm[]
+  adCampaigns     AdCampaign[]
+  adLeadForms     AdLeadForm[]
+  paymentSettings PaymentSettings[]
 
   @@map("tags")
 }
@@ -669,8 +703,9 @@ model Template {
   flowTriggers FlowTrigger[]
   dripSteps    DripStep[]
 
-  apiCampaigns ApiCampaign[]
-  adLeadForms  AdLeadForm[]
+  apiCampaigns    ApiCampaign[]
+  adLeadForms     AdLeadForm[]
+  paymentSettings PaymentSettings[]
 
   @@unique([wabaId, name, language])
   @@index([status])
@@ -750,6 +785,9 @@ model Campaign {
   trackedLinkTargets TrackedLinkTarget[]
   retryRuns          CampaignRetryRound[]
   dripTriggers       DripTrigger[]
+  /// Payment requests per recipient (feature 008, R5): {amount: {source, minor?, attributeKey?}, description,
+  /// expiryMinutes, tagId?, flowId?}; null when the campaign asks for no payment.
+  paymentConfig      Json?                @map("payment_config")
 
   @@index([state])
   @@map("campaigns")
@@ -969,8 +1007,10 @@ model Conversation {
   aiConversations AiConversation[]
 
   /// NULL contact ids (after erasure) stay distinct.
-  chatLinkStarts ChatLinkStart[]
-  adChatStarts   AdChatStart[]
+  chatLinkStarts  ChatLinkStart[]
+  adChatStarts    AdChatStart[]
+  paymentRequests PaymentRequest[]
+  chatOrders      ChatOrder[]
 
   @@unique([contactId, numberId])
   @@index([state, lastActivityAt(sort: Desc)])
@@ -1229,6 +1269,10 @@ enum FlowWait {
   INPUT
   DELAY
   API
+  /// Feature 008: waiting for a payment, a cart (product and catalog steps) or a form answer.
+  PAYMENT
+  ORDER
+  FORM
 }
 
 enum FlowStartedBy {
@@ -2195,6 +2239,8 @@ enum StoreAutomationKind {
   ORDER_CANCELLED
   COD_CONFIRMATION
   CART_REMINDER
+  /// A Pay now link for unpaid (and optionally COD) orders (feature 008).
+  PAY_LINK
 }
 
 enum PaymentKind {
@@ -2222,6 +2268,8 @@ enum StoreMessageKind {
   COD_REMINDER
   /// The reply after a COD answer; may repeat (a later tap gets the "already answered" reply).
   COD_REPLY
+  /// The order's Pay now link (feature 008).
+  PAY_LINK
 }
 
 enum CartStatus {
@@ -2389,10 +2437,11 @@ model StoreConnection {
   createdAt              DateTime       @default(now()) @map("created_at") @db.Timestamptz
   updatedAt              DateTime       @updatedAt @map("updated_at") @db.Timestamptz
 
-  events      StoreEvent[]
-  automations StoreAutomation[]
-  orders      StoreOrder[]
-  carts       StoreCart[]
+  events       StoreEvent[]
+  automations  StoreAutomation[]
+  orders       StoreOrder[]
+  carts        StoreCart[]
+  catalogFills CatalogConnection[]
 
   @@index([status])
   @@index([numberId])
@@ -2462,9 +2511,12 @@ model StoreOrder {
   createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
   updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz
 
-  messages       StoreOrderMessage[]
-  sentMessages   Message[]
-  recoveredCarts StoreCart[]
+  messages         StoreOrderMessage[]
+  sentMessages     Message[]
+  recoveredCarts   StoreCart[]
+  /// The Pay now request sent for this order (feature 008, PAY_LINK).
+  paymentRequestId String?             @map("payment_request_id") @db.Uuid
+  paidViaLinkAt    DateTime?           @map("paid_via_link_at") @db.Timestamptz
 
   @@unique([storeId, externalId])
   @@index([codStatus, codNextAt])
@@ -2972,4 +3024,385 @@ model AdLinkOpen {
   @@index([adCampaignId, openedAt])
   @@index([openedAt])
   @@map("ad_link_opens")
+}
+
+// ---------- Commerce and payments (feature 008, data-model.md) ----------
+
+enum PaymentProvider {
+  STRIPE
+}
+
+enum GatewayMode {
+  LIVE
+  TEST
+}
+
+enum GatewayStatus {
+  CONNECTED
+  ERROR
+}
+
+enum PaymentStatus {
+  WAITING
+  PAID
+  EXPIRED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentSource {
+  INBOX
+  FLOW
+  CAMPAIGN
+  API
+  STORE_ORDER
+  CHAT_ORDER
+}
+
+enum PaymentEventSource {
+  WEBHOOK
+  RECONCILE
+  CHECK
+}
+
+enum PaymentEventResult {
+  PENDING
+  APPLIED
+  IGNORED
+  DUPLICATE
+  REJECTED
+  FAILED
+}
+
+enum ChatOrderMode {
+  AUTO
+  REVIEW
+  FLOW
+}
+
+enum ChatOrderStatus {
+  RECEIVED
+  LINK_SENT
+  PAID
+  EXPIRED
+  CANCELLED
+  REFUNDED
+}
+
+enum FormStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum FormVersionStatus {
+  PUBLISHED
+  FAILED
+  DEPRECATED
+}
+
+enum FormCategory {
+  SIGN_UP
+  APPOINTMENT_BOOKING
+  LEAD_GENERATION
+  CONTACT_US
+  CUSTOMER_SUPPORT
+  SURVEY
+  OTHER
+}
+
+/// The company's Stripe account; one row at most (FR-001 - FR-005, R1, R4).
+model PaymentGateway {
+  id                       String          @id @default(uuid(7)) @db.Uuid
+  provider                 PaymentProvider @default(STRIPE)
+  mode                     GatewayMode
+  accountId                String?         @map("account_id") @db.VarChar(64)
+  accountName              String?         @map("account_name") @db.VarChar(200)
+  country                  String?         @db.Char(2)
+  /// The connection currency, lower case (aed); one per connection.
+  currency                 String          @db.Char(3)
+  /// Restricted or secret key, encrypted with the 001 TokenCipher; never returned.
+  secretKeyEnc             String          @map("secret_key_enc")
+  /// restricted | secret
+  keyKind                  String          @map("key_kind") @db.VarChar(10)
+  webhookSecretEnc         String?         @map("webhook_secret_enc")
+  previousWebhookSecretEnc String?         @map("previous_webhook_secret_enc")
+  previousSecretUntil      DateTime?       @map("previous_secret_until") @db.Timestamptz
+  /// Set when the platform registered the endpoint; deleted on disconnect.
+  webhookEndpointId        String?         @map("webhook_endpoint_id") @db.VarChar(64)
+  status                   GatewayStatus   @default(CONNECTED)
+  checks                   Json            @default("[]")
+  /// {status: NOT_RUN | PENDING | PASSED | FAILED, sessionId?, startedAt?, passedAt?, fix?}
+  notificationCheck        Json            @default("{\"status\":\"NOT_RUN\"}") @map("notification_check")
+  lastCheckedAt            DateTime?       @map("last_checked_at") @db.Timestamptz
+  lastEventAt              DateTime?       @map("last_event_at") @db.Timestamptz
+  /// The reconciler's position in Stripe's event list (created time).
+  eventsCursor             DateTime?       @map("events_cursor") @db.Timestamptz
+  connectedById            String?         @map("connected_by_id") @db.Uuid
+  createdAt                DateTime        @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("payment_gateways")
+}
+
+/// Payment settings; one row, created with defaults (FR-006 - FR-008, FR-017, FR-027).
+model PaymentSettings {
+  id                     String        @id @default(uuid(7)) @db.Uuid
+  maxAmountMinor         BigInt        @default(1000000) @map("max_amount_minor")
+  defaultExpiryMinutes   Int           @default(1440) @map("default_expiry_minutes")
+  requestRoles           String[]      @default(["ADMIN", "MANAGER", "AGENT"]) @map("request_roles")
+  sessionText            String        @default("{description}\nAmount: {amount}\nPlease pay by {expires}.") @map("session_text") @db.VarChar(1024)
+  buttonText             String        @default("Pay now") @map("button_text") @db.VarChar(20)
+  templateId             String?       @map("template_id") @db.Uuid
+  template               Template?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  templateMapping        Json          @default("{}") @map("template_mapping")
+  /// Up to two: [{beforeMinutes, templateId, mapping}]
+  reminders              Json          @default("[]")
+  chatOrderMode          ChatOrderMode @default(REVIEW) @map("chat_order_mode")
+  chatOrderExpiryMinutes Int           @default(1440) @map("chat_order_expiry_minutes")
+  chatOrderTagId         String?       @map("chat_order_tag_id") @db.Uuid
+  chatOrderTag           Tag?          @relation(fields: [chatOrderTagId], references: [id], onDelete: SetNull)
+  updatedById            String?       @map("updated_by_id") @db.Uuid
+  updatedAt              DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("payment_settings")
+}
+
+/// One customer's request to pay, from any source (FR-006 - FR-016, R2, R5, R6).
+model PaymentRequest {
+  id                    String         @id @default(uuid(7)) @db.Uuid
+  /// Pay link code: ${PUBLIC_LINK_BASE_URL}/p/{code}
+  code                  String         @unique @db.VarChar(16)
+  contactId             String?        @map("contact_id") @db.Uuid
+  contact               Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  conversationId        String?        @map("conversation_id") @db.Uuid
+  conversation          Conversation?  @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  phoneE164             String?        @map("phone_e164") @db.VarChar(16)
+  customerName          String?        @map("customer_name") @db.VarChar(120)
+  amountMinor           BigInt         @map("amount_minor")
+  currency              String         @db.Char(3)
+  description           String         @db.VarChar(250)
+  reference             String?        @db.VarChar(80)
+  expiresAt             DateTime       @map("expires_at") @db.Timestamptz
+  status                PaymentStatus  @default(WAITING)
+  source                PaymentSource
+  createdById           String?        @map("created_by_id") @db.Uuid
+  createdBy             User?          @relation("PaymentRequestCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  apiKeyId              String?        @map("api_key_id") @db.Uuid
+  flowSessionId         String?        @map("flow_session_id") @db.Uuid
+  campaignId            String?        @map("campaign_id") @db.Uuid
+  messageId             String?        @map("message_id") @db.Uuid
+  chatItemId            String?        @map("chat_item_id") @db.Uuid
+  storeOrderId          String?        @map("store_order_id") @db.Uuid
+  chatOrderId           String?        @map("chat_order_id") @db.Uuid
+  chatOrder             ChatOrder?     @relation(fields: [chatOrderId], references: [id], onDelete: SetNull)
+  tagId                 String?        @map("tag_id") @db.Uuid
+  flowId                String?        @map("flow_id") @db.Uuid
+  isTest                Boolean        @default(false) @map("is_test")
+  sessionId             String?        @map("session_id") @db.VarChar(80)
+  sessionUrl            String?        @map("session_url")
+  sessionExpiresAt      DateTime?      @map("session_expires_at") @db.Timestamptz
+  sessionsCreated       Int            @default(0) @map("sessions_created")
+  sessionExpirePending  Boolean        @default(false) @map("session_expire_pending")
+  sessionExpireAttempts Int            @default(0) @map("session_expire_attempts")
+  paymentIntentId       String?        @map("payment_intent_id") @db.VarChar(80)
+  paidAt                DateTime?      @map("paid_at") @db.Timestamptz
+  paidAmountMinor       BigInt?        @map("paid_amount_minor")
+  paidLate              Boolean        @default(false) @map("paid_late")
+  failedAttempts        Int            @default(0) @map("failed_attempts")
+  lastFailureCode       String?        @map("last_failure_code") @db.VarChar(60)
+  lastFailedAt          DateTime?      @map("last_failed_at") @db.Timestamptz
+  refundedMinor         BigInt         @default(0) @map("refunded_minor")
+  refundedAt            DateTime?      @map("refunded_at") @db.Timestamptz
+  cancelledAt           DateTime?      @map("cancelled_at") @db.Timestamptz
+  cancelledById         String?        @map("cancelled_by_id") @db.Uuid
+  expiredAt             DateTime?      @map("expired_at") @db.Timestamptz
+  remindersSent         Int            @default(0) @map("reminders_sent")
+  nextReminderAt        DateTime?      @map("next_reminder_at") @db.Timestamptz
+  opens                 Int            @default(0)
+  firstOpenedAt         DateTime?      @map("first_opened_at") @db.Timestamptz
+  createdAt             DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt             DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+  events                PaymentEvent[]
+
+  @@index([contactId, createdAt])
+  @@index([campaignId, status])
+  @@index([source, createdAt])
+  @@index([createdAt])
+  @@index([paymentIntentId])
+  @@index([reference])
+  @@index([chatOrderId])
+  @@index([storeOrderId])
+  @@index([flowSessionId])
+  @@map("payment_requests")
+}
+
+/// Every Stripe notification as received, card details removed; kept 30 days (FR-004, R3).
+model PaymentEvent {
+  id               String             @id @default(uuid(7)) @db.Uuid
+  stripeEventId    String?            @unique @map("stripe_event_id") @db.VarChar(80)
+  type             String             @db.VarChar(80)
+  livemode         Boolean?
+  signatureValid   Boolean            @map("signature_valid")
+  source           PaymentEventSource @default(WEBHOOK)
+  result           PaymentEventResult @default(PENDING)
+  paymentRequestId String?            @map("payment_request_id") @db.Uuid
+  paymentRequest   PaymentRequest?    @relation(fields: [paymentRequestId], references: [id], onDelete: SetNull)
+  body             Json?
+  error            String?            @db.VarChar(500)
+  stripeCreatedAt  DateTime?          @map("stripe_created_at") @db.Timestamptz
+  receivedAt       DateTime           @default(now()) @map("received_at") @db.Timestamptz
+  processedAt      DateTime?          @map("processed_at") @db.Timestamptz
+
+  @@index([receivedAt])
+  @@index([paymentRequestId])
+  @@index([result, receivedAt])
+  @@map("payment_events")
+}
+
+/// The Meta catalog linked to the WhatsApp accounts; one row at most (FR-021, FR-022, R8, R9).
+model CatalogConnection {
+  id            String           @id @default(uuid(7)) @db.Uuid
+  catalogId     String           @map("catalog_id") @db.VarChar(40)
+  name          String           @db.VarChar(200)
+  /// [{wabaId, connected}]
+  wabaChecks    Json             @default("[]") @map("waba_checks")
+  /// IDLE | RUNNING | FAILED
+  syncStatus    String           @default("IDLE") @map("sync_status") @db.VarChar(20)
+  lastSyncedAt  DateTime?        @map("last_synced_at") @db.Timestamptz
+  productCount  Int              @default(0) @map("product_count")
+  lastSyncError String?          @map("last_sync_error") @db.VarChar(500)
+  fillStoreId   String?          @map("fill_store_id") @db.Uuid
+  fillStore     StoreConnection? @relation(fields: [fillStoreId], references: [id], onDelete: SetNull)
+  fillEnabled   Boolean          @default(false) @map("fill_enabled")
+  lastFilledAt  DateTime?        @map("last_filled_at") @db.Timestamptz
+  fillErrors    Json             @default("[]") @map("fill_errors")
+  connectedById String?          @map("connected_by_id") @db.Uuid
+  createdAt     DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt     DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("catalog_connections")
+}
+
+/// The platform's copy of the catalog's products (FR-021, FR-025, R8).
+model CatalogProduct {
+  id             String    @id @default(uuid(7)) @db.Uuid
+  retailerId     String    @unique @map("retailer_id") @db.VarChar(100)
+  metaProductId  String?   @map("meta_product_id") @db.VarChar(40)
+  name           String    @db.VarChar(200)
+  description    String?
+  priceMinor     BigInt?   @map("price_minor")
+  salePriceMinor BigInt?   @map("sale_price_minor")
+  currency       String?   @db.Char(3)
+  imageUrl       String?   @map("image_url")
+  url            String?
+  availability   String    @db.VarChar(30)
+  visibility     String?   @db.VarChar(20)
+  reviewStatus   String?   @map("review_status") @db.VarChar(20)
+  removedAt      DateTime? @map("removed_at") @db.Timestamptz
+  fillHash       String?   @map("fill_hash") @db.Char(64)
+  storeRef       String?   @map("store_ref") @db.VarChar(80)
+  syncedAt       DateTime  @default(now()) @map("synced_at") @db.Timestamptz
+
+  @@index([removedAt])
+  @@map("catalog_products")
+}
+
+/// A cart a customer sent in chat (FR-026 - FR-029, R11).
+model ChatOrder {
+  id              String           @id @default(uuid(7)) @db.Uuid
+  contactId       String?          @map("contact_id") @db.Uuid
+  contact         Contact?         @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  conversationId  String?          @map("conversation_id") @db.Uuid
+  conversation    Conversation?    @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  chatItemId      String?          @map("chat_item_id") @db.Uuid
+  catalogId       String           @map("catalog_id") @db.VarChar(40)
+  customerText    String?          @map("customer_text") @db.VarChar(1000)
+  /// [{retailerId, name, quantity, itemPriceMinor, currency}]
+  items           Json
+  currency        String           @db.Char(3)
+  totalMinor      BigInt           @map("total_minor")
+  /// [{kind, retailerId?, detail}]
+  warnings        Json             @default("[]")
+  mode            ChatOrderMode
+  status          ChatOrderStatus  @default(RECEIVED)
+  editedById      String?          @map("edited_by_id") @db.Uuid
+  cancelledById   String?          @map("cancelled_by_id") @db.Uuid
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+  paymentRequests PaymentRequest[]
+
+  @@index([status, createdAt])
+  @@index([contactId, createdAt])
+  @@index([createdAt])
+  @@map("chat_orders")
+}
+
+/// A WhatsApp Form (Meta WhatsApp Flow) built in the platform (FR-030 - FR-035, R12).
+model Form {
+  id                  String        @id @default(uuid(7)) @db.Uuid
+  name                String        @db.Citext
+  category            FormCategory
+  status              FormStatus    @default(DRAFT)
+  /// Shared FormModelSchema: {screens: [...]}
+  draft               Json          @default("{\"screens\":[]}")
+  /// [{fieldKey, attributeKey}]
+  mapping             Json          @default("[]")
+  tagIds              String[]      @default([]) @map("tag_ids") @db.Uuid
+  changedSincePublish Boolean       @default(true) @map("changed_since_publish")
+  currentVersionId    String?       @map("current_version_id") @db.Uuid
+  createdById         String?       @map("created_by_id") @db.Uuid
+  updatedById         String?       @map("updated_by_id") @db.Uuid
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz
+  versions            FormVersion[]
+  answers             FormAnswer[]
+
+  @@map("forms")
+}
+
+/// One published version of a form, with its Meta flows per WhatsApp account.
+model FormVersion {
+  id            String            @id @default(uuid(7)) @db.Uuid
+  formId        String            @map("form_id") @db.Uuid
+  form          Form              @relation(fields: [formId], references: [id], onDelete: Cascade)
+  number        Int
+  model         Json
+  mapping       Json              @default("[]")
+  tagIds        String[]          @default([]) @map("tag_ids") @db.Uuid
+  flowJson      Json              @map("flow_json")
+  /// [{wabaId, flowId, status, errors}]
+  metaFlows     Json              @default("[]") @map("meta_flows")
+  status        FormVersionStatus @default(PUBLISHED)
+  publishedById String?           @map("published_by_id") @db.Uuid
+  publishedAt   DateTime          @default(now()) @map("published_at") @db.Timestamptz
+  answers       FormAnswer[]
+
+  @@unique([formId, number])
+  @@map("form_versions")
+}
+
+/// One form submission; kept 12 months, deleted with the contact (FR-034).
+model FormAnswer {
+  id             String      @id @default(uuid(7)) @db.Uuid
+  formId         String      @map("form_id") @db.Uuid
+  form           Form        @relation(fields: [formId], references: [id], onDelete: Cascade)
+  formVersionId  String      @map("form_version_id") @db.Uuid
+  formVersion    FormVersion @relation(fields: [formVersionId], references: [id], onDelete: Cascade)
+  contactId      String      @map("contact_id") @db.Uuid
+  contact        Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  conversationId String?     @map("conversation_id") @db.Uuid
+  chatItemId     String?     @map("chat_item_id") @db.Uuid
+  /// INBOX | FLOW | TEMPLATE | CAMPAIGN (from the token)
+  source         String      @db.VarChar(20)
+  flowSessionId  String?     @map("flow_session_id") @db.Uuid
+  answers        Json
+  saved          Json        @default("{}")
+  problems       Json        @default("[]")
+  submittedAt    DateTime    @default(now()) @map("submitted_at") @db.Timestamptz
+
+  @@index([formId, submittedAt])
+  @@index([contactId, submittedAt])
+  @@index([submittedAt])
+  @@map("form_answers")
 }

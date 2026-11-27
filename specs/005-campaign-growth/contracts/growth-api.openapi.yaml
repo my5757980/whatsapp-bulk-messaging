@@ -624,7 +624,8 @@ components:
         clicks: { type: integer }
     RetargetStatus:
       type: string
-      enum: [FAILED, NOT_READ, READ, DELIVERED, CLICKED, NOT_CLICKED, REPLIED, NOT_REPLIED, HELD_BACK]
+      # PAID and NOT_PAID: payment campaigns (feature 008 US4).
+      enum: [FAILED, NOT_READ, READ, DELIVERED, CLICKED, NOT_CLICKED, REPLIED, NOT_REPLIED, HELD_BACK, PAID, NOT_PAID]
     RetryPlan:
       type: object
       required: [rounds, delaysMinutes]

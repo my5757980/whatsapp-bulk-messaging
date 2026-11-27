@@ -4,7 +4,9 @@ import { z } from 'zod';
 
 export const VariableSourceSchema = z
   .object({
-    source: z.enum(['column', 'field', 'attribute', 'static']),
+    // Feature 008: `payment` reads the payment request a message carries (key: amount, description,
+    // reference, expires, link or code).
+    source: z.enum(['column', 'field', 'attribute', 'static', 'payment']),
     key: z.string().trim().min(1).max(100).optional(),
     value: z.string().max(1024).optional(),
     fallback: z.string().max(1024).nullish(),
@@ -24,7 +26,12 @@ export interface ResolveInput {
   contact: { name: string | null; phone: string | null; attributes: unknown };
   /** Raw CSV columns of the uploaded row (`column` source); empty for non-upload audiences. */
   row: Record<string, unknown>;
+  /** The payment request the message carries (`payment` source, feature 008), already formatted. */
+  payment?: PaymentVariables;
 }
+
+export const PAYMENT_VARIABLE_KEYS = ['amount', 'description', 'reference', 'expires', 'link', 'code'] as const;
+export type PaymentVariables = Partial<Record<(typeof PAYMENT_VARIABLE_KEYS)[number], string>>;
 
 export type ResolveResult = { ok: true; params: Record<string, string> } | { ok: false; missing: string[] };
 
@@ -45,6 +52,8 @@ function readSource(source: VariableSource, input: ResolveInput): string {
       if (source.key === 'name') return asText(input.contact.name);
       if (source.key === 'phone') return asText(input.contact.phone);
       return '';
+    case 'payment':
+      return asText(input.payment?.[(source.key ?? '') as keyof PaymentVariables]);
     case 'attribute': {
       const attributes = input.contact.attributes;
       return attributes && typeof attributes === 'object'

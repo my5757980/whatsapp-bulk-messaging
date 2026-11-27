@@ -321,4 +321,23 @@ export class PlatformEvents {
     const contacts = await this.contactsById(db, items.map((i) => i.contactId));
     for (const item of items) await this.events.record(db, 'contact.opted_in', { contact: contacts.get(item.contactId) ?? null, source, note: item.note });
   }
+
+  /** Feature 008: a payment request changed (no keys or card details are ever in the payment). */
+  payment(
+    db: Db,
+    type: 'payment.requested' | 'payment.paid' | 'payment.failed' | 'payment.expired' | 'payment.refunded' | 'payment.cancelled',
+    input: { payment: Record<string, unknown>; contactId: string | null; at?: Date },
+  ): Promise<void> {
+    return this.when(type, async () => ({ payment: input.payment, contact: await this.contact(db, input.contactId) }), db, input.at);
+  }
+
+  /** Feature 008: a cart sent in chat became a chat order, or that order was paid. */
+  chatOrder(db: Db, type: 'chat_order.received' | 'chat_order.paid', input: { order: Record<string, unknown>; contactId: string | null }): Promise<void> {
+    return this.when(type, async () => ({ order: input.order, contact: await this.contact(db, input.contactId) }), db);
+  }
+
+  /** Feature 008: a WhatsApp Form was answered. */
+  formSubmitted(db: Db, input: { form: { id: string; name: string; version: number }; answers: Record<string, unknown>; contactId: string; answerId: string }): Promise<void> {
+    return this.when('form.submitted', async () => ({ form: input.form, answerId: input.answerId, answers: input.answers, contact: await this.contact(db, input.contactId) }), db);
+  }
 }

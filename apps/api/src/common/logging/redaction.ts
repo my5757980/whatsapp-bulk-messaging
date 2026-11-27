@@ -49,6 +49,19 @@ const SECRET_KEYS = new Set([
   'webhook-signature',
   'x-shopify-hmac-sha256',
   'x-wc-webhook-signature',
+  // Payments (feature 008, T020): Stripe keys, webhook signing secrets (also the encrypted copies) and
+  // Stripe's signature header.
+  'secretkey',
+  'secret_key',
+  'secretkeyenc',
+  'secret_key_enc',
+  'webhooksecret',
+  'webhook_secret',
+  'webhooksecretenc',
+  'webhook_secret_enc',
+  'previouswebhooksecretenc',
+  'previous_webhook_secret_enc',
+  'stripe-signature',
 ]);
 
 const CONTENT_KEYS = new Set([
@@ -109,7 +122,8 @@ const PHONE_KEYS = new Set([
 
 /** Keys whose string values are paths or addresses: tracked-link codes in them are hidden (005). */
 const PATH_KEYS = new Set(['url', 'path', 'originalurl']);
-const LINK_PATH = /\/l\/[^/?#\s]+/g;
+/** Chat (c/), ad (a/) and pay (p/) links included: their codes are hidden too (features 006–008). */
+const LINK_PATH = /\/l\/(?:[acp]\/)?[^/?#\s]+/g;
 
 const REDACTED = '[REDACTED]';
 const MAX_DEPTH = 8;

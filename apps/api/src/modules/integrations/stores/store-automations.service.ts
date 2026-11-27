@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
-import { CART_FIELDS, ORDER_FIELDS, STORE_VALUE_FIELDS, can, cartStepProblems, type MetaTemplateComponent, type Role } from '@wbm/shared';
+import { Inject, Injectable } from '@nestjs/common';
+import { CART_FIELDS, ORDER_FIELDS, STORE_VALUE_FIELDS, can, cartStepProblems, payLinkButtonIndex, type MetaTemplateComponent, type Role } from '@wbm/shared';
 import { z } from 'zod';
+import { APP_CONFIG } from '../../../common/config/config.module.js';
+import type { AppConfig } from '../../../common/config/config.js';
 import { AppError } from '../../../common/errors/app-error.js';
 import { maskPhone } from '../../../common/phone/phone.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
@@ -39,8 +41,13 @@ const CodSettingsSchema = z
   .partial()
   .strict();
 
+/** Feature 008: the PAY_LINK automation's settings. */
+const PayLinkSettingsSchema = z
+  .object({ includeCod: z.boolean(), expiryMinutes: z.number().int().min(30).max(43_200) })
+  .partial()
+  .strict();
 export const AutomationInputSchema = z
-  .object({ enabled: z.boolean(), steps: z.array(StepSchema).min(1).max(3), settings: CodSettingsSchema.optional() })
+  .object({ enabled: z.boolean(), steps: z.array(StepSchema).min(1).max(3), settings: z.union([CodSettingsSchema, PayLinkSettingsSchema]).optional() })
   .strict();
 export type AutomationInput = z.infer<typeof AutomationInputSchema>;
 
@@ -60,7 +67,13 @@ export class StoreAutomationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
+
+  /** Where pay links live (feature 008), for the PAY_LINK template check. */
+  private linkBase(): string {
+    return this.config.PUBLIC_LINK_BASE_URL ?? `${this.config.APP_URL.replace(/\/+$/, '')}/l`;
+  }
 
   private async store(id: string) {
     const store = await this.prisma.storeConnection.findUnique({ where: { id }, select: { id: true, numberId: true, platform: true } });
@@ -86,6 +99,9 @@ export class StoreAutomationsService {
     if (kind !== 'CART_REMINDER' && input.steps.length !== 1) throw AppError.validation('This automation sends one message', [{ field: 'steps', issue: 'must have exactly one step' }]);
     if (kind === 'CART_REMINDER' && input.steps.some((s) => s.waitMinutes === undefined)) {
       throw AppError.validation('Each cart reminder needs its wait', [{ field: 'steps', issue: 'each step needs waitMinutes' }]);
+    }
+    if (kind === 'PAY_LINK' && input.settings && !PayLinkSettingsSchema.safeParse(input.settings).success) {
+      throw AppError.validation('The pay link settings are includeCod and expiryMinutes', [{ field: 'settings', issue: 'has unknown or invalid values' }]);
     }
     const problems = await this.problems(store.numberId, kind, input.steps);
     if (input.enabled && problems.length) throw AppError.validation('Fix these problems before turning it on', problems.map((p) => ({ field: 'steps', issue: p.message })));
@@ -120,7 +136,15 @@ export class StoreAutomationsService {
           problems.push({ code: 'COD_BUTTONS', message: 'The template needs two quick-reply buttons first: confirm, then cancel' });
         }
       }
-      const variables = ((Array.isArray(template.variables) ? template.variables : []) as Array<{ key: string }>).map((v) => v.key);
+      // Feature 008: the pay link template's URL button carries the request's code (no mapping).
+      let payButton: string | null = null;
+      if (kind === 'PAY_LINK') {
+        const buttons = (template.components as unknown as Array<{ type: string; buttons?: Array<{ type: string; url?: string }> }>).find((c) => c.type.toUpperCase() === 'BUTTONS')?.buttons ?? [];
+        const index = payLinkButtonIndex(buttons as never, this.linkBase());
+        if (index < 0) problems.push({ code: 'TEMPLATE_NOT_PAY_LINK', message: `The template needs a URL button to ${this.linkBase()}/p/{{1}}` });
+        else payButton = `BUTTON.${index}.1`;
+      }
+      const variables = ((Array.isArray(template.variables) ? template.variables : []) as Array<{ key: string }>).map((v) => v.key).filter((v) => v !== payButton);
       for (const v of variables) if (!step.variableMapping[v]) problems.push({ code: 'MAPPING', message: `${label}${v} has no value source` });
       for (const v of Object.keys(step.variableMapping)) if (!variables.includes(v)) problems.push({ code: 'MAPPING', message: `${label}${v} is not a variable of the template` });
       for (const [v, source] of Object.entries(step.variableMapping)) {
@@ -275,6 +299,7 @@ export class StoreAutomationsService {
         paymentKind: o.paymentKind,
         status: o.status,
         codStatus: o.codStatus,
+        paidViaLinkAt: o.paidViaLinkAt?.toISOString() ?? null,
         placedAt: o.placedAt.toISOString(),
         messages: o.messages.map((m) => ({ kind: m.kind, outcome: m.outcome, skipReason: m.skipReason, status: m.message?.status ?? null })),
       })),
