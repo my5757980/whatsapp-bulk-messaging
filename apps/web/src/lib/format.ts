@@ -53,6 +53,12 @@ export function titleCase(value: string): string {
   return value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
 }
 
+/** Why a campaign recipient was skipped; feature 009 reasons get their own words. */
+const SKIP_WORDS: Record<string, string> = { OFFER_CODE_MISSING: 'Missing offer code', MEDIA_URL_MISSING: 'Missing media address' };
+export function skipReasonLabel(reason: string): string {
+  return SKIP_WORDS[reason] ?? titleCase(reason);
+}
+
 export function totalRecipients(t: StatusTotals): number {
   return t.pending + t.queued + t.sent + t.delivered + t.read + t.failed + t.skipped + t.cancelled;
 }

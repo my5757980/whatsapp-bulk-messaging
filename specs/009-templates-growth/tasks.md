@@ -283,7 +283,7 @@ more".
   - `cardMedia` on create and update in apps/api/src/modules/campaigns/campaigns.service.ts
   - the `CARD.*` mapping keys in variable-resolver.ts and audience-snapshot.service.ts
   - a `carouselComponents()` in apps/api/src/modules/sending/template-payload.builder.ts, using the Meta ids from `MediaService.ensureMetaMediaId`
-- [ ] T038 [US2] Inbound: apps/api/src/modules/inbox/inbound/message-parser.ts reads `wbm:c{i}:b{b}` payloads into the chat item's `card`; the chat item text is "Card {i+1} · {button text}"; 003 template button triggers still match on the button text
+- [ ] T038 [US2] Inbound: apps/api/src/modules/inbox/inbound/message-parser.ts reads `wbm:c{i}:b{b}` payloads into the chat item's `card`; the chat item text stays the button text, so 003 template button triggers still match (the flow publish check and the trigger panel include card quick replies); live chat and the inbox list show "Card {i+1} · {button text}"
 - [ ] T039 [P] [US2] Web:
   - apps/web/src/components/templates/carousel-cards.tsx in templates/new
   - the cards preview in template-preview.tsx

@@ -42,4 +42,34 @@ describe('US5 dashboard API contract', () => {
     await check('post', '/campaigns/{id}/retarget', retarget, 201);
     await check('get', '/campaigns/{id}', await admin.agent.get(`/api/campaigns/${retarget.body.id}`), 200);
   });
+
+  // T042 (feature 009 US3): offerConfig on the campaign routes, and why messages expired in the report.
+  it('offer campaigns and expired messages', async () => {
+    const number = await seedNumber(ctx);
+    const offer = await seedTemplate(ctx, number.wabaId, {
+      category: 'MARKETING',
+      kind: 'LIMITED_TIME_OFFER',
+      components: [
+        { type: 'LIMITED_TIME_OFFER', limited_time_offer: { text: 'Weekend deal', has_expiration: true } },
+        { type: 'BODY', text: 'Hi {{1}}, 20% off.' },
+        { type: 'BUTTONS', buttons: [{ type: 'COPY_CODE', example: 'WKND20' }, { type: 'URL', text: 'Shop', url: 'https://shop.example.com/{{1}}' }] },
+      ],
+      variables: [{ key: 'BODY.1', example: 'Sara' }, { key: 'BUTTON.1.1', example: 'offer' }],
+    });
+    const offerConfig = { endsAt: new Date(Date.now() + 86_400_000).toISOString(), code: { source: 'attribute', key: 'offer_code' } };
+    const created = await admin.agent.post('/api/campaigns').set('x-csrf-token', admin.csrf).send({ name: 'Weekend offer', numberId: number.id, templateId: offer.id, audienceType: 'ALL_OPTED_IN', offerConfig });
+    await check('post', '/campaigns', created, 201);
+    expect(created.body.offerConfig).toEqual(offerConfig);
+    const updated = await admin.agent.patch(`/api/campaigns/${created.body.id}`).set('x-csrf-token', admin.csrf).send({ offerConfig: { ...offerConfig, code: { source: 'static', value: 'WKND20' } } });
+    await check('patch', '/campaigns/{id}', updated, 200);
+    expect(updated.body.offerConfig.code).toEqual({ source: 'static', value: 'WKND20' });
+
+    const contact = await seedContact(ctx, uaePhone());
+    const ran = await seedRunningCampaign(ctx, { numberId: number.id, templateId: offer.id, createdById: admin.userId, contacts: [contact] });
+    await ctx.prisma.message.updateMany({ where: { campaignId: ran.id }, data: { status: 'EXPIRED', expiredReason: 'OFFER_ENDED' } });
+    const report = await admin.agent.get(`/api/campaigns/${ran.id}/report`);
+    await check('get', '/campaigns/{id}/report', report, 200);
+    expect(report.body.totals.expired).toBe(1);
+    expect(report.body.expired).toEqual({ expiredBeforeSending: 0, notDeliveredInTime: 0, offerEnded: 1 });
+  });
 });

@@ -30,6 +30,11 @@ export class ReportsService {
     const failureReasons = reasons
       .map((r) => ({ code: r.failureCode, reason: r.failureReason ?? 'Unknown reason', count: r._count._all }))
       .sort((a, b) => b.count - a.count);
+    // Feature 009 (research R7, R8): why messages expired.
+    const expiredGroups = totals.expired
+      ? await this.prisma.message.groupBy({ by: ['expiredReason'], where: { campaignId, status: 'EXPIRED' }, _count: { _all: true } })
+      : [];
+    const expiredBy = (reason: string) => expiredGroups.find((g) => g.expiredReason === reason)?._count._all ?? 0;
 
     return {
       campaignId,
@@ -37,6 +42,7 @@ export class ReportsService {
       deliveryRate: attempted ? delivered / attempted : 0,
       readRate: delivered ? totals.read / delivered : 0,
       failureReasons,
+      expired: { expiredBeforeSending: expiredBy('EXPIRED_BEFORE_SENDING'), notDeliveredInTime: expiredBy('NOT_DELIVERED_IN_TIME'), offerEnded: expiredBy('OFFER_ENDED') },
       estimatedCostUsd: microsToUsdNumber(await this.costMicros(campaignId)),
       costIsEstimate: true as const,
     };

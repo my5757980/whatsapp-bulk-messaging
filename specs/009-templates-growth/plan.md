@@ -179,7 +179,8 @@ Gates from `.specify/memory/constitution.md` (v1.0.0):
   - Opt-out wins on every campaign path, including duplicate rows and carousels.
   - One-time codes are not marketing: the person asked for them on the company's own site or app
     (spec assumption). They skip marketing consent but never go to blocked numbers.
-  - The broadcast kill switch (001) pauses campaigns, not codes. Codes have their own per-phone limit.
+  - Pausing a campaign (001) does not stop codes, but the number's `sending_enabled` kill switch does
+    (NUMBER_NOT_SENDING). Codes also have their own per-phone limit.
 - [x] **II. Original Product**:
   - Behaviour comes from public documentation only.
   - Samples, guidelines, error meanings, the button's design and its icon are written or drawn by us.

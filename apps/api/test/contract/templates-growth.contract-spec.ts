@@ -1,18 +1,21 @@
 import nock from 'nock';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FakeTemplatesGraph } from '../support/fake-templates-graph.js';
-import { restoreNetwork, seedNumber, useNockLocalOnly } from '../support/fixtures.js';
+import { digits, restoreNetwork, seedNumber, seedTemplate, useNockLocalOnly } from '../support/fixtures.js';
 import { seedAuthTemplate } from '../support/templates.js';
 import { createTestContext, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
 import { expectMatchesContract } from './openapi-validator.js';
 
 // Feature 009 contract tests: the dashboard routes match contracts/templates-growth-api.openapi.yaml.
 // Each story adds its cases (T022 US1, T032 US2, T051 US4, T060 US5, T068 US6, T083 US8).
+const PNG = Buffer.from('89504e470d0a1a0a0000000d4948445200000001000000010806000000', 'hex');
+
 describe('Templates and growth API (009) contract', () => {
   let ctx: TestContext;
   let admin: SignedInAgent;
   let manager: SignedInAgent;
   let number: Awaited<ReturnType<typeof seedNumber>>;
+  let fake: FakeTemplatesGraph;
 
   const check = async (method: string, route: string, res: { status: number; body: unknown }, expected: number) => {
     expect(res.status, JSON.stringify(res.body)).toBe(expected);
@@ -25,6 +28,7 @@ describe('Templates and growth API (009) contract', () => {
     admin = await signIn(ctx, 'ADMIN');
     manager = await signIn(ctx, 'MANAGER');
     number = await seedNumber(ctx);
+    fake = new FakeTemplatesGraph().install();
   });
 
   afterAll(async () => {
@@ -35,11 +39,40 @@ describe('Templates and growth API (009) contract', () => {
 
   describe('US1 one-time code settings', () => {
     it('GET and PUT /otp/settings', async () => {
-      const template = await seedAuthTemplate(ctx, number.wabaId, new FakeTemplatesGraph().install());
+      const template = await seedAuthTemplate(ctx, number.wabaId, fake);
       await check('get', '/otp/settings', await manager.agent.get('/api/otp/settings'), 200);
       const put = (body: object) => admin.agent.put('/api/otp/settings').set('X-CSRF-Token', admin.csrf).send(body);
       await check('put', '/otp/settings', await put({ defaultTemplateId: template.id, defaultNumberId: number.id, limitPerPhone: 5, limitWindowMinutes: 15 }), 200);
       await check('put', '/otp/settings', await put({ defaultTemplateId: template.id, defaultNumberId: number.id, limitPerPhone: 0, limitWindowMinutes: 15 }), 422);
+    });
+  });
+
+  describe('US2 carousel card media', () => {
+    it('POST /campaigns/{id}/media-check', async () => {
+      const upload = async () => {
+        const res = await manager.agent.post('/api/media').set('X-CSRF-Token', manager.csrf).field('purpose', 'TEMPLATE_SAMPLE').attach('file', PNG, { filename: 'card.png', contentType: 'image/png' });
+        expect(res.status).toBe(201);
+        return res.body.id as string;
+      };
+      const samples = [await upload(), await upload()];
+      const card = { components: [{ type: 'HEADER', format: 'IMAGE' }, { type: 'BODY', text: 'Card {{1}}' }, { type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'More' }] }] };
+      const template = await seedTemplate(ctx, number.wabaId, {
+        category: 'MARKETING',
+        kind: 'CAROUSEL',
+        components: [{ type: 'BODY', text: 'Hi' }, { type: 'CAROUSEL', cards: [card, card] }],
+        variables: [{ key: 'CARD.0.BODY.1', example: '1' }, { key: 'CARD.1.BODY.1', example: '2' }],
+        options: { cardMediaFormat: 'IMAGE', cards: samples.map((sampleMediaAssetId) => ({ sampleMediaAssetId })) },
+      });
+      const draft = await manager.agent
+        .post('/api/campaigns')
+        .set('X-CSRF-Token', manager.csrf)
+        .send({ name: `Cards ${digits(5)}`, numberId: number.id, templateId: template.id, audienceType: 'ALL_OPTED_IN', cardMedia: [{ cardIndex: 1, mediaAssetId: await upload() }] });
+      expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+      const res = await manager.agent.post(`/api/campaigns/${draft.body.id}/media-check`).set('X-CSRF-Token', manager.csrf);
+      await check('post', '/campaigns/{id}/media-check', res, 200);
+      expect(res.body.cardMedia).toEqual([expect.objectContaining({ cardIndex: 0, result: 'READY' }), expect.objectContaining({ cardIndex: 1, result: 'READY' })]);
+      await ctx.prisma.campaign.update({ where: { id: draft.body.id }, data: { state: 'COMPLETED' } });
+      await check('post', '/campaigns/{id}/media-check', await manager.agent.post(`/api/campaigns/${draft.body.id}/media-check`).set('X-CSRF-Token', manager.csrf), 409);
     });
   });
 });

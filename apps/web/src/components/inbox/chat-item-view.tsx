@@ -145,14 +145,18 @@ function Body({ item }: { item: ChatItem }) {
       );
     }
     case 'BUTTON_REPLY':
-    case 'LIST_REPLY':
+    case 'LIST_REPLY': {
+      // Feature 009 (research R6): a carousel card's quick reply says which card.
+      const card = p.card && typeof p.card === 'object' ? (p.card as { cardIndex?: unknown }) : null;
+      const cardNumber = typeof card?.cardIndex === 'number' ? card.cardIndex + 1 : null;
       return (
         <p className="text-sm">
           <span className="text-muted-foreground">Chose: </span>
-          {str(p.title) ?? item.text}
+          {cardNumber ? <span data-testid="card-reply">{`Card ${cardNumber} · ${str(p.title) ?? item.text ?? ''}`}</span> : (str(p.title) ?? item.text)}
           {str(p.description) ? <span className="text-muted-foreground"> — {str(p.description)}</span> : null}
         </p>
       );
+    }
     case 'FORM_REPLY': {
       // Answers to our forms (feature 008 US7) are saved; the others are shown as they came.
       const response = { ...((p.response ?? {}) as Record<string, unknown>) };

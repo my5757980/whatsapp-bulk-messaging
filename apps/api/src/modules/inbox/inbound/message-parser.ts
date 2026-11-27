@@ -227,9 +227,13 @@ export function previewOf(item: { contentType: ChatContentType; text: string | n
       break;
     }
     case 'BUTTON_REPLY':
-    case 'LIST_REPLY':
-      line = clean(str(p.title) ?? item.text);
+    case 'LIST_REPLY': {
+      // Feature 009 (research R6): "Card 2 · Tell me more" for a carousel card's quick reply.
+      const cardIndex = obj(p.card)?.cardIndex;
+      const title = clean(str(p.title) ?? item.text);
+      line = typeof cardIndex === 'number' ? `Card ${cardIndex + 1} · ${title}` : title;
       break;
+    }
     case 'FORM_REPLY':
       line = '📝 Form reply';
       break;

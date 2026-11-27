@@ -1,6 +1,7 @@
 import nock from 'nock';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { META_BASE, META_VERSION, digits, restoreNetwork, seedNumber, seedRunningCampaign, seedTemplate, useNockLocalOnly } from '../support/fixtures.js';
+import { FakeTemplatesGraph } from '../support/fake-templates-graph.js';
 import { createTestContext, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
 import { expectMatchesContract } from './openapi-validator.js';
 
@@ -63,5 +64,18 @@ describe('US3 dashboard API contract', () => {
     const inUse = await seedTemplate(ctx, wabaId);
     await seedRunningCampaign(ctx, { numberId, templateId: inUse.id, createdById: admin.userId, contacts: [] });
     await check('delete', '/templates/{id}', await admin.agent.delete(`/api/templates/${inUse.id}`).set('x-csrf-token', admin.csrf), 409);
+  });
+
+  // T032 (feature 009 US2): carousel templates on the 001 template routes. Runs last: the fake Graph stays installed.
+  it('carousel create and its rule errors', async () => {
+    new FakeTemplatesGraph().install();
+    const sample = async () => (await admin.agent.post('/api/media').set('x-csrf-token', admin.csrf).field('purpose', 'TEMPLATE_SAMPLE').attach('file', PNG, { filename: 'c.png', contentType: 'image/png' })).body.id as string;
+    const card = async () => ({ mediaFormat: 'IMAGE', sampleMediaAssetId: await sample(), bodyText: 'Card {{1}}', bodyExamples: ['one'], buttons: [{ type: 'QUICK_REPLY', text: 'More' }] });
+    const carousel = (cards: object[]) => ({ wabaId, name: `carousel_${digits(6)}`, language: 'en_US', category: 'MARKETING', kind: 'CAROUSEL', body: { text: 'Hi {{1}}', examples: ['Sara'] }, cards });
+    const created = await admin.agent.post('/api/templates').set('x-csrf-token', admin.csrf).send(carousel([await card(), await card()]));
+    await check('post', '/templates', created, 201);
+    expect(created.body).toMatchObject({ kind: 'CAROUSEL', ttlSeconds: null });
+    await check('post', '/templates', await admin.agent.post('/api/templates').set('x-csrf-token', admin.csrf).send(carousel([await card()])), 422);
+    nock.cleanAll();
   });
 });

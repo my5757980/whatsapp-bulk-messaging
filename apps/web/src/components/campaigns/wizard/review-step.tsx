@@ -15,6 +15,7 @@ import { Can } from '@/lib/permissions';
 import { queryKeys } from '@/lib/query';
 import { formatInZone, isValidTimeZone, toZonedInputValue, zonedTimeToUtc } from '@/lib/time';
 import type { Campaign, CampaignDetail, CompanySettings, Estimate } from '@/lib/types';
+import { offerConfigSummary } from './offer-config';
 import { paymentConfigSummary } from './payment-config';
 
 const EXCLUDED_LABELS: Array<[keyof Estimate['excluded'], string]> = [
@@ -24,6 +25,8 @@ const EXCLUDED_LABELS: Array<[keyof Estimate['excluded'], string]> = [
   ['duplicate', 'Duplicate in the file'],
   ['missingVariable', 'Missing variable value'],
   ['paymentAmountMissing', 'No amount to ask for'],
+  ['offerCodeMissing', 'Missing offer code'],
+  ['mediaUrlMissing', 'Missing media address'],
 ];
 
 /** Step 4 (T110, T151): eligible and excluded counts, previews, then send now or schedule. */
@@ -86,6 +89,11 @@ export function ReviewStep({ campaign, onBack, onLaunched }: { campaign: Campaig
             {campaign.paymentConfig ? (
               <p className="mt-2 text-sm" data-testid="payment-summary">
                 {paymentConfigSummary(campaign.paymentConfig)}
+              </p>
+            ) : null}
+            {campaign.offerConfig ? (
+              <p className="mt-2 text-sm" data-testid="offer-summary">
+                {offerConfigSummary(campaign.offerConfig)}
               </p>
             ) : null}
           </CardContent>

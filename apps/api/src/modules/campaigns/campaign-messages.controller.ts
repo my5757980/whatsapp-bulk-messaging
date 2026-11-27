@@ -9,7 +9,7 @@ import { ZodValidationPipe } from '../../common/validation/zod.pipe.js';
 import type { Message } from '../../generated/prisma/client.js';
 
 const MessagesQuerySchema = PageQuerySchema.extend({
-  status: z.enum(['PENDING', 'QUEUED', 'SENDING', 'SENT', 'DELIVERED', 'READ', 'FAILED', 'SKIPPED', 'CANCELLED']).optional(),
+  status: z.enum(['PENDING', 'QUEUED', 'SENDING', 'SENT', 'DELIVERED', 'READ', 'FAILED', 'SKIPPED', 'CANCELLED', 'EXPIRED']).optional(),
 });
 type MessagesQuery = z.infer<typeof MessagesQuerySchema>;
 
