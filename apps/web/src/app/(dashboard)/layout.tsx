@@ -17,6 +17,8 @@ import { cn } from '@/lib/utils';
 const NAV: Array<{ href: string; label: string; permission: Permission }> = [
   { href: '/inbox', label: 'Live chat', permission: 'inbox.view' },
   { href: '/campaigns', label: 'Campaigns', permission: 'campaigns.view' },
+  // Feature 009: overview, team member and opt-in reports.
+  { href: '/reports', label: 'Reports', permission: 'reports.view' },
   { href: '/drips', label: 'Drips', permission: 'campaigns.view' },
   { href: '/contacts', label: 'Contacts', permission: 'contacts.view' },
   { href: '/templates', label: 'Templates', permission: 'templates.view' },

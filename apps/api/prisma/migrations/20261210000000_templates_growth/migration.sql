@@ -156,3 +156,8 @@ UPDATE "campaigns" c
            ORDER BY a."created_at" DESC LIMIT 1),
          c."created_by_id")
  WHERE c."launched_at" IS NOT NULL;
+
+-- Feature 009 (research R10): one upload row per line, so "send to every row" keeps repeated numbers.
+DROP INDEX "campaign_upload_rows_campaign_id_phone_e164_key";
+CREATE UNIQUE INDEX "campaign_upload_rows_campaign_id_row_number_key" ON "campaign_upload_rows"("campaign_id", "row_number");
+CREATE INDEX "campaign_upload_rows_campaign_id_phone_e164_idx" ON "campaign_upload_rows"("campaign_id", "phone_e164");

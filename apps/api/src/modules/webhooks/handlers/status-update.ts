@@ -1,4 +1,4 @@
-import { canTransition, type MessageStatus } from '@wbm/shared';
+import { canTransition, type ExpiredReason, type MessageStatus } from '@wbm/shared';
 import { describeMetaError } from '../../meta/meta-error-classifier.js';
 
 // Status webhook rules (contracts/meta-webhooks.md §3, research R10, FR-025). Pure (T077).
@@ -23,6 +23,8 @@ export interface MessageSnapshot {
   deliveredAt: Date | null;
   readAt: Date | null;
   failedAt: Date | null;
+  /** Feature 009: why an EXPIRED message expired; only "not delivered in time" can still change. */
+  expiredReason?: ExpiredReason | null;
 }
 
 export interface StatusUpdate {
@@ -35,6 +37,8 @@ export interface StatusUpdate {
   failureReason?: string;
   billable?: boolean;
   pricingCategory?: string;
+  /** Cleared when a late webhook replaces "not delivered in time" (feature 009). */
+  expiredReason?: null;
 }
 
 const DELIVERY: Record<'sent' | 'delivered' | 'read', { status: MessageStatus; field: 'sentAt' | 'deliveredAt' | 'readAt' }> = {
@@ -50,10 +54,14 @@ const DELIVERY: Record<'sent' | 'delivered' | 'read', { status: MessageStatus; f
  */
 export function computeStatusUpdate(current: MessageSnapshot, event: StatusEvent): StatusUpdate | null {
   let update: StatusUpdate | null = null;
+  // Feature 009 (research R8): a late webhook still wins over the sweep's "not delivered in time".
+  const opts = { expiredReason: current.expiredReason ?? null };
+  const leaving = current.status === 'EXPIRED' ? { expiredReason: null } : {};
 
   if (event.status === 'failed') {
-    if (!canTransition(current.status, 'FAILED')) return null;
+    if (!canTransition(current.status, 'FAILED', opts)) return null;
     update = {
+      ...leaving,
       status: 'FAILED',
       failedAt: event.timestamp,
       failureCode: event.error?.code ?? null,
@@ -61,8 +69,8 @@ export function computeStatusUpdate(current: MessageSnapshot, event: StatusEvent
     };
   } else if (event.status !== 'deleted') {
     const { status, field } = DELIVERY[event.status];
-    if (canTransition(current.status, status)) {
-      update = { status, ...(current[field] ? {} : { [field]: event.timestamp }) };
+    if (canTransition(current.status, status, opts)) {
+      update = { ...leaving, status, ...(current[field] ? {} : { [field]: event.timestamp }) };
     } else if (!current[field] && current.status !== 'FAILED') {
       update = { [field]: event.timestamp };
     }

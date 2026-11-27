@@ -13,6 +13,7 @@ import { growthKeys, type TrackedLinkConfig, type TrackedLinkSet } from '@/lib/g
 import { queryKeys } from '@/lib/query';
 import type { CampaignCardMedia, CampaignDetail, CampaignOfferConfig, CampaignPaymentConfig, Estimate, Template, VariableSource, VariableSourceKind } from '@/lib/types';
 import { CardMediaCard } from './card-media';
+import { MediaSourceCard, HEADER_MEDIA_KEY, headerMediaFormat, mediaChoiceComplete, mediaChoiceFrom, mediaChoicePatch, type MediaChoice } from './media-source';
 import { OfferConfigCard, defaultOfferConfig, offerConfigComplete } from './offer-config';
 import { PAYMENT_VARIABLE_KEYS, PaymentConfigCard, payLinkButtonKey, paymentConfigComplete } from './payment-config';
 import { ProductChoicesCard, choicesComplete, choicesFrom, choicesMapping, productButtonKind, type ProductChoices } from './product-choices';
@@ -76,6 +77,9 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
   const isOffer = template.data?.kind === 'LIMITED_TIME_OFFER';
   const [cardMedia, setCardMedia] = useState<CampaignCardMedia[]>(campaign.cardMedia ?? []);
   const [offer, setOffer] = useState<CampaignOfferConfig>(() => campaign.offerConfig ?? defaultOfferConfig());
+  // Feature 009 (US4): the header media from a library file or a web address.
+  const mediaFormat = headerMediaFormat(template.data);
+  const [mediaChoice, setMediaChoice] = useState<MediaChoice>(() => mediaChoiceFrom(campaign.headerMediaAssetId, campaign.variableMapping ?? {}));
   const [previews, setPreviews] = useState<Estimate['previews'] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const variables = template.data?.variables ?? [];
@@ -113,10 +117,18 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
             return [key, m.source === 'static' ? { source: 'static', value: m.value ?? '', fallback } : { source: m.source, key: m.key ?? '', fallback }];
           }),
       );
-      const withProducts = productKind ? { ...clean, $products: choicesMapping(productKind, choices) } : clean;
+      const media = mediaFormat ? mediaChoicePatch(mediaChoice) : null;
+      const withMedia = media?.address ? { ...clean, [HEADER_MEDIA_KEY]: media.address } : clean;
+      const withProducts = productKind ? { ...withMedia, $products: choicesMapping(productKind, choices) } : withMedia;
       await api(`/campaigns/${campaign.id}`, {
         method: 'PATCH',
-        json: { variableMapping: withProducts, paymentConfig: payKey ? payment : null, ...(carousel ? { cardMedia: cardMedia.length ? cardMedia : null } : {}), ...(isOffer ? { offerConfig: offer } : {}) },
+        json: {
+          variableMapping: withProducts,
+          paymentConfig: payKey ? payment : null,
+          ...(carousel ? { cardMedia: cardMedia.length ? cardMedia : null } : {}),
+          ...(isOffer ? { offerConfig: offer } : {}),
+          ...(media ? { headerMediaAssetId: media.headerMediaAssetId } : {}),
+        },
       });
       await api(`/campaigns/${campaign.id}/tracked-links`, {
         method: 'PUT',
@@ -138,6 +150,7 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
   const ready =
     paymentConfigComplete(payKey ? payment : null) &&
     (!isOffer || offerConfigComplete(offer)) &&
+    (!mediaFormat || mediaChoiceComplete(mediaChoice)) &&
     choicesComplete(productKind, choices) &&
     variables.every(({ key }) => {
       if (paying && key === payKey) return true;
@@ -157,6 +170,7 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
       {productKind ? <ProductChoicesCard kind={productKind} value={choices} onChange={setChoices} /> : null}
       {isOffer ? <OfferConfigCard value={offer} onChange={setOffer} columns={columns} /> : null}
       {carousel ? <CardMediaCard campaignId={campaign.id} template={template.data} value={cardMedia} onChange={setCardMedia} /> : null}
+      {mediaFormat ? <MediaSourceCard format={mediaFormat} value={mediaChoice} onChange={setMediaChoice} columns={columns} allowColumn={allowColumn} /> : null}
       {variables.map(({ key, example }) => {
         if (paying && key === payKey) {
           return (

@@ -55,3 +55,4 @@ export * from './templates/template-kinds.js';
 export * from './templates/meta-template-checks.js';
 export * from './campaigns/launch-checks.js';
 export * from './help/error-meanings.js';
+export * from './reports/ranges.js';

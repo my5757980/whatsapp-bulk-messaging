@@ -84,7 +84,7 @@ export class CampaignProgressProcessor implements OnModuleInit, OnApplicationBoo
           await this.notifications.notifyAdmins({
             type: 'CAMPAIGN_COMPLETED',
             title: 'Campaign completed',
-            body: `"${campaign.name}" finished: ${totals.sent + totals.delivered + totals.read} sent, ${totals.failed} failed, ${totals.skipped} skipped.`,
+            body: `"${campaign.name}" finished: ${totals.sent + totals.delivered + totals.read} sent, ${totals.failed} failed, ${totals.skipped} skipped${totals.expired ? `, ${totals.expired} expired` : ''}.`,
             link: `/campaigns/${campaign.id}`,
           });
           this.logger.log({ campaignId: campaign.id }, 'Campaign completed');

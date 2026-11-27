@@ -76,6 +76,11 @@ describe('US3 dashboard API contract', () => {
     await check('post', '/templates', created, 201);
     expect(created.body).toMatchObject({ kind: 'CAROUSEL', ttlSeconds: null });
     await check('post', '/templates', await admin.agent.post('/api/templates').set('x-csrf-token', admin.csrf).send(carousel([await card()])), 422);
+    // T051 (US4): the time-to-live and who applies it.
+    const ttl = await admin.agent.post('/api/templates').set('x-csrf-token', admin.csrf).send({ wabaId, name: `ttl_${digits(6)}`, language: 'en_US', category: 'UTILITY', body: { text: 'Your order {{1}} is ready.', examples: ['A-1'] }, ttlSeconds: 3_600 });
+    await check('post', '/templates', ttl, 201);
+    expect(ttl.body).toMatchObject({ ttlSeconds: 3_600, ttlAppliedBy: 'META', kind: 'STANDARD' });
+    await check('get', '/templates/{id}', await admin.agent.get(`/api/templates/${ttl.body.id}`), 200);
     nock.cleanAll();
   });
 });

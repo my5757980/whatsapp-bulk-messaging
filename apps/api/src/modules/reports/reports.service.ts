@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
+import { Prisma } from '../../generated/prisma/client.js';
 import { CampaignsService } from '../campaigns/campaigns.service.js';
+import { DELIVERED, REPLIED } from '../campaigns/replied.sql.js';
 import { RateCardService } from '../rate-card/rate-card.controller.js';
 import { microsToUsdNumber, rateCategory } from './cost-calculator.js';
 
@@ -10,6 +12,9 @@ import { microsToUsdNumber, rateCategory } from './cost-calculator.js';
  */
 @Injectable()
 export class ReportsService {
+  /** Feature 009 (research R11): replies and repeats per campaign, cached for 60 seconds like the 005 clicks. */
+  private readonly additions = new Map<string, { at: number; value: Promise<{ replied: number; replyRate: number | null; multiMessageRecipients: number; heldBack: number }> }>();
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly campaigns: CampaignsService,
@@ -43,9 +48,37 @@ export class ReportsService {
       readRate: delivered ? totals.read / delivered : 0,
       failureReasons,
       expired: { expiredBeforeSending: expiredBy('EXPIRED_BEFORE_SENDING'), notDeliveredInTime: expiredBy('NOT_DELIVERED_IN_TIME'), offerEnded: expiredBy('OFFER_ENDED') },
+      ...(await this.cachedAdditions(campaignId)),
       estimatedCostUsd: microsToUsdNumber(await this.costMicros(campaignId)),
       costIsEstimate: true as const,
     };
+  }
+
+  private cachedAdditions(campaignId: string) {
+    const hit = this.additions.get(campaignId);
+    if (hit && Date.now() - hit.at < 60_000) return hit.value;
+    const value = this.computeAdditions(campaignId);
+    this.additions.set(campaignId, { at: Date.now(), value });
+    value.catch(() => this.additions.delete(campaignId));
+    if (this.additions.size > 500) this.additions.delete(this.additions.keys().next().value as string);
+    return value;
+  }
+
+  /** Replied and its rate over delivered (distinct contacts), contacts with more than one message, and 131049 held back. */
+  private async computeAdditions(campaignId: string) {
+    const [row] = await this.prisma.$queryRaw<Array<{ delivered: number; replied: number; held: number }>>`
+      SELECT COUNT(DISTINCT m.contact_id) FILTER (WHERE ${DELIVERED})::int AS delivered,
+             COUNT(DISTINCT m.contact_id) FILTER (WHERE ${DELIVERED} AND ${REPLIED})::int AS replied,
+             COUNT(*) FILTER (WHERE m.status = 'FAILED' AND m.failure_code = 131049)::int AS held
+        FROM messages m WHERE m.campaign_id = ${campaignId}::uuid AND m.contact_id IS NOT NULL`;
+    const [multi] = await this.prisma.$queryRaw<Array<{ n: number }>>(Prisma.sql`
+      SELECT COUNT(*)::int AS n FROM (
+        SELECT m.contact_id FROM messages m
+         WHERE m.campaign_id = ${campaignId}::uuid AND m.contact_id IS NOT NULL AND m.status NOT IN ('SKIPPED', 'CANCELLED')
+         GROUP BY m.contact_id HAVING COUNT(*) > 1) x`);
+    const delivered = row?.delivered ?? 0;
+    const replied = row?.replied ?? 0;
+    return { replied, replyRate: delivered ? replied / delivered : null, multiMessageRecipients: multi?.n ?? 0, heldBack: row?.held ?? 0 };
   }
 
   /**

@@ -52,6 +52,7 @@ import { NumberRefreshProcessor } from './modules/numbers/number-refresh.process
 import { IdempotencyCleanupProcessor } from './modules/public-api/idempotency-cleanup.processor.js';
 import { DispatcherProcessor } from './modules/sending/dispatcher.processor.js';
 import { SendQueueManager } from './modules/sending/send-queue.manager.js';
+import { ExpiredSweepProcessor } from './modules/sending/expired-sweep.processor.js';
 import { SendProcessor } from './modules/sending/send.processor.js';
 import { InboundHandler } from './modules/webhooks/handlers/inbound.handler.js';
 import { QualityHandler } from './modules/webhooks/handlers/quality.handler.js';
@@ -80,6 +81,8 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     TemplateStatusHandler,
     QualityHandler,
     SendProcessor,
+    // Feature 009: sent messages not delivered within a Meta-applied time-to-live.
+    ExpiredSweepProcessor,
     SendQueueManager,
     DispatcherProcessor,
     AudienceUploadProcessor,

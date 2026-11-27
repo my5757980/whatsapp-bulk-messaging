@@ -347,7 +347,7 @@ in time"; a document campaign with per-row addresses blocks on a bad address and
 
 ### Tests for User Story 4 (write first, must fail)
 
-- [ ] T048 [P] [US4] Unit tests apps/api/test/unit/sending/send-expiry.spec.ts: `queued_at + ttl` past gives EXPIRED_BEFORE_SENDING for every kind; an offer end past gives OFFER_ENDED; no TTL means no drop; `expires_at` is set only for Meta-applied TTL
+- [ ] T048 [P] [US4] Unit tests apps/api/test/unit/sending/send-expiry.spec.ts: `created_at + ttl` past gives EXPIRED_BEFORE_SENDING for every kind (a pause or retry does not restart it); an offer end past gives OFFER_ENDED; no TTL means no drop; `expires_at` is set only for Meta-applied TTL
 - [ ] T049 [P] [US4] Integration test apps/api/test/integration/templates-ttl.int-spec.ts (`FakeTemplatesGraph`, fake clock):
   - **ranges:** ranges by category are enforced (422); the TTL is sent to Meta for AUTHENTICATION and UTILITY and never for MARKETING
   - **category change:** a sync that finds Meta changed utility to marketing clears the TTL, or keeps it as PLATFORM when it fits
@@ -415,7 +415,7 @@ three messages; each report's totals match the campaign results and download as 
     - off: one message per number, as today
     - retarget groups hold distinct contacts
   - **export:** the campaign export has `replied`, `replied_at` and `clicks`
-- [ ] T059 [P] [US5] Integration test apps/api/test/integration/reports.int-spec.ts:
+- [ ] T059 [P] [US5] Integration test apps/api/test/integration/reports-growth.int-spec.ts (the 001 reports.int-spec.ts stays as it is):
   - **overview:** totals match the campaign results, by day in the company time zone, by category and by number, with failures by reason, expired counts and the cost
   - **team report:**
     - `launched_by_id`, including campaigns backfilled from audit entries

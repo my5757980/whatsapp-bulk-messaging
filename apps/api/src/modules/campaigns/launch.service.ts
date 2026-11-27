@@ -149,6 +149,8 @@ export class LaunchService {
         const trackedKeys = await this.snapshot.trackedKeys(campaignId, variables, tx);
         const targets = (await this.trackedLinks.targetsOf(campaignId, tx)).filter((t) => trackedKeys.has(t.variableKey));
 
+        // Feature 009 (research R10): each repeated row of a contact is its own message (copy_index 0, 1, 2…).
+        const copies = new Map<string, number>();
         for await (const batch of this.snapshot.evaluate(campaign, template, tx, payment)) {
           for (let i = 0; i < batch.length; i += INSERT_BATCH) {
             const slice = batch.slice(i, i + INSERT_BATCH).map((r) => ({ ...r, id: uuidv7() }));
@@ -158,11 +160,15 @@ export class LaunchService {
                   targets,
                 )
               : null;
-            const data = slice.map((r) => ({
+            const data = slice.map((r) => {
+              const copyIndex = copies.get(r.contactId) ?? 0;
+              copies.set(r.contactId, copyIndex + 1);
+              return {
               id: r.id,
               origin: 'CAMPAIGN' as const,
               campaignId,
               contactId: r.contactId,
+              copyIndex,
               phoneE164: r.phoneE164,
               recipientCountry: r.countryCode,
               numberId: number.id,
@@ -170,7 +176,8 @@ export class LaunchService {
               resolvedParams: { ...r.params, ...(plan?.params.get(r.id) ?? {}) } as Prisma.InputJsonValue,
               status: r.status,
               skipReason: r.skipReason,
-            }));
+              };
+            });
             if (plan || payment) {
               const inserted = await tx.message.createManyAndReturn({ data, skipDuplicates: true, select: { id: true } });
               const ids = new Set(inserted.map((m) => m.id));

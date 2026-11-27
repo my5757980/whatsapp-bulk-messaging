@@ -881,6 +881,7 @@ paths:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
         - { name: status, in: query, schema: { $ref: '#/components/schemas/MessageStatus' } }
+        - { name: replied, in: query, schema: { type: string, enum: ['true', 'false'] }, description: 'Feature 009 (R11): delivered messages with a reply (true) or without one (false)' }
       responses:
         '200':
           description: Page of messages
@@ -1439,6 +1440,7 @@ components:
         contactName: { type: [string, 'null'] }
         status: { $ref: '#/components/schemas/MessageStatus' }
         skipReason: { type: [string, 'null'] }
+        expiredReason: { type: [string, 'null'], enum: [EXPIRED_BEFORE_SENDING, NOT_DELIVERED_IN_TIME, OFFER_ENDED, null], description: Feature 009 - why an EXPIRED message expired }
         failureCode: { type: [integer, 'null'] }
         failureReason: { type: [string, 'null'] }
         attempts: { type: integer }
@@ -1470,6 +1472,10 @@ components:
             expiredBeforeSending: { type: integer }
             notDeliveredInTime: { type: integer }
             offerEnded: { type: integer }
+        replied: { type: integer, description: 'Feature 009 (R11): distinct contacts who replied within 72 hours of delivery, the 005 Replied group' }
+        replyRate: { type: [number, 'null'], description: Feature 009 - replied over delivered (distinct contacts); null before any delivery }
+        multiMessageRecipients: { type: integer, description: Feature 009 (R10) - contacts who got more than one message (send to every row) }
+        heldBack: { type: integer, description: 'Feature 009: messages held back by Meta''s per-person marketing limit (131049), not charged' }
         estimatedCostUsd: { type: number }
         costIsEstimate: { type: boolean, const: true }
     RateCardEntry:

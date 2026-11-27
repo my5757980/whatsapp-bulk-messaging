@@ -93,12 +93,12 @@ export class AudienceSnapshotService {
     for (;;) {
       const after: Prisma.Sql = cursor ? Prisma.sql`AND c.id > ${cursor}::uuid` : Prisma.empty;
       const rows: Array<AudienceContact & { row_data: unknown }> = await db.$queryRaw<Array<AudienceContact & { row_data: unknown }>>`
-        SELECT c.id, c.phone_e164, c.country_code, c.name, c.attributes, c.consent_status, r.data AS row_data
+        SELECT DISTINCT ON (c.id) c.id, c.phone_e164, c.country_code, c.name, c.attributes, c.consent_status, r.data AS row_data
           FROM messages m
           JOIN contacts c ON c.id = m.contact_id
           LEFT JOIN campaign_upload_rows r ON r.campaign_id = m.campaign_id AND r.phone_e164 = c.phone_e164
          WHERE m.campaign_id = ${campaign.sourceCampaignId}::uuid AND ${inGroup} ${after}
-         ORDER BY c.id
+         ORDER BY c.id, r.row_number NULLS LAST
          LIMIT ${BATCH}`;
       if (!rows.length) return;
       cursor = rows[rows.length - 1]!.id;
@@ -120,7 +120,7 @@ export class AudienceSnapshotService {
 
   /** Yields recipient decisions in batches, in upload order. */
   async *evaluate(
-    campaign: Pick<Campaign, 'id' | 'audienceType' | 'audienceFilter' | 'variableMapping' | 'sourceCampaignId' | 'retargetStatus' | 'paymentConfig'> & { offerConfig?: unknown },
+    campaign: Pick<Campaign, 'id' | 'audienceType' | 'audienceFilter' | 'variableMapping' | 'sourceCampaignId' | 'retargetStatus' | 'paymentConfig'> & { offerConfig?: unknown; allowDuplicateRows?: boolean },
     template: Pick<Template, 'category' | 'variables'>,
     db: Db = this.prisma,
     payment: CampaignPaymentContext | null = null,
@@ -151,16 +151,18 @@ export class AudienceSnapshotService {
       return;
     }
 
-    let cursor: string | undefined;
+    // Feature 009 (research R10): without "send to every row", a repeated number gets one message.
+    const seen = campaign.allowDuplicateRows ? null : new Set<string>();
+    // In file order (row numbers are unique per campaign), so repeated rows get copy_index in order.
+    let after = 0;
     for (;;) {
       const rows = await db.campaignUploadRow.findMany({
-        where: { campaignId: campaign.id },
-        orderBy: { id: 'asc' },
+        where: { campaignId: campaign.id, rowNumber: { gt: after } },
+        orderBy: { rowNumber: 'asc' },
         take: BATCH,
-        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       });
       if (!rows.length) return;
-      cursor = rows[rows.length - 1]!.id;
+      after = rows[rows.length - 1]!.rowNumber;
 
       const contacts = await db.contact.findMany({
         where: { phoneE164: { in: rows.map((r) => r.phoneE164) } },
@@ -172,6 +174,10 @@ export class AudienceSnapshotService {
       for (const row of rows) {
         const contact = byPhone.get(row.phoneE164);
         if (!contact) continue; // deleted since the upload (FR-015)
+        if (seen) {
+          if (seen.has(contact.id)) continue;
+          seen.add(contact.id);
+        }
         const asAudience: AudienceContact = {
           id: contact.id,
           phone_e164: contact.phoneE164,

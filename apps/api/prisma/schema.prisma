@@ -685,7 +685,9 @@ model CampaignUploadRow {
   /// Raw CSV columns, used for variable mapping.
   data       Json     @default("{}")
 
-  @@unique([campaignId, phoneE164])
+  /// Feature 009 (research R10): one row per upload line; "send to every row" keeps repeated numbers.
+  @@unique([campaignId, rowNumber])
+  @@index([campaignId, phoneE164])
   @@map("campaign_upload_rows")
 }
 

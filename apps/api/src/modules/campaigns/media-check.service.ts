@@ -100,6 +100,17 @@ export class MediaCheckService {
     return out;
   }
 
+  /** Local runs and tests only (OUTBOUND_ALLOW_LOCAL, never production): http://localhost files, like webhooks and stores. */
+  private localTestAddress(url: string): boolean {
+    if (!this.config.OUTBOUND_ALLOW_LOCAL || process.env.NODE_ENV === 'production') return false;
+    try {
+      const host = new URL(url).hostname.replace(/^\[|\]$/g, '');
+      return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+    } catch {
+      return false;
+    }
+  }
+
   private headerFormat(template: Template | null): 'IMAGE' | 'VIDEO' | 'DOCUMENT' | null {
     const components = (Array.isArray(template?.components) ? template!.components : []) as Array<{ type: string; format?: string }>;
     const format = components.find((c) => c.type.toUpperCase() === 'HEADER')?.format?.toUpperCase();
@@ -133,11 +144,14 @@ export class MediaCheckService {
     return { checked: urls.length, sampled, problems };
   }
 
-  /** One address: a ranged GET through the safe client (https and public addresses only). */
+  /** One address through the safe client (https and public addresses only, up to 3 redirects): HEAD, or a one-byte ranged GET when HEAD is refused. */
   private async checkOne(url: string, format: 'IMAGE' | 'VIDEO' | 'DOCUMENT'): Promise<MediaUrlProblem | null> {
-    if (mediaUrlFormatProblem(url)) return 'NOT_HTTPS';
+    if (mediaUrlFormatProblem(url) && !this.localTestAddress(url)) return 'NOT_HTTPS';
+    const ask = (method: 'HEAD' | 'GET') =>
+      safeRequest({ method, url, ...(method === 'GET' ? { headers: { range: 'bytes=0-0' } } : {}), timeoutMs: TIMEOUT_MS, maxBytes: 1024, onLimit: 'truncate', followRedirects: 3, allowLocal: this.config.OUTBOUND_ALLOW_LOCAL });
     try {
-      const res = await safeRequest({ method: 'GET', url, headers: { range: 'bytes=0-0' }, timeoutMs: TIMEOUT_MS, maxBytes: 1024, onLimit: 'truncate', allowLocal: this.config.OUTBOUND_ALLOW_LOCAL });
+      let res = await ask('HEAD');
+      if (res.status === 405 || res.status === 501 || res.status === 403) res = await ask('GET');
       if (res.status >= 400) return 'UNREACHABLE';
       const type = String(res.headers['content-type'] ?? '');
       const range = /\/(\d+)$/.exec(String(res.headers['content-range'] ?? ''));

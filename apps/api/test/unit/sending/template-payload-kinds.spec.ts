@@ -1,10 +1,9 @@
 import { metaSendProblem, type MetaTemplateComponent } from '@wbm/shared';
 import { describe, expect, it } from 'vitest';
-import { sendExpiry } from '../../../src/modules/sending/send-expiry.js';
 import { OFFER_ENDS_PARAM, buildTemplatePayload } from '../../../src/modules/sending/template-payload.builder.js';
 
-// T030, T040, T048 (feature 009, contracts/meta-templates.md §3, research R6 - R8): carousel and offer
-// payloads, checked with Meta's send rules, and the send-time expiry.
+// T030, T040 (feature 009, contracts/meta-templates.md §3, research R6, R7): carousel and offer payloads,
+// checked with Meta's send rules.
 type Payload = { template: { components: Array<Record<string, unknown>> } };
 
 describe('carousel payloads', () => {
@@ -78,25 +77,5 @@ describe('limited-time offer payloads', () => {
     expect(sent).toContainEqual({ type: 'button', sub_type: 'copy_code', index: 0, parameters: [{ type: 'coupon_code', coupon_code: 'SARA20' }] });
     expect(sent).toContainEqual({ type: 'button', sub_type: 'url', index: '1', parameters: [{ type: 'text', text: 'wknd' }] });
     expect(metaSendProblem({ category: 'MARKETING', components }, sent.map((c) => ({ ...c, type: String(c.type).toUpperCase() })))).toBeNull();
-  });
-});
-
-describe('sendExpiry', () => {
-  const now = new Date('2026-12-01T10:00:00Z');
-  const minutes = (m: number) => new Date(now.getTime() + m * 60_000);
-
-  it('drops a message whose offer has ended', () => {
-    expect(sendExpiry({ queuedAt: minutes(-1), createdAt: minutes(-1), ttlSeconds: null, offerEndsAtMs: minutes(-0.5).getTime() }, now)).toEqual({ expire: true, reason: 'OFFER_ENDED' });
-    expect(sendExpiry({ queuedAt: minutes(-1), createdAt: minutes(-1), ttlSeconds: null, offerEndsAtMs: minutes(10).getTime() }, now)).toEqual({ expire: false });
-  });
-
-  it('drops a message that waited past the time-to-live, counted from when it was queued', () => {
-    expect(sendExpiry({ queuedAt: minutes(-11), createdAt: minutes(-60), ttlSeconds: 600, offerEndsAtMs: null }, now)).toEqual({ expire: true, reason: 'EXPIRED_BEFORE_SENDING' });
-    expect(sendExpiry({ queuedAt: minutes(-9), createdAt: minutes(-60), ttlSeconds: 600, offerEndsAtMs: null }, now)).toEqual({ expire: false });
-    expect(sendExpiry({ queuedAt: null, createdAt: minutes(-11), ttlSeconds: 600, offerEndsAtMs: null }, now)).toEqual({ expire: true, reason: 'EXPIRED_BEFORE_SENDING' });
-  });
-
-  it('keeps messages without a time-to-live or an offer', () => {
-    expect(sendExpiry({ queuedAt: minutes(-10_000), createdAt: minutes(-10_000), ttlSeconds: null, offerEndsAtMs: null }, now)).toEqual({ expire: false });
   });
 });

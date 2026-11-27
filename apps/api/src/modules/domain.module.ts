@@ -43,6 +43,10 @@ import { RateCardController, RateCardService } from './rate-card/rate-card.contr
 import { ApiMessagesController } from './reports/api-messages.controller.js';
 import { ReportsController } from './reports/export.controller.js';
 import { ReportsService } from './reports/reports.service.js';
+import { ConsentReportService } from './reports/consent-report.service.js';
+import { OverviewReportService } from './reports/overview-report.service.js';
+import { ReportsV2Controller } from './reports/reports-v2.controller.js';
+import { TeamReportService } from './reports/team-report.service.js';
 import { TemplatesSyncService } from './templates/templates-sync.service.js';
 import { TemplatesController } from './templates/templates.controller.js';
 import { TemplatesService } from './templates/templates.service.js';
@@ -75,6 +79,9 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     ScheduleService,
     RateCardService,
     ReportsService,
+    OverviewReportService,
+    TeamReportService,
+    ConsentReportService,
     RetargetService,
     ApiKeysService,
     IdempotencyService,
@@ -104,6 +111,9 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     ScheduleService,
     RateCardService,
     ReportsService,
+    OverviewReportService,
+    TeamReportService,
+    ConsentReportService,
     RetargetService,
     ApiKeysService,
     IdempotencyService,
@@ -132,6 +142,8 @@ export class DomainModule {}
     AttributesController,
     RateCardController,
     ReportsController,
+    // Feature 009: overview, team member and opt-in reports.
+    ReportsV2Controller,
     UsersController,
     InvitationsController,
     AuditController,

@@ -59,6 +59,12 @@ export function skipReasonLabel(reason: string): string {
   return SKIP_WORDS[reason] ?? titleCase(reason);
 }
 
+/** Why a message expired (feature 009, research R7, R8). */
+const EXPIRED_WORDS: Record<string, string> = { EXPIRED_BEFORE_SENDING: 'Not sent in time', NOT_DELIVERED_IN_TIME: 'Not delivered in time', OFFER_ENDED: 'Offer ended' };
+export function expiredReasonLabel(reason: string): string {
+  return EXPIRED_WORDS[reason] ?? titleCase(reason);
+}
+
 export function totalRecipients(t: StatusTotals): number {
   return t.pending + t.queued + t.sent + t.delivered + t.read + t.failed + t.skipped + t.cancelled;
 }

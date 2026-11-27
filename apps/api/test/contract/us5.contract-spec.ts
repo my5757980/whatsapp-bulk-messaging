@@ -71,5 +71,8 @@ describe('US5 dashboard API contract', () => {
     await check('get', '/campaigns/{id}/report', report, 200);
     expect(report.body.totals.expired).toBe(1);
     expect(report.body.expired).toEqual({ expiredBeforeSending: 0, notDeliveredInTime: 0, offerEnded: 1 });
+    // T060 (US5): replies, repeats and held back.
+    expect(report.body).toMatchObject({ replied: 0, replyRate: null, multiMessageRecipients: 0, heldBack: 0 });
+    await check('get', '/campaigns/{id}/messages', await admin.agent.get(`/api/campaigns/${ran.id}/messages?replied=true`), 200);
   });
 });

@@ -184,9 +184,10 @@ the end). They are re-checked in T-tasks marked *(verify)* before each story shi
       the TTL is cleared if it no longer fits.
   - **No error code:** Meta gives none for a dropped message ("assume the message was dropped" when no
     delivered status arrives within the TTL). So:
-    - **Before sending:** the send processor drops a message whose `queued_at + ttl` has passed, with
-      the new status `EXPIRED` and the reason `EXPIRED_BEFORE_SENDING`. The same check with the offer
-      end gives `OFFER_ENDED`.
+    - **Before sending:** the send processor drops a message whose `created_at + ttl` has passed (the
+      campaign launch, the API call or the code request; a pause or a retry round does not restart the
+      clock, since `queued_at` is set again on every claim), with the new status `EXPIRED` and the
+      reason `EXPIRED_BEFORE_SENDING`. The same check with the offer end gives `OFFER_ENDED`.
     - **After sending:** a 5-minute `expired-sweep` on the maintenance queue marks `SENT` messages of
       Meta-applied TTL templates whose `sent_at + ttl + 10 min` has passed as `EXPIRED` /
       `NOT_DELIVERED_IN_TIME`. It uses an index on `(status, sent_at)` for those rows.

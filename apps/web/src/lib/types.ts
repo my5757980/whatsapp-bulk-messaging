@@ -154,6 +154,8 @@ export interface CampaignMessage {
   contactName: string | null;
   status: MessageStatus;
   skipReason: string | null;
+  /** Feature 009: why an EXPIRED message expired. */
+  expiredReason?: 'EXPIRED_BEFORE_SENDING' | 'NOT_DELIVERED_IN_TIME' | 'OFFER_ENDED' | null;
   failureCode: number | null;
   failureReason: string | null;
   attempts: number;

@@ -15,6 +15,7 @@ import { Can } from '@/lib/permissions';
 import { queryKeys } from '@/lib/query';
 import { formatInZone, isValidTimeZone, toZonedInputValue, zonedTimeToUtc } from '@/lib/time';
 import type { Campaign, CampaignDetail, CompanySettings, Estimate } from '@/lib/types';
+import { MediaCheckCard } from './media-check-card';
 import { offerConfigSummary } from './offer-config';
 import { paymentConfigSummary } from './payment-config';
 
@@ -95,6 +96,11 @@ export function ReviewStep({ campaign, onBack, onLaunched }: { campaign: Campaig
               <p className="mt-2 text-sm" data-testid="offer-summary">
                 {offerConfigSummary(campaign.offerConfig)}
               </p>
+            ) : null}
+            {campaign.variableMapping?.['HEADER.media'] ? (
+              <div className="mt-3">
+                <MediaCheckCard campaignId={campaign.id} />
+              </div>
             ) : null}
           </CardContent>
         </Card>

@@ -14,7 +14,7 @@ import { NumbersService } from '../numbers/numbers.service.js';
 import { DripLeaving } from '../growth/drips/drip-leaving.js';
 import { StatusHandler } from '../webhooks/handlers/status.handler.js';
 import { decideSendFailure, preSendCheck } from './send-outcome.js';
-import { sendExpiry } from './send-expiry.js';
+import { deliveryDeadline, sendExpiry } from './send-expiry.js';
 import { OFFER_ENDS_PARAM } from './template-payload.builder.js';
 import { FLOW_TOKEN_PARAM, HEADER_MEDIA_URL_PARAM, authenticationPayload, buildTemplatePayload, headerMediaType } from './template-payload.builder.js';
 import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
@@ -137,7 +137,7 @@ export class SendProcessor {
 
     // Feature 009 (research R7, R8): past the time-to-live in our queue, or after the offer's end: not sent.
     const offerEnds = Number(((m.resolvedParams ?? {}) as Record<string, string>)[OFFER_ENDS_PARAM] ?? NaN);
-    const expiry = sendExpiry({ queuedAt: m.queuedAt, createdAt: m.createdAt, ttlSeconds: m.template.ttlSeconds, offerEndsAtMs: Number.isFinite(offerEnds) ? offerEnds : null }, new Date());
+    const expiry = sendExpiry({ createdAt: m.createdAt, ttlSeconds: m.template.ttlSeconds, offerEndsAtMs: Number.isFinite(offerEnds) ? offerEnds : null }, new Date());
     if (expiry.expire) {
       await this.transition(m.id, 'QUEUED', { status: 'EXPIRED', expiredReason: expiry.reason }, 'EXPIRED', `${m.id}:expired`, { reason: expiry.reason });
       this.metrics.messagesTotal.inc({ status: 'EXPIRED', number: m.number.phoneNumberId });
@@ -192,7 +192,7 @@ export class SendProcessor {
   private async sent(m: { id: string; origin: string; number: { phoneNumberId: string }; template: { ttlSeconds: number | null; ttlAppliedBy: string | null } }, waMessageId: string): Promise<SendOutcome> {
     const now = new Date();
     // Feature 009 (research R8): the expired sweep reads expiresAt for TTLs that Meta applies.
-    const expiresAt = m.template.ttlSeconds && m.template.ttlAppliedBy === 'META' ? new Date(now.getTime() + m.template.ttlSeconds * 1000) : null;
+    const expiresAt = deliveryDeadline(m.template, now);
     await this.prisma.message.updateMany({ where: { id: m.id, status: 'SENDING' }, data: { status: 'SENT', waMessageId, sentAt: now, ...(expiresAt ? { expiresAt } : {}) } });
     await this.event(m.id, 'SENT_ACCEPTED', `${m.id}:accepted`, { waMessageId }, now);
     this.metrics.messagesTotal.inc({ status: 'SENT', number: m.number.phoneNumberId });

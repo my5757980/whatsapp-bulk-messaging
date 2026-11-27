@@ -106,7 +106,7 @@ export class StatusHandler implements WebhookChangeHandler, OnModuleInit {
         });
         const current = await tx.message.findUniqueOrThrow({
           where: { id: known.id },
-          select: { status: true, sentAt: true, deliveredAt: true, readAt: true, failedAt: true },
+          select: { status: true, sentAt: true, deliveredAt: true, readAt: true, failedAt: true, expiredReason: true },
         });
         const update = computeStatusUpdate(current, status);
         if (update) {

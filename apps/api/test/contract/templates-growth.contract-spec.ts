@@ -75,4 +75,33 @@ describe('Templates and growth API (009) contract', () => {
       await check('post', '/campaigns/{id}/media-check', await manager.agent.post(`/api/campaigns/${draft.body.id}/media-check`).set('X-CSRF-Token', manager.csrf), 409);
     });
   });
+
+  describe('US5 reports', () => {
+    it('GET /reports/overview, /reports/team and /reports/consent, and RANGE_INVALID', async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const monthAgo = new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10);
+      const range = `from=${monthAgo}&to=${today}`;
+      await check('get', '/reports/overview', await manager.agent.get(`/api/reports/overview?${range}`), 200);
+      await check('get', '/reports/team', await manager.agent.get(`/api/reports/team?${range}`), 200);
+      await check('get', '/reports/consent', await manager.agent.get(`/api/reports/consent?${range}&pageSize=5`), 200);
+      await check('get', '/reports/overview', await manager.agent.get(`/api/reports/overview?from=${today}&to=${monthAgo}`), 422);
+      const csv = await manager.agent.get(`/api/reports/consent.csv?${range}`);
+      expect(csv.status).toBe(200);
+      expect(csv.headers['content-type']).toMatch(/text\/csv/);
+    });
+  });
+
+  describe('US4 media addresses', () => {
+    it('POST /campaigns/{id}/media-check with an address problem', async () => {
+      const template = await seedTemplate(ctx, number.wabaId, { components: [{ type: 'HEADER', format: 'DOCUMENT' }, { type: 'BODY', text: 'Your invoice' }], variables: [] });
+      const draft = await manager.agent
+        .post('/api/campaigns')
+        .set('X-CSRF-Token', manager.csrf)
+        .send({ name: `Invoices ${digits(5)}`, numberId: number.id, templateId: template.id, audienceType: 'ALL_OPTED_IN', variableMapping: { 'HEADER.media': { source: 'static', value: 'http://files.example.com/invoice.pdf' } } });
+      expect(draft.status, JSON.stringify(draft.body)).toBe(201);
+      const res = await manager.agent.post(`/api/campaigns/${draft.body.id}/media-check`).set('X-CSRF-Token', manager.csrf);
+      await check('post', '/campaigns/{id}/media-check', res, 200);
+      expect(res.body).toMatchObject({ checked: 1, sampled: false, problems: [{ url: 'http://files.example.com/invoice.pdf', reason: 'NOT_HTTPS', rows: [] }], cardMedia: [] });
+    });
+  });
 });
