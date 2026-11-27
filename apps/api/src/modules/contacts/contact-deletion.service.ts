@@ -25,6 +25,11 @@ import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
  * Campaign growth (005 FR-040): the contact leaves every drip with the reason DELETED; enrolments,
  * clicks and tracked links lose the contact (foreign keys set it to null) and stay as anonymous
  * counts; starting events not consumed yet are deleted.
+ *
+ * Commerce (008 FR-044): waiting payment links are cancelled (the payments tick expires their Stripe
+ * sessions, retrying while Stripe cannot be reached); requests and chat orders keep amounts and
+ * statuses without the contact, phone, name or the customer's cart note; form answers are deleted
+ * with the contact (foreign key cascade).
  */
 @Injectable()
 export class ContactDeletionService {
@@ -62,6 +67,11 @@ export class ContactDeletionService {
       // Leads (feature 007, R13) keep only their counts: answers, phone and email go; chats from ads lose
       // the contact through their foreign key.
       this.prisma.adLead.updateMany({ where: { OR: [{ contactId }, { phoneE164: contact.phoneE164 }] }, data: { answers: {}, phoneE164: null, email: null } }),
+      // Payments (feature 008): nothing is sent to them; the links stop working.
+      this.prisma.paymentRequest.updateMany({ where: { contactId, status: 'WAITING', sessionId: { not: null } }, data: { sessionExpirePending: true } }),
+      this.prisma.paymentRequest.updateMany({ where: { contactId, status: 'WAITING' }, data: { status: 'CANCELLED', cancelledAt: new Date(), nextReminderAt: null } }),
+      this.prisma.paymentRequest.updateMany({ where: { OR: [{ contactId }, { phoneE164: contact.phoneE164 }] }, data: { phoneE164: null, customerName: null } }),
+      this.prisma.chatOrder.updateMany({ where: { contactId }, data: { customerText: null } }),
     ]);
     // Saved audiences that sent their phone hash are updated now rather than at the daily sync (007).
     const audienceIds = (await this.prisma.adAudienceMember.findMany({ where: { contactId }, select: { audienceId: true }, distinct: ['audienceId'] })).map((m) => m.audienceId);

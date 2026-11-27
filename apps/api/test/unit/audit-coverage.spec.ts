@@ -9,15 +9,6 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../sr
 /** Actions listed before the code that records them exists (feature 006 T014; each story removes its own). */
 /** Actions listed before the code that records them exists (empty: every action is recorded). */
 const PENDING = new Set<string>([
-  // Feature 008: recorded by their stories (tasks.md T094 empties this list)
-  'catalog.connected',
-  'catalog.disconnected',
-  'catalog.fill_changed',
-  'catalog.commerce_settings_changed',
-  'form.published',
-  'form.archived',
-  'payments.exported',
-  'form_answers.exported',
 ]);
 
 function sources(dir: string): string[] {

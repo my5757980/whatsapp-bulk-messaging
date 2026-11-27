@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { AppError } from '../../../common/errors/app-error.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { PaymentRequest, PaymentSettings, Prisma } from '../../../generated/prisma/client.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { AuditService, type AuditActor } from '../../audit/audit.service.js';
 import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 import { PaymentGatewayService, type GatewayAccess } from '../gateway/payment-gateway.service.js';
@@ -88,6 +89,7 @@ export class PaymentRequestsService {
     private readonly effects: PaymentEffects,
     private readonly audit: AuditService,
     private readonly events: PlatformEvents,
+    private readonly metrics: MetricsService,
   ) {}
 
   /**
@@ -103,9 +105,16 @@ export class PaymentRequestsService {
     const code = makeLinkCode(randomInt);
     const createdAt = new Date();
     const expiresAt = new Date(createdAt.getTime() + input.expiresInMinutes * 60_000);
-    const session = input.lazySession
-      ? null
-      : await this.sessions.create(input.access, { requestId: id, code, amountMinor: input.amountMinor, currency: input.access.currency, description: input.description, reference: input.reference ?? null, expiresAt, sequence: 1 });
+    let session: Awaited<ReturnType<PaymentSessions['create']>> | null = null;
+    try {
+      session = input.lazySession
+        ? null
+        : await this.sessions.create(input.access, { requestId: id, code, amountMinor: input.amountMinor, currency: input.access.currency, description: input.description, reference: input.reference ?? null, expiresAt, sequence: 1 });
+    } catch (error) {
+      this.metrics.paymentLinksTotal.inc({ result: 'failed' });
+      throw error;
+    }
+    this.metrics.paymentLinksTotal.inc({ result: 'created' });
     const row = await this.prisma.$transaction(async (tx) => {
       const created = await tx.paymentRequest.create({
         data: {

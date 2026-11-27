@@ -21,6 +21,8 @@ import { Prisma } from '../../generated/prisma/client.js';
 //   working when the messages are purged.
 // - ads (007 R13): Meta's daily numbers after 25 months; leads, chats from ads and website ad visits
 //   after 12 months.
+// - commerce (008 FR-044): Stripe notifications after 30 days, form answers after 12 months, removed
+//   catalog products 90 days after removal, payment requests and chat orders after 5 years.
 // Audit logs are never purged here (the spec keeps them at least 12 months).
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -28,6 +30,9 @@ const CAMPAIGN_MONTHS = 12;
 /** Meta's numbers stay longer so results can be compared year over year (007 R13). */
 const AD_RESULT_MONTHS = 25;
 const SHORT_LIVED_DAYS = 30;
+/** Payment requests and chat orders are business records (008 FR-044). */
+const PAYMENT_MONTHS = 60;
+const REMOVED_PRODUCT_DAYS = 90;
 const UPLOADS_PREFIX = 'uploads/';
 const BATCH = 5_000;
 
@@ -57,7 +62,21 @@ type PurgeTable =
   | 'ad_result_days'
   | 'ad_leads'
   | 'ad_chat_starts'
-  | 'ad_link_opens';
+  | 'ad_link_opens'
+  | 'payment_events'
+  | 'form_answers'
+  | 'catalog_products'
+  | 'payment_requests'
+  | 'chat_orders';
+
+/** Commerce records removed by one run (008 FR-044). */
+export interface CommerceRetentionResult {
+  paymentEvents: number;
+  formAnswers: number;
+  removedProducts: number;
+  paymentRequests: number;
+  chatOrders: number;
+}
 
 /** Ads records removed by one run (007 R13). */
 export interface AdsRetentionResult {
@@ -101,7 +120,7 @@ export interface LiveChatRetentionResult {
   chatMedia: number;
 }
 
-export interface RetentionResult extends LiveChatRetentionResult, AiRetentionResult, GrowthRetentionResult, IntegrationsRetentionResult, AdsRetentionResult {
+export interface RetentionResult extends LiveChatRetentionResult, AiRetentionResult, GrowthRetentionResult, IntegrationsRetentionResult, AdsRetentionResult, CommerceRetentionResult {
   campaigns: number;
   messages: number;
   webhookEvents: number;
@@ -156,6 +175,11 @@ export class RetentionService {
       adLeads: 0,
       adChatStarts: 0,
       adLinkOpens: 0,
+      paymentEvents: 0,
+      formAnswers: 0,
+      removedProducts: 0,
+      paymentRequests: 0,
+      chatOrders: 0,
     };
     const failures: string[] = [];
     const step = async (name: string, fn: () => Promise<void>) => {
@@ -191,6 +215,9 @@ export class RetentionService {
     });
     await step('ads', async () => {
       Object.assign(result, await this.purgeAds(now));
+    });
+    await step('commerce', async () => {
+      Object.assign(result, await this.purgeCommerce(now));
     });
     this.logger.log({ ...result }, 'Retention run finished');
     if (failures.length) throw new Error(`Retention partly failed: ${failures.join('; ')}`);
@@ -340,6 +367,22 @@ export class RetentionService {
       adLeads: await this.deleteInBatches('ad_leads', Prisma.sql`received_at < ${cutoff}`),
       adChatStarts: await this.deleteInBatches('ad_chat_starts', Prisma.sql`started_at < ${cutoff}`),
       adLinkOpens: await this.deleteInBatches('ad_link_opens', Prisma.sql`opened_at < ${cutoff}`),
+    };
+  }
+
+  /**
+   * Commerce records (008 FR-044): Stripe notifications after 30 days, form answers after 12 months,
+   * products removed from the catalog 90 days after removal, payment requests and chat orders after
+   * 5 years (their notifications and requests lose the link through their foreign keys).
+   */
+  async purgeCommerce(now: Date): Promise<CommerceRetentionResult> {
+    const business = monthsBefore(now, PAYMENT_MONTHS);
+    return {
+      paymentEvents: await this.deleteInBatches('payment_events', Prisma.sql`received_at < ${new Date(now.getTime() - SHORT_LIVED_DAYS * DAY_MS)}`),
+      formAnswers: await this.deleteInBatches('form_answers', Prisma.sql`submitted_at < ${monthsBefore(now, CAMPAIGN_MONTHS)}`),
+      removedProducts: await this.deleteInBatches('catalog_products', Prisma.sql`removed_at < ${new Date(now.getTime() - REMOVED_PRODUCT_DAYS * DAY_MS)}`),
+      paymentRequests: await this.deleteInBatches('payment_requests', Prisma.sql`created_at < ${business}`),
+      chatOrders: await this.deleteInBatches('chat_orders', Prisma.sql`created_at < ${business}`),
     };
   }
 

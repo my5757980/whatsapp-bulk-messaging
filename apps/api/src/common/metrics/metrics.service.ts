@@ -274,6 +274,49 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  // Feature 008 (research R14): payments, chat orders, forms and the catalog.
+  readonly paymentLinksTotal = new Counter({
+    name: 'wbm_payment_links_total',
+    help: 'Payment requests made, by result: created, or failed when Stripe refused or could not be reached',
+    labelNames: ['result'] as const,
+    registers: [this.registry],
+  });
+
+  readonly paymentEventsTotal = new Counter({
+    name: 'wbm_payment_events_total',
+    help: 'Stripe events processed, by type, result (APPLIED, IGNORED, FAILED, PENDING) and source (WEBHOOK, RECONCILE, CHECK)',
+    labelNames: ['type', 'result', 'source'] as const,
+    registers: [this.registry],
+  });
+
+  readonly paymentsTotal = new Counter({
+    name: 'wbm_payments_total',
+    help: 'Payment requests that reached a status: PAID, EXPIRED, CANCELLED or REFUNDED',
+    labelNames: ['status'] as const,
+    registers: [this.registry],
+  });
+
+  readonly chatOrdersTotal = new Counter({
+    name: 'wbm_chat_orders_total',
+    help: 'Carts received in chat, by mode (AUTO, REVIEW, FLOW)',
+    labelNames: ['mode'] as const,
+    registers: [this.registry],
+  });
+
+  readonly formAnswersTotal = new Counter({
+    name: 'wbm_form_answers_total',
+    help: 'WhatsApp Form answers, by result: valid, with_problems, or untrusted (a token that is not ours)',
+    labelNames: ['result'] as const,
+    registers: [this.registry],
+  });
+
+  readonly catalogSyncTotal = new Counter({
+    name: 'wbm_catalog_sync_total',
+    help: 'Catalog jobs (copy, fill, batch) by result (ok or failed)',
+    labelNames: ['job', 'result'] as const,
+    registers: [this.registry],
+  });
+
   constructor() {
     collectDefaultMetrics({ register: this.registry });
   }

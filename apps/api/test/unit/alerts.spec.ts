@@ -59,6 +59,11 @@ describe('alert rules', () => {
     expect(rule('WbmAdsSyncFailing')).toMatch(/wbm_ads_sync_total\{result="failed"\}\[30m\][\s\S]*> 0\.50[\s\S]*for: 30m/);
   });
 
+  it('warn when payment links fail or Stripe notifications are missing (008 T091)', () => {
+    expect(rule('WbmPaymentLinksFailing')).toMatch(/wbm_payment_links_total\{result="failed"\}\[15m\][\s\S]*> 0\.50[\s\S]*>= 4/);
+    expect(rule('WbmPaymentNotificationsMissing')).toMatch(/wbm_payment_events_total\{source="RECONCILE"[\s\S]*wbm_payment_events_total\{source="WEBHOOK"\}\[24h\]\)\) == 0[\s\S]*wbm_payment_links_total/);
+  });
+
   it('give every alert a severity and a summary', () => {
     const names = [...ALERTS.matchAll(/- alert: (\w+)/g)].map((m) => m[1]!);
     expect(names.length).toBeGreaterThanOrEqual(5);

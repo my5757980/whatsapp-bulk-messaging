@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { applyPaymentEvent, type ParsedStripeEvent, type PaymentEffect } from '@wbm/shared';
 import { APP_CONFIG } from '../../../common/config/config.module.js';
 import type { AppConfig } from '../../../common/config/config.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { PaymentRequest, Prisma } from '../../../generated/prisma/client.js';
 import { InboxPublisher } from '../../inbox/realtime/inbox-publisher.js';
@@ -33,6 +34,7 @@ export class PaymentEffects {
     private readonly events: PlatformEvents,
     private readonly publisher: InboxPublisher,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly metrics: MetricsService,
   ) {}
 
   registerHook(hook: PaymentHook): void {
@@ -181,6 +183,7 @@ export class PaymentEffects {
     } catch (error) {
       this.logger.warn({ err: error, paymentRequestId: row.id }, 'Payment side effects failed');
     }
+    for (const status of ['PAID', 'EXPIRED', 'CANCELLED', 'REFUNDED'] as const) if (changes.includes(status)) this.metrics.paymentsTotal.inc({ status });
     for (const hook of this.hooks) {
       try {
         await hook(row, changes);

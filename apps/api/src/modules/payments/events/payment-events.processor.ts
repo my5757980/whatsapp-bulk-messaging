@@ -1,6 +1,7 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { parseStripeEvent } from '@wbm/shared';
 import type { Job } from 'bullmq';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { ProcessorRegistry } from '../../../common/queue/processor.registry.js';
 import { QUEUES } from '../../../common/queue/queue.constants.js';
@@ -23,6 +24,7 @@ export class PaymentEventsProcessor implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly gateway: PaymentGatewayService,
     private readonly effects: PaymentEffects,
+    private readonly metrics: MetricsService,
   ) {}
 
   onModuleInit(): void {
@@ -50,6 +52,7 @@ export class PaymentEventsProcessor implements OnModuleInit {
     try {
       const outcome = await this.effects.applyEvent(parsed, access.livemode);
       const result = await this.finish(row.id, outcome.result, outcome.reason ?? null, outcome.requestId);
+      this.metrics.paymentEventsTotal.inc({ type: row.type, result: outcome.result, source: row.source });
       // A payment makes its payment intent known: refunds that came first can be applied now.
       if (outcome.result === 'APPLIED' && parsed.change?.kind === 'paid' && parsed.paymentIntentId) await this.retryPendingRefunds(parsed.paymentIntentId);
       return result;

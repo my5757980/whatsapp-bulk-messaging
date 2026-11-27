@@ -49,7 +49,8 @@ function versionDto(v: FormVersion) {
   return { id: v.id, number: v.number, status: v.status, accounts: flows.map((f) => ({ wabaId: f.wabaId, status: f.status })), publishedAt: v.publishedAt.toISOString() };
 }
 
-const emptyModel = (): FormModel => ({ screens: [] }) as unknown as FormModel;
+/** A new form starts with one empty screen, as the builder shows it. */
+const emptyModel = (): FormModel => ({ screens: [{ title: 'Your details', button: 'Submit', fields: [] }] });
 
 @Injectable()
 export class FormsService {
@@ -81,7 +82,7 @@ export class FormsService {
     const parsed = FormModelSchema.safeParse(form.draft);
     return {
       ...(await this.summary(form, versions)),
-      draft: parsed.success ? parsed.data : (form.draft as unknown as FormModel) ?? emptyModel(),
+      draft: parsed.success ? parsed.data : (form.draft as { screens?: unknown[] } | null)?.screens?.length ? (form.draft as unknown as FormModel) : emptyModel(),
       mapping: (Array.isArray(form.mapping) ? form.mapping : []) as Array<{ fieldKey: string; attributeKey: string }>,
       tagIds: form.tagIds,
       versions: versions.map(versionDto),
@@ -106,7 +107,7 @@ export class FormsService {
 
   async create(input: z.infer<typeof CreateFormSchema>, actor: AuditActor) {
     try {
-      const form = await this.prisma.form.create({ data: { name: input.name, category: input.category, createdById: actor.userId ?? null } });
+      const form = await this.prisma.form.create({ data: { name: input.name, category: input.category, draft: emptyModel() as unknown as Prisma.InputJsonValue, createdById: actor.userId ?? null } });
       return this.dto(form);
     } catch (error) {
       if (isUniqueViolation(error)) throw AppError.conflict('A form with this name already exists', 'NAME_TAKEN');

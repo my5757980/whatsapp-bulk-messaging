@@ -2,6 +2,7 @@ import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { notSendableReason, parseCatalogPrice } from '@wbm/shared';
 import { z } from 'zod';
 import { AppError } from '../../../common/errors/app-error.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { QueueRegistry } from '../../../common/queue/queue.module.js';
 import { QUEUES } from '../../../common/queue/queue.constants.js';
@@ -100,6 +101,7 @@ export class CatalogService {
     private readonly queues: QueueRegistry,
     private readonly audit: AuditService,
     private readonly notifications: NotificationsService,
+    private readonly metrics: MetricsService,
   ) {}
 
   connection(): Promise<CatalogConnection | null> {
@@ -246,9 +248,11 @@ export class CatalogService {
       await this.prisma.catalogProduct.updateMany({ where: { removedAt: null, retailerId: { notIn: [...seen] } }, data: { removedAt: now } });
       const count = await this.prisma.catalogProduct.count({ where: { removedAt: null } });
       await this.prisma.catalogConnection.update({ where: { id: connection.id }, data: { syncStatus: 'IDLE', lastSyncedAt: now, lastSyncError: null, productCount: count } });
+      this.metrics.catalogSyncTotal.inc({ job: 'copy', result: 'ok' });
       return { products: count };
     } catch (error) {
       const reason = (error instanceof MetaApiError || error instanceof AppError ? error.message : 'Meta could not be reached').slice(0, 500);
+      this.metrics.catalogSyncTotal.inc({ job: 'copy', result: 'failed' });
       const wasFailing = connection.syncStatus === 'FAILED';
       await this.prisma.catalogConnection.update({ where: { id: connection.id }, data: { syncStatus: 'FAILED', lastSyncError: reason } });
       if (!wasFailing) {

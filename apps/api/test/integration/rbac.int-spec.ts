@@ -9,7 +9,7 @@ import { createTestContext, signIn, type SignedInAgent, type TestContext } from 
 // T167, T097, 003 T086, 004 T108, 005 T064: every operation's `x-permission` in the dashboard (001),
 // live chat (002), flows (003), AI (004) and campaign growth (005) contracts is enforced for each
 // role (001 FR-007, 002 FR-041, 003 FR-038, 004 FR-045 and FR-049, 005 FR-037), with the 006
-// integrations and 007 ads contracts.
+// integrations, 007 ads and 008 commerce contracts.
 const SPECS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../specs');
 const CONTRACTS = [
   path.join(SPECS, '001-whatsapp-bulk-messaging/contracts/dashboard-api.openapi.yaml'),
@@ -19,6 +19,7 @@ const CONTRACTS = [
   path.join(SPECS, '005-campaign-growth/contracts/growth-api.openapi.yaml'),
   path.join(SPECS, '006-integrations-platform/contracts/integrations-api.openapi.yaml'),
   path.join(SPECS, '007-ads-manager/contracts/ads-api.openapi.yaml'),
+  path.join(SPECS, '008-commerce-payments/contracts/commerce-api.openapi.yaml'),
 ];
 /**
  * The live event stream never ends, so a plain request would hang (inbox-realtime.int-spec.ts covers
@@ -33,6 +34,9 @@ const SKIP = new Set([
   'get /l/c/{code}',
   // Feature 007: the website ad link is public; ads-website-ai covers it.
   'get /l/a/{code}',
+  // Feature 008: the pay link and Stripe's notifications are public; pay-link and payments-lifecycle cover them.
+  'get /l/p/{code}',
+  'post /payments/stripe/webhook',
 ]);
 const ROLES = ['ADMIN', 'MANAGER', 'AGENT'] as const;
 /** Documented operations that are not implemented yet (none since US7). */
@@ -95,6 +99,12 @@ describe('Role permissions on every endpoint', () => {
     expect(operations.some((op) => op.route === '/ads/campaigns/{id}/submit' && op.permission === 'campaigns.launch')).toBe(true);
     expect(operations.some((op) => op.route === '/ads/lead-forms/{id}/leads/export' && op.permission === 'data.export')).toBe(true);
     expect(operations.some((op) => op.route === '/l/a/{code}')).toBe(false);
+    // And commerce: Stripe, payment requests, the catalog, chat orders and forms (008 T095).
+    expect(operations.some((op) => op.route === '/payments/gateway' && op.method === 'put' && op.permission === 'integrations.manage')).toBe(true);
+    expect(operations.some((op) => op.route === '/payments/export.csv' && op.permission === 'data.export')).toBe(true);
+    expect(operations.some((op) => op.route === '/chat-orders/{id}/send-link' && op.permission === 'inbox.reply')).toBe(true);
+    expect(operations.some((op) => op.route === '/forms/{id}/publish' && op.permission === 'forms.manage')).toBe(true);
+    expect(operations.some((op) => op.route === '/l/p/{code}' || op.route === '/payments/stripe/webhook')).toBe(false);
   });
 
   it.each(ROLES)('%s gets 403 exactly where the role table says so', async (role) => {

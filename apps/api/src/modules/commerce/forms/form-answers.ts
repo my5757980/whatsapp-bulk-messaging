@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import { FlowSessionService } from '../../flows/engine/session.service.js';
 import { FormModelSchema, formFields, type FormField } from '@wbm/shared';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { normalizePhone } from '../../../common/phone/phone.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
@@ -40,13 +41,17 @@ export class FormAnswersService implements FormAnswersPort {
     private readonly dripEvents: DripEvents,
     private readonly settings: SettingsService,
     private readonly moduleRef: ModuleRef,
+    private readonly metrics: MetricsService,
   ) {}
 
   async received(reply: InboundFormReply): Promise<boolean> {
     const response = (reply.payload.response ?? {}) as Record<string, unknown>;
     if (typeof response !== 'object' || response === null) return false;
     const token = this.tokens.decode(response.flow_token);
-    if (!token || token.contactId !== reply.contactId) return false;
+    if (!token || token.contactId !== reply.contactId) {
+      if (response.flow_token !== undefined) this.metrics.formAnswersTotal.inc({ result: 'untrusted' });
+      return false;
+    }
     const version = await this.prisma.formVersion.findUnique({ where: { id: token.versionId }, include: { form: { select: { id: true, name: true } } } });
     if (!version) return false;
     const model = FormModelSchema.safeParse(version.model);
@@ -89,6 +94,7 @@ export class FormAnswersService implements FormAnswersPort {
       }
     }
 
+    this.metrics.formAnswersTotal.inc({ result: problems.length ? 'with_problems' : 'valid' });
     const optedIn = fields.some((f) => f.type === 'optIn' && answers[f.key] === true);
     const answer = await this.prisma.$transaction(async (tx) => {
       const created = await tx.formAnswer.create({

@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { Require } from '../../../common/auth/permissions.guard.js';
 import { CurrentUser, clientIp, type AuthedRequest, type RequestUser } from '../../../common/auth/request-user.js';
 import { AppError } from '../../../common/errors/app-error.js';
+import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { ZodValidationPipe } from '../../../common/validation/zod.pipe.js';
 import type { ChatOrder, PaymentRequest, Prisma } from '../../../generated/prisma/client.js';
@@ -75,6 +76,7 @@ export class ChatOrderService implements ChatOrdersPort, OnModuleInit {
     private readonly journey: JourneyService,
     private readonly events: PlatformEvents,
     private readonly moduleRef: ModuleRef,
+    private readonly metrics: MetricsService,
   ) {}
 
   onModuleInit(): void {
@@ -116,6 +118,7 @@ export class ChatOrderService implements ChatOrdersPort, OnModuleInit {
       await this.events.chatOrder(tx, 'chat_order.received', { order: orderDto(created), contactId: created.contactId });
       return created;
     });
+    this.metrics.chatOrdersTotal.inc({ mode });
     await this.journey.recordForContact(input.contactId, { type: 'CHAT_ORDER_RECEIVED', actorType: 'CUSTOMER', data: { chatOrderId: order.id, totalMinor: cart.totalMinor, currency: cart.currency, items: cart.items.length } });
     if (session) {
       const sessions = this.moduleRef.get(FlowSessionService, { strict: false });

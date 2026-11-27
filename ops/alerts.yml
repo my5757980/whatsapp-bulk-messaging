@@ -208,3 +208,39 @@ groups:
             connection in error (token, permissions, payment method) and the worker logs for "Ad
             campaign status sync failed", "Ad insights sync failed", "Audience sync failed" or "Lead
             catch-up failed". Missed leads are read again by the 15-minute catch-up.
+
+      # Feature 008 (research R14): payments.
+      - alert: WbmPaymentLinksFailing
+        expr: |
+          (
+            sum(increase(wbm_payment_links_total{result="failed"}[15m]))
+              /
+            sum(increase(wbm_payment_links_total[15m]))
+          ) > 0.50
+          and sum(increase(wbm_payment_links_total[15m])) >= 4
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: More than half of the payment links failed in the last 15 minutes
+          description: >-
+            Customers are not getting payment links. Check Payments > Stripe connection for a key
+            in error (revoked or restricted without Checkout permission), Stripe's status page, and
+            the logs for "Stripe refused" or "Stripe could not be reached".
+
+      - alert: WbmPaymentNotificationsMissing
+        expr: |
+          sum(increase(wbm_payment_events_total{source="RECONCILE",result="APPLIED"}[1h])) > 0
+          or (
+            sum(increase(wbm_payment_events_total{source="WEBHOOK"}[24h])) == 0
+            and sum(increase(wbm_payment_links_total{result="created"}[24h])) > 0
+          )
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Stripe notifications are missing; payments were found by the reconciler or none arrived in 24 hours
+          description: >-
+            Payments show late. Check the Stripe endpoint for this server (enabled, the six events,
+            the signing secret saved in Payments > Stripe connection) and run the notification
+            check there; the 15-minute reconciler keeps statuses right meanwhile.
