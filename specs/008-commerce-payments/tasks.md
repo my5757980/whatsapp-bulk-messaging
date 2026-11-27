@@ -37,16 +37,16 @@ delivery order. Pushes are batched: US1–US3 (the MVP), US4–US6, then US7–U
 **Purpose**: configuration, queue names, contract lint and the mock-meta Stripe and commerce
 skeletons.
 
-- [ ] T001 Add the Stripe settings to the env schema in apps/api/src/common/config/config.ts and document them in .env.example (research R1):
+- [X] T001 Add the Stripe settings to the env schema in apps/api/src/common/config/config.ts and document them in .env.example (research R1):
   - `STRIPE_API_BASE_URL`: a URL, default `https://api.stripe.com`, https required in production unless it points to mock-meta in test
   - `STRIPE_API_VERSION`: default `2026-09-30.endive`, pattern `^\d{4}-\d{2}-\d{2}\.[a-z]+$`
   - Webhook addresses use the existing `APP_URL`
-- [ ] T002 [P] Add `PAYMENTS: 'payments'` and `CATALOG: 'catalog'` to `QUEUES` in apps/api/src/common/queue/queue.constants.ts, with a comment (feature 008, plan Technical Context)
-- [ ] T003 [P] Register the two 008 contract files:
+- [X] T002 [P] Add `PAYMENTS: 'payments'` and `CATALOG: 'catalog'` to `QUEUES` in apps/api/src/common/queue/queue.constants.ts, with a comment (feature 008, plan Technical Context)
+- [X] T003 [P] Register the two 008 contract files:
   - add specs/008-commerce-payments/contracts/commerce-api.openapi.yaml and public-payments-v1.openapi.yaml to the `lint:contracts` script in package.json
   - add `'commerce-api.openapi.yaml'` and `'public-payments-v1.openapi.yaml'` (feature folder `008-commerce-payments`) to `ContractFile` and `FEATURE_OF` in apps/api/test/contract/openapi-validator.ts
-- [ ] T004 [P] Add tools/mock-meta/src/stripe.ts, mounted under `/stripe` from tools/mock-meta/src/server.ts. It starts with the key rules of contracts/stripe.md, `GET /stripe/v1/account` (country AE, currency aed, charges enabled), in-memory state, and a `signEvent(secret, body)` helper (`t=…,v1=…`). Later stories add their routes to this file
-- [ ] T005 [P] Add tools/mock-meta/src/commerce.ts, mounted from tools/mock-meta/src/server.ts. Later stories add their routes to this file. It starts with:
+- [X] T004 [P] Add tools/mock-meta/src/stripe.ts, mounted under `/stripe` from tools/mock-meta/src/server.ts. It starts with the key rules of contracts/stripe.md, `GET /stripe/v1/account` (country AE, currency aed, charges enabled), in-memory state, and a `signEvent(secret, body)` helper (`t=…,v1=…`). Later stories add their routes to this file
+- [X] T005 [P] Add tools/mock-meta/src/commerce.ts, mounted from tools/mock-meta/src/server.ts. Later stories add their routes to this file. It starts with:
   - the seeded catalog `900000000000001` with 40 products: three out of stock, one `review_status: rejected`, and prices in the mixed text formats of contracts/meta-commerce-graph.md
   - `GET /{waba}/product_catalogs`, `GET /{catalog}` and paged `GET /{catalog}/products`
   - acceptance of interactive `product`, `product_list`, `catalog_message`, `cta_url` and `flow` messages in the send route, recorded in `/mock/sent`
@@ -60,7 +60,7 @@ wiring, permissions, scopes, events, audit actions, redaction, web types and the
 
 **⚠️ CRITICAL**: no user story work can begin until this phase is complete.
 
-- [ ] T006 Write the Prisma models and the migration apps/api/prisma/migrations/20261203000000_commerce_payments/migration.sql per data-model.md, then update apps/api/prisma/schema.prisma and run `prisma generate`. The migration holds:
+- [X] T006 Write the Prisma models and the migration apps/api/prisma/migrations/20261203000000_commerce_payments/migration.sql per data-model.md, then update apps/api/prisma/schema.prisma and run `prisma generate`. The migration holds:
   - the ten tables: `payment_gateways`, `payment_settings`, `payment_requests`, `payment_events`, `catalog_connections`, `catalog_products`, `chat_orders`, `forms`, `form_versions`, `form_answers`
   - the new enums of data-model.md
   - new values on existing enums: `ChatContentType` (`PAYMENT_REQUEST`, `PRODUCT`, `PRODUCT_LIST`, `CATALOG`, `ORDER`, `FORM`), `MessageOrigin.PAYMENTS`, the six `JourneyEventType` values, the four `NotificationType` values, `ConsentSource.FORM` and `StoreAutomationKind.PAY_LINK`
@@ -71,12 +71,12 @@ wiring, permissions, scopes, events, audit actions, redaction, web types and the
     - `CREATE EXTENSION IF NOT EXISTS pg_trgm`, with trigram GIN indexes on `catalog_products.name` and `retailer_id`
     - a unique form name where the status is not `ARCHIVED`
     - check constraints: `amount_minor > 0`, `refunded_minor >= 0`, `reminders_sent` between 0 and 2, form version `number >= 1`
-- [ ] T007 [P] Unit tests packages/shared/src/commerce/money.test.ts (R5):
+- [X] T007 [P] Unit tests packages/shared/src/commerce/money.test.ts (R5):
   - currency exponents (aed 2; bhd, kwd and omr 3; jpy 0), `toMinor` and `fromMinor`
   - `formatMinor` with plain spaces (the 007 behaviour)
   - `minimumMinor` (aed 200; other currencies from Stripe's table *(verify)*)
   - the 007 `formatMinor` import from `ads/budgets` still works
-- [ ] T008 [P] Unit tests packages/shared/src/commerce/payments.test.ts (R2, R3, R5):
+- [X] T008 [P] Unit tests packages/shared/src/commerce/payments.test.ts (R2, R3, R5):
   - **limits:** amount between the minimum and the maximum; expiry 30 minutes to 30 days; at most 1,380 minutes in flows
   - **`sessionExpiresAt`:** clamped to [now + 30 min, now + 24 h] and not beyond the request expiry when that is possible
   - **`applyPaymentEvent`:**
@@ -90,13 +90,13 @@ wiring, permissions, scopes, events, audit actions, redaction, web types and the
     - ranks never go back
   - **display states:** including Failed attempt, Partly refunded and Not delivered
   - **`redactStripeEvent`:** removes `payment_method_details`, `billing_details`, `customer_details`, `shipping_details` and `last_payment_error.payment_method`
-- [ ] T009 [P] Unit tests packages/shared/src/commerce/stripe-signature.test.ts (R3, contracts/stripe.md):
+- [X] T009 [P] Unit tests packages/shared/src/commerce/stripe-signature.test.ts (R3, contracts/stripe.md):
   - header parsing: `t`, several `v1`, `v0` ignored, unknown keys and spaces
   - HMAC-SHA256 over `${t}.${rawBody}`, compared in constant time
   - 300 s tolerance in both directions
   - the previous secret accepted only until `previousSecretUntil`
   - missing `t` or `v1` fails, and so does a changed body
-- [ ] T010 [P] Unit tests packages/shared/src/commerce/reminders.test.ts and gateway-checks.test.ts (R4, R6):
+- [X] T010 [P] Unit tests packages/shared/src/commerce/reminders.test.ts and gateway-checks.test.ts (R4, R6):
   - **`nextReminderAt`:** two reminders in order; a due time already past is skipped; none after expiry; each at most once; a reminder must fall before the expiry
   - **gateway checks from Stripe answers, each with a plain fix:**
     - key format, kind (a secret key is a WARNING) and mode
@@ -106,13 +106,13 @@ wiring, permissions, scopes, events, audit actions, redaction, web types and the
     - Checkout access fails with the permission named
     - endpoint registration refused is FAILED with the manual fix
     - ready means no FAILED
-- [ ] T011 [P] Unit tests packages/shared/src/commerce/catalog.test.ts and carts.test.ts (R8, R10, R11):
+- [X] T011 [P] Unit tests packages/shared/src/commerce/catalog.test.ts and carts.test.ts (R8, R10, R11):
   - **`parseCatalogPrice`:** every format listed in contracts/meta-commerce-graph.md, and null when it cannot parse
   - **`isSendableProduct`:** out of stock, removed, rejected and hidden products are not sendable
   - **`COMMERCE_LIMITS` for product lists:** 1–10 sections, at most 30 items, at least 1 per section, titles required with more than one section and at most 24 characters
   - **cart totals:** from decimal `item_price` with the currency exponent
   - **`cartWarnings`:** not in the catalog, another currency, mixed currencies, a changed price
-- [ ] T012 [P] Unit tests packages/shared/src/commerce/forms.test.ts, flow-json.test.ts and form-token.test.ts (R12):
+- [X] T012 [P] Unit tests packages/shared/src/commerce/forms.test.ts, flow-json.test.ts and form-token.test.ts (R12):
   - **`FormModelSchema`:**
     - keys match `^[a-z][a-z0-9_]{0,39}$` and are unique
     - the field types
@@ -124,11 +124,11 @@ wiring, permissions, scopes, events, audit actions, redaction, web types and the
     - the component map
     - `navigate` footers, then the terminal screen's `complete` payload with `${screen.S1.form.x}` references
   - **token encoding** (`wf1.<payload>.<mac>`, with an injected signer): it round-trips, and a changed payload or mac is refused
-- [ ] T013 Implement the pure modules, tested by T007–T012:
+- [X] T013 Implement the pure modules, tested by T007–T012:
   - packages/shared/src/commerce/money.ts, payments.ts, stripe-signature.ts (`node:crypto`, as `integrations/signing.ts`), reminders.ts, gateway-checks.ts, catalog.ts, carts.ts, forms.ts, flow-json.ts and form-token.ts
   - move `formatMinor` from packages/shared/src/ads/budgets.ts to commerce/money.ts, with a re-export
   - export everything from packages/shared/src/index.ts
-- [ ] T014 [P] Add the 008 lists to packages/shared, with cases in each file's test (R10, R12, R14):
+- [X] T014 [P] Add the 008 lists to packages/shared, with cases in each file's test (R10, R12, R14):
   - **permissions** in permissions.ts and permissions.test.ts: `payments.view` (ADMIN, MANAGER), `payments.manage` (ADMIN), `forms.manage` (ADMIN, MANAGER)
   - **API key scopes** in integrations/scopes.ts and scopes.test.ts: `payments.read`, `payments.write`, with labels
   - **event types** in integrations/events.ts and events.test.ts:
@@ -141,8 +141,8 @@ wiring, permissions, scopes, events, audit actions, redaction, web types and the
     - CATALOG and MPM are MARKETING with exactly one button
     - FLOW text is at most 25 characters
     - a pay link URL button's base must equal `${PUBLIC_LINK_BASE_URL}/p/` with the suffix `{{1}}`
-- [ ] T015 [P] Add the 008 audit actions of research R14 to apps/api/src/modules/audit/audit-actions.ts, and list them in `PENDING` in apps/api/test/unit/audit-coverage.spec.ts until their story records them
-- [ ] T016 Implement `StripeClient` in apps/api/src/modules/payments/stripe.client.ts with the seven calls of contracts/stripe.md:
+- [X] T015 [P] Add the 008 audit actions of research R14 to apps/api/src/modules/audit/audit-actions.ts, and list them in `PENDING` in apps/api/test/unit/audit-coverage.spec.ts until their story records them
+- [X] T016 Implement `StripeClient` in apps/api/src/modules/payments/stripe.client.ts with the seven calls of contracts/stripe.md:
   - **requests:** the bracketed form encoder; `Authorization`, `Stripe-Version` and `Idempotency-Key` headers; the 10 s timeout; 3 retries for network errors, 429 and 5xx with the same key; `StripeApiError {status, type, code, declineCode, param, message}`
   - **check against Stripe's 2026-09-30.endive reference and fix contracts/stripe.md:**
     - the Checkout Session create parameter names (`price_data`, `product_data`, `payment_intent_data`, `expires_at`, `locale`)
@@ -150,7 +150,7 @@ wiring, permissions, scopes, events, audit actions, redaction, web types and the
     - the expire answers for expired and complete sessions
     - the restricted key permission names
   - **unit tests** in apps/api/test/unit/payments/stripe-client.spec.ts (nock): every call, the encoding, retries with the same key, and error mapping
-- [ ] T017 Implement `MetaCommerceClient` in apps/api/src/modules/commerce/meta-commerce.client.ts:
+- [X] T017 Implement `MetaCommerceClient` in apps/api/src/modules/commerce/meta-commerce.client.ts:
   - **calls:** the catalog, commerce settings, `items_batch` with its status, and Flows calls of contracts/meta-commerce-graph.md
   - **errors:** the 001 error parsing (`MetaApiError`), and a 60 s back-off on code 80009
   - **check against Meta's reference and fix the contract:**
@@ -159,20 +159,20 @@ wiring, permissions, scopes, events, audit actions, redaction, web types and the
     - the `items_batch` maximum and price format
     - the Flows `validation_errors` fields
   - **unit tests** in apps/api/test/unit/commerce/meta-commerce-client.spec.ts (nock): each call and the errors
-- [ ] T018 [P] Add the test support files:
+- [X] T018 [P] Add the test support files:
   - apps/api/test/support/fake-stripe.ts: `FakeStripe`, a stateful nock catch-all with sessions, endpoints and events, plus `event()` (signed with the test secret) and `deliver()`
   - apps/api/test/support/fake-commerce-graph.ts: `FakeCommerceGraph` with catalogs, products, commerce settings, `items_batch` and flows, in the pattern of `fake-ads-graph.ts`
   - apps/api/test/support/commerce.ts helpers: connect a test gateway, seed the catalog copy, open a conversation with a recent customer message, deliver a cart or form answer through `webhook.inbound`
-- [ ] T019 Create apps/api/src/modules/payments/payments.module.ts and apps/api/src/modules/commerce/commerce.module.ts, and wire them into apps/api/src/app.module.ts and apps/api/src/worker-features.module.ts:
+- [X] T019 Create apps/api/src/modules/payments/payments.module.ts and apps/api/src/modules/commerce/commerce.module.ts, and wire them into apps/api/src/app.module.ts and apps/api/src/worker-features.module.ts:
   - each module has a global domain part (clients, request and order services used by the inbound handler and the flow engine) and an API part (controllers); queue processors are registered in the worker
   - add `'l/p/:code'` to the global prefix exclusions in apps/api/src/app.setup.ts
   - keep apps/api/test/unit/app-module.spec.ts green
-- [ ] T020 [P] Add `secretKey`, `secret_key_enc`, `webhookSecret`, `webhook_secret_enc` and `stripe-signature` to the redaction list in apps/api/src/common/logging/redaction.ts, with cases in apps/api/test/unit/logging-redaction.spec.ts
-- [ ] T021 [P] Add apps/web/src/lib/payments.ts, apps/web/src/lib/catalog.ts and apps/web/src/lib/forms.ts with:
+- [X] T020 [P] Add `secretKey`, `secret_key_enc`, `webhookSecret`, `webhook_secret_enc` and `stripe-signature` to the redaction list in apps/api/src/common/logging/redaction.ts, with cases in apps/api/test/unit/logging-redaction.spec.ts
+- [X] T021 [P] Add apps/web/src/lib/payments.ts, apps/web/src/lib/catalog.ts and apps/web/src/lib/forms.ts with:
   - types from the contracts and query keys
   - labels for statuses, display states, sources, checks, chat order states, form field types and categories
   - money display through the shared `formatMinor`
-- [ ] T022 [P] Add the cart and form options of contracts/meta-commerce-graph.md to tools/mock-meta/src/inbound-cli.ts:
+- [X] T022 [P] Add the cart and form options of contracts/meta-commerce-graph.md to tools/mock-meta/src/inbound-cli.ts:
   - `--order "<retailerId>:<qty>,…"`, priced from the seeded catalog, and `--order-price-change`
   - `--form-reply <flow_token> --answers '<json>'`
 
@@ -190,7 +190,7 @@ mode and AED; "Notifications working" appears; keys are never shown again.
 
 ### Tests for User Story 1 (write first, must fail)
 
-- [ ] T023 [P] [US1] Integration test apps/api/test/integration/payments-gateway.int-spec.ts (`FakeStripe`):
+- [X] T023 [P] [US1] Integration test apps/api/test/integration/payments-gateway.int-spec.ts (`FakeStripe`):
   - **saving keys:**
     - a restricted test key passes with mode TEST, aed and the account name
     - a secret key gives a KEY_KIND WARNING
@@ -206,8 +206,8 @@ mode and AED; "Notifications working" appears; keys are never shown again.
     - a webhook with a bad signature → 400, recorded with `signatureValid=false`, nothing changed
     - managers get 403 on PUT
     - audit entries without keys
-- [ ] T024 [P] [US1] Contract cases for `/payments/gateway*` and `GET /payments/settings` in a new apps/api/test/contract/commerce.contract-spec.ts
-- [ ] T025 [P] [US1] Playwright e2e apps/web/e2e/payments-us1-gateway.spec.ts:
+- [X] T024 [P] [US1] Contract cases for `/payments/gateway*` and `GET /payments/settings` in a new apps/api/test/contract/commerce.contract-spec.ts
+- [X] T025 [P] [US1] Playwright e2e apps/web/e2e/payments-us1-gateway.spec.ts:
   - `rk_test_mockXXnockout` is refused
   - `rk_test_mockOK1234` with automatic registration passes every check and shows Test mode and AED
   - **Test notifications** shows "Notifications working"
@@ -215,25 +215,25 @@ mode and AED; "Notifications working" appears; keys are never shown again.
 
 ### Implementation for User Story 1
 
-- [ ] T026 [US1] Extend tools/mock-meta/src/stripe.ts with the routes of contracts/stripe.md:
+- [X] T026 [US1] Extend tools/mock-meta/src/stripe.ts with the routes of contracts/stripe.md:
   - checkout sessions: create, retrieve and expire
   - webhook endpoints: create (secret `whsec_mock…`) and delete
   - signed delivery to the registered URL or `MOCK_STRIPE_WEBHOOK_URL`
   - the `noperm` and `nockout` key rules
-- [ ] T027 [US1] Implement apps/api/src/modules/payments/gateway/payment-gateway.service.ts, payment-gateway.controller.ts and notification-check.ts:
+- [X] T027 [US1] Implement apps/api/src/modules/payments/gateway/payment-gateway.service.ts, payment-gateway.controller.ts and notification-check.ts:
   - save: checks with the shared rules; keys and secrets encrypted with `TokenCipher`
   - the endpoint, automatic or manual
   - the notification check: a check session made and expired, with a 2-minute `notification-check-timeout` job on the `payments` queue
   - run checks again, replace keys, disconnect
   - the ERROR state, notifying admins with `PAYMENTS_CONNECTION_ERROR`
   - audit entries; the `GET /payments/settings` defaults row (read-only until US2)
-- [ ] T028 [US1] Implement apps/api/src/modules/payments/events/stripe-webhook.controller.ts and the first part of payment-events.processor.ts:
+- [X] T028 [US1] Implement apps/api/src/modules/payments/events/stripe-webhook.controller.ts and the first part of payment-events.processor.ts:
   - verify the raw body with the shared function against the current and previous secrets
   - record rejected requests (headers and the first 2 KB)
   - store the body through `redactStripeEvent`; a repeated `stripe_event_id` is answered 200 as a duplicate
   - queue `payment-event` jobs; the processor handles check-session events (the notification check)
   - request effects come in US2
-- [ ] T029 [P] [US1] Add apps/web/src/app/(dashboard)/payments/gateway/page.tsx and a **Payments** item (permission `payments.view`) in apps/web/src/app/(dashboard)/layout.tsx. The page has:
+- [X] T029 [P] [US1] Add apps/web/src/app/(dashboard)/payments/gateway/page.tsx and a **Payments** item (permission `payments.view`) in apps/web/src/app/(dashboard)/layout.tsx. The page has:
   - the key form, with automatic or manual registration and the webhook URL to copy
   - the checks with their fixes
   - the notification check, polling until it passes or fails
@@ -254,7 +254,7 @@ Cancelled.
 
 ### Tests for User Story 2 (write first, must fail)
 
-- [ ] T030 [P] [US2] Integration test apps/api/test/integration/payments-requests.int-spec.ts (`FakeStripe`):
+- [X] T030 [P] [US2] Integration test apps/api/test/integration/payments-requests.int-spec.ts (`FakeStripe`):
   - **inside the window:**
     - the session is made eagerly with every parameter of contracts/stripe.md: amount, currency, both metadata places, `client_reference_id`, the clamped `expires_at`, `success_url`, key `wbm-pr-<id>-s1`
     - a `cta_url` message goes on the priority send path with our pay link (chat item `PAYMENT_REQUEST`)
@@ -266,7 +266,7 @@ Cancelled.
     - gateway ERROR → 409 GATEWAY_NOT_READY
     - Stripe 5xx → 502 with nothing sent; Stripe 400 → 422 GATEWAY_REFUSED
   - **settings:** `PUT /payments/settings` refuses a template without a pay link button (TEMPLATE_NOT_PAY_LINK)
-- [ ] T031 [P] [US2] Integration test apps/api/test/integration/payments-lifecycle.int-spec.ts (`FakeStripe` webhooks):
+- [X] T031 [P] [US2] Integration test apps/api/test/integration/payments-lifecycle.int-spec.ts (`FakeStripe` webhooks):
   - **paid:**
     - `paidAt`, the paid amount and `paymentIntentId` are set
     - the agent gets `PAYMENT_RECEIVED`, with journey `PAYMENT_PAID` and event `payment.paid`
@@ -281,17 +281,17 @@ Cancelled.
     - the reconciler finds a held-back event (`/v1/events`) and applies it once with source RECONCILE
     - the fallback without Events read uses session retrieval
   - **visibility:** `GET /contacts/{id}/payments` lists the request; agents get 403 on `GET /payments/requests` but see the `payment` summary on the chat item
-- [ ] T032 [P] [US2] Integration test apps/api/test/integration/pay-link.int-spec.ts:
+- [X] T032 [P] [US2] Integration test apps/api/test/integration/pay-link.int-spec.ts:
   - `/l/p/:code` → 302 to the open session
   - **an expired session on a waiting request:** the old session is expired first, then a new one is made with key `s2`, then 302
   - two opens at once make one session
   - **pages:** paid (with the `wa.me` button), expired, cancelled, paused (gateway disconnected), the `?paid=1` return page
   - **counting and limits:** opens counted except previews and robots; 429 from the rate limiter; unknown code 404
-- [ ] T033 [P] [US2] Contract cases in apps/api/test/contract/commerce.contract-spec.ts for:
+- [X] T033 [P] [US2] Contract cases in apps/api/test/contract/commerce.contract-spec.ts for:
   - `/inbox/conversations/{id}/payment-requests` and `/payments/requests/{id}` with cancel and resend
   - `PUT /payments/settings` and `/contacts/{id}/payments`
   - the webhook and `/l/p/{code}`
-- [ ] T034 [P] [US2] Playwright e2e apps/web/e2e/payments-us2-live-chat.spec.ts:
+- [X] T034 [P] [US2] Playwright e2e apps/web/e2e/payments-us2-live-chat.spec.ts:
   - request AED 150 for "Order 1042" in a chat
   - open the link, then **Pay** on the mock page: Paid shows in the chat, on the profile's Payments tab and in the journey
   - **Decline** on a second request shows Failed attempt; cancelling shows Cancelled
@@ -299,45 +299,45 @@ Cancelled.
 
 ### Implementation for User Story 2
 
-- [ ] T035 [US2] Implement apps/api/src/modules/payments/settings/payment-settings.service.ts and payment-settings.controller.ts:
+- [X] T035 [US2] Implement apps/api/src/modules/payments/settings/payment-settings.service.ts and payment-settings.controller.ts:
   - the defaults row and validation
   - the `TEMPLATE_NOT_PAY_LINK` check, using the shared rule
   - audit `payments.settings_changed`
   - reminder and chat order fields are stored now and validated further in US4 and US6
-- [ ] T036 [US2] Implement apps/api/src/modules/payments/requests/payment-sessions.ts:
+- [X] T036 [US2] Implement apps/api/src/modules/payments/requests/payment-sessions.ts:
   - `ensureSession` (eager or lazy) under a row lock
   - the clamp and the `sessionsCreated` idempotency counter
   - expire-before-new; a `complete` answer applies the payment
-- [ ] T037 [US2] Implement apps/api/src/modules/payments/requests/payment-sender.ts:
+- [X] T037 [US2] Implement apps/api/src/modules/payments/requests/payment-sender.ts:
   - **in the window:** the `cta_url` message through the 002 priority send, with the settings' text and button
   - **outside it:** the payment template through the 001 queue with origin `PAYMENTS`
   - the `payment` variable source (amount, description, reference, expires, code) in apps/api/src/modules/campaigns/variable-resolver.ts, with cases in its unit test
-- [ ] T038 [US2] Implement apps/api/src/modules/payments/requests/payment-requests.service.ts and payment-requests.controller.ts:
+- [X] T038 [US2] Implement apps/api/src/modules/payments/requests/payment-requests.service.ts and payment-requests.controller.ts:
   - create from a chat (role, window and limit checks); get and list (`payments.view`)
   - cancel, which expires the session; resend
   - `GET /contacts/{id}/payments`
   - the chat item `payment` summary in the 002 chat item DTO (apps/api/src/modules/inbox/)
-- [ ] T039 [US2] Implement apps/api/src/modules/payments/requests/payment-effects.ts and the rest of apps/api/src/modules/payments/events/payment-events.processor.ts:
+- [X] T039 [US2] Implement apps/api/src/modules/payments/requests/payment-effects.ts and the rest of apps/api/src/modules/payments/events/payment-events.processor.ts:
   - `applyPaymentEvent` under a row lock
   - after-commit effects:
     - notify the maker; journey entries; 006 outbound events; the 002 live stream
     - the tag, and the flow start by the 006 chat-link rule
     - `PAYMENT_PAID_LATE` to managers
   - held refunds are retried
-- [ ] T040 [US2] Implement apps/api/src/modules/payments/events/payments-reconcile.processor.ts: the 15-minute repeatable job reading `/v1/events` from the cursor minus 10 minutes, falling back to session retrieval when the key cannot read events
-- [ ] T041 [US2] Implement apps/api/src/modules/payments/tick/payments-tick.processor.ts:
+- [X] T040 [US2] Implement apps/api/src/modules/payments/events/payments-reconcile.processor.ts: the 15-minute repeatable job reading `/v1/events` from the cursor minus 10 minutes, falling back to session retrieval when the key cannot read events
+- [X] T041 [US2] Implement apps/api/src/modules/payments/tick/payments-tick.processor.ts:
   - the 60-second repeatable `payments-tick`, batches of 500 with `FOR UPDATE SKIP LOCKED`
   - expiry, with a best-effort session expire retried up to 10 times (reminders come in US4)
-- [ ] T042 [US2] Implement apps/api/src/modules/payments/links/pay-link.controller.ts:
+- [X] T042 [US2] Implement apps/api/src/modules/payments/links/pay-link.controller.ts:
   - `/l/p/:code` with its pages (our wording, no Stripe branding)
   - the 005 `LinkRateLimiter` factory
   - open counting that skips previews and robots, as in the 006 chat link redirect
-- [ ] T043 [P] [US2] Add the live chat parts:
+- [X] T043 [P] [US2] Add the live chat parts:
   - apps/web/src/components/inbox/payment-request-dialog.tsx, opened from composer.tsx: amount, description, reference, expiry, tag and flow, with the window notice
   - the payment card in chat-item-view.tsx: status, display state, amount, copy link, cancel, resend
   - payment journey labels in journey-list.tsx
   - a Payments tab in profile-panel.tsx and on apps/web/src/app/(dashboard)/contacts/[id]/page.tsx
-- [ ] T044 [P] [US2] Add apps/web/src/app/(dashboard)/payments/settings/page.tsx (limits, request roles, the message text and button, the payment template with its mapping) and apps/web/src/app/(dashboard)/payments/[id]/page.tsx (status history, the message, cancel, resend)
+- [X] T044 [P] [US2] Add apps/web/src/app/(dashboard)/payments/settings/page.tsx (limits, request roles, the message text and button, the payment template with its mapping) and apps/web/src/app/(dashboard)/payments/[id]/page.tsx (status history, the message, cancel, resend)
 
 **Checkpoint**: US2 runs alone (with US1's connection).
 
@@ -356,7 +356,7 @@ tags and flows on payment.
 
 ### Tests for User Story 3 (write first, must fail)
 
-- [ ] T045 [P] [US3] Unit tests for the payment step:
+- [X] T045 [P] [US3] Unit tests for the payment step:
   - in packages/shared/src/flows/graph.test.ts and validate.test.ts:
     - the `payment` step schema: amount sources `static`, `answer` and `attribute`; description; `expiryMinutes` at most 1,380; `next` and `onNotPaid`
     - the publish fact "gateway connected"
@@ -364,7 +364,7 @@ tags and flows on payment.
     - the step emits a request effect and waits
     - input `payment` paid → `next`; not paid → `onNotPaid`
     - customer messages while waiting follow the 003 interrupt rules
-- [ ] T046 [P] [US3] Integration test apps/api/test/integration/payments-sources.int-spec.ts:
+- [X] T046 [P] [US3] Integration test apps/api/test/integration/payments-sources.int-spec.ts:
   - **flow step:**
     - the session waits; paid → the paid branch; expiry → the not-paid branch
     - a test session's request is `is_test`, and `/payments/requests/{id}/test-result` drives the branches
@@ -377,7 +377,7 @@ tags and flows on payment.
     - a currency mismatch is logged with no link
     - **when paid:** the order shows paid, COD becomes CLOSED, and nock sees Shopify `orderMarkAsPaid` and WooCommerce `set_paid`; a store refusal only gives a warning
   - **tag and flow on payment:** the 006 chat-link rule holds (never over a running flow or a member's chat)
-- [ ] T047 [P] [US3] Integration test apps/api/test/integration/public-payments-api.int-spec.ts:
+- [X] T047 [P] [US3] Integration test apps/api/test/integration/public-payments-api.int-spec.ts:
   - **create** (`POST /api/v1/payments` with `Idempotency-Key`):
     - a new contact is created
     - in the window → `cta_url`; outside → the template
@@ -386,29 +386,29 @@ tags and flows on payment.
   - **scopes:** missing scopes → 403
   - **read and cancel:** get by id and by reference or phone; cancel
   - **events:** `payment.requested` and `payment.paid` are delivered as outbound events
-- [ ] T048 [P] [US3] Contract cases for the public payments routes in a new apps/api/test/contract/public-payments-v1.contract-spec.ts, and for `/payments/requests/{id}/test-result` in commerce.contract-spec.ts
-- [ ] T049 [P] [US3] Playwright e2e apps/web/e2e/payments-us3-sources.spec.ts:
+- [X] T048 [P] [US3] Contract cases for the public payments routes in a new apps/api/test/contract/public-payments-v1.contract-spec.ts, and for `/payments/requests/{id}/test-result` in commerce.contract-spec.ts
+- [X] T049 [P] [US3] Playwright e2e apps/web/e2e/payments-us3-sources.spec.ts:
   - a flow with a Request payment step, run from the test panel: **Mark paid (test)** takes the paid branch
   - a campaign with a pay link template to three test contacts makes three requests
   - a store order with the Pay link automation shows paid after the mock payment
 
 ### Implementation for User Story 3
 
-- [ ] T050 [US3] Add the flow payment step:
+- [X] T050 [US3] Add the flow payment step:
   - the schema, `FLOW_LIMITS` and publish facts in packages/shared/src/flows/graph.ts and validate.ts
   - the step and the `payment` input in apps/api/src/modules/flows/engine/run.ts and effects.ts
   - `resume` accepting `payment` in apps/api/src/modules/flows/engine/session.service.ts; requests are made through the payments domain with source FLOW, `flowSessionId`, and `is_test` for test sessions
   - the gateway fact passed by apps/api/src/modules/flows/definitions/publish.service.ts
   - the `test-result` route in payment-requests.controller.ts
-- [ ] T051 [US3] Add campaign payment requests:
+- [X] T051 [US3] Add campaign payment requests:
   - validate `paymentConfig` in the campaign create and update DTOs (apps/api/src/modules/campaigns/)
   - create the requests per recipient in apps/api/src/modules/sending/dispatch-planner.ts, in the same transaction
   - the held-back reason `PAYMENT_AMOUNT_MISSING`
   - the `payment` variable source for the button suffix; opening a pay link makes the session lazily (payment-sessions.ts)
-- [ ] T052 [US3] Implement apps/api/src/modules/payments/public/public-payments.controller.ts:
+- [X] T052 [US3] Implement apps/api/src/modules/payments/public/public-payments.controller.ts:
   - the 006 API key guard, the scope decorator, the idempotency service and the rate limit
   - find or create the contact by the 006 contacts rules
-- [ ] T053 [US3] Add the store `PAY_LINK` automation in apps/api/src/modules/integrations/stores/store-automations.service.ts:
+- [X] T053 [US3] Add the store `PAY_LINK` automation in apps/api/src/modules/integrations/stores/store-automations.service.ts:
   - settings `includeCod` and `expiryMinutes`, with the automation's template and pay link
   - order effects from payment-effects.ts: the order shows paid and COD becomes CLOSED
   - mark paid in the store:
@@ -416,7 +416,7 @@ tags and flows on payment.
     - `set_paid` in apps/api/src/modules/integrations/stores/woocommerce/woo.client.ts
   - a store connection warning when the store refuses
   - mock routes for both calls in tools/mock-meta/src/shopify.ts and woocommerce.ts
-- [ ] T054 [P] [US3] Add the web parts for these sources:
+- [X] T054 [P] [US3] Add the web parts for these sources:
   - apps/web/src/components/flows/steps/payment-form.tsx, registered in step-form.tsx and step-node.tsx
   - **Mark paid (test)** and **Mark not paid (test)** in apps/web/src/components/flows/test-panel.tsx
   - the campaign payment config in apps/web/src/components/campaigns/wizard/mapping-step.tsx (amount fixed or from an attribute, description, expiry, tag and flow on payment), with its summary in review-step.tsx
@@ -439,7 +439,7 @@ and export.
 
 ### Tests for User Story 4 (write first, must fail)
 
-- [ ] T055 [P] [US4] Integration test apps/api/test/integration/payments-reports.int-spec.ts:
+- [X] T055 [P] [US4] Integration test apps/api/test/integration/payments-reports.int-spec.ts:
   - **reminders:**
     - two reminders at their times through the tick (fake clock)
     - only while the request is waiting and was delivered
@@ -452,8 +452,8 @@ and export.
     - a refund changes the totals
   - **export:** a CSV stream with phones masked without `phones.full`, and audit `payments.exported`
   - **retargeting:** `PAID` and `NOT_PAID` groups from a campaign with a payment config
-- [ ] T056 [P] [US4] Contract cases for `GET /payments/requests`, `/payments/summary` and `/payments/export.csv` in apps/api/test/contract/commerce.contract-spec.ts
-- [ ] T057 [P] [US4] Playwright e2e apps/web/e2e/payments-us4-reports.spec.ts:
+- [X] T056 [P] [US4] Contract cases for `GET /payments/requests`, `/payments/summary` and `/payments/export.csv` in apps/api/test/contract/commerce.contract-spec.ts
+- [X] T057 [P] [US4] Playwright e2e apps/web/e2e/payments-us4-reports.spec.ts:
   - set a reminder in the settings
   - the payments page totals for five mock requests (two paid, one refunded in half, two waiting)
   - filters and export
@@ -461,13 +461,13 @@ and export.
 
 ### Implementation for User Story 4
 
-- [ ] T058 [US4] Add reminders to apps/api/src/modules/payments/tick/payments-tick.processor.ts:
+- [X] T058 [US4] Add reminders to apps/api/src/modules/payments/tick/payments-tick.processor.ts:
   - due reminders are sent through the 001 queue with origin `PAYMENTS` and the 001 opt-out checks
   - `remindersSent` and `nextReminderAt` follow the shared rule
   - reminder validation in payment-settings.service.ts
-- [ ] T059 [US4] Implement apps/api/src/modules/payments/reports/payments-summary.service.ts and payments-export.controller.ts (aggregations, the CSV stream, masking, audit), and the list filters in payment-requests.controller.ts
-- [ ] T060 [US4] Add `PAID` and `NOT_PAID` to `RETARGET_GROUPS` in apps/api/src/modules/campaigns/retarget.service.ts, with their audience queries
-- [ ] T061 [P] [US4] Add the web parts:
+- [X] T059 [US4] Implement apps/api/src/modules/payments/reports/payments-summary.service.ts and payments-export.controller.ts (aggregations, the CSV stream, masking, audit), and the list filters in payment-requests.controller.ts
+- [X] T060 [US4] Add `PAID` and `NOT_PAID` to `RETARGET_GROUPS` in apps/api/src/modules/campaigns/retarget.service.ts, with their audience queries
+- [X] T061 [P] [US4] Add the web parts:
   - apps/web/src/app/(dashboard)/payments/page.tsx: the period, total tiles, a by-day chart, a by-source table, the request list with filters, and export
   - the reminders section in payments/settings/page.tsx
   - `PAID` and `NOT_PAID` in apps/web/src/components/campaigns/retarget-dialog.tsx
@@ -488,7 +488,7 @@ and the catalog; managers use catalog and multi-product templates.
 
 ### Tests for User Story 5 (write first, must fail)
 
-- [ ] T062 [P] [US5] Integration test apps/api/test/integration/catalog.int-spec.ts (`FakeCommerceGraph`):
+- [X] T062 [P] [US5] Integration test apps/api/test/integration/catalog.int-spec.ts (`FakeCommerceGraph`):
   - **connection state:** catalogs per WABA; numbers with and without the catalog
   - **connect and copy:**
     - the first copy: 40 products, prices parsed, unsendable ones flagged
@@ -500,42 +500,42 @@ and the catalog; managers use catalog and multi-product templates.
     - product, list and catalog payloads exactly as the contract (chat items `PRODUCT`, `PRODUCT_LIST`, `CATALOG`)
     - window closed → 409; a number without the catalog → 409; unsendable products → 422 naming them
   - **audit and roles:** audit `catalog.connected`, `catalog.disconnected` and `catalog.commerce_settings_changed`; agents get 403 on the connection
-- [ ] T063 [P] [US5] Integration test apps/api/test/integration/catalog-fill.int-spec.ts (nock store APIs plus `FakeCommerceGraph`):
+- [X] T063 [P] [US5] Integration test apps/api/test/integration/catalog-fill.int-spec.ts (nock store APIs plus `FakeCommerceGraph`):
   - filling from a Shopify store and from a WooCommerce store, one item per variant with the retailer id rules of R9
   - the price text; only changed items sent (hash); deletions
   - batch status polling and per-item errors
   - the 80009 back-off; audit `catalog.fill_changed`
-- [ ] T064 [P] [US5] Template tests:
+- [X] T064 [P] [US5] Template tests:
   - apps/api/test/unit/template-payload.builder.spec.ts: the CATALOG and MPM send components with thumbnail and sections
   - apps/api/test/integration/catalog-templates.int-spec.ts:
     - creating and syncing templates with CATALOG and MPM buttons
     - the MARKETING category enforced
     - a campaign with product choices sends them
-- [ ] T065 [P] [US5] Contract cases for `/catalog/*` and `/inbox/conversations/{id}/products` in apps/api/test/contract/commerce.contract-spec.ts
-- [ ] T066 [P] [US5] Playwright e2e apps/web/e2e/commerce-us5-catalog.spec.ts:
+- [X] T065 [P] [US5] Contract cases for `/catalog/*` and `/inbox/conversations/{id}/products` in apps/api/test/contract/commerce.contract-spec.ts
+- [X] T066 [P] [US5] Playwright e2e apps/web/e2e/commerce-us5-catalog.spec.ts:
   - connect the mock catalog, copy the products, search
   - send one product, a list with two sections, and the catalog in a chat
   - an out-of-stock product shows as unavailable in the picker
 
 ### Implementation for User Story 5
 
-- [ ] T067 [US5] Extend tools/mock-meta/src/commerce.ts with commerce settings per number, and `items_batch` with its status (`finished` on the second check, items without a price invalid)
-- [ ] T068 [US5] Implement apps/api/src/modules/commerce/catalog/catalog-connection.service.ts, catalog.controller.ts and catalog-sync.processor.ts:
+- [X] T067 [US5] Extend tools/mock-meta/src/commerce.ts with commerce settings per number, and `items_batch` with its status (`finished` on the second check, items without a price invalid)
+- [X] T068 [US5] Implement apps/api/src/modules/commerce/catalog/catalog-connection.service.ts, catalog.controller.ts and catalog-sync.processor.ts:
   - connection state; connect, which starts the first copy; disconnect
   - commerce settings
   - the hourly `catalog-sync` repeatable job and the on-demand copy on the `catalog` queue
   - product search with the trigram index
   - audit entries
-- [ ] T069 [US5] Implement apps/api/src/modules/commerce/catalog/catalog-fill.processor.ts and the store product readers:
+- [X] T069 [US5] Implement apps/api/src/modules/commerce/catalog/catalog-fill.processor.ts and the store product readers:
   - Shopify GraphQL products with variants in shopify.client.ts *(verify that the app has `read_products`)*
   - WooCommerce products and variations in woo.client.ts
   - hashing, chunked `items_batch`, status polling, and errors saved on the connection
-- [ ] T070 [US5] Implement apps/api/src/modules/commerce/messages/product-messages.service.ts and the inbox route:
+- [X] T070 [US5] Implement apps/api/src/modules/commerce/messages/product-messages.service.ts and the inbox route:
   - product, list and catalog sends, and their chat item DTO
   - CATALOG and MPM buttons in apps/api/src/modules/templates/template-components.builder.ts and templates-sync.service.ts
   - their send components in apps/api/src/modules/sending/template-payload.builder.ts *(verify the MPM send parameters against Meta's multi-product template page)*
   - campaign product choices in the variable mapping
-- [ ] T071 [P] [US5] Add the web parts:
+- [X] T071 [P] [US5] Add the web parts:
   - apps/web/src/app/(dashboard)/catalog/page.tsx (the connection, numbers with commerce settings, products with search, fill from a store with its errors) and a **Catalog** item in apps/web/src/app/(dashboard)/layout.tsx
   - apps/web/src/components/inbox/product-picker.tsx, opened from composer.tsx
   - product message rendering in chat-item-view.tsx
@@ -558,15 +558,15 @@ review.
 
 ### Tests for User Story 6 (write first, must fail)
 
-- [ ] T072 [P] [US6] Unit cases in apps/api/test/unit/inbox/message-parser.spec.ts: `order` messages parse to `ORDER` with the items, decimal prices, lower-case currency and the customer's text
-- [ ] T073 [P] [US6] Integration test apps/api/test/integration/chat-orders.int-spec.ts:
+- [X] T072 [P] [US6] Unit cases in apps/api/test/unit/inbox/message-parser.spec.ts: `order` messages parse to `ORDER` with the items, decimal prices, lower-case currency and the customer's text
+- [X] T073 [P] [US6] Integration test apps/api/test/integration/chat-orders.int-spec.ts:
   - **a cart arrives:** the chat order has the items, names from the copy and the total
   - **automatic mode:** a `CHAT_ORDER` request and a `cta_url` message are sent inside the inbound job
   - **review mode:** the order waits; edit quantities, remove items, cancel (which cancels the request), send the link
   - **warnings:** not in the catalog, currency, mixed currencies and a changed price stop automatic links
   - **paid:** the order is PAID, gets its tag, sends events `chat_order.received` and `chat_order.paid`, and journey `CHAT_ORDER_RECEIVED`; a refund is mirrored
-- [ ] T074 [P] [US6] Contract cases for `/chat-orders*` in apps/api/test/contract/commerce.contract-spec.ts
-- [ ] T075 [P] [US6] Playwright e2e apps/web/e2e/commerce-us6-chat-orders.spec.ts:
+- [X] T074 [P] [US6] Contract cases for `/chat-orders*` in apps/api/test/contract/commerce.contract-spec.ts
+- [X] T075 [P] [US6] Playwright e2e apps/web/e2e/commerce-us6-chat-orders.spec.ts:
   - a CLI cart of two products shows a chat order card in live chat
   - automatic mode: the link arrives, and paying marks the order Paid
   - review mode: edit the order and send the link
@@ -574,13 +574,13 @@ review.
 
 ### Implementation for User Story 6
 
-- [ ] T076 [US6] Parse `order` messages in apps/api/src/modules/inbox/inbound/message-parser.ts, and route them in inbound-chat.handler.ts: to a waiting flow step once US8 adds it, otherwise to `ChatOrderService`
-- [ ] T077 [US6] Implement apps/api/src/modules/commerce/orders/chat-orders.service.ts and chat-orders.controller.ts:
+- [X] T076 [US6] Parse `order` messages in apps/api/src/modules/inbox/inbound/message-parser.ts, and route them in inbound-chat.handler.ts: to a waiting flow step once US8 adds it, otherwise to `ChatOrderService`
+- [X] T077 [US6] Implement apps/api/src/modules/commerce/orders/chat-orders.service.ts and chat-orders.controller.ts:
   - the modes, with warnings from the shared `cartWarnings`
   - edits; the link through payment requests with source `CHAT_ORDER`; cancel
   - status mirroring in payment-effects.ts
   - the chat order mode, expiry and tag validated in payment-settings.service.ts
-- [ ] T078 [P] [US6] Add the web parts:
+- [X] T078 [P] [US6] Add the web parts:
   - apps/web/src/components/inbox/chat-order-card.tsx (items, total, warnings, edit quantities, send link, cancel), rendered by chat-item-view.tsx
   - chat order settings in apps/web/src/app/(dashboard)/payments/settings/page.tsx
   - orders on the contact's Payments tab
@@ -601,7 +601,7 @@ tags and consent.
 
 ### Tests for User Story 7 (write first, must fail)
 
-- [ ] T079 [P] [US7] Integration test apps/api/test/integration/forms.int-spec.ts (`FakeCommerceGraph`):
+- [X] T079 [P] [US7] Integration test apps/api/test/integration/forms.int-spec.ts (`FakeCommerceGraph`):
   - **build and check:** create, save the draft, check problems
   - **publish:**
     - the compiled Flow JSON goes to each WABA with its category as version 1
@@ -621,21 +621,21 @@ tags and consent.
   - **a forged or changed token, or another contact:** only a plain `FORM_REPLY`
   - **answers:** the list and export (audit `form_answers.exported`, masking)
   - **audit and roles:** audit `form.published` and `form.archived`; agents get 403 on manage routes
-- [ ] T080 [P] [US7] Contract cases for `/forms*` and `/inbox/conversations/{id}/forms` in apps/api/test/contract/commerce.contract-spec.ts
-- [ ] T081 [P] [US7] Playwright e2e apps/web/e2e/commerce-us7-forms.spec.ts:
+- [X] T080 [P] [US7] Contract cases for `/forms*` and `/inbox/conversations/{id}/forms` in apps/api/test/contract/commerce.contract-spec.ts
+- [X] T081 [P] [US7] Playwright e2e apps/web/e2e/commerce-us7-forms.spec.ts:
   - build a two-screen form, map name and email, add a tag, publish
   - send it in a chat, and answer with the CLI using the token read from `/mock/sent`
   - the answer shows in the chat, the attributes and tag are set, and the answers list shows it
 
 ### Implementation for User Story 7
 
-- [ ] T082 [US7] Extend tools/mock-meta/src/commerce.ts with the Flows routes of contracts/meta-commerce-graph.md: create with validation, get, deprecate and delete
-- [ ] T083 [US7] Implement apps/api/src/modules/commerce/forms/forms.service.ts, forms.controller.ts and form-publisher.ts:
+- [X] T082 [US7] Extend tools/mock-meta/src/commerce.ts with the Flows routes of contracts/meta-commerce-graph.md: create with validation, get, deprecate and delete
+- [X] T083 [US7] Implement apps/api/src/modules/commerce/forms/forms.service.ts, forms.controller.ts and form-publisher.ts:
   - checks and compiling; publishing to each WABA; versions
   - mapping Meta's validation errors back to screens and fields
   - archive and deprecate
   - *(verify the `validation_errors` fields and the `${screen.<id>.form.<field>}` reference syntax with a published test flow; switch the compiler to navigate payloads if needed)*
-- [ ] T084 [US7] Implement apps/api/src/modules/commerce/forms/form-tokens.ts and form-answers.service.ts:
+- [X] T084 [US7] Implement apps/api/src/modules/commerce/forms/form-tokens.ts and form-answers.service.ts:
   - form tokens: HMAC with `TOKEN_ENCRYPTION_KEY` over the shared encoding
   - answers:
     - `nfm_reply` routing from inbound-chat.handler.ts
@@ -644,7 +644,7 @@ tags and consent.
     - journey entries and outbound events
   - the inbox form send route (chat item `FORM`)
   - FLOW buttons in template-components.builder.ts, templates-sync.service.ts and template-payload.builder.ts
-- [ ] T085 [P] [US7] Add the web parts:
+- [X] T085 [P] [US7] Add the web parts:
   - apps/web/src/app/(dashboard)/forms/page.tsx (the list)
   - forms/[id]/page.tsx (the builder: screens, fields, options, mapping to attributes, tags, preview, check, publish, versions, archive)
   - forms/[id]/answers/page.tsx (answers and export)
@@ -668,7 +668,7 @@ in the test panel.
 
 ### Tests for User Story 8 (write first, must fail)
 
-- [ ] T086 [P] [US8] Unit tests:
+- [X] T086 [P] [US8] Unit tests:
   - in packages/shared/src/flows/graph.test.ts and validate.test.ts:
     - the `product`, `catalog` and `form` step schemas
     - the `cartTotal` amount source
@@ -677,22 +677,22 @@ in the test panel.
     - product and catalog steps wait for an `order` input, then go to `next` with the cart in answers; a timeout → `onTimeout`
     - form steps wait for a `form` input, then go to `next` with the answers under the prefix; a timeout
     - a payment amount from `cartTotal`
-- [ ] T087 [P] [US8] Integration test apps/api/test/integration/flows-commerce.int-spec.ts:
+- [X] T087 [P] [US8] Integration test apps/api/test/integration/flows-commerce.int-spec.ts:
   - a flow sends a product list; the cart goes to the flow (chat order mode `FLOW`, no automatic link); the payment step charges the cart total and takes the paid branch
   - a form step's answers are used in a later message
   - publishing is refused when the catalog is not connected or the form is not published
   - test sessions run with the test numbers
-- [ ] T088 [P] [US8] Playwright e2e apps/web/e2e/commerce-us8-flow-steps.spec.ts: build **Send product list** → **Request payment** (cart total) → **Send form**, and run it in the test panel with a CLI cart, **Mark paid (test)** and a CLI form answer
+- [X] T088 [P] [US8] Playwright e2e apps/web/e2e/commerce-us8-flow-steps.spec.ts: build **Send product list** → **Request payment** (cart total) → **Send form**, and run it in the test panel with a CLI cart, **Mark paid (test)** and a CLI form answer
 
 ### Implementation for User Story 8
 
-- [ ] T089 [US8] Add the three steps across shared, engine and inbound:
+- [X] T089 [US8] Add the three steps across shared, engine and inbound:
   - **shared:** the schemas, the publish facts and the `cartTotal` source in packages/shared/src/flows/graph.ts and validate.ts
   - **engine:** the `order` and `form` inputs and the three steps in apps/api/src/modules/flows/engine/run.ts, effects.ts and session.service.ts
   - **inbound:** carts and verified answers routed to waiting sessions in inbound-chat.handler.ts
   - **sending:** through product-messages.service.ts and the form sender
   - **publishing:** the catalog and form facts passed by publish.service.ts
-- [ ] T090 [P] [US8] Add apps/web/src/components/flows/steps/product-form.tsx, catalog-form.tsx and form-step-form.tsx, registered in step-form.tsx and step-node.tsx, with the product and form pickers; their problems show in problems-panel.tsx
+- [X] T090 [P] [US8] Add apps/web/src/components/flows/steps/product-form.tsx, catalog-form.tsx and form-step-form.tsx, registered in step-form.tsx and step-node.tsx, with the product and form pickers; their problems show in problems-panel.tsx
 
 **Checkpoint**: all stories are done.
 
@@ -700,10 +700,10 @@ in the test panel.
 
 ## Phase 11: Polish & Cross-Cutting Concerns
 
-- [ ] T091 [P] Add the observability of research R14:
+- [X] T091 [P] Add the observability of research R14:
   - metrics in apps/api/src/common/metrics/metrics.service.ts, with their instrumentation points: `wbm_payment_links_total{result}`, `wbm_payment_events_total{type,result,source}`, `wbm_payments_total{status}`, `wbm_chat_orders_total{mode}`, `wbm_form_answers_total{result}`, `wbm_catalog_sync_total{job,result}`
   - the alerts `WbmPaymentLinksFailing` and `WbmPaymentNotificationsMissing` in ops/alerts.yml, with cases in apps/api/test/unit/alerts.spec.ts
-- [ ] T092 [P] Extend retention and erasure, tests first:
+- [X] T092 [P] Extend retention and erasure, tests first:
   - **retention**, in apps/api/test/integration/retention.int-spec.ts and apps/api/src/modules/maintenance/retention.processor.ts:
     - `payment_events` after 30 days
     - `form_answers` after 12 months
@@ -713,17 +713,17 @@ in the test panel.
     - waiting requests are cancelled, with their sessions expired
     - requests and orders keep their amounts without the contact, phone and name
     - form answers are deleted
-- [ ] T093 [P] Add the card-data scan for SC-004 in apps/api/test/integration/payments-no-card-data.int-spec.ts:
+- [X] T093 [P] Add the card-data scan for SC-004 in apps/api/test/integration/payments-no-card-data.int-spec.ts:
   - **setup:** a full payment, refund and failure run with `FakeStripe` events that carry card details (`payment_method_details.card` with last4 and brand, `billing_details`, `customer_details`)
   - **what is scanned:** every payment, order and event table, the captured logs, and the outbound event payloads
   - **what must not appear:** Luhn-valid 13–19 digit numbers, `last4`, `cvc`, card brands or the customer's address
-- [ ] T094 [P] Empty the 008 `PENDING` list in apps/api/test/unit/audit-coverage.spec.ts once every action is recorded
-- [ ] T095 [P] Add contracts/commerce-api.openapi.yaml to apps/api/test/integration/rbac.int-spec.ts, skipping `get /l/p/{code}` and `post /payments/stripe/webhook`
-- [ ] T096 [P] Update the docs:
+- [X] T094 [P] Empty the 008 `PENDING` list in apps/api/test/unit/audit-coverage.spec.ts once every action is recorded
+- [X] T095 [P] Add contracts/commerce-api.openapi.yaml to apps/api/test/integration/rbac.int-spec.ts, skipping `get /l/p/{code}` and `post /payments/stripe/webhook`
+- [X] T096 [P] Update the docs:
   - README.md: Payments, Catalog and Forms sections (Stripe keys and the restricted key, notifications, pay links and expiry, reminders, the catalog and commerce settings, carts, forms, the commerce flow steps)
   - specs/008-commerce-payments/quickstart.md, if steps changed
   - docs/research/aisensy/feature-inventory-2026-11-19.md: mark items 3.13, 4.8, 6.12, 7.4, 8.1–8.4 and 11.8 (8.3 as payment links), and update the roadmap
-- [ ] T097 Run every quickstart row end to end (in CI where the machine's memory does not allow it) and record the results in specs/008-commerce-payments/checklists/release.md, with the pre-release items:
+- [X] T097 Run every quickstart row end to end (in CI where the machine's memory does not allow it) and record the results in specs/008-commerce-payments/checklists/release.md, with the pre-release items:
   - **Stripe:** the account verified with charges enabled; a restricted live key; the endpoint registered; "Notifications working" in live mode
   - **Meta:** the catalog connected in WhatsApp Manager; `catalog_management` on the token; the cart enabled; catalog, MPM and payment templates approved; business verification if Meta asks for it before forms can be published
   - **Shopify:** the app scopes `read_products` and `write_orders`
