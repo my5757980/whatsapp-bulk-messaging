@@ -35,15 +35,15 @@ delivery order. Pushes are batched: US1–US3 (the MVP), US4–US5, then US6–U
 **Purpose**: contract lint, and the mock-meta skeletons for template kinds, delivery hold, the test
 site and card replies.
 
-- [ ] T001 [P] Register the two 009 contract files:
+- [X] T001 [P] Register the two 009 contract files:
   - add specs/009-templates-growth/contracts/templates-growth-api.openapi.yaml and public-otp-v1.openapi.yaml to the `lint:contracts` script in package.json
   - add `'templates-growth-api.openapi.yaml'` and `'public-otp-v1.openapi.yaml'` (feature folder `009-templates-growth`) to `ContractFile` and `FEATURE_OF` in apps/api/test/contract/openapi-validator.ts
-- [ ] T002 [P] Add tools/mock-meta/src/templates.ts, mounted from tools/mock-meta/src/server.ts (contracts/meta-templates.md §5). Later stories add their rules to this file. It starts with:
+- [X] T002 [P] Add tools/mock-meta/src/templates.ts, mounted from tools/mock-meta/src/server.ts (contracts/meta-templates.md §5). Later stories add their rules to this file. It starts with:
   - template create and edit that keep `kind`-specific components and `message_send_ttl_seconds`, approved after 30 seconds like other mock templates
   - `POST /{phone-number-id}/media` returning `media-<n>` ids
   - the send route accepting authentication, carousel and offer payloads, recorded in `/mock/sent`
-- [ ] T003 [P] Add `POST /mock/hold-delivery { phoneNumberId, on }` to tools/mock-meta/src/webhook-emitter.ts (no `delivered` webhooks while on), and add tools/mock-meta/src/site.ts serving `GET /mock/site/{page}?key=…`: a plain HTML page with the website button snippet pointing at the api's public link base (contracts/website-button.md)
-- [ ] T004 [P] Add `--button-payload <payload> --button-text <text>` to tools/mock-meta/src/inbound-cli.ts: an inbound `button` message, for carousel card quick replies
+- [X] T003 [P] Add `POST /mock/hold-delivery { phoneNumberId, on }` to tools/mock-meta/src/webhook-emitter.ts (no `delivered` webhooks while on), and add tools/mock-meta/src/site.ts serving `GET /mock/site/{page}?key=…`: a plain HTML page with the website button snippet pointing at the api's public link base (contracts/website-button.md)
+- [X] T004 [P] Add `--button-payload <payload> --button-text <text>` to tools/mock-meta/src/inbound-cli.ts: an inbound `button` message, for carousel card quick replies
 
 ---
 
@@ -55,7 +55,7 @@ types and earlier contracts.
 
 **⚠️ CRITICAL**: no user story work can begin until this phase is complete.
 
-- [ ] T005 Write the Prisma models and the migration apps/api/prisma/migrations/20261210000000_templates_growth/migration.sql per data-model.md, then update apps/api/prisma/schema.prisma and run `prisma generate`. The migration holds:
+- [X] T005 Write the Prisma models and the migration apps/api/prisma/migrations/20261210000000_templates_growth/migration.sql per data-model.md, then update apps/api/prisma/schema.prisma and run `prisma generate`. The migration holds:
   - **new enums:** `TemplateKind`, `TtlAppliedBy`, `ExpiredReason`, `ChatLinkSource` and `ChatWidgetStatus`
   - **new enum values:** `MessageOrigin.OTP`, `MessageStatus.EXPIRED`, `SkipReason.OFFER_CODE_MISSING` and `MEDIA_URL_MISSING`
   - **new columns:**
@@ -71,7 +71,7 @@ types and earlier contracts.
     - a one-row unique index on `otp_settings`
     - backfill `campaigns.launched_by_id` from the `campaign.launched` audit entries, else `created_by_id`
     - checks: `copy_index >= 0`, `otp_settings.limit_per_phone` between 1 and 50, `limit_window_minutes` between 1 and 1440
-- [ ] T006 [P] Unit tests in packages/shared/src/template-rules.test.ts for the new kinds (research R2, R6, R7, R8):
+- [X] T006 [P] Unit tests in packages/shared/src/template-rules.test.ts for the new kinds (research R2, R6, R7, R8):
   - **authentication:**
     - the body cannot be set
     - `codeExpiryMinutes` is 1–90 or null
@@ -93,10 +93,10 @@ types and earlier contracts.
     - ranges: AUTHENTICATION 30–900, UTILITY 30–43200, MARKETING 43200–2592000
     - `ttlAppliedBy` is META for the first two and PLATFORM for marketing
     - a category change clears a TTL outside the new range
-- [ ] T007 [P] Unit tests packages/shared/src/templates/template-kinds.test.ts:
+- [X] T007 [P] Unit tests packages/shared/src/templates/template-kinds.test.ts:
   - the mapping keys `CARD.{i}.BODY.{n}`, `CARD.{i}.BUTTON.{b}`, `HEADER.media` and `$offerCode`, and the keys each kind needs in the campaign mapping step
   - card quick reply payloads `wbm:c{i}:b{b}`: encoded and parsed, with anything else refused
-- [ ] T008 [P] Unit tests packages/shared/src/campaigns/launch-checks.test.ts and the `EXPIRED` cases in packages/shared/src/status.test.ts:
+- [X] T008 [P] Unit tests packages/shared/src/campaigns/launch-checks.test.ts and the `EXPIRED` cases in packages/shared/src/status.test.ts:
   - **launch checks:**
     - an offer must end in the future and after the scheduled start
     - card media must match the template's format and the size limits (001 `HEADER_MEDIA`)
@@ -106,40 +106,40 @@ types and earlier contracts.
     - `EXPIRED` with `NOT_DELIVERED_IN_TIME` is replaced by `DELIVERED`, `READ` or `FAILED`
     - `EXPIRED_BEFORE_SENDING` and `OFFER_ENDED` are final
     - `EXPIRED` never goes back to `QUEUED` or `SENT`
-- [ ] T009 Implement the shared modules tested by T006–T008:
+- [X] T009 Implement the shared modules tested by T006–T008:
   - packages/shared/src/template-rules.ts (kinds, TTL ranges, `ttlAppliedByFor`)
   - packages/shared/src/templates/template-kinds.ts
   - packages/shared/src/campaigns/launch-checks.ts
   - `EXPIRED` in packages/shared/src/status.ts
   - export them from packages/shared/src/index.ts and rebuild `@wbm/shared`
-- [ ] T010 [P] Add the 009 lists to packages/shared, with cases in each file's test (research R17):
+- [X] T010 [P] Add the 009 lists to packages/shared, with cases in each file's test (research R17):
   - **permission** in permissions.ts and permissions.test.ts: `reports.view` (ADMIN, MANAGER)
   - **API key scope** in integrations/scopes.ts and scopes.test.ts: `otp.send`, labelled "Send one-time codes"
   - **event type** in integrations/events.ts and events.test.ts: `otp.status` (group `otp`)
   - **enums** in enums.ts: `MessageOrigin.OTP`, `MessageStatus.EXPIRED` and `ExpiredReason`
-- [ ] T011 [P] Unit tests packages/shared/src/help/error-meanings.test.ts (research R12):
+- [X] T011 [P] Unit tests packages/shared/src/help/error-meanings.test.ts (research R12):
   - every code in apps/api/src/modules/meta/meta-error-classifier.ts, plus 131050, 131051, 131052, 131053 and 131057, has `title`, `meaning`, `action` and `checkedAt`
   - the platform reasons have entries: unknown outcome, expired before sending, not delivered in time, offer ended, and the media address problems
   - an unknown code gives Meta's text with general advice
-- [ ] T012 Implement packages/shared/src/help/error-meanings.ts (texts in our own words, from Meta's public error reference) and make `describeMetaError` in apps/api/src/modules/meta/meta-error-classifier.ts read its titles; keep apps/api/test/unit/meta-error-classifier.spec.ts green
-- [ ] T013 [P] Add the 009 audit actions of research R17 to apps/api/src/modules/audit/audit-actions.ts, and list them in `PENDING` in apps/api/test/unit/audit-coverage.spec.ts until their story records them
-- [ ] T014 [P] Add the test support files:
+- [X] T012 Implement packages/shared/src/help/error-meanings.ts (texts in our own words, from Meta's public error reference) and make `describeMetaError` in apps/api/src/modules/meta/meta-error-classifier.ts read its titles; keep apps/api/test/unit/meta-error-classifier.spec.ts green
+- [X] T013 [P] Add the 009 audit actions of research R17 to apps/api/src/modules/audit/audit-actions.ts, and list them in `PENDING` in apps/api/test/unit/audit-coverage.spec.ts until their story records them
+- [X] T014 [P] Add the test support files:
   - apps/api/test/support/fake-templates-graph.ts: `FakeTemplatesGraph`, a stateful nock fake per contracts/meta-templates.md §5:
     - template create and edit checks per kind
     - media uploads
     - send payload checks per kind, with the calls recorded
     - `holdDelivery`
   - apps/api/test/support/templates.ts helpers: seed an approved template of each kind; seed an API key with given scopes; deliver a status webhook for a message
-- [ ] T015 [P] Add `code`, `codeEnc` and `coupon_code` to the redaction list in apps/api/src/common/logging/redaction.ts, with cases in apps/api/test/unit/logging-redaction.spec.ts
-- [ ] T016 [P] Add the web libraries, with types from the contracts, labels and query keys:
+- [X] T015 [P] Add `code`, `codeEnc` and `coupon_code` to the redaction list in apps/api/src/common/logging/redaction.ts, with cases in apps/api/test/unit/logging-redaction.spec.ts
+- [X] T016 [P] Add the web libraries, with types from the contracts, labels and query keys:
   - apps/web/src/lib/templates.ts: kind labels, TTL range labels, and who applies the TTL
   - apps/web/src/lib/reports.ts
   - apps/web/src/lib/chat-widgets.ts
   - apps/web/src/lib/help.ts: re-exports of the shared help data
-- [ ] T017 Create apps/api/src/modules/otp/otp.module.ts and wire it into apps/api/src/app.module.ts (and the worker where its jobs run):
+- [X] T017 Create apps/api/src/modules/otp/otp.module.ts and wire it into apps/api/src/app.module.ts (and the worker where its jobs run):
   - add `'l/w/widget.js'`, `'l/w/:key/config.json'` and `'l/w/:key/image'` to the global prefix exclusions in apps/api/src/app.setup.ts
   - keep apps/api/test/unit/app-module.spec.ts green
-- [ ] T018 Update the earlier contracts for the new fields, then run `npm run lint:contracts`:
+- [X] T018 Update the earlier contracts for the new fields, then run `npm run lint:contracts`:
   - **001 dashboard-api.openapi.yaml:**
     - TemplateInput and Template gain `kind`, `ttlSeconds`, `ttlAppliedBy`, `auth`, `cards`, `offer` and `options` (the TemplateKindFields of the 009 contract)
     - campaigns gain `allowDuplicateRows`, `offerConfig` and `cardMedia`
@@ -165,7 +165,7 @@ delivered with a copy-code button, its status readable, the code masked, the six
 
 ### Tests for User Story 1 (write first, must fail)
 
-- [ ] T019 [P] [US1] Unit tests:
+- [X] T019 [P] [US1] Unit tests:
   - apps/api/test/unit/templates/template-components-auth.spec.ts: our authentication draft becomes Meta's create body (contracts/meta-templates.md §1):
     - copy code, and one-tap with `supported_apps`
     - the footer only when a validity is set
@@ -173,12 +173,12 @@ delivered with a copy-code button, its status readable, the code masked, the six
     - `message_send_ttl_seconds`
     - the `URL` button Meta returns is read back
   - apps/api/test/unit/sending/template-payload-auth.spec.ts: the code as the body parameter and the button parameter (`sub_type: url`, `index: "0"`), taken only from the decrypted job and never from `resolved_params`
-- [ ] T020 [P] [US1] Integration test apps/api/test/integration/templates-auth.int-spec.ts (`FakeTemplatesGraph`):
+- [X] T020 [P] [US1] Integration test apps/api/test/integration/templates-auth.int-spec.ts (`FakeTemplatesGraph`):
   - create, submit and sync an authentication template; editor rule problems give 422 with field issues
   - one-tap needs its apps
   - the TTL is sent to Meta and stored with `ttl_applied_by = META`
   - a manager can create it; an agent gets 403
-- [ ] T021 [P] [US1] Integration test apps/api/test/integration/otp-api.int-spec.ts (`FakeTemplatesGraph`):
+- [X] T021 [P] [US1] Integration test apps/api/test/integration/otp-api.int-spec.ts (`FakeTemplatesGraph`):
   - **settings:**
     - the default template must be an approved AUTHENTICATION template, else TEMPLATE_NOT_AUTHENTICATION
     - the number must be connected
@@ -196,10 +196,10 @@ delivered with a copy-code button, its status readable, the code masked, the six
     - delivered, read and failed webhooks update `GET /api/v1/otp/{id}` and emit `otp.status` without the code
     - another key's id gets 404
     - a number stopped by quality or its limit gives 422 NUMBER_NOT_SENDING at once
-- [ ] T022 [P] [US1] Contract cases:
+- [X] T022 [P] [US1] Contract cases:
   - apps/api/test/contract/otp.contract-spec.ts against contracts/public-otp-v1.openapi.yaml: the 202, the errors and the status
   - `/otp/settings` in a new apps/api/test/contract/templates-growth.contract-spec.ts
-- [ ] T023 [P] [US1] Playwright e2e apps/web/e2e/templates-us1-codes.spec.ts:
+- [X] T023 [P] [US1] Playwright e2e apps/web/e2e/templates-us1-codes.spec.ts:
   - create a code template (security note, 10-minute validity, copy code, 5-minute TTL), approved on mock-meta
   - choose it in Settings → One-time codes; give a key **Send one-time codes**
   - `POST /api/v1/otp` with the key: `/mock/sent` shows the code twice in the payload, and the message log shows `••••`
@@ -207,26 +207,26 @@ delivered with a copy-code button, its status readable, the code masked, the six
 
 ### Implementation for User Story 1
 
-- [ ] T024 [US1] Add the authentication rules to tools/mock-meta/src/templates.ts: the create body checks, and sends that must carry the code twice (at most 15 characters). Mirror them in `FakeTemplatesGraph`. Check the copy-code and one-tap pages again *(verify)* and fix contracts/meta-templates.md.
-- [ ] T025 [US1] Templates api:
+- [X] T024 [US1] Add the authentication rules to tools/mock-meta/src/templates.ts: the create body checks, and sends that must carry the code twice (at most 15 characters). Mirror them in `FakeTemplatesGraph`. Check the copy-code and one-tap pages again *(verify)* and fix contracts/meta-templates.md.
+- [X] T025 [US1] Templates api:
   - map AUTHENTICATION drafts in apps/api/src/modules/templates/template-components.builder.ts (create and edit bodies with `message_send_ttl_seconds`)
   - remove the editor refusal and store `kind`, `options` and `ttl_seconds` in apps/api/src/modules/templates/templates.service.ts
   - read the kind and options back in apps/api/src/modules/templates/templates-sync.service.ts
-- [ ] T026 [US1] Implement apps/api/src/modules/otp/otp.service.ts (research R3 – R5):
+- [X] T026 [US1] Implement apps/api/src/modules/otp/otp.service.ts (research R3 – R5):
   - checks: the code, the phone (libphonenumber with the default country), an approved AUTHENTICATION template, and a connected number that is sending
   - refuse blocked numbers
   - the Redis per-phone counter
   - a `messages` row: origin `OTP`, no contact, the code masked
   - the job, added through a new `otpSendJob()` in apps/api/src/modules/sending/send-jobs.ts: the code encrypted with `TokenCipher`, no priority, `removeOnComplete` and `removeOnFail` true
-- [ ] T027 [US1] Sending and statuses:
+- [X] T027 [US1] Sending and statuses:
   - apps/api/src/modules/sending/send.processor.ts decrypts `codeEnc` for OTP jobs and builds the payload through a new `authenticationComponents()` in template-payload.builder.ts; it never logs payloads
   - apps/api/src/modules/webhooks/handlers/status.handler.ts emits `otp.status` for `origin = OTP` through apps/api/src/modules/integrations/webhooks/platform-events.ts
-- [ ] T028 [US1] Add the routes:
+- [X] T028 [US1] Add the routes:
   - apps/api/src/modules/otp/public-otp.controller.ts:
     - `POST /v1/otp` with `@RequireScope('otp.send')`, the 006 idempotency storing the masked response, and the key rate limit
     - `GET /v1/otp/{id}`: the key's own codes, for 30 days
   - apps/api/src/modules/otp/otp-settings.controller.ts: `GET` and `PUT /otp/settings` with the last-24-hours counts, audited
-- [ ] T029 [P] [US1] Web:
+- [X] T029 [P] [US1] Web:
   - the kind choice in apps/web/src/app/(dashboard)/templates/new/page.tsx, with new apps/web/src/components/templates/code-options.tsx and apps/web/src/components/templates/ttl-field.tsx
   - the fixed code text in apps/web/src/components/templates/template-preview.tsx
   - apps/web/src/app/(dashboard)/settings/one-time-codes/page.tsx, linked from settings/layout.tsx
@@ -247,11 +247,11 @@ more".
 
 ### Tests for User Story 2 (write first, must fail)
 
-- [ ] T030 [P] [US2] Unit tests:
+- [X] T030 [P] [US2] Unit tests:
   - apps/api/test/unit/templates/template-components-carousel.spec.ts: cards with a `header_handle` each, card bodies and buttons, and the message body
   - apps/api/test/unit/sending/template-payload-carousel.spec.ts: `card_index`, header media `id`s, card body and url parameters, quick reply payloads `wbm:c{i}:b{b}`
   - the `wbm:c1:b0` button case in apps/api/test/unit/inbox/message-parser.spec.ts
-- [ ] T031 [P] [US2] Integration test apps/api/test/integration/templates-carousel.int-spec.ts (`FakeTemplatesGraph`):
+- [X] T031 [P] [US2] Integration test apps/api/test/integration/templates-carousel.int-spec.ts (`FakeTemplatesGraph`):
   - **templates:** create, submit (one resumable upload per card sample) and sync
   - **campaign media:**
     - the cards default to the samples, and card 2 can be replaced from the library
@@ -263,10 +263,10 @@ more".
     - a card 2 quick reply becomes a chat item with the card and button
     - a 003 template button trigger starts its flow
   - **results:** tracked url buttons count clicks (005)
-- [ ] T032 [P] [US2] Contract cases:
+- [X] T032 [P] [US2] Contract cases:
   - `POST /campaigns/{id}/media-check` (card part) in apps/api/test/contract/templates-growth.contract-spec.ts
   - the CAROUSEL template cases in apps/api/test/contract/us3.contract-spec.ts
-- [ ] T033 [P] [US2] Playwright e2e apps/web/e2e/templates-us2-carousel.spec.ts:
+- [X] T033 [P] [US2] Playwright e2e apps/web/e2e/templates-us2-carousel.spec.ts:
   - build a 3-card carousel; it is approved
   - a campaign with another image on card 2 shows the card preview, and launches to three test contacts
   - `/mock/sent` has three carousel payloads with media ids
@@ -274,17 +274,17 @@ more".
 
 ### Implementation for User Story 2
 
-- [ ] T034 [US2] Add the carousel rules to tools/mock-meta/src/templates.ts and `FakeTemplatesGraph`: the create checks, the media upload, and sends that check every card has a media id. Check the carousel page again *(verify)* and fix contracts/meta-templates.md.
-- [ ] T035 [US2] Map CAROUSEL drafts in apps/api/src/modules/templates/template-components.builder.ts, uploading each card's sample with apps/api/src/modules/media/meta-resumable-upload.ts in templates.service.ts; sync the cards back in templates-sync.service.ts
-- [ ] T036 [US2] Add apps/api/src/modules/campaigns/media-check.service.ts (the card checks; card files go to the number through the 001 `MediaService.ensureMetaMediaId`):
+- [X] T034 [US2] Add the carousel rules to tools/mock-meta/src/templates.ts and `FakeTemplatesGraph`: the create checks, the media upload, and sends that check every card has a media id. Check the carousel page again *(verify)* and fix contracts/meta-templates.md.
+- [X] T035 [US2] Map CAROUSEL drafts in apps/api/src/modules/templates/template-components.builder.ts, uploading each card's sample with apps/api/src/modules/media/meta-resumable-upload.ts in templates.service.ts; sync the cards back in templates-sync.service.ts
+- [X] T036 [US2] Add apps/api/src/modules/campaigns/media-check.service.ts (the card checks; card files go to the number through the 001 `MediaService.ensureMetaMediaId`):
   - the `POST /campaigns/{id}/media-check` route in campaigns.controller.ts
   - apps/api/src/modules/campaigns/launch.service.ts uploads the card media before dispatch and refuses with MEDIA_PROBLEMS
-- [ ] T037 [US2] Campaign sends:
+- [X] T037 [US2] Campaign sends:
   - `cardMedia` on create and update in apps/api/src/modules/campaigns/campaigns.service.ts
   - the `CARD.*` mapping keys in variable-resolver.ts and audience-snapshot.service.ts
   - a `carouselComponents()` in apps/api/src/modules/sending/template-payload.builder.ts, using the Meta ids from `MediaService.ensureMetaMediaId`
-- [ ] T038 [US2] Inbound: apps/api/src/modules/inbox/inbound/message-parser.ts reads `wbm:c{i}:b{b}` payloads into the chat item's `card`; the chat item text stays the button text, so 003 template button triggers still match (the flow publish check and the trigger panel include card quick replies); live chat and the inbox list show "Card {i+1} · {button text}"
-- [ ] T039 [P] [US2] Web:
+- [X] T038 [US2] Inbound: apps/api/src/modules/inbox/inbound/message-parser.ts reads `wbm:c{i}:b{b}` payloads into the chat item's `card`; the chat item text stays the button text, so 003 template button triggers still match (the flow publish check and the trigger panel include card quick replies); live chat and the inbox list show "Card {i+1} · {button text}"
+- [X] T039 [P] [US2] Web:
   - apps/web/src/components/templates/carousel-cards.tsx in templates/new
   - the cards preview in template-preview.tsx
   - apps/web/src/components/campaigns/wizard/card-media.tsx in mapping-step.tsx
@@ -304,31 +304,31 @@ upload column; a row without a code is skipped; messages after the end are "offe
 
 ### Tests for User Story 3 (write first, must fail)
 
-- [ ] T040 [P] [US3] Unit tests:
+- [X] T040 [P] [US3] Unit tests:
   - apps/api/test/unit/templates/template-components-offer.spec.ts: the component order, no footer, and the copy-code example
   - apps/api/test/unit/sending/template-payload-offer.spec.ts: `limited_time_offer.expiration_time_ms`, the `coupon_code` parameter at index 0 and the url parameter at index 1
-- [ ] T041 [P] [US3] Integration test apps/api/test/integration/templates-offer.int-spec.ts (`FakeTemplatesGraph`):
+- [X] T041 [P] [US3] Integration test apps/api/test/integration/templates-offer.int-spec.ts (`FakeTemplatesGraph`):
   - create, submit and sync an offer template
   - **offer config:** an end in the past, or before the scheduled start, gets 422
   - **codes:** per-recipient codes from an upload column and from an attribute; a missing code skips the recipient with OFFER_CODE_MISSING
   - each payload carries the end time and the recipient's code
   - **after the end:** a campaign paused until after the end drops the rest as `EXPIRED` / `OFFER_ENDED`, counted in the results
-- [ ] T042 [P] [US3] Contract cases: `offerConfig` on the 001 campaign routes in apps/api/test/contract/us5.contract-spec.ts, and `expired.offerEnded` in the campaign report
-- [ ] T043 [P] [US3] Playwright e2e apps/web/e2e/templates-us3-offer.spec.ts:
+- [X] T042 [P] [US3] Contract cases: `offerConfig` on the 001 campaign routes in apps/api/test/contract/us5.contract-spec.ts, and `expired.offerEnded` in the campaign report
+- [X] T043 [P] [US3] Playwright e2e apps/web/e2e/templates-us3-offer.spec.ts:
   - build an offer template; it is approved
   - a campaign ending in two days with codes from an upload column
   - `/mock/sent` shows each recipient's own code; the row without a code shows "missing offer code"
 
 ### Implementation for User Story 3
 
-- [ ] T044 [US3] Add the offer rules to tools/mock-meta/src/templates.ts and `FakeTemplatesGraph`. Check the offer page again, especially `expiration_time_ms` as a timestamp *(verify)*, and fix contracts/meta-templates.md.
-- [ ] T045 [US3] Map LIMITED_TIME_OFFER drafts in apps/api/src/modules/templates/template-components.builder.ts and sync them back
-- [ ] T046 [US3] Campaigns and sending:
+- [X] T044 [US3] Add the offer rules to tools/mock-meta/src/templates.ts and `FakeTemplatesGraph`. Check the offer page again, especially `expiration_time_ms` as a timestamp *(verify)*, and fix contracts/meta-templates.md.
+- [X] T045 [US3] Map LIMITED_TIME_OFFER drafts in apps/api/src/modules/templates/template-components.builder.ts and sync them back
+- [X] T046 [US3] Campaigns and sending:
   - `offerConfig` in campaigns.service.ts, checked in launch.service.ts
   - `$offerCode` and OFFER_CODE_MISSING in audience-snapshot.service.ts and variable-resolver.ts
   - the send-time end check in a new apps/api/src/modules/sending/send-expiry.ts, called by send.processor.ts, giving `EXPIRED` / `OFFER_ENDED` through send-outcome.ts
   - an `offerComponents()` in template-payload.builder.ts
-- [ ] T047 [P] [US3] Web:
+- [X] T047 [P] [US3] Web:
   - apps/web/src/components/templates/offer-fields.tsx in templates/new
   - the countdown in the preview
   - apps/web/src/components/campaigns/wizard/offer-config.tsx (end time, and the code from one value, a column or an attribute)
