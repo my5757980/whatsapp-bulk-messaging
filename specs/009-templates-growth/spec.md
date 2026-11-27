@@ -23,9 +23,9 @@ Meta's current documentation during planning.
 | **One-time code (OTP)** | A short code that the company's own website or app makes when a person signs in or confirms an action, and asks the platform to send over WhatsApp. |
 | **Copy-code button** | A button under the code message that copies the code so the person can paste it. |
 | **One-tap button** | A button that fills the code straight into the company's Android app. Phones without the app see a copy-code button instead. |
-| **Carousel template** | A marketing or utility template with a short text followed by up to 10 cards that the person swipes through. Each card has an image or video, a short card text and up to 2 buttons. |
+| **Carousel template** | A marketing template with a short text followed by 2 to 10 cards that the person swipes through. Each card has an image or video, a short card text and up to 2 buttons. |
 | **Limited-time offer template** | A marketing template that shows an offer with a countdown to its end and an offer code the person can copy. |
-| **Time-to-live** | How long WhatsApp keeps trying to deliver a template message. After it, a message that has not been delivered is dropped and reported as not delivered in time. |
+| **Time-to-live** | How long a template message may take to arrive. For code and utility templates WhatsApp drops a message it could not deliver in that time; for marketing templates (where Meta's Cloud API takes no time-to-live) the platform stops sending messages that waited longer in its own queue. |
 | **Media from a URL** | A header image, video or document taken from a public web address instead of a file uploaded to the platform. |
 | **Sample template** | A ready-made template written by us for an industry and purpose, which a member copies into a draft, adjusts and submits. |
 | **Error meaning** | A plain explanation of a WhatsApp delivery error and what to do about it. |
@@ -76,7 +76,7 @@ A manager creates a carousel template: a short text, then 2 to 10 cards. Every c
 kind of media (all images or all videos), a short card text that may use variables, and the same set
 of up to 2 buttons (quick replies, website or phone buttons). They upload sample media for each card
 and submit it to Meta. When they build a campaign with it, they choose each card's media (from the
-media library or a web address), fill the variables, and see a preview of the swipeable cards before
+media library), fill the variables, and see a preview of the swipeable cards before
 launch. Recipients get the carousel; quick replies from any card come back to the chat and to flows
 like other buttons.
 
@@ -124,9 +124,11 @@ carries the end time and the person's own code.
 
 ### User Story 4 - Stop late delivery, and send media from a web address (Priority: P2)
 
-A manager sets a time-to-live on a template, within the range Meta allows for its category (short
-for codes, longer for updates and offers). Messages that WhatsApp cannot deliver in that time are
-dropped and shown as "not delivered in time" instead of arriving hours later. A member running a
+A manager sets a time-to-live on a template: 30 seconds to 15 minutes for codes and 30 seconds to
+12 hours for utility messages, which WhatsApp applies, or 12 hours to 30 days for marketing
+messages, which the platform applies in its own queue (Meta's Cloud API takes no time-to-live for
+marketing). Messages that cannot be delivered in that time are dropped and shown as "not delivered
+in time" instead of arriving hours later. A member running a
 campaign with a media header can take the media from a public web address, either one address for
 everyone or each person's own address from the upload or a contact attribute (for example each
 customer's invoice). The API accepts a media address too.
@@ -140,10 +142,10 @@ campaign with a different address per recipient and check each message's media a
 
 **Acceptance Scenarios**:
 
-1. **Given** the editor, **When** a manager sets a time-to-live, **Then** only values within Meta's range for the template's category are accepted, and the template shows its time-to-live.
+1. **Given** the editor, **When** a manager sets a time-to-live, **Then** only values within the category's range are accepted (codes 30 s–15 min, utility 30 s–12 h, marketing 12 h–30 days), and the template shows its time-to-live and whether WhatsApp or the platform applies it.
 2. **Given** a sent message whose time-to-live passed before delivery, **When** WhatsApp reports it, **Then** the message shows "not delivered in time" in results and reports, and retry rounds (005) do not retry it.
 3. **Given** a paused or scheduled campaign, **When** it resumes after the template's time-to-live has passed for messages queued long ago, **Then** the platform's own queue drops those messages as "expired before sending" (a time-to-live counts from when the message was queued).
-4. **Given** a campaign with media from a web address, **When** it is launched, **Then** each address is checked first (secure address, reachable, right type and size); problems block the launch with the rows and reasons, and an address that fails at send time fails only that message with a clear reason.
+4. **Given** a campaign with media from a web address, **When** it is launched, **Then** the addresses are checked first (secure address, reachable, right type and size; all of them up to 1,000 distinct addresses, a sample above that); problems block the launch with the rows and reasons, and an address that fails at send time fails only that message with a clear reason.
 5. **Given** the public API, **When** a template with a media header is sent with a media address, **Then** it is sent with that address and the same checks apply.
 
 ---
@@ -247,7 +249,7 @@ message and the button's counts rise; make a link and QR in the generator and sa
 1. **Given** the button designer, **When** a manager changes a setting, **Then** a live preview shows the button and greeting as visitors will see them, on desktop and phone sizes.
 2. **Given** a saved button, **When** the manager copies the snippet, **Then** pasting it on any web page shows the button with those settings, and later changes in the platform apply without changing the snippet.
 3. **Given** page rules, **When** a visitor opens a page whose address matches a rule, **Then** the rule's choice applies (hidden, or another message or greeting); pages without a matching rule use the defaults.
-4. **Given** a visitor who starts a chat, **When** their message arrives, **Then** live chat shows that it came from the website button and which page, and the counts of opens and chats started for that button and page go up.
+4. **Given** a visitor who starts a chat, **When** their message arrives, **Then** live chat shows that it came from the website button and which page rule, the opens count for that page goes up, and the chats started count for that button and page rule goes up.
 5. **Given** the button's number is disconnected, **When** a visitor opens a page, **Then** the button is not shown, and the manager sees a warning.
 6. **Given** the generator, **When** a member enters a number and a message, **Then** they get a WhatsApp link and a QR code to download, and can save them as a tracked chat link for a connected number.
 
@@ -261,7 +263,7 @@ message and the button's counts rise; make a link and QR in the generator and sa
 - A code request arrives while the number's quality or messaging limit stops sending: it fails at once with a clear reason rather than waiting in a queue.
 - One-tap is chosen but the person's phone does not have the app: the message shows a copy-code button instead (Meta's behaviour), and the platform reports it as delivered normally.
 - A carousel's cards do not all have the same buttons, or one card has a video while others have images: the editor shows the card and the rule before submission.
-- A carousel's card media address fails at send time: the whole message fails with the card number and reason (a carousel is sent as one message).
+- A carousel's card media cannot be uploaded to WhatsApp before launch: the launch is blocked with the card number and reason (a carousel is sent as one message, so one bad card would fail every message).
 - An offer's end time is earlier than the campaign's scheduled start: the launch is refused.
 - A time-to-live is set below or above Meta's range for the category: it is refused; changing a template's category clears a time-to-live that no longer fits.
 - A media address points to a page instead of a file, needs a login, or is not secure (http): it is refused at the launch check.
@@ -294,7 +296,7 @@ message and the button's counts rise; make a link and QR in the generator and sa
 
 - **FR-009**: Members who manage templates MUST be able to create carousel templates with a message text and 2–10 cards, each card with an image or video (the same type on every card), a card text with optional variables, and up to 2 buttons in the same layout on every card, within Meta's limits.
 - **FR-010**: The editor MUST check every carousel rule before submission and show each problem next to the card and field.
-- **FR-011**: When a carousel template is used in a campaign, the member MUST choose each card's media (defaulting to the sample from creation, from the media library or a web address) and fill the message and card variables, with a preview of the cards before launch.
+- **FR-011**: When a carousel template is used in a campaign, the member MUST choose each card's media (defaulting to the sample from creation, or another file from the media library; the same cards for every recipient) and fill the message and card variables, with a preview of the cards before launch.
 - **FR-012**: Button replies from carousel cards MUST arrive in live chat with the card and button they came from, and MUST be usable as template button triggers for flows (003).
 - **FR-013**: Carousel campaigns MUST have the same results, retargeting, retry rounds and click tracking as other campaigns (001, 005).
 
@@ -307,15 +309,15 @@ message and the button's counts rise; make a link and QR in the generator and sa
 
 **Time-to-live**
 
-- **FR-018**: Members who manage templates MUST be able to set a time-to-live on a template within the range Meta allows for its category; values outside the range MUST be refused.
+- **FR-018**: Members who manage templates MUST be able to set a time-to-live on a template within its category's range: codes 30 seconds–15 minutes and utility 30 seconds–12 hours (sent to Meta with the template), marketing 12 hours–30 days (applied only by the platform's queue, as Meta's Cloud API does not take it); values outside the range MUST be refused.
 - **FR-019**: Messages that WhatsApp reports as not delivered within their time-to-live MUST show "not delivered in time" in results and reports and MUST NOT be retried by retry rounds.
 - **FR-020**: Messages still waiting in the platform's own queue when their template's time-to-live has passed since they were queued MUST NOT be sent and MUST be counted as "expired before sending".
 
 **Media from a web address**
 
 - **FR-021**: A campaign with a media header MUST accept media from a secure web address, one for all recipients or one per recipient from an upload column or contact attribute.
-- **FR-022**: Before launch, the platform MUST check each media address (secure, reachable, the header's media type and within the size limit) and block the launch with the rows and reasons when any fail; an address that fails at send time MUST fail only that message with the reason.
-- **FR-023**: The public API MUST accept a media address for templates with a media header, with the same checks.
+- **FR-022**: Before launch, the platform MUST check the media addresses (secure, reachable, the header's media type and within the size limit): every distinct address up to 1,000, and a sample of 1,000 when there are more. It MUST block the launch with the rows and reasons when any fail; an address that fails at send time MUST fail only that message with the reason.
+- **FR-023**: The public API's media address for templates with a media header (006) MUST be refused when it is not a secure address, and a send that fails because of it MUST show the same clear reasons.
 
 **Sample templates**
 
@@ -350,7 +352,7 @@ message and the button's counts rise; make a link and QR in the generator and sa
 - **FR-040**: The designer MUST show a live preview of the button and greeting at desktop and phone sizes.
 - **FR-041**: Managers MUST be able to add page rules that match page addresses (exact, starts with, contains) to hide the button or to use another greeting or pre-filled message, in an order they choose, the first match applying.
 - **FR-042**: The platform MUST generate a snippet for each button; the snippet MUST show the button on any web page, MUST pick up later setting changes without being pasted again, MUST NOT set cookies or collect personal data, and MUST NOT break the page when it cannot load.
-- **FR-043**: Starting a chat from the button MUST go through a 006 chat link so that live chat shows the button and page it came from, and opens and chats started are counted per button and page, without robots and previews.
+- **FR-043**: Starting a chat from the button MUST go through a 006 chat link so that live chat shows the button and page rule it came from; opens MUST be counted per button and page, and chats started per button and page rule (WhatsApp does not link a page visit to the later message), without robots and previews.
 - **FR-044**: The button MUST hide itself while its number is disconnected, and the manager MUST be warned.
 
 **Link and QR generator**
@@ -362,7 +364,7 @@ message and the button's counts rise; make a link and QR in the generator and sa
 
 - **FR-047**: Roles: authentication, carousel and offer templates and time-to-live follow the template permissions (001); the code API needs its own key permission (FR-004); reports need manager or admin and the export permission for downloads; website buttons follow the chat link permissions (006); samples and help are open to every member.
 - **FR-048**: Every change to templates, code settings, website buttons and page rules, every API key permission change and every report download MUST be recorded in the audit log.
-- **FR-049**: Retention: code messages MUST be kept 30 days (with the code masked); website button opens and chats started 12 months like chat links; report files MUST be removed within 24 hours of being made; other data follows 001–006.
+- **FR-049**: Retention: code messages MUST be kept 30 days (with the code masked); website button opens and chats started 12 months like chat links; report downloads MUST be streamed and not stored; other data follows 001–006.
 - **FR-050**: Deleting a contact MUST remove them from report data the same way as from campaign data (001, 005), and code messages to their number MUST lose the phone number.
 - **FR-051**: New outbound webhook events MUST cover code status changes (sent, delivered, read, failed) without the code.
 - **FR-052**: Every new screen and message MUST use our own design and wording; nothing may copy another company's screens, texts, samples or help.
@@ -385,7 +387,7 @@ message and the button's counts rise; make a link and QR in the generator and sa
 
 - **SC-001**: A manager creates an authentication template and has it submitted in under 3 minutes, and a code requested through the API is handed to WhatsApp within 2 seconds in 95% of requests, even while a campaign is sending on the same number.
 - **SC-002**: No sent code can be found in stored messages, logs, exports or webhook events (checked by scanning them after the test runs).
-- **SC-003**: In a carousel campaign, 100% of delivered messages carry the card media and variables chosen for that recipient.
+- **SC-003**: In a carousel campaign, 100% of delivered messages carry the campaign's card media and that recipient's variables.
 - **SC-004**: No message of an offer is sent after the offer's end time, and no message is sent from the platform's queue after its time-to-live (100% in tests with paused and resumed campaigns).
 - **SC-005**: With "send to every row" on, an upload of 1,000 rows with 100 repeated numbers sends 1,000 messages; with it off, 900, as today.
 - **SC-006**: The replied count in campaign results always equals the size of the 005 Replied retarget group for the same campaign.

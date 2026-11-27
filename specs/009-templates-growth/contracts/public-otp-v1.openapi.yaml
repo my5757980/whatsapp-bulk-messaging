@@ -1,0 +1,101 @@
+openapi: 3.1.0
+info:
+  title: WhatsApp Platform - One-time Codes (public API v1)
+  version: 0.1.0
+  description: >
+    Company systems send one-time codes they made over WhatsApp with an approved authentication
+    template (feature 009-templates-growth, research R3 - R5). Same conventions as the 006 public
+    API: an API key as a Bearer token, per-key rate limits, an optional Idempotency-Key, and the flat
+    error shape {code, message, details, requestId}. The key needs the scope otp.send; a key with
+    only otp.send cannot send other templates. The code is never stored, returned, logged or sent in
+    events: the platform keeps only a masked copy. Codes are sent even after a marketing opt-out (the
+    person asked for the code) but never to a blocked number, and they never create contacts or change
+    consent. Status changes are also sent to outbound webhooks as the event otp.status (group otp)
+    with the OtpStatus body below.
+servers:
+  - url: /api
+security:
+  - apiKey: []
+paths:
+  /v1/otp:
+    post:
+      summary: Send a one-time code (scope otp.send)
+      description: >
+        Accepted at once and sent ahead of campaign and chat traffic on the number (R5). The template
+        and number default to the admin's code settings. Codes are 4 - 15 letters or digits.
+      parameters:
+        - { name: Idempotency-Key, in: header, schema: { type: string, maxLength: 120 }, description: 'As in 006: a repeat with the same key and body returns the first response; a different body gets IDEMPOTENCY_CONFLICT' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [to, code]
+              properties:
+                to: { type: string, maxLength: 32, description: 'Phone number, E.164 or local with the default country' }
+                code: { type: string, pattern: '^[0-9A-Za-z]{4,15}$' }
+                template:
+                  type: object
+                  additionalProperties: false
+                  required: [name, language]
+                  properties:
+                    name: { type: string, maxLength: 512 }
+                    language: { type: string, maxLength: 15 }
+                numberId: { type: string, format: uuid }
+      responses:
+        '202': { description: Accepted, content: { application/json: { schema: { $ref: '#/components/schemas/OtpAccepted' } } } }
+        '401': { description: 'API_KEY_INVALID', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: 'SCOPE_MISSING (otp.send)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: IDEMPOTENCY_CONFLICT, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422':
+          description: >
+            VALIDATION_FAILED (the code format), INVALID_NUMBER, RECIPIENT_BLOCKED, NO_DEFAULT_TEMPLATE,
+            TEMPLATE_NOT_FOUND, TEMPLATE_NOT_AUTHENTICATION, TEMPLATE_NOT_APPROVED,
+            NUMBER_NOT_CONNECTED, NUMBER_NOT_SENDING (quality or messaging limit stops sending)
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '429': { description: 'TOO_MANY_CODES (the per-phone limit) or RATE_LIMITED (the key''s limit); Retry-After is set', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /v1/otp/{id}:
+    get:
+      summary: A code message's status (scope otp.send; only the key's own codes)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Status, content: { application/json: { schema: { $ref: '#/components/schemas/OtpStatus' } } } }
+        '403': { description: SCOPE_MISSING, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: 'NOT_FOUND (unknown, another key''s, or older than the 30 days kept)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+components:
+  securitySchemes:
+    apiKey: { type: http, scheme: bearer }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: object, properties: { field: { type: string }, issue: { type: string } } }
+        requestId: { type: string }
+    OtpAccepted:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [queued] }
+    OtpStatus:
+      type: object
+      required: [id, to, status, queuedAt]
+      properties:
+        id: { type: string, format: uuid }
+        to: { type: string, description: E.164 }
+        status: { type: string, enum: [queued, sent, delivered, read, failed, expired] }
+        failureCode: { type: [integer, 'null'], description: Meta's error code }
+        failureReason: { type: [string, 'null'], description: The plain reason from the help entries (R12) }
+        expiredReason: { type: [string, 'null'], enum: [EXPIRED_BEFORE_SENDING, NOT_DELIVERED_IN_TIME, null] }
+        queuedAt: { type: string, format: date-time }
+        sentAt: { type: [string, 'null'], format: date-time }
+        deliveredAt: { type: [string, 'null'], format: date-time }
+        readAt: { type: [string, 'null'], format: date-time }

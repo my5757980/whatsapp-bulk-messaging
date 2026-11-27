@@ -1,0 +1,658 @@
+openapi: 3.1.0
+info:
+  title: WhatsApp Platform - Templates and Campaign Growth API
+  version: 0.1.0
+  description: >
+    Sample templates, the one-time code settings, campaign media checks, reports, website chat
+    buttons and the WhatsApp link generator for the Next.js dashboard (feature 009-templates-growth).
+    Same conventions as 001–008: httpOnly session cookie, an X-CSRF-Token header on every mutating
+    request, an x-permission on every operation, and the error shape {code, message, details,
+    requestId}. Permissions:
+      templates.view     ADMIN, MANAGER, AGENT - samples, the link generator
+      templates.manage   ADMIN, MANAGER        - copying samples into drafts
+      settings.view      ADMIN, MANAGER        - one-time code settings
+      settings.manage    ADMIN                 - changing one-time code settings
+      campaigns.view     ADMIN, MANAGER, AGENT - website buttons and their counts
+      campaigns.manage   ADMIN, MANAGER        - website buttons, campaign media checks
+      reports.view       ADMIN, MANAGER        - overview, team member and consent reports (new)
+      data.export        ADMIN, MANAGER        - report downloads (phones masked without phones.full)
+
+    The new template kinds (authentication, carousel, limited-time offer) and time-to-live extend the
+    001 template routes (POST /templates, PUT /templates/{id}): TemplateInput gains kind, ttlSeconds,
+    auth, cards and offer (schema TemplateKindFields below), and Template gains kind, ttlSeconds,
+    ttlAppliedBy and options. The 001 campaign routes gain allowDuplicateRows, offerConfig and
+    cardMedia, and the campaign report gains replied, replyRate, expired and multiMessageRecipients
+    (schema CampaignReportAdditions). Those changes are made in the 001 contract.
+
+    Public routes (x-permission: public, skipped by the RBAC test) are served outside /api (servers
+    override): GET /l/w/widget.js, GET /l/w/{key}/config.json and GET /l/w/{key}/image
+    (contracts/website-button.md).
+servers:
+  - url: /api
+security:
+  - sessionCookie: []
+tags:
+  - name: samples
+  - name: otp-settings
+  - name: campaigns
+  - name: reports
+  - name: chat-widgets
+  - name: tools
+  - name: public
+paths:
+  /template-samples:
+    get:
+      tags: [samples]
+      summary: The sample library, filtered and searched (FR-024, FR-025, R13)
+      x-permission: templates.view
+      parameters:
+        - { name: industry, in: query, schema: { $ref: '#/components/schemas/SampleIndustry' } }
+        - { name: purpose, in: query, schema: { $ref: '#/components/schemas/SamplePurpose' } }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/SampleType' } }
+        - { name: language, in: query, schema: { type: string, enum: [en, ar] } }
+        - { name: search, in: query, schema: { type: string, maxLength: 100 } }
+      responses:
+        '200': { description: Matching samples, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/TemplateSample' } } } } } } }
+  /template-samples/{sampleId}:
+    get:
+      tags: [samples]
+      summary: One sample with its full content and example values
+      x-permission: templates.view
+      parameters:
+        - { name: sampleId, in: path, required: true, schema: { type: string, pattern: '^[a-z0-9-]{3,80}$' } }
+      responses:
+        '200': { description: Sample, content: { application/json: { schema: { $ref: '#/components/schemas/TemplateSample' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /template-samples/{sampleId}/copy:
+    post:
+      tags: [samples]
+      summary: Copy a sample into a new draft for a WhatsApp account (FR-026)
+      description: >
+        Creates a DRAFT template with the sample's content and examples. A media sample's draft has no
+        file yet; the editor asks for one before submitting. NAME_TAKEN when the account already has a
+        template with that name and language.
+      x-permission: templates.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters:
+        - { name: sampleId, in: path, required: true, schema: { type: string, pattern: '^[a-z0-9-]{3,80}$' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [wabaId, name]
+              additionalProperties: false
+              properties:
+                wabaId: { type: string }
+                name: { type: string, pattern: '^[a-z0-9_]{1,512}$' }
+      responses:
+        '201': { description: 'The new draft (001 Template)', content: { application/json: { schema: { type: object, required: [id, status], properties: { id: { type: string, format: uuid }, status: { type: string, enum: [DRAFT] } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /otp/settings:
+    get:
+      tags: [otp-settings]
+      summary: The one-time code settings with the codes sent in the last 24 hours (FR-004, FR-006)
+      x-permission: settings.view
+      responses:
+        '200': { description: Settings, content: { application/json: { schema: { $ref: '#/components/schemas/OtpSettings' } } } }
+    put:
+      tags: [otp-settings]
+      summary: Change the default code template and number and the per-phone limit (audited)
+      description: >
+        TEMPLATE_NOT_AUTHENTICATION when the template is not an approved authentication template;
+        NUMBER_NOT_CONNECTED when the number is not connected.
+      x-permission: settings.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [defaultTemplateId, defaultNumberId, limitPerPhone, limitWindowMinutes]
+              properties:
+                defaultTemplateId: { type: [string, 'null'], format: uuid }
+                defaultNumberId: { type: [string, 'null'], format: uuid }
+                limitPerPhone: { type: integer, minimum: 1, maximum: 50 }
+                limitWindowMinutes: { type: integer, minimum: 1, maximum: 1440 }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/OtpSettings' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /campaigns/{id}/media-check:
+    post:
+      tags: [campaigns]
+      summary: Check the campaign's media addresses and carousel card media before launch (FR-022, R6, R9)
+      description: >
+        Runs the same checks as launch: every distinct media address up to 1,000 (a sample of 1,000
+        above that) and the card media uploads to the campaign's number. Launch runs it again and
+        refuses with MEDIA_PROBLEMS when problems remain.
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Check result, content: { application/json: { schema: { $ref: '#/components/schemas/MediaCheck' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'NOT_DRAFT (only drafts and scheduled campaigns are checked)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /reports/overview:
+    get:
+      tags: [reports]
+      summary: Totals for all campaigns in a range, by day, template category and number (FR-034, R14)
+      x-permission: reports.view
+      parameters: [{ $ref: '#/components/parameters/From' }, { $ref: '#/components/parameters/To' }]
+      responses:
+        '200': { description: Overview, content: { application/json: { schema: { $ref: '#/components/schemas/OverviewReport' } } } }
+        '422': { description: 'RANGE_INVALID (to before from, longer than 366 days, or older than the 12 months kept)', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /reports/overview.csv:
+    get:
+      tags: [reports]
+      summary: The overview as a CSV download, one row per day, category and number (audited, streamed)
+      x-permission: data.export
+      parameters: [{ $ref: '#/components/parameters/From' }, { $ref: '#/components/parameters/To' }]
+      responses:
+        '200': { description: CSV, content: { text/csv: { schema: { type: string } } } }
+        '422': { description: RANGE_INVALID, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /reports/team:
+    get:
+      tags: [reports]
+      summary: Each team member's launched campaigns and live chat activity in a range (FR-035)
+      x-permission: reports.view
+      parameters: [{ $ref: '#/components/parameters/From' }, { $ref: '#/components/parameters/To' }]
+      responses:
+        '200': { description: Team report, content: { application/json: { schema: { $ref: '#/components/schemas/TeamReport' } } } }
+        '422': { description: RANGE_INVALID, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /reports/team.csv:
+    get:
+      tags: [reports]
+      summary: The team member report as a CSV download (audited, streamed)
+      x-permission: data.export
+      parameters: [{ $ref: '#/components/parameters/From' }, { $ref: '#/components/parameters/To' }]
+      responses:
+        '200': { description: CSV, content: { text/csv: { schema: { type: string } } } }
+        '422': { description: RANGE_INVALID, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /reports/consent:
+    get:
+      tags: [reports]
+      summary: Opt-ins and opt-outs in a range with counts by source and day (FR-036)
+      x-permission: reports.view
+      parameters:
+        - { $ref: '#/components/parameters/From' }
+        - { $ref: '#/components/parameters/To' }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+        - { name: status, in: query, schema: { type: string, enum: [OPTED_IN, OPTED_OUT] } }
+      responses:
+        '200': { description: Consent report, content: { application/json: { schema: { $ref: '#/components/schemas/ConsentReport' } } } }
+        '422': { description: RANGE_INVALID, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /reports/consent.csv:
+    get:
+      tags: [reports]
+      summary: Every consent change in the range as a CSV download (audited, streamed)
+      x-permission: data.export
+      parameters: [{ $ref: '#/components/parameters/From' }, { $ref: '#/components/parameters/To' }]
+      responses:
+        '200': { description: CSV, content: { text/csv: { schema: { type: string } } } }
+        '422': { description: RANGE_INVALID, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /chat-widgets:
+    get:
+      tags: [chat-widgets]
+      summary: The website chat buttons with their totals for the last 30 days
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Buttons, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/ChatWidget' } } } } } } }
+    post:
+      tags: [chat-widgets]
+      summary: Create a website chat button (FR-039 - FR-042)
+      description: >
+        Makes the button's 006 chat links (source WIDGET): one for the default message and one per
+        page rule with its own message. NAME_TAKEN for a used name; NUMBER_NOT_CONNECTED when the
+        number is not connected.
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ChatWidgetInput' } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/ChatWidget' } } } }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /chat-widgets/{id}:
+    get:
+      tags: [chat-widgets]
+      summary: One button with its snippet and totals
+      x-permission: campaigns.view
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Button, content: { application/json: { schema: { $ref: '#/components/schemas/ChatWidget' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [chat-widgets]
+      summary: Change a button; the snippet stays the same (FR-042)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ChatWidgetInput' } } }
+      responses:
+        '200': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/ChatWidget' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [chat-widgets]
+      summary: Delete a button; the snippet then shows nothing and its chat links stop (audited)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /chat-widgets/{id}/pause:
+    post:
+      tags: [chat-widgets]
+      summary: Hide the button on the website without removing the snippet
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Paused, content: { application/json: { schema: { $ref: '#/components/schemas/ChatWidget' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /chat-widgets/{id}/resume:
+    post:
+      tags: [chat-widgets]
+      summary: Show the button again
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Active, content: { application/json: { schema: { $ref: '#/components/schemas/ChatWidget' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NUMBER_NOT_CONNECTED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /chat-widgets/{id}/stats:
+    get:
+      tags: [chat-widgets]
+      summary: Opens by page and chats started by page rule in a range (FR-043, R15)
+      x-permission: campaigns.view
+      parameters: [{ $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/From' }, { $ref: '#/components/parameters/To' }]
+      responses:
+        '200': { description: Counts, content: { application/json: { schema: { $ref: '#/components/schemas/ChatWidgetStats' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /tools/whatsapp-link:
+    post:
+      tags: [tools]
+      summary: A WhatsApp link and QR code for a number and message; nothing is saved (FR-045, R16)
+      x-permission: templates.view
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [phone]
+              properties:
+                phone: { type: string, maxLength: 32 }
+                message: { type: string, maxLength: 500 }
+      responses:
+        '200':
+          description: Link and QR code
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, qrPng, qrSvg, connectedNumberId]
+                properties:
+                  url: { type: string, format: uri }
+                  qrPng: { type: string, description: 'data:image/png;base64,…' }
+                  qrSvg: { type: string }
+                  connectedNumberId: { type: [string, 'null'], format: uuid, description: 'The connected number with this phone, when there is one (for "Save as chat link")' }
+        '422': { description: INVALID_NUMBER, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /l/w/widget.js:
+    servers: [{ url: / }]
+    get:
+      tags: [public]
+      summary: The website chat button script (one static file for every button, cached for a day)
+      x-permission: public
+      security: []
+      responses:
+        '200': { description: JavaScript, content: { application/javascript: { schema: { type: string } } } }
+  /l/w/{key}/config.json:
+    servers: [{ url: / }]
+    get:
+      tags: [public]
+      summary: A button's public config (CORS *, no cookies, cached 60 s with an ETag, 005 link rate limit)
+      x-permission: public
+      security: []
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9]{12}$' } }
+      responses:
+        '200': { description: 'Config, or {hidden: true}', content: { application/json: { schema: { $ref: '#/components/schemas/WidgetPublicConfig' } } } }
+        '304': { description: Not modified }
+        '404': { description: Unknown or deleted key }
+        '429': { description: Too many requests from one address }
+  /l/w/{key}/image:
+    servers: [{ url: / }]
+    get:
+      tags: [public]
+      summary: The button's brand image
+      x-permission: public
+      security: []
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string, pattern: '^[A-Za-z0-9]{12}$' } }
+      responses:
+        '200': { description: Image, content: { image/png: { schema: { type: string, format: binary } }, image/jpeg: { schema: { type: string, format: binary } } } }
+        '404': { description: No image }
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: sid }
+    csrfHeader: { type: apiKey, in: header, name: X-CSRF-Token }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+    From: { name: from, in: query, required: true, schema: { type: string, format: date }, description: 'First day, in the company time zone' }
+    To: { name: to, in: query, required: true, schema: { type: string, format: date }, description: 'Last day, in the company time zone' }
+  responses:
+    NotFound:
+      description: Not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationFailed:
+      description: VALIDATION_FAILED, with field details
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [VALIDATION_FAILED, NAME_TAKEN, NOT_DRAFT, MEDIA_PROBLEMS, RANGE_INVALID, NUMBER_NOT_CONNECTED, TEMPLATE_NOT_AUTHENTICATION, INVALID_NUMBER] }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: object, properties: { field: { type: string }, issue: { type: string } } }
+        requestId: { type: string }
+    SampleIndustry: { type: string, enum: [RETAIL, FOOD, HEALTH, EDUCATION, REAL_ESTATE, TRAVEL, BEAUTY, AUTOMOTIVE, FINANCE, SERVICES] }
+    SamplePurpose: { type: string, enum: [WELCOME, ORDER_UPDATE, APPOINTMENT_REMINDER, PAYMENT_REMINDER, OFFER, FEEDBACK, ONE_TIME_CODE] }
+    SampleType: { type: string, enum: [TEXT, MEDIA, CAROUSEL, OFFER, AUTHENTICATION] }
+    TemplateSample:
+      type: object
+      required: [id, version, industry, purpose, type, language, category, name, draft]
+      properties:
+        id: { type: string }
+        version: { type: integer, minimum: 1 }
+        industry: { $ref: '#/components/schemas/SampleIndustry' }
+        purpose: { $ref: '#/components/schemas/SamplePurpose' }
+        type: { $ref: '#/components/schemas/SampleType' }
+        language: { type: string, enum: [en, ar] }
+        category: { type: string, enum: [MARKETING, UTILITY, AUTHENTICATION] }
+        name: { type: string, description: Suggested template name }
+        draft: { type: object, description: 'A TemplateDraft (001 TemplateInput with TemplateKindFields) without wabaId or media' }
+    TemplateKindFields:
+      type: object
+      description: Added to the 001 TemplateInput (research R1, R2, R6 - R8)
+      properties:
+        kind: { type: string, enum: [STANDARD, CAROUSEL, LIMITED_TIME_OFFER, AUTHENTICATION], default: STANDARD }
+        ttlSeconds: { type: [integer, 'null'], description: 'Codes 30-900, utility 30-43200, marketing 43200-2592000' }
+        auth:
+          type: object
+          properties:
+            securityNote: { type: boolean }
+            codeExpiryMinutes: { type: [integer, 'null'], minimum: 1, maximum: 90 }
+            button: { type: string, enum: [COPY_CODE, ONE_TAP] }
+            buttonText: { type: string, maxLength: 25 }
+            autofillText: { type: string, maxLength: 25 }
+            apps:
+              type: array
+              maxItems: 5
+              items:
+                type: object
+                required: [packageName, signatureHash]
+                properties:
+                  packageName: { type: string, maxLength: 224 }
+                  signatureHash: { type: string, pattern: '^[A-Za-z0-9+/=]{11}$' }
+        cards:
+          type: array
+          minItems: 2
+          maxItems: 10
+          items:
+            type: object
+            required: [mediaFormat, sampleMediaAssetId, buttons]
+            properties:
+              mediaFormat: { type: string, enum: [IMAGE, VIDEO] }
+              sampleMediaAssetId: { type: [string, 'null'], format: uuid }
+              bodyText: { type: string, maxLength: 160 }
+              bodyExamples: { type: array, items: { type: string } }
+              buttons:
+                type: array
+                maxItems: 2
+                items:
+                  type: object
+                  required: [type, text]
+                  properties:
+                    type: { type: string, enum: [QUICK_REPLY, URL, PHONE_NUMBER] }
+                    text: { type: string, maxLength: 25 }
+                    url: { type: string, maxLength: 2000 }
+                    urlExample: { type: string }
+                    phoneNumber: { type: string, maxLength: 20 }
+        offer:
+          type: object
+          required: [offerText, showsEndTime, codeExample]
+          properties:
+            offerText: { type: string, maxLength: 16 }
+            showsEndTime: { type: boolean }
+            codeExample: { type: string, maxLength: 15 }
+    CampaignReportAdditions:
+      type: object
+      description: Added to the 001 campaign report (FR-031, FR-033, R8, R10, R11)
+      properties:
+        replied: { type: integer, description: 'Distinct contacts, the 005 definition' }
+        replyRate: { type: [number, 'null'], description: replied / delivered (distinct contacts) }
+        expired:
+          type: object
+          properties:
+            expiredBeforeSending: { type: integer }
+            notDeliveredInTime: { type: integer }
+            offerEnded: { type: integer }
+        multiMessageRecipients: { type: integer, description: Contacts who got more than one message (send to every row) }
+        heldBack: { type: integer, description: 'Messages held back by Meta''s per-person marketing limit (131049)' }
+    OtpSettings:
+      type: object
+      required: [defaultTemplateId, defaultNumberId, limitPerPhone, limitWindowMinutes, last24h]
+      properties:
+        defaultTemplateId: { type: [string, 'null'], format: uuid }
+        defaultNumberId: { type: [string, 'null'], format: uuid }
+        limitPerPhone: { type: integer }
+        limitWindowMinutes: { type: integer }
+        last24h:
+          type: object
+          required: [requested, sent, delivered, failed, expired, refusedByLimit]
+          properties:
+            requested: { type: integer }
+            sent: { type: integer }
+            delivered: { type: integer }
+            failed: { type: integer }
+            expired: { type: integer }
+            refusedByLimit: { type: integer }
+    MediaCheck:
+      type: object
+      required: [checked, sampled, problems, cardMedia]
+      properties:
+        checked: { type: integer, description: Distinct addresses checked }
+        sampled: { type: boolean, description: 'True when more than 1,000 distinct addresses meant a sample was checked' }
+        problems:
+          type: array
+          maxItems: 50
+          items:
+            type: object
+            required: [url, reason]
+            properties:
+              url: { type: string }
+              rows: { type: array, items: { type: integer } }
+              reason: { type: string, enum: [NOT_HTTPS, NOT_PUBLIC, UNREACHABLE, WRONG_TYPE, TOO_LARGE, TIMEOUT] }
+        cardMedia:
+          type: array
+          items:
+            type: object
+            required: [cardIndex, result]
+            properties:
+              cardIndex: { type: integer }
+              result: { type: string, enum: [READY, WRONG_TYPE, TOO_LARGE, UPLOAD_FAILED] }
+              detail: { type: string }
+    Counts:
+      type: object
+      required: [sent, delivered, read, replied, clicked, failed, expired, estimatedCostUsd]
+      properties:
+        sent: { type: integer }
+        delivered: { type: integer }
+        read: { type: integer }
+        replied: { type: integer }
+        clicked: { type: integer }
+        failed: { type: integer }
+        expired: { type: integer }
+        estimatedCostUsd: { type: string, description: Decimal string }
+    OverviewReport:
+      type: object
+      required: [from, to, totals, days, byCategory, byNumber, failedByReason]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        totals: { $ref: '#/components/schemas/Counts' }
+        days: { type: array, items: { allOf: [{ $ref: '#/components/schemas/Counts' }, { type: object, required: [day], properties: { day: { type: string, format: date } } }] } }
+        byCategory: { type: array, items: { allOf: [{ $ref: '#/components/schemas/Counts' }, { type: object, required: [category], properties: { category: { type: string, enum: [MARKETING, UTILITY, AUTHENTICATION] } } }] } }
+        byNumber: { type: array, items: { allOf: [{ $ref: '#/components/schemas/Counts' }, { type: object, required: [numberId, label], properties: { numberId: { type: string, format: uuid }, label: { type: string } } }] } }
+        failedByReason: { type: array, items: { type: object, required: [reason, count], properties: { code: { type: [integer, 'null'] }, reason: { type: string }, count: { type: integer } } } }
+    TeamReport:
+      type: object
+      required: [from, to, members]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        members:
+          type: array
+          items:
+            type: object
+            required: [userId, name, active, campaignsLaunched, campaignTotals, chatsTaken, chatsClosed, repliesSent]
+            properties:
+              userId: { type: string, format: uuid }
+              name: { type: string }
+              active: { type: boolean, description: 'False for removed members, still listed' }
+              campaignsLaunched: { type: integer }
+              campaignTotals: { $ref: '#/components/schemas/Counts' }
+              chatsTaken: { type: integer }
+              chatsClosed: { type: integer }
+              repliesSent: { type: integer }
+              medianFirstResponseSeconds: { type: [number, 'null'] }
+    ConsentReport:
+      type: object
+      required: [from, to, counts, items, total]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        counts:
+          type: array
+          items:
+            type: object
+            required: [day, source, optedIn, optedOut]
+            properties:
+              day: { type: string, format: date }
+              source: { type: string, description: 'The 001 ConsentSource (IMPORT, KEYWORD, FORM, LEAD_FORM, API, STORE, MANUAL, …)' }
+              optedIn: { type: integer }
+              optedOut: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            required: [contactId, name, phone, status, source, at]
+            properties:
+              contactId: { type: string, format: uuid }
+              name: { type: [string, 'null'] }
+              phone: { type: string, description: Masked without phones.full }
+              status: { type: string, enum: [OPTED_IN, OPTED_OUT, UNKNOWN] }
+              source: { type: string }
+              note: { type: [string, 'null'] }
+              actor: { type: [string, 'null'], description: 'The member who changed it, if any' }
+              at: { type: string, format: date-time }
+        total: { type: integer }
+    PageRule:
+      type: object
+      required: [match, value, hide]
+      properties:
+        id: { type: string, description: Kept across edits; new rules get one }
+        match: { type: string, enum: [EXACT, PREFIX, CONTAINS] }
+        value: { type: string, minLength: 1, maxLength: 200 }
+        hide: { type: boolean }
+        greeting: { type: [string, 'null'], maxLength: 300 }
+        message: { type: [string, 'null'], maxLength: 500 }
+    ChatWidgetInput:
+      type: object
+      additionalProperties: false
+      required: [name, numberId, look, brandName, greeting, message, rules]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        numberId: { type: string, format: uuid }
+        look:
+          type: object
+          required: [colour, buttonText, corner, offsetX, offsetY, radius]
+          properties:
+            colour: { type: string, pattern: '^#[0-9A-Fa-f]{6}$' }
+            buttonText: { type: string, maxLength: 30 }
+            corner: { type: string, enum: [BOTTOM_LEFT, BOTTOM_RIGHT] }
+            offsetX: { type: integer, minimum: 0, maximum: 200 }
+            offsetY: { type: integer, minimum: 0, maximum: 200 }
+            radius: { type: integer, minimum: 0, maximum: 40 }
+        brandName: { type: string, maxLength: 60 }
+        brandImageAssetId: { type: [string, 'null'], format: uuid }
+        greeting: { type: string, maxLength: 300 }
+        message: { type: string, minLength: 1, maxLength: 500 }
+        rules: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/PageRule' } }
+    ChatWidget:
+      allOf:
+        - { $ref: '#/components/schemas/ChatWidgetInput' }
+        - type: object
+          required: [id, key, status, snippet, numberConnected, last30Days]
+          properties:
+            id: { type: string, format: uuid }
+            key: { type: string }
+            status: { type: string, enum: [ACTIVE, PAUSED] }
+            snippet: { type: string, description: The HTML to paste }
+            numberConnected: { type: boolean }
+            last30Days: { type: object, required: [opens, chatsStarted], properties: { opens: { type: integer }, chatsStarted: { type: integer } } }
+    ChatWidgetStats:
+      type: object
+      required: [from, to, opensByPage, chatsByRule]
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        opensByPage: { type: array, items: { type: object, required: [page, opens], properties: { page: { type: string }, opens: { type: integer } } } }
+        chatsByRule: { type: array, items: { type: object, required: [ruleId, label, chatsStarted, newContacts], properties: { ruleId: { type: [string, 'null'] }, label: { type: string }, chatsStarted: { type: integer }, newContacts: { type: integer } } } }
+    WidgetPublicConfig:
+      oneOf:
+        - type: object
+          required: [hidden]
+          properties: { hidden: { type: boolean, const: true } }
+        - type: object
+          required: [hidden, version, look, brandName, greeting, startUrl, rules]
+          properties:
+            hidden: { type: boolean, const: false }
+            version: { type: string, description: Changes with every edit (ETag) }
+            look: { type: object }
+            brandName: { type: string }
+            brandImageUrl: { type: [string, 'null'] }
+            greeting: { type: string }
+            startUrl: { type: string, description: The default message's chat link }
+            rules:
+              type: array
+              items:
+                type: object
+                required: [id, match, value, hide]
+                properties:
+                  id: { type: string }
+                  match: { type: string, enum: [EXACT, PREFIX, CONTAINS] }
+                  value: { type: string }
+                  hide: { type: boolean }
+                  greeting: { type: [string, 'null'] }
+                  startUrl: { type: [string, 'null'], description: The rule's own chat link when it has its own message }
