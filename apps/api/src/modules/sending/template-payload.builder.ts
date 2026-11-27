@@ -59,6 +59,24 @@ function textParam(text: string, placeholder: string, named: boolean): Record<st
   return named ? { type: 'text', text, parameter_name: placeholder } : { type: 'text', text };
 }
 
+/**
+ * A one-time code message (feature 009, research R2): the code is the body parameter and the
+ * button parameter (`sub_type: url`, index 0), as Meta's authentication templates need.
+ */
+export function authenticationPayload(to: string, template: { name: string; language: string }, code: string): TemplateMessagePayload {
+  return {
+    to: to.replace(/^\+/, ''),
+    template: {
+      name: template.name,
+      language: { code: template.language },
+      components: [
+        { type: 'body', parameters: [{ type: 'text', text: code }] },
+        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: code }] },
+      ],
+    },
+  } as unknown as TemplateMessagePayload;
+}
+
 export function buildTemplatePayload(input: PayloadInput): TemplateMessagePayload {
   const named = input.template.parameterFormat === 'NAMED';
   const components: Array<Record<string, unknown>> = [];

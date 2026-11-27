@@ -125,8 +125,8 @@ the end). They are re-checked in T-tasks marked *(verify)* before each story shi
   - **Send:** a `carousel` component with `cards[card_index]`. Each card's header is
     `{image|video: {id}}`. Only media ids are documented, so the card media is uploaded to the sending
     number with `POST /{phone-number-id}/media` before launch.
-    - The new `meta_media_uploads` cache keeps one Meta id per (media asset, number) and uploads again
-      after 25 days (Meta keeps ids for 30).
+    - The 001 cache `media_assets.meta_media_ids` (through `MediaService.ensureMetaMediaId`) keeps one
+      Meta id per media asset and number and uploads again when the id is old, so no new table.
     - The same cards go to every recipient (spec FR-011); card body and button variables can differ
       per recipient.
   - **Mapping keys:** `CARD.{i}.BODY.{n}` and `CARD.{i}.BUTTON.{b}` join the 001 keys
@@ -388,7 +388,6 @@ the end). They are re-checked in T-tasks marked *(verify)* before each story shi
   - **Outbound event:** `otp.status` (group `otp`).
   - **Retention:**
     - OTP messages are deleted after 30 days.
-    - `meta_media_uploads` rows go 30 days after upload.
     - Widget opens follow chat link opens (12 months).
     - Reports store nothing.
     - **Erasure:** OTP messages to the contact's phone lose the phone. Report data follows campaign

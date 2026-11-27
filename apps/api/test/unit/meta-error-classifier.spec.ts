@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { classifyMetaError, describeMetaError } from '../../src/modules/meta/meta-error-classifier.js';
+import { META_ERROR_MEANINGS } from '@wbm/shared';
+import { HANDLED_META_CODES, classifyMetaError, describeMetaError } from '../../src/modules/meta/meta-error-classifier.js';
 
 // Research R9: Meta error code -> retry policy.
 describe('classifyMetaError', () => {
@@ -33,5 +34,16 @@ describe('describeMetaError', () => {
 
   it('falls back to the Meta message for unknown codes', () => {
     expect(describeMetaError(424242, 'Something odd')).toBe('Something odd (code 424242)');
+  });
+});
+
+// T011 (feature 009, FR-028): every handled code has a meaning and a suggested action.
+describe('error meanings coverage', () => {
+  it('covers every code the classifier handles', () => {
+    expect(HANDLED_META_CODES.length).toBeGreaterThan(15);
+    for (const code of HANDLED_META_CODES) {
+      expect(META_ERROR_MEANINGS[code], String(code)).toBeDefined();
+      expect(META_ERROR_MEANINGS[code]!.action.length).toBeGreaterThan(5);
+    }
   });
 });

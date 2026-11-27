@@ -64,7 +64,7 @@ types and earlier contracts.
     - `messages`: `copy_index` (default 0), `expired_reason`, `expires_at`
     - `chat_links`: `source` (default `MANUAL`), `widget_id`, `widget_rule_id`
     - `chat_link_opens`: `page`
-  - **new tables:** `meta_media_uploads`, `otp_settings` and `chat_widgets`
+  - **new tables:** `otp_settings` and `chat_widgets` (card media reuse the 001 `media_assets.meta_media_ids` cache)
   - **a hand-written SQL tail:**
     - drop the unique `(campaign_id, contact_id)` on `messages` and add `(campaign_id, contact_id, copy_index)`
     - indexes: `messages (created_at)`, the partial `messages (expires_at) WHERE status = 'SENT'`, `consent_events (created_at)`, `chat_link_opens (chat_link_id, page)`
@@ -257,7 +257,7 @@ more".
     - the cards default to the samples, and card 2 can be replaced from the library
     - `POST /campaigns/{id}/media-check` reports READY, WRONG_TYPE or TOO_LARGE per card
   - **launch:**
-    - each card file is uploaded once per number; a second campaign reuses `meta_media_uploads`, and after 25 days (fake clock) the file is uploaded again
+    - each card file is uploaded once per number; a second campaign reuses the cached Meta id (`media_assets.meta_media_ids`), and after the cache age (fake clock) the file is uploaded again
     - each recipient's payload carries the card variables
   - **replies:**
     - a card 2 quick reply becomes a chat item with the card and button
@@ -276,13 +276,13 @@ more".
 
 - [ ] T034 [US2] Add the carousel rules to tools/mock-meta/src/templates.ts and `FakeTemplatesGraph`: the create checks, the media upload, and sends that check every card has a media id. Check the carousel page again *(verify)* and fix contracts/meta-templates.md.
 - [ ] T035 [US2] Map CAROUSEL drafts in apps/api/src/modules/templates/template-components.builder.ts, uploading each card's sample with apps/api/src/modules/media/meta-resumable-upload.ts in templates.service.ts; sync the cards back in templates-sync.service.ts
-- [ ] T036 [US2] Add apps/api/src/modules/media/meta-media-uploads.ts (upload with `POST /{phone-number-id}/media`, reuse within 25 days) and apps/api/src/modules/campaigns/media-check.service.ts (the card checks):
+- [ ] T036 [US2] Add apps/api/src/modules/campaigns/media-check.service.ts (the card checks; card files go to the number through the 001 `MediaService.ensureMetaMediaId`):
   - the `POST /campaigns/{id}/media-check` route in campaigns.controller.ts
   - apps/api/src/modules/campaigns/launch.service.ts uploads the card media before dispatch and refuses with MEDIA_PROBLEMS
 - [ ] T037 [US2] Campaign sends:
   - `cardMedia` on create and update in apps/api/src/modules/campaigns/campaigns.service.ts
   - the `CARD.*` mapping keys in variable-resolver.ts and audience-snapshot.service.ts
-  - a `carouselComponents()` in apps/api/src/modules/sending/template-payload.builder.ts, using the Meta ids from `meta_media_uploads`
+  - a `carouselComponents()` in apps/api/src/modules/sending/template-payload.builder.ts, using the Meta ids from `MediaService.ensureMetaMediaId`
 - [ ] T038 [US2] Inbound: apps/api/src/modules/inbox/inbound/message-parser.ts reads `wbm:c{i}:b{b}` payloads into the chat item's `card`; the chat item text is "Card {i+1} · {button text}"; 003 template button triggers still match on the button text
 - [ ] T039 [P] [US2] Web:
   - apps/web/src/components/templates/carousel-cards.tsx in templates/new
@@ -605,7 +605,7 @@ through 006 chat links; a quick link and QR generator.
   - **metrics** in apps/api/src/common/metrics/metrics.service.ts, with their instrumentation points: `wbm_otp_sends_total{result}`, `wbm_otp_send_seconds`, `wbm_messages_expired_total{reason}`, `wbm_widget_opens_total`, `wbm_reports_exported_total{type}`
   - **alerts** `WbmOtpFailing` and `WbmOtpSlow` in ops/alerts.yml, with cases in apps/api/test/unit/alerts.spec.ts
 - [ ] T091 [P] Extend retention and erasure, tests first:
-  - **retention**, in apps/api/test/integration/retention.int-spec.ts and apps/api/src/modules/maintenance/retention.processor.ts: OTP messages after 30 days, `meta_media_uploads` 30 days after upload
+  - **retention**, in apps/api/test/integration/retention.int-spec.ts and apps/api/src/modules/maintenance/retention.processor.ts: OTP messages after 30 days
   - **erasure**, in apps/api/test/integration/contact-deletion.int-spec.ts and apps/api/src/modules/contacts/contact-deletion.service.ts: OTP messages to the phone lose it, and duplicate-row messages are cleared like other campaign messages
 - [ ] T092 [P] Add the code leak scan for SC-002 in apps/api/test/integration/otp-no-code-leak.int-spec.ts:
   - **setup:** codes sent through a success, a failure, a retry (a 5xx then success) and an idempotent repeat

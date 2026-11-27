@@ -95,7 +95,7 @@ export class SendQueueManager implements OnModuleInit, OnApplicationBootstrap {
 
   /** BullMQ adapter: transient failures throw (retry with backoff), permanent ones are final. */
   private async run(job: Job<SendJobData>) {
-    const outcome = await this.sender.process(job.data.messageId, job.attemptsMade + 1);
+    const outcome = await this.sender.process(job.data.messageId, job.attemptsMade + 1, job.data.codeEnc);
     if (outcome.result === 'retry') throw new Error(outcome.reason);
     if (outcome.result === 'failed') throw new UnrecoverableError(outcome.reason);
     return outcome;

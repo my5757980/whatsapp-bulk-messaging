@@ -115,6 +115,8 @@ export class StatusHandler implements WebhookChangeHandler, OnModuleInit {
         }
         // Each Meta status once (duplicates fail on the event's dedupe key above): feature 006, FR-002.
         await this.platformEvents.messageStatus(tx, known.id, status);
+        // Feature 009: one-time codes also tell the company system through otp.status.
+        if (known.origin === 'OTP' && update) await this.platformEvents.otpStatus(tx, known.id);
       }, { maxWait: 10_000 });
     } catch (error) {
       if (isUniqueViolation(error)) return true; // duplicate delivery of the same event

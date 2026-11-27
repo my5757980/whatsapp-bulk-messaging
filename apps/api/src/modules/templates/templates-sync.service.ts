@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { extractTemplateVariables } from '@wbm/shared';
+import { extractTemplateVariables, metaKindOf, ttlAfterCategoryChange, ttlAppliedByFor } from '@wbm/shared';
 import { z } from 'zod';
 import { AppError } from '../../common/errors/app-error.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
@@ -59,6 +59,11 @@ export function toTemplateDto(t: Template) {
     variables: Array.isArray(t.variables) ? t.variables : [],
     lastSyncedAt: t.lastSyncedAt?.toISOString() ?? null,
     updatedAt: t.updatedAt.toISOString(),
+    // Feature 009
+    kind: t.kind,
+    ttlSeconds: t.ttlSeconds,
+    ttlAppliedBy: t.ttlAppliedBy,
+    options: t.options ?? {},
   };
 }
 
@@ -74,6 +79,8 @@ function syncFields(t: MetaTemplate, now: Date) {
     status,
     rejectionReason: status === 'REJECTED' ? rejected : null,
     lastSyncedAt: now,
+    // Feature 009: the kind follows Meta's components (contracts/meta-templates.md §1).
+    kind: metaKindOf(t.category, t.components),
   };
 }
 
@@ -151,9 +158,11 @@ export class TemplatesSyncService {
     for (const t of templates) {
       const key = { wabaId_name_language: { wabaId, name: t.name, language: t.language } };
       const fields = syncFields(t, now);
-      const existing = await this.prisma.template.findUnique({ where: key, select: { id: true } });
+      const existing = await this.prisma.template.findUnique({ where: key, select: { id: true, ttlSeconds: true } });
       if (existing) {
-        await this.prisma.template.update({ where: { id: existing.id }, data: fields });
+        // When Meta changed the category, a TTL that no longer fits is cleared (research R8).
+        const ttl = ttlAfterCategoryChange(fields.category, existing.ttlSeconds);
+        await this.prisma.template.update({ where: { id: existing.id }, data: { ...fields, ttlSeconds: ttl, ttlAppliedBy: ttl === null ? null : ttlAppliedByFor(fields.category) } });
         updated++;
       } else {
         await this.prisma.template.create({ data: { wabaId, name: t.name, language: t.language, ...fields } });

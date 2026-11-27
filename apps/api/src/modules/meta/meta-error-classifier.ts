@@ -31,6 +31,9 @@ const REASONS: Readonly<Record<number, string>> = {
   133010: 'Phone number is not registered on the WhatsApp Business Platform',
 };
 
+/** Every Meta code the platform handles; each has a meaning in @wbm/shared help (feature 009, FR-028). */
+export const HANDLED_META_CODES: readonly number[] = [...new Set([...TRANSIENT, ...BLOCKING, ...Object.keys(REASONS).map(Number)])].sort((a, b) => a - b);
+
 export function classifyMetaError(code: number | undefined, httpStatus?: number): MetaErrorClass {
   if (code !== undefined) {
     if (TRANSIENT.has(code)) return 'TRANSIENT';

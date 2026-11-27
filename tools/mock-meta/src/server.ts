@@ -13,6 +13,7 @@ import { handleWizard } from './wizard.js';
 import { handleAds } from './ads.js';
 import { commerceInteractiveProblem, handleCommerce } from './commerce.js';
 import { handleStripe } from './stripe.js';
+import { handleTemplatesMock, isDeliveryHeld, storedComponents, templateCreateProblem, templateSendProblem } from './templates.js';
 import { postSigned, statusPayload, templateStatusPayload } from './webhook-emitter.js';
 
 interface MockTemplate {
@@ -23,6 +24,8 @@ interface MockTemplate {
   status: string;
   parameter_format: string;
   components: unknown[];
+  /** Feature 009: the template's time-to-live, as sent. */
+  message_send_ttl_seconds?: number;
 }
 
 interface SentMessage {
@@ -138,7 +141,11 @@ const MEDIA_TYPES: readonly string[] = ['image', 'video', 'audio', 'document'];
 
 /** Returns a Graph-style error message when a send body is not one Meta would accept. */
 function outboundProblem(type: string | undefined, body: OutboundBody): string | undefined {
-  if (type === 'template') return body.template?.name ? undefined : 'Missing template name';
+  if (type === 'template') {
+    if (!body.template?.name) return 'Missing template name';
+    // Feature 009: authentication, carousel and offer sends follow Meta's rules (src/templates.ts).
+    return templateSendProblem(templateByName(body.template.name), body.template.components) ?? undefined;
+  }
   if (type === 'text') {
     const text = body.text?.body;
     if (typeof text !== 'string' || text.trim() === '') return "Param text['body'] is required";
@@ -153,6 +160,9 @@ function outboundProblem(type: string | undefined, body: OutboundBody): string |
   }
   return `Unsupported message type: ${type ?? '(none)'}`;
 }
+
+/** A stored template by name (feature 009 send checks). */
+const templateByName = (name: string): MockTemplate | undefined => [...templates.values()].flat().find((t) => t.name === name);
 
 /** Category of a template by name (Meta's pricing category follows the template category). */
 const templateCategory = (name: string): string | undefined => [...templates.values()].flat().find((t) => t.name === name)?.category;
@@ -222,6 +232,8 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   if (req.method === 'GET' && url.pathname === '/mock/sent') return send(res, 200, { count: sent.length, messages: sent });
   if (req.method === 'GET' && url.pathname === '/mock/reads') return send(res, 200, { count: reads.length, reads });
 
+  // Feature 009: held delivery and the test website (src/templates.ts).
+  if (await handleTemplatesMock(req, res, url)) return;
   // Feature 008: the mock Stripe gateway and its hosted page (src/stripe.ts).
   if (await handleStripe(req, res, url)) return;
   // Feature 006: mock Shopify and WooCommerce stores (src/shopify.ts, src/woocommerce.ts).
@@ -388,8 +400,11 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
       // Free-form replies are service conversations; templates are priced by their category.
       const category = type === 'template' ? templateCategory(templateName) : 'service';
       later(400, () => postSigned(statusPayload({ wabaId, phoneNumberId: id, wamid, recipient: to, status: 'sent', category })));
-      later(900, () => postSigned(statusPayload({ wabaId, phoneNumberId: id, wamid, recipient: to, status: 'delivered', category })));
-      later(1600, () => postSigned(statusPayload({ wabaId, phoneNumberId: id, wamid, recipient: to, status: 'read', category })));
+      // Feature 009: a held number gets no delivered or read status, so time-to-live can pass.
+      if (!isDeliveryHeld(id)) {
+        later(900, () => postSigned(statusPayload({ wabaId, phoneNumberId: id, wamid, recipient: to, status: 'delivered', category })));
+        later(1600, () => postSigned(statusPayload({ wabaId, phoneNumberId: id, wamid, recipient: to, status: 'read', category })));
+      }
     }
     return send(res, 200, { messaging_product: 'whatsapp', contacts: [{ input: to, wa_id: to }], messages: [{ id: wamid }] });
   }
@@ -414,6 +429,9 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
     if (req.method === 'POST') {
       const body = JSON.parse((await readBody(req)) || '{}') as Partial<MockTemplate>;
       if (!body.name || !/^[a-z0-9_]+$/.test(body.name)) return graphError(res, 400, 100, 'Invalid template name');
+      // Feature 009: the new kinds and the time-to-live follow Meta's rules (src/templates.ts).
+      const kindProblem = templateCreateProblem(body);
+      if (kindProblem) return graphError(res, 400, 100, kindProblem);
       const template: MockTemplate = {
         id: nextId('T'),
         name: body.name,
@@ -421,7 +439,8 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
         category: body.category ?? 'MARKETING',
         status: 'PENDING',
         parameter_format: body.parameter_format ?? 'POSITIONAL',
-        components: body.components ?? [],
+        components: storedComponents(body.category, body.components ?? []),
+        ...(typeof body.message_send_ttl_seconds === 'number' ? { message_send_ttl_seconds: body.message_send_ttl_seconds } : {}),
       };
       list.push(template);
       later(env.templateApprovalMs, async () => {

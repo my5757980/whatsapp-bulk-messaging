@@ -42,6 +42,7 @@ const MESSAGE_VARIANT: Record<MessageStatus, Variant> = {
   FAILED: 'destructive',
   SKIPPED: 'warning',
   CANCELLED: 'secondary',
+  EXPIRED: 'warning',
 };
 
 export function messageStatusBadge(status: MessageStatus): { label: string; variant: Variant } {

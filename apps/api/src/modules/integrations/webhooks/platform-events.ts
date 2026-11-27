@@ -3,6 +3,7 @@ import { eventContact, eventMessage, type EventType } from '@wbm/shared';
 import type { PrismaService } from '../../../common/prisma/prisma.service.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
 import { OutboundEvents } from './outbound-events.js';
+import { otpStatusDto } from '../../otp/otp-status.js';
 
 // Typed event writers for each event source (feature 006, research R3, contracts/webhook-events.md).
 // Each call runs inside the source's own transaction and does nothing when no endpoint chose the
@@ -74,6 +75,19 @@ export class PlatformEvents {
       },
       db,
       status.timestamp,
+    );
+  }
+
+  /** A one-time code's status (feature 009, contracts/public-otp-v1.openapi.yaml `OtpStatus`), never the code. */
+  otpStatus(db: Db, messageId: string): Promise<void> {
+    return this.when(
+      'otp.status',
+      async () => {
+        const m = await db.message.findUnique({ where: { id: messageId } });
+        if (!m || m.origin !== 'OTP') return null;
+        return { otp: otpStatusDto(m) };
+      },
+      db,
     );
   }
 

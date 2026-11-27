@@ -86,19 +86,11 @@ The variable mapping (`variable_mapping`, 001) gains these keys:
   - `template_id`, `number_id`
   - `resolved_params` with the code masked; never the code (R4)
 
-## MetaMediaUpload → `meta_media_uploads` (new)
+## Card media: the existing cache
 
-A Meta media id for a library file on one number, reused by carousel campaigns (R6).
-
-| Field | Type | Notes |
-|---|---|---|
-| id | uuid | |
-| mediaAssetId | uuid → media_assets | `CASCADE` |
-| numberId | uuid → whatsapp_numbers | `CASCADE` |
-| metaMediaId | varchar(80) | From `POST /{phone-number-id}/media` |
-| uploadedAt | timestamptz | Uploaded again after 25 days; rows deleted after 30 |
-
-**Unique:** `(media_asset_id, number_id)`.
+Carousel card files reuse the 001 cache `media_assets.meta_media_ids`
+(`{ "<phoneNumberId>": { id, uploadedAt } }`) through `MediaService.ensureMetaMediaId`, which uploads a
+library file to a number on first use and again when the cached id is old (R6). No new table.
 
 ## OtpSettings → `otp_settings` (new, one row)
 
@@ -123,7 +115,6 @@ about the code is stored.
 | key | char(12) unique | Public, from the 005 link code alphabet; in the snippet |
 | name | citext unique | For the team |
 | numberId | uuid → whatsapp_numbers | `RESTRICT`; a connected number when saved |
-| chatLinkId | uuid → chat_links | The default message's link (`source: WIDGET`) |
 | look | jsonb | `{ colour (#RRGGBB), buttonText (≤ 30), corner: 'BOTTOM_LEFT'\|'BOTTOM_RIGHT', offsetX, offsetY (0–200 px), radius (0–40 px) }` |
 | brandName | varchar(60) | |
 | brandImageAssetId | uuid? → media_assets | `SET NULL`; JPEG or PNG up to 1 MB |
@@ -134,8 +125,9 @@ about the code is stored.
 | createdById | uuid? → users | |
 | createdAt, updatedAt | timestamptz | |
 
-The public config (contracts/website-button.md) is built from this row. Opens and chats started are
-read from the widget's chat links.
+The public config (contracts/website-button.md) is built from this row. The default message's link
+is the button's `WIDGET` chat link without a rule (`widget_rule_id` null). Opens and chats started are
+read from the button's chat links.
 
 ## ChatLink (extended, 006)
 
@@ -170,7 +162,6 @@ New index `(created_at)` for the opt-in and opt-out report.
 | Data | Kept | Erasure of a contact |
 |---|---|---|
 | OTP messages (`origin = OTP`) | 30 days | Messages to the contact's phone lose the phone |
-| meta_media_uploads | 30 days after upload | n/a |
 | chat_link_opens.page | as chat link opens (12 months, 006) | n/a (no contact on opens) |
 | chat_widgets | until deleted | n/a |
 | Campaign messages with `copy_index` > 0 | as campaign messages (12 months, 001) | As 001: the contact link, phone and parameters are cleared |

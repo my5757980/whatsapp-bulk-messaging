@@ -14,7 +14,8 @@ import { NumbersService } from '../numbers/numbers.service.js';
 import { DripLeaving } from '../growth/drips/drip-leaving.js';
 import { StatusHandler } from '../webhooks/handlers/status.handler.js';
 import { decideSendFailure, preSendCheck } from './send-outcome.js';
-import { FLOW_TOKEN_PARAM, HEADER_MEDIA_URL_PARAM, buildTemplatePayload, headerMediaType } from './template-payload.builder.js';
+import { FLOW_TOKEN_PARAM, HEADER_MEDIA_URL_PARAM, authenticationPayload, buildTemplatePayload, headerMediaType } from './template-payload.builder.js';
+import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
 import { TEMPLATE_FORM_TOKENS, type TemplateFormTokensPort } from './template-form-tokens.port.js';
 import { HEADER_MEDIA_ASSET_PARAM } from './template-send-rules.js';
 
@@ -27,6 +28,8 @@ const TEMPLATE_STATE: Readonly<Record<number, 'PAUSED' | 'DISABLED'>> = { 132015
 
 export interface SendJobData {
   messageId: string;
+  /** Feature 009: the encrypted one-time code of an OTP job. */
+  codeEnc?: string;
 }
 
 export type SendOutcome =
@@ -59,11 +62,28 @@ export class SendProcessor {
     private readonly numbers: NumbersService,
     private readonly timeline: ChatTimelineService,
     private readonly drips: DripLeaving,
+    private readonly platformEvents: PlatformEvents,
     @Optional() @Inject(TEMPLATE_FORM_TOKENS) private readonly formTokens?: TemplateFormTokensPort,
   ) {}
 
-  /** @param attempt 1-based attempt number of this job */
-  async process(messageId: string, attempt: number): Promise<SendOutcome> {
+  /**
+   * @param attempt 1-based attempt number of this job
+   * @param codeEnc a one-time code from the job, encrypted (feature 009, research R4)
+   */
+  async process(messageId: string, attempt: number, codeEnc?: string): Promise<SendOutcome> {
+    const outcome = await this.send(messageId, attempt, codeEnc);
+    // Feature 009: one-time code status for the company system (send-time failures; webhooks do the rest).
+    if (outcome.result === 'failed' || outcome.result === 'cancelled') await this.otpEvent(messageId);
+    return outcome;
+  }
+
+  private async otpEvent(messageId: string): Promise<void> {
+    const m = await this.prisma.message.findUnique({ where: { id: messageId }, select: { origin: true, status: true, failureCode: true, failureReason: true, failedAt: true } });
+    if (m?.origin !== 'OTP') return;
+    await this.platformEvents.otpStatus(this.prisma, messageId).catch((error: unknown) => this.logger.warn({ messageId, err: (error as Error).message }, 'Could not record the code status event'));
+  }
+
+  private async send(messageId: string, attempt: number, codeEnc?: string): Promise<SendOutcome> {
     const m = await this.prisma.message.findUnique({
       where: { id: messageId },
       include: {
@@ -136,6 +156,12 @@ export class SendProcessor {
       // A form (FLOW) button carries the recipient's signed form token (feature 008 US7).
       const flowButton = ((components.find((c) => c.type.toUpperCase() === 'BUTTONS') as unknown as { buttons?: Array<{ type: string; flow_id?: string }> } | undefined)?.buttons ?? []).find((b) => b.type.toUpperCase() === 'FLOW');
       const flowToken = flowButton?.flow_id && m.contactId && this.formTokens ? await this.formTokens.forMessage(m.id, m.contactId, flowButton.flow_id) : null;
+      // Feature 009: a one-time code goes only from the decrypted job into Meta's payload (research R4).
+      if (m.template.kind === 'AUTHENTICATION') {
+        if (!codeEnc) throw new Error('The one-time code is missing from the send job');
+        ({ waMessageId } = await this.meta.sendTemplate(this.cipher.decrypt(m.number.accessTokenEnc), m.number.phoneNumberId, authenticationPayload(m.phoneE164, m.template, this.cipher.decrypt(codeEnc))));
+        return this.sent(m, waMessageId);
+      }
       const payload = buildTemplatePayload({
         to: m.phoneE164,
         template: { name: m.template.name, language: m.template.language, parameterFormat: m.template.parameterFormat, components },
@@ -146,15 +172,21 @@ export class SendProcessor {
     } catch (error) {
       return this.handleFailure(m, error, attempt);
     }
+    return this.sent(m, waMessageId);
+  }
 
+  private async sent(m: { id: string; origin: string; number: { phoneNumberId: string }; template: { ttlSeconds: number | null; ttlAppliedBy: string | null } }, waMessageId: string): Promise<SendOutcome> {
     const now = new Date();
-    await this.prisma.message.updateMany({ where: { id: m.id, status: 'SENDING' }, data: { status: 'SENT', waMessageId, sentAt: now } });
+    // Feature 009 (research R8): the expired sweep reads expiresAt for TTLs that Meta applies.
+    const expiresAt = m.template.ttlSeconds && m.template.ttlAppliedBy === 'META' ? new Date(now.getTime() + m.template.ttlSeconds * 1000) : null;
+    await this.prisma.message.updateMany({ where: { id: m.id, status: 'SENDING' }, data: { status: 'SENT', waMessageId, sentAt: now, ...(expiresAt ? { expiresAt } : {}) } });
     await this.event(m.id, 'SENT_ACCEPTED', `${m.id}:accepted`, { waMessageId }, now);
     this.metrics.messagesTotal.inc({ status: 'SENT', number: m.number.phoneNumberId });
     if (m.origin === 'INBOX') this.metrics.inboxMessagesTotal.inc({ direction: 'out', kind: 'template' });
     await this.statuses.applyBuffered(waMessageId);
     // Show the template in the contact's live chat on this number (002 R2); never fails the send.
-    await this.timeline.appendRef(m.id).catch((error: unknown) =>
+    // One-time codes have no contact and stay out of live chat (feature 009).
+    if (m.origin !== 'OTP') await this.timeline.appendRef(m.id).catch((error: unknown) =>
       this.logger.warn({ messageId: m.id, err: (error as Error).message }, 'Could not add the message to live chat'),
     );
     return { result: 'sent', waMessageId };

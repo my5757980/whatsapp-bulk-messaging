@@ -10,7 +10,7 @@ describe('event catalog', () => {
     expect(EVENT_TYPES).toEqual(expect.arrayContaining(['payment.requested', 'payment.paid', 'payment.failed', 'payment.expired', 'payment.refunded', 'payment.cancelled', 'chat_order.received', 'chat_order.paid', 'form.submitted']));
     expect(EVENT_TYPES).toContain('test.ping');
     for (const type of EVENT_TYPES) {
-      expect(EVENT_GROUPS[type]).toMatch(/^(messages|contacts|links|drips|live_chat|api_campaigns|stores|ads|payments|commerce|forms|test)$/);
+      expect(EVENT_GROUPS[type]).toMatch(/^(messages|contacts|links|drips|live_chat|api_campaigns|stores|ads|payments|commerce|forms|otp|test)$/);
       expect(EVENT_LABELS[type]).toMatch(/\w/);
     }
     expect(new Set(EVENT_TYPES).size).toBe(EVENT_TYPES.length);

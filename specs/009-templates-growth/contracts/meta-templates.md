@@ -98,8 +98,9 @@ against Meta's pages in the story's first task.
 `POST /{PHONE_NUMBER_ID}/media` (multipart: `messaging_product=whatsapp`, `type`, `file`)
 returns `{ "id": "<MEDIA_ID>" }`.
 
-- It is called before launch for each carousel card file and number. The result is kept in
-  `meta_media_uploads`, and the upload is repeated after 25 days (Meta keeps ids for 30).
+- It is called before launch for each carousel card file and number, through the 001
+  `MediaService.ensureMetaMediaId` cache (`media_assets.meta_media_ids`), which uploads again when the
+  cached id is old.
 
 ## 3. Send
 

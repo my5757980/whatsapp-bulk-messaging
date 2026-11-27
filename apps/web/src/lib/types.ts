@@ -54,6 +54,11 @@ export interface Template {
   components: TemplateComponent[];
   variables: TemplateVariable[];
   lastSyncedAt: string | null;
+  /** Feature 009 (research R1, R8). */
+  kind?: 'STANDARD' | 'CAROUSEL' | 'LIMITED_TIME_OFFER' | 'AUTHENTICATION';
+  ttlSeconds?: number | null;
+  ttlAppliedBy?: 'META' | 'PLATFORM' | null;
+  options?: Record<string, unknown>;
 }
 
 export interface StatusTotals {

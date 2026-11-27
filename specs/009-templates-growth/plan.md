@@ -30,7 +30,7 @@ wording:
   - OTP jobs go on the number's 002 send queue without a priority, so they run before chat replies
     and campaigns under the same rate limiter (R5)
 - **Carousels:** card files are uploaded to the number before launch and cached for 25 days
-  (`meta_media_uploads`). Card quick replies carry `wbm:c{i}:b{b}` payloads (R6).
+  (the 001 `media_assets.meta_media_ids` cache). Card quick replies carry `wbm:c{i}:b{b}` payloads (R6).
 - **Time-to-live:** codes and utility go to Meta; marketing is applied in our queue, because the Cloud
   API takes no marketing TTL. A new final status `EXPIRED` comes from send-time checks and a 5-minute
   sweep, since Meta sends no code for dropped messages (R8).
@@ -67,7 +67,8 @@ wording:
   - Meta calls use the existing client.
 
 **Storage**:
-- **PostgreSQL:** 3 new tables, `meta_media_uploads`, `otp_settings` and `chat_widgets`.
+- **PostgreSQL:** 2 new tables, `otp_settings` and `chat_widgets`. Card media reuse the 001
+  `media_assets.meta_media_ids` cache.
   - **New columns:**
     - `templates`: `kind`, `ttl_seconds`, `ttl_applied_by`, `options`
     - `campaigns`: `allow_duplicate_rows`, `offer_config`, `card_media`, `launched_by_id`
@@ -254,7 +255,6 @@ apps/api/src/modules/otp/
 ├── public-otp.controller.ts          # /api/v1/otp
 └── otp-settings.controller.ts        # /otp/settings
 apps/api/src/modules/sending/         # OTP jobs, carousel/offer/auth payloads, TTL and offer checks, expired sweep
-apps/api/src/modules/media/meta-media-uploads.ts  # upload cache for card media
 apps/api/src/modules/campaigns/       # duplicates, offer config, card media, media checks, replied.sql.ts, launchedById
 apps/api/src/modules/reports/         # overview, team and consent reports with streamed CSVs
 apps/api/src/modules/integrations/chat-widgets/   # widgets service and controller, public config, image and script routes
