@@ -16,6 +16,7 @@ import { ConsentService } from './consent.service.js';
 import { normaliseTag } from './tags.controller.js';
 import { contactFilterSql } from './contact-filter.sql.js';
 import { SegmentQueryBuilder } from './segment-query.builder.js';
+import { leadSourceFor } from './lead-source.js';
 
 // Contacts (FR-009, FR-012, T123). Deletion ships with US1 (ContactDeletionService).
 
@@ -26,6 +27,8 @@ export const ContactInputSchema = z
     tags: z.array(z.string().trim().min(1).max(50)).max(50),
     attributes: z.record(z.string(), z.unknown()),
     consentStatus: z.enum(['OPTED_IN', 'OPTED_OUT', 'UNKNOWN']),
+    /** Feature 010: a custom lead source label for a new contact. */
+    leadSourceLabel: z.string().trim().max(80),
     consentSourceNote: z.string().trim().min(3).max(500),
   })
   .partial()
@@ -91,6 +94,9 @@ export function toContactDto(c: ContactWithTags) {
     createdAt: c.createdAt.toISOString(),
   };
 }
+
+/** Feature 010: the lead source kind of contacts made by each creation path. */
+const LEAD_KIND = { dashboard: 'CUSTOM', api: 'API', store: 'STORE' } as const;
 
 const WITH_TAGS = { tags: { select: { tag: { select: { name: true } } } } } as const;
 
@@ -238,7 +244,8 @@ export class ContactsService {
             countryCode: phone.country,
             name: input.name ?? null,
             attributes: attributes as Prisma.InputJsonValue,
-            ...(source === 'api' ? { leadSource: 'API' } : source === 'store' ? { leadSource: 'STORE' } : {}),
+            // Feature 010 (FR-011): API and store contacts, or added by hand in the dashboard (a custom label).
+            ...leadSourceFor(LEAD_KIND[source], input.leadSourceLabel ?? (source === 'dashboard' ? 'Added by hand' : null)),
             ...(status ? { consentStatus: status, consentSource: 'MANUAL' as const, consentSourceNote: input.consentSourceNote ?? null, consentAt: now } : {}),
           },
         });

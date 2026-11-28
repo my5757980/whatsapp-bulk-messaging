@@ -28,6 +28,7 @@ import { AdChatMatcher } from '../../ads/chats/ad-chat-matcher.js';
 import { ChatLinkMatcher } from '../../integrations/chat-links/chat-link-matcher.js';
 import { parseInboundMessage, previewOf, type ParsedInbound } from './message-parser.js';
 import { stopContactCarts } from '../../integrations/stores/store-carts.js';
+import { leadSourceFor } from '../../contacts/lead-source.js';
 
 interface LockedChat {
   id: string;
@@ -114,7 +115,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     }
     const contact = await this.prisma.contact.upsert({
       where: { phoneE164: phone.e164 },
-      create: { phoneE164: phone.e164, countryCode: phone.country, name: msg.profileName?.slice(0, 120) ?? null, leadSource: 'Organic' },
+      create: { phoneE164: phone.e164, countryCode: phone.country, name: msg.profileName?.slice(0, 120) ?? null, ...leadSourceFor('ORGANIC') },
       update: {},
       select: { id: true, blockedAt: true },
     });

@@ -15,6 +15,7 @@ import type { ApiKeyContext } from './api-key.guard.js';
 import { DripEvents } from '../growth/drips/drip-events.js';
 import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
 import { IdempotencyService, requestHash } from './idempotency.service.js';
+import { leadSourceFor } from '../contacts/lead-source.js';
 
 // POST /api/v1/messages and GET /api/v1/messages/{id} (FR-033-FR-036, T189).
 
@@ -129,7 +130,7 @@ export class PublicApiService {
         const now = new Date();
         const contact = await tx.contact.upsert({
           where: { phoneE164: phone.e164 },
-          create: { phoneE164: phone.e164, countryCode: phone.country, name: input.contact?.name || null, leadSource: 'API' },
+          create: { phoneE164: phone.e164, countryCode: phone.country, name: input.contact?.name || null, ...leadSourceFor('API') },
           update: {},
         });
         if (input.contact?.name && !contact.name) await tx.contact.update({ where: { id: contact.id }, data: { name: input.contact.name } });

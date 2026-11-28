@@ -8,6 +8,9 @@ import { ConsentService } from '../../contacts/consent.service.js';
 import { JourneyService } from '../../inbox/journey/journey.service.js';
 import { SettingsService } from '../../settings/settings.service.js';
 import { WebhookRouter, type WebhookChange, type WebhookChangeHandler } from '../webhook-router.js';
+import { findChatRef } from '@wbm/shared';
+import { AutoTagService } from '../../contacts/auto-tags.service.js';
+import { leadSourceFor } from '../../contacts/lead-source.js';
 
 const DEDUPE_TTL_SECONDS = 7 * 24 * 3600;
 
@@ -58,6 +61,7 @@ export class InboundHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly consent: ConsentService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly journey: JourneyService,
+    private readonly autoTags: AutoTagService,
   ) {}
 
   onModuleInit(): void {
@@ -98,12 +102,18 @@ export class InboundHandler implements WebhookChangeHandler, OnModuleInit {
         (await this.prisma.contact.upsert({
           where: { phoneE164: phone.e164 },
           // A contact first seen through their own message came organically (002 FR-033).
-          create: { phoneE164: phone.e164, countryCode: phone.country, name: profiles.get(from)?.slice(0, 120) ?? null, leadSource: 'Organic' },
+          create: { phoneE164: phone.e164, countryCode: phone.country, name: profiles.get(from)?.slice(0, 120) ?? null, ...leadSourceFor('ORGANIC') },
           update: {},
           select: { id: true },
         }));
       // Chat links count new contacts (feature 006 US7, FR-049).
-      if (!known) await this.redis.set(newContactKey(id), '1', 'EX', DEDUPE_TTL_SECONDS);
+      if (!known) {
+        await this.redis.set(newContactKey(id), '1', 'EX', DEDUPE_TTL_SECONDS);
+        // Feature 010 (R4, R5): an ad or an active chat link sets the source in its matcher; others are organic now.
+        const ref = findChatRef(messageText(message));
+        const viaLink = ref ? Boolean(await this.prisma.chatLink.findFirst({ where: { ref, status: 'ACTIVE', deletedAt: null }, select: { id: true } })) : false;
+        if (!message.referral && !viaLink) await this.autoTags.apply(this.prisma, 'CONTACT_CREATED', contact.id, 'ORGANIC');
+      }
       if (status) {
         const before = await this.prisma.contact.findUnique({ where: { id: contact.id }, select: { consentStatus: true } });
         await this.consent.setStatus(contact.id, status, 'KEYWORD', { note: `Replied "${keyword}"` });

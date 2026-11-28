@@ -748,6 +748,8 @@ model ImportJob {
   fileKey         String       @map("file_key")
   mapping         Json         @default("{}")
   optInSourceNote String?      @map("opt_in_source_note")
+  /// Feature 010 (FR-011): the lead source label of contacts this import creates.
+  leadSourceLabel String?      @map("lead_source_label") @db.VarChar(80)
   status          ImportStatus @default(QUEUED)
   totalRows       Int          @default(0) @map("total_rows")
   createdCount    Int          @default(0) @map("created_count")

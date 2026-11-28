@@ -5,6 +5,7 @@ import { InboxPublisher } from '../../inbox/realtime/inbox-publisher.js';
 import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 import { DripEvents } from '../drips/drip-events.js';
 import type { ResolvedLink } from './link-resolver.js';
+import { AutoTagService } from '../../contacts/auto-tags.service.js';
 
 /**
  * Records one real click (FR-003): the time, the recipient, the campaign or drip step, the link and
@@ -20,6 +21,7 @@ export class ClickRecorder {
     private readonly publisher: InboxPublisher,
     private readonly dripEvents: DripEvents,
     private readonly platformEvents: PlatformEvents,
+    private readonly autoTags: AutoTagService,
   ) {}
 
   async record(link: ResolvedLink, device: ClickDeviceKind): Promise<void> {
@@ -35,6 +37,8 @@ export class ClickRecorder {
         },
       });
       if (link.contactId) await this.dripEvents.recordClick(tx, link.contactId, { campaignId: link.campaignId, dripId: link.dripId });
+      // Automatic tags (feature 010, R4).
+      if (link.contactId) await this.autoTags.apply(tx, 'LINK_CLICK', link.contactId);
       // Outbound webhooks (feature 006, FR-002).
       await this.platformEvents.linkClicked(tx, { contactId: link.contactId, campaignId: link.campaignId, dripId: link.dripId, destination: link.destination, device, at: new Date() });
     });

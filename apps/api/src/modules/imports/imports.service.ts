@@ -37,6 +37,13 @@ export const ImportFormSchema = z.object({
     .max(500)
     .optional()
     .transform((v) => v || undefined),
+  /** Feature 010 (FR-011): the lead source label for contacts this import creates. */
+  leadSourceLabel: z
+    .string()
+    .trim()
+    .max(80)
+    .optional()
+    .transform((v) => v || undefined),
 });
 export type ImportForm = z.infer<typeof ImportFormSchema>;
 
@@ -105,6 +112,7 @@ export class ImportsService {
         fileKey,
         mapping: stored as unknown as Prisma.InputJsonValue,
         optInSourceNote: form.optInSourceNote ?? null,
+        leadSourceLabel: form.leadSourceLabel ?? null,
         columns,
         createdById: userId,
       },

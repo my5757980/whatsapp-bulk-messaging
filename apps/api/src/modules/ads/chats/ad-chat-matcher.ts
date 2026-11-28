@@ -12,6 +12,8 @@ import { DripEvents } from '../../growth/drips/drip-events.js';
 import { JourneyService } from '../../inbox/journey/journey.service.js';
 import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 import { newContactKey } from '../../webhooks/handlers/inbound.handler.js';
+import { AutoTagService } from '../../contacts/auto-tags.service.js';
+import { upgradeFirstMessageSource } from '../../contacts/lead-source.js';
 
 export interface AdChatMessage {
   numberId: string;
@@ -44,6 +46,7 @@ export class AdChatMatcher {
     private readonly platformEvents: PlatformEvents,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly metrics: MetricsService,
+    private readonly autoTags: AutoTagService,
   ) {}
 
   /** True when the campaign's flow started and so answered the message. */
@@ -76,6 +79,8 @@ export class AdChatMatcher {
                   ${newContact}, ${referral.headline}, ${referral.body}, ${referral.mediaUrl}, ${referral.sourceUrl}, ${referral.ctwaClid}, ${msg.occurredAt})
           ON CONFLICT DO NOTHING`;
         if (!inserted) return false;
+        // Feature 010 (R5): a new contact's first message came from an ad.
+        if (newContact && (await upgradeFirstMessageSource(tx, msg.contactId, 'AD', campaign?.name ?? null))) await this.autoTags.apply(tx, 'CONTACT_CREATED', msg.contactId, 'AD');
         if (campaign?.tagId && campaign.tag) {
           const added = await tx.contactTag.createManyAndReturn({ data: [{ contactId: msg.contactId, tagId: campaign.tagId }], skipDuplicates: true, select: { contactId: true, tagId: true } });
           if (added.length) {

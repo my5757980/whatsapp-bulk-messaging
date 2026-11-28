@@ -21,6 +21,7 @@ import { MAX_SEND_ATTEMPTS } from '../../sending/send-outcome.js';
 import { headerMediaType } from '../../sending/template-payload.builder.js';
 import { AdsConnectionService, type AdsAccess } from '../connection/ads-connection.service.js';
 import { MetaAdsClient, type MetaLead } from '../meta-ads.client.js';
+import { leadSourceFor } from '../../contacts/lead-source.js';
 
 // Lead forms and leads (feature 007 US7, FR-035 – FR-039, research R9): forms made at Meta with the
 // page token and a WhatsApp consent checkbox; each lead becomes a contact with the form's tag, is opted
@@ -218,7 +219,7 @@ export class AdLeadFormsService {
         if (phone) {
           const contact = await tx.contact.upsert({
             where: { phoneE164: phone.e164 },
-            create: { phoneE164: phone.e164, countryCode: phone.country, name, leadSource: 'Lead form' },
+            create: { phoneE164: phone.e164, countryCode: phone.country, name, ...leadSourceFor('LEAD_FORM', form.name) },
             update: {},
             select: { id: true },
           });

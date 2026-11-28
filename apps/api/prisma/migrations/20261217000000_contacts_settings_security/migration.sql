@@ -39,6 +39,9 @@ ALTER TABLE "contacts" ADD COLUMN     "lead_source_kind" "LeadSourceKind" NOT NU
 -- AlterTable
 ALTER TABLE "campaigns" ADD COLUMN     "segment_id" UUID;
 
+-- AlterTable
+ALTER TABLE "import_jobs" ADD COLUMN     "lead_source_label" VARCHAR(80);
+
 -- CreateTable
 CREATE TABLE "segments" (
     "id" UUID NOT NULL,

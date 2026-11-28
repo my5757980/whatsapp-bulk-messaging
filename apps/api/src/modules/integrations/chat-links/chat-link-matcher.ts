@@ -10,6 +10,8 @@ import { DripEvents } from '../../growth/drips/drip-events.js';
 import { JourneyService } from '../../inbox/journey/journey.service.js';
 import { newContactKey } from '../../webhooks/handlers/inbound.handler.js';
 import { PlatformEvents } from '../webhooks/platform-events.js';
+import { AutoTagService } from '../../contacts/auto-tags.service.js';
+import { upgradeFirstMessageSource } from '../../contacts/lead-source.js';
 
 export interface ChatLinkMessage {
   numberId: string;
@@ -40,6 +42,7 @@ export class ChatLinkMatcher {
     private readonly dripEvents: DripEvents,
     private readonly platformEvents: PlatformEvents,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly autoTags: AutoTagService,
   ) {}
 
   /** True when the link's flow started and so answered the message. */
@@ -70,6 +73,11 @@ export class ChatLinkMatcher {
           INSERT INTO chat_link_starts (id, chat_link_id, contact_id, conversation_id, new_contact, started_at)
           VALUES (${uuidv7()}::uuid, ${link.id}::uuid, ${msg.contactId}::uuid, ${msg.conversationId}::uuid, ${newContact}, now())
           ON CONFLICT DO NOTHING`;
+        // Feature 010 (R5): a new contact's first message came through this link or the website button.
+        if (newContact) {
+          const kind = link.widget ? 'WEBSITE_BUTTON' : 'CHAT_LINK';
+          if (await upgradeFirstMessageSource(tx, msg.contactId, kind, link.widget ? null : link.name)) await this.autoTags.apply(tx, 'CONTACT_CREATED', msg.contactId, kind);
+        }
         if (link.tagId && link.tag) {
           const added = await tx.contactTag.createManyAndReturn({ data: [{ contactId: msg.contactId, tagId: link.tagId }], skipDuplicates: true, select: { contactId: true, tagId: true } });
           if (added.length) {
