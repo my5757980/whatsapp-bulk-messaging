@@ -34,9 +34,13 @@ export default function OneTimeCodesSettingsPage() {
   const templates = useQuery({ queryKey: ['templates', 'APPROVED'], queryFn: () => api<Template[]>('/templates?status=APPROVED') });
   const numbers = useQuery({ queryKey: queryKeys.numbers, queryFn: () => api<WhatsAppNumber[]>('/numbers') });
   const [form, setForm] = useState({ defaultTemplateId: '', defaultNumberId: '', limitPerPhone: 5, limitWindowMinutes: 15 });
+  const [loaded, setLoaded] = useState(false);
 
+  // The form takes the saved settings once, and stays locked until then: a late answer must not undo a
+  // choice already made.
   useEffect(() => {
-    if (settings.data) {
+    if (settings.data && !loaded) {
+      setLoaded(true);
       setForm({
         defaultTemplateId: settings.data.defaultTemplateId ?? '',
         defaultNumberId: settings.data.defaultNumberId ?? '',
@@ -44,7 +48,7 @@ export default function OneTimeCodesSettingsPage() {
         limitWindowMinutes: settings.data.limitWindowMinutes,
       });
     }
-  }, [settings.data]);
+  }, [settings.data, loaded]);
 
   const save = useMutation({
     mutationFn: () =>
@@ -61,6 +65,7 @@ export default function OneTimeCodesSettingsPage() {
 
   const codeTemplates = (templates.data ?? []).filter((t) => t.kind === 'AUTHENTICATION');
   const editable = can('settings.manage');
+  const locked = !editable || !loaded;
   const last = settings.data?.last24h;
 
   return (
@@ -79,7 +84,7 @@ export default function OneTimeCodesSettingsPage() {
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="grid gap-1.5">
             <Label htmlFor="otp-template">Code template</Label>
-            <NativeSelect id="otp-template" disabled={!editable} value={form.defaultTemplateId} onChange={(e) => setForm({ ...form, defaultTemplateId: e.target.value })}>
+            <NativeSelect id="otp-template" disabled={locked} value={form.defaultTemplateId} onChange={(e) => setForm({ ...form, defaultTemplateId: e.target.value })}>
               <option value="">Choose an approved code template…</option>
               {codeTemplates.map((t) => (
                 <option key={t.id} value={t.id}>
@@ -90,7 +95,7 @@ export default function OneTimeCodesSettingsPage() {
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="otp-number">Number</Label>
-            <NativeSelect id="otp-number" disabled={!editable} value={form.defaultNumberId} onChange={(e) => setForm({ ...form, defaultNumberId: e.target.value })}>
+            <NativeSelect id="otp-number" disabled={locked} value={form.defaultNumberId} onChange={(e) => setForm({ ...form, defaultNumberId: e.target.value })}>
               <option value="">First connected number of the template&apos;s account</option>
               {(numbers.data ?? [])
                 .filter((n) => n.connectionStatus === 'CONNECTED')
@@ -103,15 +108,15 @@ export default function OneTimeCodesSettingsPage() {
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="otp-limit">Codes per phone number</Label>
-            <Input id="otp-limit" type="number" min={1} max={50} disabled={!editable} value={form.limitPerPhone} onChange={(e) => setForm({ ...form, limitPerPhone: Number(e.target.value) })} />
+            <Input id="otp-limit" type="number" min={1} max={50} disabled={locked} value={form.limitPerPhone} onChange={(e) => setForm({ ...form, limitPerPhone: Number(e.target.value) })} />
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="otp-window">In (minutes)</Label>
-            <Input id="otp-window" type="number" min={1} max={1440} disabled={!editable} value={form.limitWindowMinutes} onChange={(e) => setForm({ ...form, limitWindowMinutes: Number(e.target.value) })} />
+            <Input id="otp-window" type="number" min={1} max={1440} disabled={locked} value={form.limitWindowMinutes} onChange={(e) => setForm({ ...form, limitWindowMinutes: Number(e.target.value) })} />
           </div>
           {editable ? (
             <div className="sm:col-span-2">
-              <Button onClick={() => save.mutate()} disabled={save.isPending}>
+              <Button onClick={() => save.mutate()} disabled={save.isPending || !loaded}>
                 {save.isPending ? 'Saving…' : 'Save settings'}
               </Button>
             </div>

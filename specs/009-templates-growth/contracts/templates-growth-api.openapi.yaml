@@ -587,6 +587,16 @@ components:
         hide: { type: boolean }
         greeting: { type: [string, 'null'], maxLength: 300 }
         message: { type: [string, 'null'], maxLength: 500 }
+    WidgetLook:
+      type: object
+      required: [colour, buttonText, corner, offsetX, offsetY, radius]
+      properties:
+        colour: { type: string, pattern: '^#[0-9A-Fa-f]{6}$' }
+        buttonText: { type: string, maxLength: 30 }
+        corner: { type: string, enum: [BOTTOM_LEFT, BOTTOM_RIGHT] }
+        offsetX: { type: integer, minimum: 0, maximum: 200 }
+        offsetY: { type: integer, minimum: 0, maximum: 200 }
+        radius: { type: integer, minimum: 0, maximum: 40 }
     ChatWidgetInput:
       type: object
       additionalProperties: false
@@ -594,33 +604,36 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 80 }
         numberId: { type: string, format: uuid }
-        look:
-          type: object
-          required: [colour, buttonText, corner, offsetX, offsetY, radius]
-          properties:
-            colour: { type: string, pattern: '^#[0-9A-Fa-f]{6}$' }
-            buttonText: { type: string, maxLength: 30 }
-            corner: { type: string, enum: [BOTTOM_LEFT, BOTTOM_RIGHT] }
-            offsetX: { type: integer, minimum: 0, maximum: 200 }
-            offsetY: { type: integer, minimum: 0, maximum: 200 }
-            radius: { type: integer, minimum: 0, maximum: 40 }
+        look: { $ref: '#/components/schemas/WidgetLook' }
         brandName: { type: string, maxLength: 60 }
         brandImageAssetId: { type: [string, 'null'], format: uuid }
         greeting: { type: string, maxLength: 300 }
         message: { type: string, minLength: 1, maxLength: 500 }
         rules: { type: array, maxItems: 50, items: { $ref: '#/components/schemas/PageRule' } }
     ChatWidget:
-      allOf:
-        - { $ref: '#/components/schemas/ChatWidgetInput' }
-        - type: object
-          required: [id, key, status, snippet, numberConnected, last30Days]
-          properties:
-            id: { type: string, format: uuid }
-            key: { type: string }
-            status: { type: string, enum: [ACTIVE, PAUSED] }
-            snippet: { type: string, description: The HTML to paste }
-            numberConnected: { type: boolean }
-            last30Days: { type: object, required: [opens, chatsStarted], properties: { opens: { type: integer }, chatsStarted: { type: integer } } }
+      description: >
+        A website chat button as the dashboard shows it. The fields are listed in full rather than
+        through allOf, because the input schema allows no other properties.
+      type: object
+      required: [id, key, name, numberId, numberLabel, look, brandName, brandImageAssetId, greeting, message, rules, status, snippet, numberConnected, last30Days, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string }
+        name: { type: string }
+        numberId: { type: string, format: uuid }
+        numberLabel: { type: string }
+        look: { $ref: '#/components/schemas/WidgetLook' }
+        brandName: { type: string }
+        brandImageAssetId: { type: [string, 'null'], format: uuid }
+        greeting: { type: string }
+        message: { type: string }
+        rules: { type: array, items: { $ref: '#/components/schemas/PageRule' } }
+        status: { type: string, enum: [ACTIVE, PAUSED] }
+        snippet: { type: string, description: The HTML to paste }
+        numberConnected: { type: boolean }
+        last30Days: { type: object, required: [opens, chatsStarted], properties: { opens: { type: integer }, chatsStarted: { type: integer } } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
     ChatWidgetStats:
       type: object
       required: [from, to, opensByPage, chatsByRule]
