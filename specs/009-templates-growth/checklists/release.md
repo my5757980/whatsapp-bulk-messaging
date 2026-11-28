@@ -9,9 +9,8 @@
   for template kinds, held delivery, the mock shop page and media files) and the nock
   `FakeTemplatesGraph`. No real WhatsApp account, template approval, phone or company website was used.
 
-**Status**: CI for the fixes after 69e5d4b is running. US1–US7 passed in CI (b0244f6 for the MVP
-batch; 700991c for US4–US7, where the only failure was the US1 e2e that found the settings page race
-in section 3, item 8).
+**Status**: Ready for review. All automated gates pass in CI (fdf3ad4), and every quickstart row is
+covered by integration tests and a Playwright e2e spec.
 
 Still open before release (section 4):
 - an authentication, a carousel and an offer template approved on the real account
@@ -29,17 +28,17 @@ Still open before release (section 4):
 | `npm run lint:contracts` | ✅ PASS | redocly over every contract, now with `templates-growth-api.openapi.yaml` and `public-otp-v1.openapi.yaml` |
 | `npm run typecheck` | ✅ PASS | api (src and tests, and `tsconfig.widget.json` for the browser script), web (with e2e), shared and mock-meta |
 | `npm test` (unit) | ✅ PASS | api 596/596 (61 files), shared 403/403 (55 files), web 8/8 (2 files) (2026-11-28, local). New: template kinds, TTL ranges, launch checks, samples, help and guidelines, report ranges and page rules in shared; the payload builder for cards and offers, send expiry, the message parser's card replies, the widget script (jsdom) and its bundle, the code alerts |
-| `npm run test:integration` | ⏳ 69e5d4b | 009 suites: `templates-auth`, `otp-api`, `otp-no-code-leak`, `templates-carousel`, `templates-offer`, `templates-ttl`, `campaign-media-urls`, `campaign-replies-duplicates`, `reports-growth`, `template-samples`, `help-reasons`, `chat-widgets`, `whatsapp-link-tool`, plus 009 cases in `rbac`, `retention`, `contact-deletion`, `campaign-send`, `templates-create` and `reports`. All but the last three suites of the list and the polish cases passed at 700991c |
-| `npm run test:contract` | ⏳ 69e5d4b | `templates-growth.contract-spec.ts` (samples, code settings, media check, reports, website buttons, the generator, the public config) and `otp.contract-spec.ts`; the 001 `us3` and `us5` contracts carry the new template and campaign fields |
-| RBAC from all nine contracts (T094) | ⏳ 69e5d4b | `rbac.int-spec.ts` now reads the 001–009 contracts; the website button script, config and image are public and skipped |
+| `npm run test:integration` | ✅ PASS | 114 files in CI (fdf3ad4). 009 suites: `templates-auth`, `otp-api`, `otp-no-code-leak`, `templates-carousel`, `templates-offer`, `templates-ttl`, `campaign-media-urls`, `campaign-replies-duplicates`, `reports-growth`, `template-samples`, `help-reasons`, `chat-widgets`, `whatsapp-link-tool`, plus 009 cases in `rbac`, `retention`, `contact-deletion`, `campaign-send`, `templates-create` and `reports` |
+| `npm run test:contract` | ✅ PASS | `templates-growth.contract-spec.ts` (samples, code settings, media check, reports, website buttons, the generator, the public config) and `otp.contract-spec.ts`; the 001 `us3` and `us5` contracts carry the new template and campaign fields |
+| RBAC from all nine contracts (T094) | ✅ PASS | `rbac.int-spec.ts` now reads the 001–009 contracts; the website button script, config and image are public and skipped |
 | Audit coverage (T093) | ✅ PASS | every 009 action is recorded (`otp_settings.changed`, `chat_widget.*`, `template_sample.copied`, `data.exported` with the report type); the pending list is empty |
-| Retention and erasure (T091) | ⏳ 69e5d4b | `retention.int-spec.ts`: code messages after 30 days. `contact-deletion.int-spec.ts`: code messages sent to the phone lose it, every-row messages are cleared like other campaign messages |
-| No code leak (T092, SC-002) | ⏳ 69e5d4b | `otp-no-code-leak.int-spec.ts`: a success, a failure, a retry (a 5xx, then success) and an idempotent repeat; messages, events, idempotency records, audit entries, outbound events, captured logs and the queue's Redis data hold no code, and a real worker leaves no job |
+| Retention and erasure (T091) | ✅ PASS | `retention.int-spec.ts`: code messages after 30 days. `contact-deletion.int-spec.ts`: code messages sent to the phone lose it, every-row messages are cleared like other campaign messages |
+| No code leak (T092, SC-002) | ✅ PASS | `otp-no-code-leak.int-spec.ts`: a success, a failure, a retry (a 5xx, then success) and an idempotent repeat; messages, events, idempotency records, audit entries, outbound events, captured logs and the queue's Redis data hold no code, and a real worker leaves no job |
 | Metrics and alerts (T090) | ✅ PASS | `wbm_otp_sends_total{result}`, `wbm_otp_send_seconds`, `wbm_messages_expired_total{reason}`, `wbm_widget_opens_total`, `wbm_reports_exported_total{type}` and `wbm_unknown_error_codes_total{code}`; `WbmOtpFailing` and `WbmOtpSlow` with cases in `alerts.spec.ts` (`promtool check rules` in CI) |
-| `npm audit --audit-level=high` | ✅ PASS | CI `build-test` step (700991c) |
-| gitleaks (history) | ✅ PASS | CI `secret-scan` (700991c) |
-| Docker images | ✅ PASS | CI `docker-images` (700991c): the api (with the bundled widget script), migration and web images build |
-| Playwright e2e | ⏳ 69e5d4b | CI `e2e-smoke`: `templates-us1-codes` … `templates-us7-help`, `reports-us5` and `widget-us8` |
+| `npm audit --audit-level=high` | ✅ PASS | CI `build-test` step (fdf3ad4) |
+| gitleaks (history) | ✅ PASS | CI `secret-scan` (fdf3ad4) |
+| Docker images | ✅ PASS | CI `docker-images` (fdf3ad4): the api (with the bundled widget script), migration and web images build |
+| Playwright e2e | ✅ PASS | CI `e2e-smoke` (fdf3ad4), 73 of 73: `templates-us1-codes` … `templates-us7-help`, `reports-us5` and `widget-us8` |
 
 CI per batch (all four jobs: build-test, e2e-smoke, docker-images, secret-scan):
 
@@ -50,7 +49,8 @@ CI per batch (all four jobs: build-test, e2e-smoke, docker-images, secret-scan):
 | US6–US7, US8 api | 37d4b48 … 61f5f7f | the sample copy, fixed in 700991c (section 3, item 7) |
 | US4–US7 confirmed | 700991c | build-test green; e2e 71 of 72, the US1 settings race (section 3, item 8) |
 | US8 web and tests, polish, docs | 69e5d4b | the website button response schema and a settings regression test built on a wrong cause (section 3, items 8 and 10) |
-| Fixes | next push | running |
+| Fixes | 7a86392, 5a8ef50, bdc7da0 | the settings page race and the response schema; the designer preview and the dashboard CSP; the script on another site (section 3, items 8 and 10–12) |
+| E2e reads the chat link redirect | fdf3ad4 | green (all four jobs) |
 
 ## 2. Quickstart validation rows (§3)
 
@@ -63,7 +63,7 @@ CI per batch (all four jobs: build-test, e2e-smoke, docker-images, secret-scan):
 | US5 Replies, every row and reports | ✅ | Shared report ranges. Integration `campaign-replies-duplicates` (replied and reply rate, every row with copy numbers, retarget counting people once) and `reports-growth` (overview, team and consent reports, CSV streams with masking and audit, ranges refused). E2e `reports-us5` | — |
 | US6 Samples | ✅ | Shared sample rules (70 samples, 10 industries, every purpose and type, 10 Arabic). Integration `template-samples` (filters, copy to a draft, a taken name). E2e `templates-us6-samples` | — |
 | US7 Help | ✅ | Shared guideline and meaning rules (every handled code has an entry). Integration `help-reasons` (meanings and actions on reasons, unknown codes counted). E2e `templates-us7-help` | Re-check the `checkedAt` dates before release |
-| US8 Website button and generator | ⏳ 69e5d4b | Shared page rules. Unit script (jsdom) and bundle (under 30 KB, no cookies or storage). Integration `chat-widgets` (links per rule hidden from chat links, public config with CORS, ETag and no cookies, pause, a disconnected number hidden and its notice once, opens per page without previews, chats per rule with the rule's label, the rate limit, audit) and `whatsapp-link-tool`. E2e `widget-us8` (the designer and preview, the mock shop page, Start chat through the chat link, the inbound message counted for the rule, no button on checkout, the generator and the chat link form filled in) | Paste the snippet on the company site with its CSP allowing the link host; check on desktop and phone |
+| US8 Website button and generator | ✅ | Shared page rules. Unit script (jsdom) and bundle (under 30 KB, no cookies or storage). Integration `chat-widgets` (links per rule hidden from chat links, public config with CORS, ETag and no cookies, pause, a disconnected number hidden and its notice once, opens per page without previews, chats per rule with the rule's label, the rate limit, audit) and `whatsapp-link-tool`. E2e `widget-us8` (the designer and preview, the mock shop page, Start chat through the chat link, the inbound message counted for the rule, no button on checkout, the generator and the chat link form filled in) | Paste the snippet on the company site with its CSP allowing the link host; check on desktop and phone |
 
 ## 3. Gaps found and fixed during implementation
 
@@ -99,6 +99,9 @@ CI per batch (all four jobs: build-test, e2e-smoke, docker-images, secret-scan):
     `Cross-Origin-Resource-Policy: same-origin`, which stopped the mock shop page (another origin)
     from loading the script, so no button showed (found by the US8 e2e). The script, config and
     brand image routes send `cross-origin`, checked by the integration test.
+13. **The popup in the US8 e2e:** it followed the chat link redirect, and the api's
+    `Cross-Origin-Opener-Policy` swapped its frame on the way (`net::ERR_ABORTED`). Like the 006 chat
+    link e2e, the test reads the redirect from the real request, so the open is still counted.
 
 ## 4. Before release (owner: the company's admin)
 

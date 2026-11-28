@@ -539,19 +539,19 @@ through 006 chat links; a quick link and QR generator.
 
 ### Tests for User Story 8 (write first, must fail)
 
-- [ ] T079 [P] [US8] Unit tests packages/shared/src/growth/page-rules.test.ts:
+- [X] T079 [P] [US8] Unit tests packages/shared/src/growth/page-rules.test.ts:
   - EXACT ignores a trailing slash; PREFIX and CONTAINS
   - matching is lower-case
   - the first match wins; `hide` stops the button
   - the fragment is dropped
-- [ ] T080 [P] [US8] Unit tests for the website button script:
+- [X] T080 [P] [US8] Unit tests for the website button script:
   - apps/api/test/unit/widget/chat-button.spec.ts (`@vitest-environment jsdom`):
     - it renders in a shadow root with the look settings
     - `{hidden: true}` and fetch errors do nothing and throw nothing
     - Start chat opens the rule's link with `w` and `p`
     - Escape closes the greeting
   - apps/api/test/unit/widget/widget-bundle.spec.ts: the built file is under 30 KB, with no `import`, `require`, `document.cookie` or storage use
-- [ ] T081 [P] [US8] Integration test apps/api/test/integration/chat-widgets.int-spec.ts:
+- [X] T081 [P] [US8] Integration test apps/api/test/integration/chat-widgets.int-spec.ts:
   - **creating:**
     - the button's `WIDGET` chat links are made, and left out of `/chat-links`
     - a rule with its own message gets its own link
@@ -568,9 +568,9 @@ through 006 chat links; a quick link and QR generator.
     - one notification per disconnection
     - audit entries
     - agents get 403 on create
-- [ ] T082 [P] [US8] Integration test apps/api/test/integration/whatsapp-link-tool.int-spec.ts: the link, a PNG data URL and an SVG; 422 INVALID_NUMBER; `connectedNumberId` for a connected number's phone; nothing stored
-- [ ] T083 [P] [US8] Contract cases for `/chat-widgets*`, `/tools/whatsapp-link` and `/l/w/{key}/config.json` in apps/api/test/contract/templates-growth.contract-spec.ts
-- [ ] T084 [P] [US8] Playwright e2e apps/web/e2e/widget-us8.spec.ts:
+- [X] T082 [P] [US8] Integration test apps/api/test/integration/whatsapp-link-tool.int-spec.ts: the link, a PNG data URL and an SVG; 422 INVALID_NUMBER; `connectedNumberId` for a connected number's phone; nothing stored
+- [X] T083 [P] [US8] Contract cases for `/chat-widgets*`, `/tools/whatsapp-link` and `/l/w/{key}/config.json` in apps/api/test/contract/templates-growth.contract-spec.ts
+- [X] T084 [P] [US8] Playwright e2e apps/web/e2e/widget-us8.spec.ts:
   - **designer:** the preview, then copying the snippet
   - **the mock site:**
     - `/mock/site/products/lamp` shows the button and the rule's greeting
@@ -581,16 +581,16 @@ through 006 chat links; a quick link and QR generator.
 
 ### Implementation for User Story 8
 
-- [ ] T085 [US8] Add apps/api/src/modules/integrations/chat-widgets/chat-widgets.service.ts and chat-widgets.controller.ts:
+- [X] T085 [US8] Add apps/api/src/modules/integrations/chat-widgets/chat-widgets.service.ts and chat-widgets.controller.ts:
   - create, update, pause, resume, delete, stats and the snippet
   - `WIDGET` links in chat-links.service.ts, hidden from the list
   - `w` and `p` in chat-link-redirect.service.ts
   - the "From the website button · {rule}" label from chat-link-matcher.ts
   - the notification when a button's number disconnects
-- [ ] T086 [US8] Add apps/api/src/modules/integrations/chat-widgets/widget-public.controller.ts: `/l/w/widget.js` (the static file from dist, cached for a day), `/l/w/{key}/config.json` (CORS, cache, ETag, the 005 limiter) and `/l/w/{key}/image`
-- [ ] T087 [US8] Write the script apps/api/src/widget/chat-button.ts (contracts/website-button.md: shadow root, the shared page rule matcher, the greeting dialog, and a `data-preview` mode that reads an inline config). Build it with apps/api/scripts/build-widget.mjs: compile, inline the shared matcher, wrap it in an IIFE and write dist/widget/widget.js, run by the api `build` script and copied by apps/api/Dockerfile.
-- [ ] T088 [US8] Add apps/api/src/modules/tools/whatsapp-link.controller.ts (the generator, with the 006 `qrcode`) and register it
-- [ ] T089 [P] [US8] Web:
+- [X] T086 [US8] Add apps/api/src/modules/integrations/chat-widgets/widget-public.controller.ts: `/l/w/widget.js` (the static file from dist, cached for a day), `/l/w/{key}/config.json` (CORS, cache, ETag, the 005 limiter) and `/l/w/{key}/image`
+- [X] T087 [US8] Write the script apps/api/src/widget/chat-button.ts (contracts/website-button.md: shadow root, the shared page rule matcher, the greeting dialog, and a `data-preview` mode that reads an inline config). Build it with apps/api/scripts/build-widget.mjs: compile, inline the shared matcher, wrap it in an IIFE and write dist/widget/widget.js, run by the api `build` script and copied by apps/api/Dockerfile.
+- [X] T088 [US8] Add apps/api/src/modules/tools/whatsapp-link.controller.ts (the generator, with the 006 `qrcode`) and register it
+- [X] T089 [P] [US8] Web:
   - apps/web/src/app/(dashboard)/website-button/page.tsx and website-button/[id]/page.tsx: the designer with the live preview (an iframe `srcdoc` that loads widget.js with `data-preview`), page rules with their order, the snippet, the setup guide and stats
   - apps/web/src/app/(dashboard)/tools/whatsapp-link/page.tsx
   - nav items in layout.tsx
@@ -601,23 +601,23 @@ through 006 chat links; a quick link and QR generator.
 
 ## Phase 11: Polish & Cross-Cutting Concerns
 
-- [ ] T090 [P] Add the observability of research R17:
+- [X] T090 [P] Add the observability of research R17:
   - **metrics** in apps/api/src/common/metrics/metrics.service.ts, with their instrumentation points: `wbm_otp_sends_total{result}`, `wbm_otp_send_seconds`, `wbm_messages_expired_total{reason}`, `wbm_widget_opens_total`, `wbm_reports_exported_total{type}`
   - **alerts** `WbmOtpFailing` and `WbmOtpSlow` in ops/alerts.yml, with cases in apps/api/test/unit/alerts.spec.ts
-- [ ] T091 [P] Extend retention and erasure, tests first:
+- [X] T091 [P] Extend retention and erasure, tests first:
   - **retention**, in apps/api/test/integration/retention.int-spec.ts and apps/api/src/modules/maintenance/retention.processor.ts: OTP messages after 30 days
   - **erasure**, in apps/api/test/integration/contact-deletion.int-spec.ts and apps/api/src/modules/contacts/contact-deletion.service.ts: OTP messages to the phone lose it, and duplicate-row messages are cleared like other campaign messages
-- [ ] T092 [P] Add the code leak scan for SC-002 in apps/api/test/integration/otp-no-code-leak.int-spec.ts:
+- [X] T092 [P] Add the code leak scan for SC-002 in apps/api/test/integration/otp-no-code-leak.int-spec.ts:
   - **setup:** codes sent through a success, a failure, a retry (a 5xx then success) and an idempotent repeat
   - **what is scanned:** messages, idempotency records, audit entries, outbound events, captured logs (`Logger` prototype spies) and Redis job data
   - **what must hold:** no code appears anywhere, and the jobs are gone
-- [ ] T093 [P] Empty the 009 `PENDING` list in apps/api/test/unit/audit-coverage.spec.ts once every action is recorded
-- [ ] T094 [P] Add contracts/templates-growth-api.openapi.yaml to apps/api/test/integration/rbac.int-spec.ts, skipping `get /l/w/widget.js`, `get /l/w/{key}/config.json` and `get /l/w/{key}/image`
-- [ ] T095 [P] Update the docs:
+- [X] T093 [P] Empty the 009 `PENDING` list in apps/api/test/unit/audit-coverage.spec.ts once every action is recorded
+- [X] T094 [P] Add contracts/templates-growth-api.openapi.yaml to apps/api/test/integration/rbac.int-spec.ts, skipping `get /l/w/widget.js`, `get /l/w/{key}/config.json` and `get /l/w/{key}/image`
+- [X] T095 [P] Update the docs:
   - README.md: a Templates and growth section (code templates and the API, carousels, offers, TTL, media addresses, every row, replies, reports, samples, help, the website button, the generator)
   - specs/009-templates-growth/quickstart.md, if steps changed
   - docs/research/aisensy/feature-inventory-2026-11-19.md: mark items 4.1, 4.3–4.7, 4.9, 4.11, 5.3, 5.6, 5.13, 5.14, 12.1 and 12.2, and update the roadmap
-- [ ] T096 Run every quickstart row end to end (in CI where the machine's memory does not allow it) and record the results in specs/009-templates-growth/checklists/release.md, with the pre-release items:
+- [X] T096 Run every quickstart row end to end (in CI where the machine's memory does not allow it) and record the results in specs/009-templates-growth/checklists/release.md, with the pre-release items:
   - **Meta:** the three kinds approved on the real account; a real code in under 10 seconds; the offer end time correct on a phone
   - **One-tap (optional):** the company's Android app does Meta's handshake
   - **Website:** the snippet pasted with the site's Content Security Policy allowing the link host, checked on desktop and phone
