@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { LEAD_SOURCE_KINDS } from '@wbm/shared';
 import { z } from 'zod';
 import { AppError, type ErrorDetail } from '../../common/errors/app-error.js';
 import { normalizePhone } from '../../common/phone/phone.js';
@@ -13,6 +14,8 @@ import { DripEvents } from '../growth/drips/drip-events.js';
 import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
 import { ConsentService } from './consent.service.js';
 import { normaliseTag } from './tags.controller.js';
+import { contactFilterSql } from './contact-filter.sql.js';
+import { SegmentQueryBuilder } from './segment-query.builder.js';
 
 // Contacts (FR-009, FR-012, T123). Deletion ships with US1 (ContactDeletionService).
 
@@ -39,6 +42,9 @@ export const ContactListQuerySchema = PageQuerySchema.extend({
   q: z.string().trim().max(100).optional(),
   tag: tagList,
   consent: z.enum(['OPTED_IN', 'OPTED_OUT', 'UNKNOWN']).optional(),
+  /** Feature 010: the lead source kind (FR-012) and a saved segment (FR-007). */
+  leadSource: z.enum(LEAD_SOURCE_KINDS).optional(),
+  segmentId: z.uuid().optional(),
 });
 export type ContactListQuery = z.infer<typeof ContactListQuerySchema>;
 
@@ -79,6 +85,9 @@ export function toContactDto(c: ContactWithTags) {
     consentStatus: c.consentStatus,
     consentSource: c.consentSource,
     consentAt: c.consentAt?.toISOString() ?? null,
+    // Feature 010 (FR-012): where the contact first came from.
+    leadSource: c.leadSourceKind,
+    leadSourceLabel: c.leadSource,
     createdAt: c.createdAt.toISOString(),
   };
 }
@@ -94,6 +103,7 @@ export class ContactsService {
     private readonly audience: AudienceQueryBuilder,
     private readonly dripEvents: DripEvents,
     private readonly platformEvents: PlatformEvents,
+    private readonly segments: SegmentQueryBuilder,
   ) {}
 
   private async attributeTypes(): Promise<Map<string, AttributeType>> {
@@ -169,6 +179,7 @@ export class ContactsService {
   }
 
   async list(query: ContactListQuery) {
+    if (query.segmentId) return this.listInSegment(query, query.segmentId);
     const and: Prisma.ContactWhereInput[] = [];
     if (query.q) {
       // Phone search only for phone-like input ("+971 50…", "4440001"); otherwise search names.
@@ -183,6 +194,7 @@ export class ContactsService {
     }
     for (const name of query.tag) and.push({ tags: { some: { tag: { name } } } });
     if (query.consent) and.push({ consentStatus: query.consent });
+    if (query.leadSource) and.push({ leadSourceKind: query.leadSource });
     const where: Prisma.ContactWhereInput = and.length ? { AND: and } : {};
     const [items, total] = await Promise.all([
       this.prisma.contact.findMany({
@@ -195,6 +207,20 @@ export class ContactsService {
       this.prisma.contact.count({ where }),
     ]);
     return { items: items.map(toContactDto), page: pageMeta(query, total) };
+  }
+
+  /** Feature 010 (FR-007): the list within a saved segment, with the same other filters, in SQL. */
+  private async listInSegment(query: ContactListQuery, segmentId: string) {
+    const where = Prisma.sql`(${await this.segments.whereFor(segmentId)}) AND (${contactFilterSql(query)})`;
+    const [rows, counted] = await Promise.all([
+      this.prisma.$queryRaw<Array<{ id: string }>>`
+        SELECT c.id FROM contacts c WHERE ${where} ORDER BY c.created_at DESC, c.id DESC LIMIT ${query.pageSize} OFFSET ${(query.page - 1) * query.pageSize}`,
+      this.prisma.$queryRaw<Array<{ total: bigint }>>`SELECT count(*) AS total FROM contacts c WHERE ${where}`,
+    ]);
+    const found = await this.prisma.contact.findMany({ where: { id: { in: rows.map((r) => r.id) } }, include: WITH_TAGS });
+    const byId = new Map(found.map((c) => [c.id, c]));
+    const items = rows.map((r) => byId.get(r.id)).filter((c): c is NonNullable<typeof c> => c !== undefined);
+    return { items: items.map(toContactDto), page: pageMeta(query, Number(counted[0]?.total ?? 0)) };
   }
 
   /** `source` is what webhook events report; 'api' also raises the drips' API_CREATED starting event (005). */
@@ -273,6 +299,33 @@ export class ContactsService {
       await this.consent.setStatus(id, input.consentStatus, 'MANUAL', { note: input.consentSourceNote ?? null, actorUserId });
     }
     return toContactDto(await this.prisma.contact.findUniqueOrThrow({ where: { id }, include: WITH_TAGS }));
+  }
+
+  /**
+   * Feature 010 (research R3): adds or removes tags on a batch of contacts for a bulk action, with the
+   * 005 drip events and the 006 webhook events of the 001 bulk route. Returns the links changed.
+   */
+  async tagMany(contactIds: string[], tagIds: string[], add: boolean): Promise<number> {
+    if (!contactIds.length || !tagIds.length) return 0;
+    if (add) {
+      return this.prisma.$transaction(async (tx) => {
+        const existing = await tx.contact.findMany({ where: { id: { in: contactIds } }, select: { id: true } });
+        const links = await tx.contactTag.createManyAndReturn({
+          data: existing.flatMap((c) => tagIds.map((tagId) => ({ contactId: c.id, tagId }))),
+          skipDuplicates: true,
+          select: { contactId: true, tagId: true },
+        });
+        await this.dripEvents.recordTagAddedToMany(tx, links);
+        await this.platformEvents.tagLinksChanged(tx, links);
+        return links.length;
+      });
+    }
+    const removed = (await this.platformEvents.listens('contact.tags_changed'))
+      ? await this.prisma.contactTag.findMany({ where: { tagId: { in: tagIds }, contactId: { in: contactIds } }, select: { contactId: true, tagId: true } })
+      : [];
+    const { count } = await this.prisma.contactTag.deleteMany({ where: { tagId: { in: tagIds }, contactId: { in: contactIds } } });
+    await this.platformEvents.tagLinksChanged(this.prisma, [], removed);
+    return count;
   }
 
   /** POST /contacts/bulk: returns how many contacts changed. */

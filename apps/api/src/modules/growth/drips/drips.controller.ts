@@ -11,6 +11,7 @@ import { csvField } from '../../campaigns/csv.js';
 import { DripResultsService, MetricPageQuerySchema, MetricQuerySchema, type MetricPageQuery, type MetricQuery } from './drip-results.service.js';
 import { CreateDripSchema, DripSettingsSchema, DripStepsSchema, DripsService, type CreateDripInput, type DripSettingsInput, type DripStepsInput } from './drips.service.js';
 import { EnrolInputSchema, EnrolmentListQuerySchema, EnrolmentsService, type EnrolInput, type EnrolmentListQuery } from './enrolments.service.js';
+import { BulkActionsService } from '../../contacts/bulk-actions.service.js';
 
 const DripListQuerySchema = z.object({ status: z.enum(['DRAFT', 'ACTIVE', 'PAUSED', 'ARCHIVED']).optional() });
 const NEWLINE = '\n';
@@ -23,6 +24,7 @@ export class DripsController {
     private readonly enrolments: EnrolmentsService,
     private readonly results: DripResultsService,
     private readonly audit: AuditService,
+    private readonly bulk: BulkActionsService,
   ) {}
 
   private actor(user: RequestUser, req: AuthedRequest) {
@@ -96,7 +98,19 @@ export class DripsController {
   @Post(':id/enrolments')
   @HttpCode(200)
   @Require('campaigns.launch')
-  enrol(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(EnrolInputSchema)) body: EnrolInput, @CurrentUser() user: RequestUser, @Req() req: AuthedRequest) {
+  async enrol(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodValidationPipe(EnrolInputSchema)) body: EnrolInput,
+    @CurrentUser() user: RequestUser,
+    @Req() req: AuthedRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    // Feature 010 (FR-005): a segment is enrolled in the background; the answer is the bulk action.
+    if ('segmentId' in body) {
+      await this.enrolments.assertCanEnrol(id);
+      res.status(202);
+      return this.bulk.create('DRIP_ENROL', { dripId: id }, { segmentId: body.segmentId }, this.actor(user, req));
+    }
     return this.enrolments.enrol(id, body, this.actor(user, req));
   }
 

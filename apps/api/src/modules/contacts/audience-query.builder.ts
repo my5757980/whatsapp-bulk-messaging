@@ -4,6 +4,7 @@ import { AppError, type ErrorDetail } from '../../common/errors/app-error.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { validateAttributeValue, type AttributeType } from './attribute-validator.js';
+import { SegmentQueryBuilder } from './segment-query.builder.js';
 
 // Filter-based audiences (contract AudienceFilter, FR-014, T125). Rules are combined with AND
 // and compiled to parameterised SQL over `contacts c`. Consent is applied separately:
@@ -36,8 +37,8 @@ const OPERATORS_BY_TYPE: Record<AttributeType, ReadonlySet<AttributeOperator>> =
 
 const escapeLike = (value: string) => value.replace(/[\\%_]/g, (c) => `\\${c}`);
 
-function compileRule(rule: AudienceRule, index: number, defs: ReadonlyMap<string, AttributeType>, errors: ErrorDetail[]): Prisma.Sql | null {
-  const field = `audienceFilter.all.${index}`;
+/** Compiles one tag or attribute rule (also used by segments, feature 010, with their own field path). */
+export function compileRule(rule: AudienceRule, index: number, defs: ReadonlyMap<string, AttributeType>, errors: ErrorDetail[], field = `audienceFilter.all.${index}`): Prisma.Sql | null {
   if ('tag' in rule) {
     const name = rule.tag.trim().toLowerCase();
     return Prisma.sql`EXISTS (SELECT 1 FROM contact_tags ct JOIN tags t ON t.id = ct.tag_id WHERE ct.contact_id = c.id AND t.name = ${name})`;
@@ -113,13 +114,17 @@ export interface AudienceContact {
   consent_status: 'OPTED_IN' | 'OPTED_OUT' | 'UNKNOWN';
 }
 
-export type FilterAudience = { type: 'FILTER'; filter: AudienceFilter } | { type: 'ALL_OPTED_IN' };
+/** Feature 010 adds SEGMENT: a saved segment, compiled when the audience is read (research R2). */
+export type FilterAudience = { type: 'FILTER'; filter: AudienceFilter } | { type: 'ALL_OPTED_IN' } | { type: 'SEGMENT'; segmentId: string };
 
 type Db = PrismaService | Prisma.TransactionClient;
 
 @Injectable()
 export class AudienceQueryBuilder {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly segments: SegmentQueryBuilder,
+  ) {}
 
   async definitions(db: Db = this.prisma): Promise<AttributeDef[]> {
     return db.attributeDefinition.findMany({ select: { key: true, type: true } });
@@ -131,7 +136,13 @@ export class AudienceQueryBuilder {
   }
 
   private async condition(audience: FilterAudience, db: Db): Promise<Prisma.Sql> {
+    if (audience.type === 'SEGMENT') return this.segments.whereFor(audience.segmentId, db);
     return audience.type === 'ALL_OPTED_IN' ? Prisma.sql`c.consent_status = 'OPTED_IN'` : this.compile(audience.filter, db);
+  }
+
+  /** Throws when the audience cannot be read (a missing or broken segment, a bad filter). */
+  async check(audience: FilterAudience, db: Db = this.prisma): Promise<void> {
+    await this.condition(audience, db);
   }
 
   /** Eligible and excluded counts for POST /contacts/audience-preview and campaign estimates. */

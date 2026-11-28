@@ -62,9 +62,13 @@ export class AudienceSnapshotService {
     private readonly codes: TrackedLinkCodes,
   ) {}
 
-  /** The filter audience of a FILTER / ALL_OPTED_IN campaign; FILTER needs at least one rule. */
-  filterAudience(campaign: Pick<Campaign, 'audienceType' | 'audienceFilter'>): FilterAudience {
+  /** The filter audience of a FILTER / ALL_OPTED_IN / SEGMENT campaign; FILTER needs at least one rule. */
+  filterAudience(campaign: Pick<Campaign, 'audienceType' | 'audienceFilter' | 'segmentId'>): FilterAudience {
     if (campaign.audienceType === 'ALL_OPTED_IN') return { type: 'ALL_OPTED_IN' };
+    if (campaign.audienceType === 'SEGMENT') {
+      if (!campaign.segmentId) throw AppError.validation('Choose a segment', [{ field: 'segmentId', issue: 'is required for a segment audience' }]);
+      return { type: 'SEGMENT', segmentId: campaign.segmentId };
+    }
     const filter = campaign.audienceFilter as AudienceFilter | null;
     if (!filter?.all?.length) {
       throw AppError.validation('Add at least one filter rule, or choose All opted-in', [{ field: 'audienceFilter', issue: 'needs at least one rule' }]);
@@ -73,13 +77,17 @@ export class AudienceSnapshotService {
   }
 
   /** Throws a readable error when the campaign's audience cannot be evaluated yet. */
-  async assertReady(campaign: Pick<Campaign, 'id' | 'audienceType' | 'audienceFilter' | 'sourceCampaignId' | 'retargetStatus'>, db: Db = this.prisma): Promise<void> {
+  async assertReady(campaign: Pick<Campaign, 'id' | 'audienceType' | 'audienceFilter' | 'segmentId' | 'sourceCampaignId' | 'retargetStatus'>, db: Db = this.prisma): Promise<void> {
     if (campaign.audienceType === 'UPLOAD') await this.readyUpload(campaign.id, db);
     else if (campaign.audienceType === 'RETARGET') {
       if (!campaign.sourceCampaignId || !campaign.retargetStatus) {
         throw AppError.validation('This retarget draft has no source campaign', [{ field: 'audienceType', issue: 'choose another audience' }]);
       }
-    } else this.filterAudience(campaign);
+    } else {
+      const audience = this.filterAudience(campaign);
+      // Feature 010: a missing or broken segment refuses the estimate and the launch (SEGMENT_BROKEN).
+      if (audience.type === 'SEGMENT') await this.audience.check(audience, db);
+    }
   }
 
   /** Contacts of the source campaign whose message is in the retarget group (RETARGET; 005 adds groups). */
@@ -120,7 +128,7 @@ export class AudienceSnapshotService {
 
   /** Yields recipient decisions in batches, in upload order. */
   async *evaluate(
-    campaign: Pick<Campaign, 'id' | 'audienceType' | 'audienceFilter' | 'variableMapping' | 'sourceCampaignId' | 'retargetStatus' | 'paymentConfig'> & { offerConfig?: unknown; allowDuplicateRows?: boolean },
+    campaign: Pick<Campaign, 'id' | 'audienceType' | 'audienceFilter' | 'segmentId' | 'variableMapping' | 'sourceCampaignId' | 'retargetStatus' | 'paymentConfig'> & { offerConfig?: unknown; allowDuplicateRows?: boolean },
     template: Pick<Template, 'category' | 'variables'>,
     db: Db = this.prisma,
     payment: CampaignPaymentContext | null = null,
