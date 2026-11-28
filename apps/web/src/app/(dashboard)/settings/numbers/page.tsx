@@ -47,6 +47,15 @@ export default function NumbersPage() {
         <div>
           <h1 className="text-2xl font-semibold">WhatsApp numbers</h1>
           <p className="text-sm text-muted-foreground">Numbers connected through the WhatsApp Cloud API. Access tokens are stored encrypted and never shown again.</p>
+          {/* Feature 010 (US8): guides for moving a number in and out. */}
+          <p className="mt-1 flex flex-wrap gap-3 text-sm">
+            <Link href="/numbers/guides/move-here" className="underline">
+              Move a number here
+            </Link>
+            <Link href="/numbers/guides/move-back" className="underline">
+              Move a number back to the app
+            </Link>
+          </p>
         </div>
         <Can permission="numbers.manage">
           <div className="flex flex-wrap gap-2">
@@ -113,6 +122,10 @@ export default function NumbersPage() {
                         >
                           <RefreshCw className="h-3.5 w-3.5" /> Refresh
                         </Button>
+                        {/* Feature 010 (US7): the business profile, name status and blue tick checklist. */}
+                        <Button variant="outline" size="sm" asChild>
+                          <Link href={`/numbers/${n.id}/profile`}>Profile</Link>
+                        </Button>
                         <Can permission="numbers.manage">
                           <HealthCheckDialog number={n} />
                           <EditNumberDialog number={n} onSaved={invalidate} />
@@ -127,6 +140,7 @@ export default function NumbersPage() {
                               description="Running campaigns on this number will be paused. You can reconnect later by entering a new access token."
                               confirmLabel="Disconnect"
                               confirmVariant="destructive"
+                              typeToConfirm={n.displayPhoneNumber}
                               onConfirm={() =>
                                 api(`/numbers/${n.id}`, { method: 'DELETE' })
                                   .then(() => {

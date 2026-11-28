@@ -21,6 +21,9 @@ import { GlobalAttributesController } from './settings/global-attributes.control
 import { KeywordRepliesController, KeywordRepliesService } from './settings/keyword-replies.js';
 import { DateAutomationsController } from './automations/date-automations.controller.js';
 import { DateAutomationsService } from './automations/date-automations.service.js';
+import { BusinessProfileController, ObaChecklistController } from './numbers/business-profile.controller.js';
+import { BusinessProfileService } from './numbers/business-profile.service.js';
+import { ObaChecklistService } from './numbers/oba-checklist.service.js';
 import { GlobalAttributesService } from './settings/global-attributes.service.js';
 import { AutoTagService } from './contacts/auto-tags.service.js';
 import { BulkActionsController } from './contacts/bulk-actions.controller.js';
@@ -111,6 +114,8 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     GlobalAttributesService,
     KeywordRepliesService,
     DateAutomationsService,
+    BusinessProfileService,
+    ObaChecklistService,
   ],
   exports: [
     NumbersService,
@@ -150,6 +155,8 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     GlobalAttributesService,
     KeywordRepliesService,
     DateAutomationsService,
+    BusinessProfileService,
+    ObaChecklistService,
   ],
 })
 export class DomainModule {}
@@ -179,6 +186,8 @@ export class DomainModule {}
     GlobalAttributesController,
     KeywordRepliesController,
     DateAutomationsController,
+    BusinessProfileController,
+    ObaChecklistController,
     TagsController,
     AttributesController,
     RateCardController,

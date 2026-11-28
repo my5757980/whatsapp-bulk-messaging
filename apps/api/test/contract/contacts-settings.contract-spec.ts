@@ -1,9 +1,12 @@
 import argon2 from 'argon2';
+import nock from 'nock';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { totpCode } from '../../src/common/auth/totp.js';
 import { BulkTagsProcessor } from '../../src/modules/contacts/bulk-tags.processor.js';
-import { digits, seedContact, seedNumber, seedTemplate, uaePhone } from '../support/fixtures.js';
+import { FakeBusinessGraph } from '../support/fake-business-graph.js';
+import { digits, restoreNetwork, seedContact, seedNumber, seedTemplate, uaePhone, useNockLocalOnly } from '../support/fixtures.js';
+import { pngHeader } from '../support/images.js';
 import { createTestContext, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
 import { expectMatchesContract } from './openapi-validator.js';
 
@@ -189,6 +192,35 @@ describe('Contacts, settings and security API (010) contract', () => {
       await check('post', '/users/{id}/2fa/reset', await send(admin, 'post', `/users/${admin.userId}/2fa/reset`), 409);
       await check('post', '/users/{id}/2fa/reset', await send(admin, 'post', '/users/0190a000-0000-7000-8000-00000000abcd/2fa/reset'), 404);
       await check('post', '/users/{id}/2fa/reset', await send(admin, 'post', `/users/${user.id}/2fa/reset`), 204);
+    });
+  });
+
+  describe('US7 business profile and blue tick checklist', () => {
+    it('/numbers/{id}/business-profile*, /oba-checklist', async () => {
+      useNockLocalOnly();
+      try {
+        const number = await seedNumber(ctx);
+        const off = await seedNumber(ctx, { connectionStatus: 'DISCONNECTED' });
+        const graph = new FakeBusinessGraph().number(number.phoneNumberId, { about: 'Contract shop' }).install();
+        await check('get', '/numbers/{id}/business-profile', await manager.agent.get(`/api/numbers/${number.id}/business-profile`), 200);
+        await check('get', '/numbers/{id}/business-profile', await manager.agent.get(`/api/numbers/${off.id}/business-profile`), 409);
+        await check('get', '/numbers/{id}/business-profile', await manager.agent.get('/api/numbers/0190a000-0000-7000-8000-00000000abcd/business-profile'), 404);
+        await check('put', '/numbers/{id}/business-profile', await send(admin, 'put', `/numbers/${number.id}/business-profile`, { about: 'Contract shop, open daily' }), 200);
+        await check('put', '/numbers/{id}/business-profile', await send(admin, 'put', `/numbers/${number.id}/business-profile`, { about: '' }), 422);
+        graph.failNextPost = { status: 400, code: 100, message: 'Param email is not valid' };
+        await check('put', '/numbers/{id}/business-profile', await send(admin, 'put', `/numbers/${number.id}/business-profile`, { email: 'shop@acme.test' }), 502);
+        const picture = (file: Buffer, name: string, type: string) =>
+          admin.agent.post(`/api/numbers/${number.id}/business-profile/picture`).set('X-CSRF-Token', admin.csrf).attach('file', file, { filename: name, contentType: type });
+        await check('post', '/numbers/{id}/business-profile/picture', await picture(pngHeader(512, 512), 'logo.png', 'image/png'), 200);
+        await check('post', '/numbers/{id}/business-profile/picture', await picture(pngHeader(512, 300), 'wide.png', 'image/png'), 422);
+
+        await check('get', '/oba-checklist', await manager.agent.get('/api/oba-checklist'), 200);
+        await check('put', '/oba-checklist', await send(admin, 'put', '/oba-checklist', { steps: { 'display-name': true }, result: null }), 200);
+        await check('put', '/oba-checklist', await send(admin, 'put', '/oba-checklist', { steps: { nope: true } }), 422);
+      } finally {
+        nock.cleanAll();
+        restoreNetwork();
+      }
     });
   });
 });
