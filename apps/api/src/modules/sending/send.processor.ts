@@ -76,7 +76,26 @@ export class SendProcessor {
     const outcome = await this.send(messageId, attempt, codeEnc);
     // Feature 009: one-time code status for the company system (send-time failures; webhooks do the rest).
     if (outcome.result === 'failed' || outcome.result === 'cancelled') await this.otpEvent(messageId);
+    await this.occurrenceOutcome(messageId, outcome);
     return outcome;
+  }
+
+  /** Feature 010 (US5): a date automation's occurrence follows its message's send outcome. */
+  private async occurrenceOutcome(messageId: string, outcome: SendOutcome): Promise<void> {
+    const result =
+      outcome.result === 'sent'
+        ? { status: 'SENT' as const, reason: null }
+        : outcome.result === 'failed' || outcome.result === 'blocked'
+          ? { status: 'FAILED' as const, reason: 'send_failed' }
+          : outcome.result === 'skipped'
+            ? { status: 'SKIPPED' as const, reason: outcome.reason.toLowerCase().slice(0, 40) }
+            : outcome.result === 'cancelled'
+              ? { status: 'SKIPPED' as const, reason: 'cancelled' }
+              : null;
+    if (!result) return;
+    await this.prisma.dateAutomationOccurrence
+      .updateMany({ where: { messageId, status: 'PENDING' }, data: result })
+      .catch((error: unknown) => this.logger.warn({ messageId, err: (error as Error).message }, 'Could not record the date automation outcome'));
   }
 
   private async otpEvent(messageId: string): Promise<void> {

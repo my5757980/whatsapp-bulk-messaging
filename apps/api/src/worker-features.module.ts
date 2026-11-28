@@ -62,6 +62,7 @@ import { QualityHandler } from './modules/webhooks/handlers/quality.handler.js';
 import { StatusHandler } from './modules/webhooks/handlers/status.handler.js';
 import { TemplateStatusHandler } from './modules/webhooks/handlers/template-status.handler.js';
 import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
+import { DateAutomationTickProcessor } from './modules/automations/date-automation-tick.processor.js';
 
 /**
  * Background processors and webhook handlers (ADR-0002). Imported by the worker process and by
@@ -90,6 +91,7 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     ChatWidgetCheckProcessor,
     // Feature 010: bulk tag actions and segment drip enrolments on the `bulk` queue.
     BulkTagsProcessor,
+    DateAutomationTickProcessor,
     DripSegmentEnrolProcessor,
     SendQueueManager,
     DispatcherProcessor,
