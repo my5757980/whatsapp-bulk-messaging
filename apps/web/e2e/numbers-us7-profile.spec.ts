@@ -23,7 +23,7 @@ test('US7: business profile, picture, declined name and the blue tick checklist'
   // Edit the profile.
   await page.getByLabel(/^About/).fill(`Sofas and beds ${suffix}`);
   await page.getByLabel('Website', { exact: true }).fill('https://acme.example');
-  await page.getByLabel('Category').selectOption('RETAIL');
+  await page.getByLabel('Category', { exact: true }).selectOption('RETAIL');
   await page.getByRole('button', { name: 'Save profile' }).click();
   await expect(page.getByText('Profile saved on WhatsApp')).toBeVisible();
   await page.reload();

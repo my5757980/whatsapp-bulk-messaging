@@ -310,8 +310,22 @@ function Checklist() {
   const checklist = useQuery({ queryKey: ['oba-checklist'], queryFn: () => api<ObaChecklist>('/oba-checklist') });
   const save = useMutation({
     mutationFn: (body: Record<string, unknown>) => api<ObaChecklist>('/oba-checklist', { method: 'PUT', json: body }),
+    // Ticks and the result change at once; an error puts the saved values back.
+    onMutate: (body: Record<string, unknown>) =>
+      queryClient.setQueryData<ObaChecklist>(['oba-checklist'], (old) => {
+        if (!old) return old;
+        const steps = (body.steps ?? {}) as Record<string, boolean>;
+        return {
+          ...old,
+          ...(body.result !== undefined ? { result: body.result as ObaChecklist['result'] } : {}),
+          steps: old.steps.map((s) => (s.id in steps ? { ...s, done: steps[s.id]!, at: steps[s.id] ? new Date().toISOString() : null } : s)),
+        };
+      }),
     onSuccess: (saved) => queryClient.setQueryData(['oba-checklist'], saved),
-    onError: (e) => toast.error(errorMessage(e)),
+    onError: (e) => {
+      toast.error(errorMessage(e));
+      void queryClient.invalidateQueries({ queryKey: ['oba-checklist'] });
+    },
   });
   const c = checklist.data;
   return (

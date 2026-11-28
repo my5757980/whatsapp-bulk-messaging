@@ -35,14 +35,14 @@ delivery order. Pushes are batched: US1–US2 (the MVP), US3–US6, then US7–U
 - [X] T001 [P] Register the 010 contract:
   - add specs/010-contacts-settings-security/contracts/contacts-settings-api.openapi.yaml to the `lint:contracts` script in package.json
   - add `'contacts-settings-api.openapi.yaml'` (feature folder `010-contacts-settings-security`) to `ContractFile` and `FEATURE_OF` in apps/api/test/contract/openapi-validator.ts
-- [ ] T002 [P] Add tools/mock-meta/src/business-profile.ts, mounted from tools/mock-meta/src/server.ts (contracts/meta-business-profile.md):
+- [X] T002 [P] Add tools/mock-meta/src/business-profile.ts, mounted from tools/mock-meta/src/server.ts (contracts/meta-business-profile.md):
   - `GET` and `POST /{phone-number-id}/whatsapp_business_profile` with an in-memory profile per number and Meta-style errors beyond the limits
   - `GET /{phone-number-id}?fields=verified_name,name_status,new_name_status,quality_rating,whatsapp_business_manager_messaging_limit`
   - `POST /mock/name-status { phoneNumberId, nameStatus, newNameStatus }`
-- [ ] T003 [P] Add a TOTP helper for tests and the quickstart:
+- [X] T003 [P] Add a TOTP helper for tests and the quickstart:
   - apps/web/e2e/totp.ts (RFC 6238 with `node:crypto`, used by e2e)
   - `npm run tool:totp -w @wbm/api -- --secret <base32>` (apps/api/scripts/totp.ts) that prints the current code
-- [ ] T004 [P] Add tools/perf/segments-200k.ts and the `perf:segments` script in apps/api/package.json:
+- [X] T004 [P] Add tools/perf/segments-200k.ts and the `perf:segments` script in apps/api/package.json:
   - seeds 200,000 contacts with tags, attributes and campaign messages
   - times the count of a 10-rule segment, printing `EXPLAIN ANALYZE` (SC-001)
 
@@ -320,7 +320,7 @@ the replies (quickstart US4).
   - the 001 settings refuse a keyword in both lists
   - audit `keyword_replies.changed`
 - [X] T051 [P] [US4] Write the contract cases for `/settings/keyword-replies`
-- [ ] T052 [P] [US4] Write the Playwright e2e apps/web/e2e/settings-us4-keywords.spec.ts: set the replies, send STOP with the inbound CLI, and see the reply in the chat
+- [X] T052 [P] [US4] Write the Playwright e2e apps/web/e2e/settings-us4-keywords.spec.ts: set the replies, send STOP with the inbound CLI, and see the reply in the chat
 
 ### Implementation for User Story 4
 
@@ -443,8 +443,8 @@ tick checklist steps (quickstart US7).
 
 ### Tests for User Story 7 ⚠️
 
-- [ ] T073 [P] [US7] Write apps/api/test/support/fake-business-graph.ts (nock): profile `GET` and `POST`, the number status fields, the Resumable Upload steps, and Meta-style errors on demand
-- [ ] T074 [P] [US7] Write the integration test apps/api/test/integration/business-profile.int-spec.ts:
+- [X] T073 [P] [US7] Write apps/api/test/support/fake-business-graph.ts (nock): profile `GET` and `POST`, the number status fields, the Resumable Upload steps, and Meta-style errors on demand
+- [X] T074 [P] [US7] Write the integration test apps/api/test/integration/business-profile.int-spec.ts:
   - `GET` combines the profile and the number status
   - `PUT` sends only changed fields and returns Meta's values
   - our limit checks refuse before calling Meta; `META_REFUSED` keeps Meta's field and message
@@ -454,7 +454,7 @@ tick checklist steps (quickstart US7).
   - audit with field names only
   - the checklist `GET` and `PUT`
   - managers can read, only admins can change
-- [ ] T075 [P] [US7] Write the contract cases for `/numbers/{id}/business-profile*` and `/oba-checklist`
+- [X] T075 [P] [US7] Write the contract cases for `/numbers/{id}/business-profile*` and `/oba-checklist`
 - [ ] T076 [P] [US7] Write the Playwright e2e apps/web/e2e/numbers-us7-profile.spec.ts:
   - edit the profile and upload a picture
   - a refused picture
@@ -463,12 +463,12 @@ tick checklist steps (quickstart US7).
 
 ### Implementation for User Story 7
 
-- [ ] T077 [US7] Write apps/api/src/modules/numbers/business-profile.service.ts and business-profile.controller.ts (contracts/meta-business-profile.md):
+- [X] T077 [US7] Write apps/api/src/modules/numbers/business-profile.service.ts and business-profile.controller.ts (contracts/meta-business-profile.md):
   - the Graph calls through the 001 client; a 5-minute status cache; the `number_business_profiles` row
   - the picture through the Resumable Upload flow
   - error mapping; audit `business_profile.changed` with field names; remove it from `PENDING`
-- [ ] T078 [US7] Read the messaging limit from `whatsapp_business_manager_messaging_limit` in the 001 number sync (apps/api/src/modules/numbers/number-sync.processor.ts), keeping the `messaging_limit_tier` column
-- [ ] T079 [US7] Write apps/api/src/modules/numbers/oba-checklist.service.ts and oba-checklist.controller.ts (shared steps plus the stored progress; audit `oba_checklist.changed`; remove it from `PENDING`)
+- [X] T078 [US7] Read the messaging limit from `whatsapp_business_manager_messaging_limit` in the 001 number sync (apps/api/src/modules/numbers/number-sync.processor.ts), keeping the `messaging_limit_tier` column
+- [X] T079 [US7] Write apps/api/src/modules/numbers/oba-checklist.service.ts and oba-checklist.controller.ts (shared steps plus the stored progress; audit `oba_checklist.changed`; remove it from `PENDING`)
 - [ ] T080 [P] [US7] Write apps/web/src/app/(dashboard)/numbers/[id]/profile/page.tsx:
   - the profile form with the shared limits, and a picture upload with a square check before upload
   - name status, quality and limit badges, with the steps for declined names
@@ -482,23 +482,23 @@ tick checklist steps (quickstart US7).
 
 **Independent Test**: open both guides and check every step, warning and link (quickstart US8).
 
-- [ ] T081 [P] [US8] Write the Playwright e2e apps/web/e2e/numbers-us8-guides.spec.ts: both guides from the numbers page, every step from the shared data, and the link to the number removal with its typed confirmation
-- [ ] T082 [US8] Write apps/web/src/app/(dashboard)/numbers/guides/[guide]/page.tsx from the shared `NUMBER_GUIDES`, with links from apps/web/src/app/(dashboard)/numbers/page.tsx and the "move back" link to the existing removal dialog
+- [X] T081 [P] [US8] Write the Playwright e2e apps/web/e2e/numbers-us8-guides.spec.ts: both guides from the numbers page, every step from the shared data, and the link to the number removal with its typed confirmation
+- [X] T082 [US8] Write apps/web/src/app/(dashboard)/numbers/guides/[guide]/page.tsx from the shared `NUMBER_GUIDES`, with links from apps/web/src/app/(dashboard)/numbers/page.tsx and the "move back" link to the existing removal dialog
 
 ---
 
 ## Phase 11: Polish & Cross-Cutting Concerns
 
-- [ ] T083 [P] Add the observability of research R13:
+- [X] T083 [P] Add the observability of research R13:
   - **metrics** in apps/api/src/common/metrics/metrics.service.ts, with their instrumentation points: `wbm_segment_query_seconds`, `wbm_bulk_actions_total{kind,result}`, `wbm_contacts_exported_total`, `wbm_keyword_replies_total{kind,result}`, `wbm_date_automation_messages_total{result}` and `wbm_login_second_step_total{result}`
   - **alerts** `WbmDateAutomationBehind` and `WbmSecondStepFailures` in ops/alerts.yml, with cases in apps/api/test/unit/alerts.spec.ts
-- [ ] T084 [P] Extend retention and erasure, tests first:
+- [X] T084 [P] Extend retention and erasure, tests first:
   - **retention**, in apps/api/test/integration/retention.int-spec.ts and apps/api/src/modules/maintenance/retention.processor.ts: bulk actions after 90 days; occurrences with their messages
   - **erasure**, in apps/api/test/integration/contact-deletion.int-spec.ts and apps/api/src/modules/contacts/contact-deletion.service.ts: a contact's occurrences are deleted, and exports never include erased contacts
-- [ ] T085 [P] Empty the 010 `PENDING` list in apps/api/test/unit/audit-coverage.spec.ts once every action is recorded
-- [ ] T086 [P] Add contracts/contacts-settings-api.openapi.yaml to apps/api/test/integration/rbac.int-spec.ts (routes without x-permission are skipped by the test)
-- [ ] T087 [P] Run `perf:segments` in CI (a manual workflow job or the build-test job) and record SC-001 in the release checklist
-- [ ] T088 [P] Update the docs:
+- [X] T085 [P] Empty the 010 `PENDING` list in apps/api/test/unit/audit-coverage.spec.ts once every action is recorded
+- [X] T086 [P] Add contracts/contacts-settings-api.openapi.yaml to apps/api/test/integration/rbac.int-spec.ts (routes without x-permission are skipped by the test)
+- [X] T087 [P] Run `perf:segments` in CI (a manual workflow job or the build-test job) and record SC-001 in the release checklist
+- [X] T088 [P] Update the docs:
   - README.md: a Contacts, settings and security section
   - specs/010-contacts-settings-security/quickstart.md, if steps changed
   - docs/research/aisensy/feature-inventory-2026-11-19.md: mark items 1.3, 1.4, 1.6, 2.3, 3.2, 3.3, 3.5, 3.8, 3.9, 3.10 and 5.11; also mark the 002 and 003 rows built earlier (2.4, 2.5, 3.11, 6.1–6.11, 6.13, 6.14, 7.1, 7.2); update the roadmap

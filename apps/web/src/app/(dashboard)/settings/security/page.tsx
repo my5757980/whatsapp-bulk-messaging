@@ -34,11 +34,16 @@ function Security() {
   const settings = useQuery({ queryKey: securityKey, queryFn: () => api<SecuritySettings>('/settings/security') });
   const save = useMutation({
     mutationFn: (require2fa: boolean) => api<SecuritySettings>('/settings/security', { method: 'PUT', json: { require2fa } }),
+    // The box changes at once; an error puts the saved value back.
+    onMutate: (require2fa: boolean) => queryClient.setQueryData<SecuritySettings>(securityKey, (old) => (old ? { ...old, require2fa } : old)),
     onSuccess: (s) => {
       queryClient.setQueryData(securityKey, s);
       toast.success(s.require2fa ? 'Two-factor sign-in is now required' : 'Two-factor sign-in is no longer required');
     },
-    onError: toastError,
+    onError: (error) => {
+      toastError(error);
+      void queryClient.invalidateQueries({ queryKey: securityKey });
+    },
   });
   const reset = useMutation({
     mutationFn: (userId: string) => api(`/users/${userId}/2fa/reset`, { method: 'POST' }),
