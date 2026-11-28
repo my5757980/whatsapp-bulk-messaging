@@ -11,7 +11,8 @@ import { campaignPaymentConfig, type CampaignPaymentConfig, type CampaignPayment
 import { retargetCondition, type RetargetGroup } from './retarget.service.js';
 import { HEADER_MEDIA_KEY, OFFER_CODE_PARAM } from '@wbm/shared';
 import { HEADER_MEDIA_URL_PARAM, OFFER_ENDS_PARAM } from '../sending/template-payload.builder.js';
-import { resolveVariables, type VariableMapping, type VariableSource } from './variable-resolver.js';
+import { resolveVariables, type VariableMapping, type VariableSource, globalKeys } from './variable-resolver.js';
+import { GlobalAttributesService } from '../settings/global-attributes.service.js';
 
 // Recipient evaluation shared by the estimate (T095) and the launch snapshot (T096). Consent is
 // enforced here first (research R11): opted-out contacts are skipped, and MARKETING templates
@@ -60,6 +61,7 @@ export class AudienceSnapshotService {
     private readonly prisma: PrismaService,
     private readonly audience: AudienceQueryBuilder,
     private readonly codes: TrackedLinkCodes,
+    private readonly globals: GlobalAttributesService,
   ) {}
 
   /** The filter audience of a FILTER / ALL_OPTED_IN / SEGMENT campaign; FILTER needs at least one rule. */
@@ -77,7 +79,14 @@ export class AudienceSnapshotService {
   }
 
   /** Throws a readable error when the campaign's audience cannot be evaluated yet. */
-  async assertReady(campaign: Pick<Campaign, 'id' | 'audienceType' | 'audienceFilter' | 'segmentId' | 'sourceCampaignId' | 'retargetStatus'>, db: Db = this.prisma): Promise<void> {
+  async assertReady(campaign: Pick<Campaign, 'id' | 'audienceType' | 'audienceFilter' | 'segmentId' | 'sourceCampaignId' | 'retargetStatus'> & { variableMapping?: unknown }, db: Db = this.prisma): Promise<void> {
+    // Feature 010 (FR-016): every global attribute a variable uses must have a value.
+    const keys = globalKeys((campaign.variableMapping ?? {}) as VariableMapping);
+    if (keys.length) {
+      const values = await this.globals.values();
+      const empty = keys.filter((k) => !values[k]?.trim());
+      if (empty.length) throw AppError.validation('A global attribute used by a variable has no value', empty.map((k) => ({ field: `global.${k}`, issue: 'has no value' })), 'GLOBAL_ATTRIBUTE_EMPTY');
+    }
     if (campaign.audienceType === 'UPLOAD') await this.readyUpload(campaign.id, db);
     else if (campaign.audienceType === 'RETARGET') {
       if (!campaign.sourceCampaignId || !campaign.retargetStatus) {
@@ -143,7 +152,9 @@ export class AudienceSnapshotService {
     const mapping = (campaign.variableMapping ?? {}) as VariableMapping;
     const marketing = template.category === 'MARKETING';
     const offer = (campaign.offerConfig ?? null) as CampaignOfferConfig | null;
-    const decide = (c: AudienceContact, row: Record<string, unknown>) => this.decide(c, row, variables, mapping, marketing, samples, plan, offer);
+    // Feature 010 (R7): global attributes in force at evaluation (the launch snapshot).
+    const globals = globalKeys(mapping).length ? await this.globals.values() : {};
+    const decide = (c: AudienceContact, row: Record<string, unknown>) => this.decide(c, row, variables, mapping, marketing, samples, plan, offer, globals);
 
     if (campaign.audienceType === 'RETARGET') {
       // Uploaded columns of the source campaign still feed "column" variables.
@@ -216,6 +227,7 @@ export class AudienceSnapshotService {
     samples: Record<string, string>,
     plan: PaymentPlan | null = null,
     offer: CampaignOfferConfig | null = null,
+    globals: Readonly<Record<string, string>> = {},
   ): RecipientDecision {
     const base = { contactId: contact.id, phoneE164: contact.phone_e164, countryCode: contact.country_code, params: {}, customerName: contact.name };
     if (contact.consent_status === 'OPTED_OUT') return { ...base, status: 'SKIPPED', skipReason: 'OPTED_OUT' };
@@ -229,6 +241,7 @@ export class AudienceSnapshotService {
     const resolved = resolveVariables(variables, mapping, {
       contact: { name: contact.name, phone: contact.phone_e164, attributes: contact.attributes },
       row,
+      globals,
       ...(payment && plan ? { payment: paymentWords({ ...payment, amountMinor: BigInt(payment.amountMinor), currency: plan.context.currency, reference: null }, plan.context.linkBase, plan.context.timeZone) } : {}),
     });
     if (!resolved.ok) return { ...base, status: 'SKIPPED', skipReason: 'MISSING_VARIABLE' };

@@ -16,6 +16,7 @@ import { TrackedLinkCodes } from '../links/link-codes.js';
 import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
 import { DripEvents } from './drip-events.js';
 import { quietHoursOf } from './drip-views.js';
+import { GlobalAttributesService } from '../../settings/global-attributes.service.js';
 
 // The drip tick (feature 005 US4, research R7): every 30 seconds, for each active drip outside its
 // quiet hours, claim the enrolments whose step is due (FOR UPDATE SKIP LOCKED, in batches of 500),
@@ -64,6 +65,7 @@ export class DripTickProcessor implements OnModuleInit, OnApplicationBootstrap {
     private readonly events: DripEvents,
     private readonly metrics: MetricsService,
     private readonly platformEvents: PlatformEvents,
+    private readonly globals: GlobalAttributesService,
   ) {}
 
   onModuleInit(): void {
@@ -215,6 +217,7 @@ export class DripTickProcessor implements OnModuleInit, OnApplicationBootstrap {
     const resolved = resolveVariables(variables, (step.variableMapping ?? {}) as VariableMapping, {
       contact: { name: contact.name, phone: contact.phoneE164, attributes: contact.attributes },
       row: {},
+      globals: await this.globals.values(),
     });
     if (!resolved.ok) return 'MISSING_VARIABLE';
 

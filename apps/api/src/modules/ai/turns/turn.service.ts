@@ -17,6 +17,7 @@ import { TurnApplier } from './apply.js';
 import { capReached, handOverFor, ineligibility } from './decisions.js';
 import { AiFailureMonitor } from './failure-monitor.js';
 import { localStamp, nextOpening } from './hours.js';
+import { GlobalAttributesService, fillGlobals } from '../../settings/global-attributes.service.js';
 
 /** At most this many unanswered customer messages are read in one turn. */
 const MAX_NEW_MESSAGES = 10;
@@ -105,6 +106,7 @@ export class TurnService {
     private readonly failures: AiFailureMonitor,
     private readonly secretsVault: AgentSecretsVault,
     private readonly metrics: MetricsService,
+    private readonly globals: GlobalAttributesService,
   ) {}
 
   /** One turn, counted by result; the time is measured for turns that called the model (T104). */
@@ -215,8 +217,11 @@ export class TurnService {
 
     const [catalog, live] = await Promise.all([this.catalog(config), this.liveChat.get()]);
     const now = new Date();
+    // Feature 010 (R7): {global:key} in the agent's instructions, filled before the request to Claude.
+    const globals = await this.globals.values();
+    const filled = { ...config, goal: fillGlobals(config.goal, globals), businessDetails: fillGlobals(config.businessDetails, globals), tone: { ...config.tone, notes: fillGlobals(config.tone.notes, globals) }, guardrails: config.guardrails.map((g) => fillGlobals(g, globals)) };
     const prompt = buildPrompt({
-      config,
+      config: filled,
       catalog,
       knowledge: { mode, items },
       retrieved,

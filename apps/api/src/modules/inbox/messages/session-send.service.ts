@@ -18,6 +18,7 @@ import { MediaLibraryService } from '../media-library/media-library.service.js';
 import { InboxPublisher } from '../realtime/inbox-publisher.js';
 import { AiConversationsService } from '../../ai/turns/ai-conversations.service.js';
 import { FlowSessionService } from '../../flows/engine/session.service.js';
+import { GlobalAttributesService } from '../../settings/global-attributes.service.js';
 
 /** POST /inbox/conversations/{id}/messages (contracts/inbox-api.openapi.yaml). */
 export const SendMessageSchema = z
@@ -73,6 +74,7 @@ export class SessionSendService {
     private readonly library: MediaLibraryService,
     private readonly flows: FlowSessionService,
     private readonly ai: AiConversationsService,
+    private readonly globals: GlobalAttributesService,
   ) {}
 
   async send(viewer: Viewer, conversationId: string, input: SendMessageInput): Promise<ChatItemDto> {
@@ -172,7 +174,7 @@ export class SessionSendService {
 
     const canned = await this.prisma.cannedMessage.findUnique({ where: { id: input.cannedMessageId! } });
     if (!canned) throw AppError.notFound('Saved reply not found');
-    const contact = { name: chat.contact?.name ?? null, phoneE164: chat.contact?.phoneE164 ?? null, attributes: (chat.contact?.attributes ?? {}) as Record<string, unknown> };
+    const contact = { name: chat.contact?.name ?? null, phoneE164: chat.contact?.phoneE164 ?? null, attributes: (chat.contact?.attributes ?? {}) as Record<string, unknown>, globals: await this.globals.values() };
     const rendered = renderCanned(canned.text ?? '', contact, (canned.variableFallbacks ?? {}) as Record<string, string>, input.params ?? {});
     if (!rendered.ok) {
       throw AppError.validation('Fill in every parameter of the saved reply', rendered.missing.map((n) => ({ field: `params.${n}`, issue: 'is required' })), 'PARAMS_MISSING');

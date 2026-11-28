@@ -17,6 +17,8 @@ import { ScheduleService } from './campaigns/schedule.service.js';
 import { AttributesController } from './contacts/attributes.controller.js';
 import { AudienceQueryBuilder } from './contacts/audience-query.builder.js';
 import { AutoTagsController } from './contacts/auto-tags.controller.js';
+import { GlobalAttributesController } from './settings/global-attributes.controller.js';
+import { GlobalAttributesService } from './settings/global-attributes.service.js';
 import { AutoTagService } from './contacts/auto-tags.service.js';
 import { BulkActionsController } from './contacts/bulk-actions.controller.js';
 import { ContactsExportController } from './contacts/contacts-export.controller.js';
@@ -98,11 +100,12 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     IdempotentResponses,
     PublicApiService,
     QueueDepthCollector,
-    // Feature 010: segments, bulk actions and automatic tags.
+    // Feature 010: segments, bulk actions, automatic tags and global attributes.
     SegmentQueryBuilder,
     SegmentsService,
     BulkActionsService,
     AutoTagService,
+    GlobalAttributesService,
   ],
   exports: [
     NumbersService,
@@ -139,6 +142,7 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     SegmentsService,
     BulkActionsService,
     AutoTagService,
+    GlobalAttributesService,
   ],
 })
 export class DomainModule {}
@@ -165,6 +169,7 @@ export class DomainModule {}
     ContactsController,
     SegmentsController,
     AutoTagsController,
+    GlobalAttributesController,
     TagsController,
     AttributesController,
     RateCardController,

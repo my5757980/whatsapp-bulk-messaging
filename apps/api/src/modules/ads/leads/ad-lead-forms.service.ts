@@ -23,6 +23,7 @@ import { AdsConnectionService, type AdsAccess } from '../connection/ads-connecti
 import { MetaAdsClient, type MetaLead } from '../meta-ads.client.js';
 import { leadSourceFor } from '../../contacts/lead-source.js';
 import { AutoTagService } from '../../contacts/auto-tags.service.js';
+import { GlobalAttributesService } from '../../settings/global-attributes.service.js';
 
 // Lead forms and leads (feature 007 US7, FR-035 – FR-039, research R9): forms made at Meta with the
 // page token and a WhatsApp consent checkbox; each lead becomes a contact with the form's tag, is opted
@@ -80,6 +81,7 @@ export class AdLeadFormsService {
     private readonly settings: SettingsService,
     private readonly metrics: MetricsService,
     private readonly autoTags: AutoTagService,
+    private readonly globals: GlobalAttributesService,
   ) {}
 
   async list() {
@@ -293,6 +295,7 @@ export class AdLeadFormsService {
     const resolved = resolveVariables((template.variables ?? []) as Array<{ key: string }>, (form.welcomeMapping ?? {}) as VariableMapping, {
       contact: { name: contact.name, phone: contact.phoneE164, attributes: contact.attributes },
       row: lead.fields,
+      globals: await this.globals.values(),
     });
     if (!resolved.ok) {
       this.logger.warn({ formId: form.id, missing: resolved.missing }, 'Lead form welcome template has unmapped variables');

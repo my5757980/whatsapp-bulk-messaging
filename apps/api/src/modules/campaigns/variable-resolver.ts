@@ -6,7 +6,7 @@ export const VariableSourceSchema = z
   .object({
     // Feature 008: `payment` reads the payment request a message carries (key: amount, description,
     // reference, expires, link or code).
-    source: z.enum(['column', 'field', 'attribute', 'static', 'payment']),
+    source: z.enum(['column', 'field', 'attribute', 'static', 'payment', 'global']),
     key: z.string().trim().min(1).max(100).optional(),
     value: z.string().max(1024).optional(),
     fallback: z.string().max(1024).nullish(),
@@ -19,6 +19,11 @@ export type VariableSource = z.infer<typeof VariableSourceSchema>;
 export const VariableMappingSchema = z.record(z.string(), VariableSourceSchema);
 export type VariableMapping = z.infer<typeof VariableMappingSchema>;
 
+/** Feature 010: the global attribute keys a mapping uses. */
+export function globalKeys(mapping: VariableMapping): string[] {
+  return [...new Set(Object.values(mapping).flatMap((s) => (s.source === 'global' && s.key ? [s.key] : [])))];
+}
+
 /** Contact fields that can feed a variable (`field` source). */
 export const CONTACT_FIELDS = ['name', 'phone'] as const;
 
@@ -28,6 +33,8 @@ export interface ResolveInput {
   row: Record<string, unknown>;
   /** The payment request the message carries (`payment` source, feature 008), already formatted. */
   payment?: PaymentVariables;
+  /** Feature 010: global attribute values by key (`global` source). */
+  globals?: Readonly<Record<string, string>>;
 }
 
 export const PAYMENT_VARIABLE_KEYS = ['amount', 'description', 'reference', 'expires', 'link', 'code'] as const;
@@ -54,6 +61,8 @@ function readSource(source: VariableSource, input: ResolveInput): string {
       return '';
     case 'payment':
       return asText(input.payment?.[(source.key ?? '') as keyof PaymentVariables]);
+    case 'global':
+      return asText(input.globals?.[source.key ?? '']);
     case 'attribute': {
       const attributes = input.contact.attributes;
       return attributes && typeof attributes === 'object'

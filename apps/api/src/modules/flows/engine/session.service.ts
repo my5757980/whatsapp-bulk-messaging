@@ -22,6 +22,7 @@ import { renderFlowText } from './render.js';
 import { newSessionState, run, type FlowFacts, type FlowInput, type RunResult, type SessionState } from './run.js';
 import { DripEvents } from '../../growth/drips/drip-events.js';
 import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
+import { GlobalAttributesService } from '../../settings/global-attributes.service.js';
 
 type Tx = Prisma.TransactionClient;
 
@@ -96,6 +97,7 @@ export class FlowSessionService {
     private readonly aiConversations: AiConversationsService,
     private readonly dripEvents: DripEvents,
     private readonly platformEvents: PlatformEvents,
+    private readonly globals: GlobalAttributesService,
     @Optional() @Inject(FLOW_PAYMENTS) private readonly flowPayments?: FlowPaymentsPort,
     @Optional() @Inject(FLOW_COMMERCE) private readonly flowCommerce?: FlowCommercePort,
   ) {}
@@ -338,6 +340,8 @@ export class FlowSessionService {
       name: conversation.contact?.name ?? null,
       phoneE164: conversation.contact?.phoneE164 ?? null,
       attributes: (conversation.contact?.attributes ?? {}) as Record<string, unknown>,
+      // Feature 010: {global:key} in flow messages.
+      globals: await this.globals.values(),
     };
     const result: RunResult = run(state, input, {
       graph: flow.graph,
