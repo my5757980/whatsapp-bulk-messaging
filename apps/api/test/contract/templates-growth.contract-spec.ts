@@ -76,6 +76,18 @@ describe('Templates and growth API (009) contract', () => {
     });
   });
 
+  describe('US6 samples', () => {
+    it('GET /template-samples, GET /template-samples/{sampleId} and POST copy', async () => {
+      await check('get', '/template-samples', await manager.agent.get('/api/template-samples?industry=FOOD'), 200);
+      await check('get', '/template-samples/{sampleId}', await manager.agent.get('/api/template-samples/food-order-update'), 200);
+      await check('get', '/template-samples/{sampleId}', await manager.agent.get('/api/template-samples/no-such-sample'), 404);
+      const copy = (name: string) => manager.agent.post('/api/template-samples/food-order-update/copy').set('X-CSRF-Token', manager.csrf).send({ wabaId: number.wabaId, name });
+      const name = `food_${digits(6)}`;
+      await check('post', '/template-samples/{sampleId}/copy', await copy(name), 201);
+      await check('post', '/template-samples/{sampleId}/copy', await copy(name), 409);
+    });
+  });
+
   describe('US5 reports', () => {
     it('GET /reports/overview, /reports/team and /reports/consent, and RANGE_INVALID', async () => {
       const today = new Date().toISOString().slice(0, 10);

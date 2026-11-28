@@ -56,3 +56,5 @@ export * from './templates/meta-template-checks.js';
 export * from './campaigns/launch-checks.js';
 export * from './help/error-meanings.js';
 export * from './reports/ranges.js';
+export * from './templates/samples.js';
+export * from './help/template-guidelines.js';

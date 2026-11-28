@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { failureHelp } from '@wbm/shared';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { CLICKED, DELIVERED, REPLIED } from '../campaigns/replied.sql.js';
@@ -16,7 +17,7 @@ export interface OverviewReport {
   days: Array<Counts & { day: string }>;
   byCategory: Array<Counts & { category: string }>;
   byNumber: Array<Counts & { numberId: string; label: string }>;
-  failedByReason: Array<{ code: number | null; reason: string; count: number }>;
+  failedByReason: Array<{ code: number | null; reason: string; count: number; meaning: string | null; action: string | null }>;
 }
 
 @Injectable()
@@ -53,7 +54,8 @@ export class OverviewReportService {
     const numberRows = rows.filter((r) => !r.g_number && r.number_id);
     const labels = new Map((await this.prisma.whatsAppNumber.findMany({ where: { id: { in: numberRows.map((r) => r.number_id!) } }, select: { id: true, label: true } })).map((n) => [n.id, n.label]));
     const byNumber = numberRows.map((r) => ({ numberId: r.number_id!, label: labels.get(r.number_id!) ?? 'Removed number', ...toCounts(r) })).sort((a, b) => a.label.localeCompare(b.label));
-    return { from: range.from, to: range.to, totals: toCounts(totals), days, byCategory, byNumber, failedByReason: failed };
+    const failedByReason = failed.map((f) => ({ ...f, meaning: failureHelp(f.code, f.reason)?.meaning ?? null, action: failureHelp(f.code, f.reason)?.action ?? null }));
+    return { from: range.from, to: range.to, totals: toCounts(totals), days, byCategory, byNumber, failedByReason };
   }
 
   /** One row per day, category and number, for the CSV download. */

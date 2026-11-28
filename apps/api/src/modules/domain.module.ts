@@ -49,6 +49,7 @@ import { ReportsV2Controller } from './reports/reports-v2.controller.js';
 import { TeamReportService } from './reports/team-report.service.js';
 import { TemplatesSyncService } from './templates/templates-sync.service.js';
 import { TemplatesController } from './templates/templates.controller.js';
+import { TemplateSamplesController, TemplateSamplesService } from './templates/template-samples.controller.js';
 import { TemplatesService } from './templates/templates.service.js';
 import { InvitationsService } from './users/invitations.service.js';
 import { MailerService } from './users/mailer.service.js';
@@ -76,6 +77,7 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     ImportsService,
     MetaResumableUpload,
     TemplatesService,
+    TemplateSamplesService,
     ScheduleService,
     RateCardService,
     ReportsService,
@@ -108,6 +110,7 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     ImportsService,
     MetaResumableUpload,
     TemplatesService,
+    TemplateSamplesService,
     ScheduleService,
     RateCardService,
     ReportsService,
@@ -132,6 +135,8 @@ export class DomainModule {}
   controllers: [
     NumbersController,
     TemplatesController,
+    // Feature 009: the sample template library.
+    TemplateSamplesController,
     MediaController,
     CampaignsController,
     CampaignMessagesController,

@@ -1,4 +1,5 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import { failureHelp } from '@wbm/shared';
 import { z } from 'zod';
 import { Require } from '../../common/auth/permissions.guard.js';
 import { AppError } from '../../common/errors/app-error.js';
@@ -18,6 +19,11 @@ type MessagesQuery = z.infer<typeof MessagesQuerySchema>;
 
 const iso = (d: Date | null) => d?.toISOString() ?? null;
 
+function helpOf(m: Pick<Message, 'status' | 'failureCode' | 'failureReason' | 'expiredReason'>): { meaning: string; action: string } | null {
+  const help = m.status === 'EXPIRED' ? failureHelp(null, m.expiredReason) : m.status === 'FAILED' ? failureHelp(m.failureCode, m.failureReason) : null;
+  return help ? { meaning: help.meaning, action: help.action } : null;
+}
+
 /** Response shape (contract `Message`); `phone` is masked for agents by PhoneMaskInterceptor. */
 export function toMessageDto(m: Message & { contact?: { name: string | null } | null }) {
   return {
@@ -31,6 +37,8 @@ export function toMessageDto(m: Message & { contact?: { name: string | null } | 
     expiredReason: m.expiredReason,
     failureCode: m.failureCode,
     failureReason: m.failureReason,
+    // Feature 009 (research R12): the meaning and action of the failure, or of why it expired.
+    failureHelp: helpOf(m),
     attempts: m.attempts,
     sentAt: iso(m.sentAt),
     deliveredAt: iso(m.deliveredAt),

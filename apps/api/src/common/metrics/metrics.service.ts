@@ -25,6 +25,14 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  /** Feature 009 (research R12): Meta error codes without a help entry, so maintainers know which to add. */
+  readonly unknownErrorCodes = new Counter({
+    name: 'wbm_unknown_error_codes_total',
+    help: 'Meta error codes seen without an entry in the help meanings',
+    labelNames: ['code'] as const,
+    registers: [this.registry],
+  });
+
   /**
    * Jobs ready to run but not picked up yet. Delayed jobs (retry backoff, the next run of a job
    * scheduler) are left out, so an idle queue reads 0 and a growing value means a backlog.

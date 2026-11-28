@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
-import type { MetaTemplateComponent } from '@wbm/shared';
+import { META_ERROR_MEANINGS, type MetaTemplateComponent } from '@wbm/shared';
 import { TokenCipher } from '../../common/crypto/token-cipher.js';
 import { MetricsService } from '../../common/metrics/metrics.service.js';
 import { maskPhone } from '../../common/phone/phone.js';
@@ -228,6 +228,7 @@ export class SendProcessor {
   ): Promise<SendOutcome> {
     const decision = decideSendFailure(error, attempt);
     this.metrics.sendErrorsTotal.inc({ code: String(decision.code ?? 'network') });
+    if (decision.code !== null && !META_ERROR_MEANINGS[decision.code]) this.metrics.unknownErrorCodes.inc({ code: String(decision.code) });
     this.logger.warn({ messageId: m.id, to: maskPhone(m.phoneE164), attempt, code: decision.code, action: decision.action }, 'Send failed');
 
     if (decision.action === 'retry') {

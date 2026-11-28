@@ -14,6 +14,8 @@ import { errorMessage } from '@/lib/errors';
 import { formatNumber, totalRecipients } from '@/lib/format';
 import { Can } from '@/lib/permissions';
 import { queryKeys } from '@/lib/query';
+import { ErrorMeaning } from '@/components/help/error-meaning';
+import { FrequencyCapNote } from '@/components/help/frequency-cap-note';
 import type { CampaignDetail, StatusTotals } from '@/lib/types';
 
 interface CampaignReport {
@@ -21,7 +23,7 @@ interface CampaignReport {
   totals: StatusTotals;
   deliveryRate: number;
   readRate: number;
-  failureReasons: Array<{ code: number | null; reason: string; count: number }>;
+  failureReasons: Array<{ code: number | null; reason: string; count: number; meaning?: string | null; action?: string | null }>;
   /** Feature 009: why messages expired. */
   expired?: { expiredBeforeSending: number; notDeliveredInTime: number; offerEnded: number };
   /** Feature 009 (research R10, R11). */
@@ -138,10 +140,11 @@ export default function CampaignReportPage() {
             <CardTitle className="text-3xl" data-testid="multi-message">
               {formatNumber(r.multiMessageRecipients ?? 0)}
             </CardTitle>
-            {r.heldBack ? <CardDescription>{formatNumber(r.heldBack)} held back by Meta&apos;s per-person marketing limit (not charged).</CardDescription> : null}
           </CardHeader>
         </Card>
       </div>
+
+      {r.heldBack ? <FrequencyCapNote heldBack={r.heldBack} /> : null}
 
       <ClickResults campaignId={id} />
 
@@ -185,7 +188,10 @@ export default function CampaignReportPage() {
               <TableBody>
                 {r.failureReasons.map((f) => (
                   <TableRow key={`${f.code}-${f.reason}`}>
-                    <TableCell>{f.reason}</TableCell>
+                    <TableCell>
+                      {f.reason}
+                      <ErrorMeaning meaning={f.meaning} action={f.action} />
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{f.code ?? '—'}</TableCell>
                     <TableCell className="text-right">{formatNumber(f.count)}</TableCell>
                   </TableRow>

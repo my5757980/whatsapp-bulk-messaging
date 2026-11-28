@@ -16,6 +16,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { toast } from '@/components/ui/toaster';
 import { api } from '@/lib/api-client';
 import { errorMessage, toastError } from '@/lib/errors';
+import { ErrorMeaning } from '@/components/help/error-meaning';
 import { campaignStateVariant, expiredReasonLabel, formatDateTime, formatNumber, messageStatusBadge, progressPercent, skipReasonLabel, titleCase, totalRecipients } from '@/lib/format';
 import { Can } from '@/lib/permissions';
 import { queryKeys } from '@/lib/query';
@@ -229,6 +230,7 @@ export default function CampaignDetailPage() {
                       <TableCell className="max-w-xs text-xs">
                         {m.failureReason ?? (m.skipReason ? skipReasonLabel(m.skipReason) : m.expiredReason ? expiredReasonLabel(m.expiredReason) : '')}
                         {m.failureCode ? <span className="text-muted-foreground"> ({m.failureCode})</span> : null}
+                        <ErrorMeaning meaning={m.failureHelp?.meaning} action={m.failureHelp?.action} />
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{formatDateTime(m.sentAt)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{formatDateTime(m.deliveredAt)}</TableCell>

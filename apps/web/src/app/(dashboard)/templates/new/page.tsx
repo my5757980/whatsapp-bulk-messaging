@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { RequirePermission } from '@/components/require-permission';
 import { CarouselCards, CodeOptions, DEFAULT_AUTH, OfferFields, TtlField, defaultCard } from '@/components/templates/kind-fields';
+import { GuidelinesPanel } from '@/components/templates/guidelines-panel';
 import { TemplatePreview } from '@/components/templates/template-preview';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -468,8 +469,9 @@ function Editor() {
             </Button>
           </div>
         </div>
-        <div className="lg:sticky lg:top-6 lg:self-start">
+        <div className="grid gap-4 lg:sticky lg:top-6 lg:self-start">
           <TemplatePreview draft={draft} />
+          <GuidelinesPanel kind={kind} hasMedia={Boolean(draft.header && draft.header.format !== 'TEXT')} />
         </div>
       </div>
     </div>

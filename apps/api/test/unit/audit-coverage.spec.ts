@@ -10,11 +10,9 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../sr
 /** Actions listed before the code that records them exists (empty: every action is recorded). */
 const PENDING = new Set<string>([
   // Feature 009: recorded by their stories (tasks.md T093 empties this list)
-  'otp_settings.changed',
   'chat_widget.created',
   'chat_widget.updated',
   'chat_widget.deleted',
-  'template_sample.copied',
 ]);
 
 function sources(dir: string): string[] {

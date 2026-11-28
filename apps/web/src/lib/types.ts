@@ -156,6 +156,8 @@ export interface CampaignMessage {
   skipReason: string | null;
   /** Feature 009: why an EXPIRED message expired. */
   expiredReason?: 'EXPIRED_BEFORE_SENDING' | 'NOT_DELIVERED_IN_TIME' | 'OFFER_ENDED' | null;
+  /** Feature 009 (research R12): what the failure means and what to do. */
+  failureHelp?: { meaning: string; action: string } | null;
   failureCode: number | null;
   failureReason: string | null;
   attempts: number;

@@ -77,3 +77,15 @@ export function meaningOfMetaError(code: number | null | undefined, metaText?: s
 export function meaningOfPlatformReason(reason: string | null | undefined): ErrorMeaning | null {
   return reason ? (PLATFORM_REASON_MEANINGS[reason] ?? null) : null;
 }
+
+/**
+ * What a stored failure means and what to do (FR-028): a platform reason key, else the Meta code's entry,
+ * else Meta's own text with general advice (`known: false`, counted by the api). Null with no failure.
+ */
+export function failureHelp(code: number | null | undefined, reason: string | null | undefined): { meaning: string; action: string; known: boolean } | null {
+  const platform = meaningOfPlatformReason(reason);
+  if (platform) return { meaning: platform.meaning, action: platform.action, known: true };
+  if ((code === null || code === undefined) && !reason) return null;
+  const meta = meaningOfMetaError(code, reason);
+  return { meaning: meta.meaning, action: meta.action, known: meta.known };
+}

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
+import { failureHelp } from '@wbm/shared';
 import { Prisma } from '../../generated/prisma/client.js';
 import { CampaignsService } from '../campaigns/campaigns.service.js';
 import { DELIVERED, REPLIED } from '../campaigns/replied.sql.js';
@@ -33,7 +34,8 @@ export class ReportsService {
       _count: { _all: true },
     });
     const failureReasons = reasons
-      .map((r) => ({ code: r.failureCode, reason: r.failureReason ?? 'Unknown reason', count: r._count._all }))
+      // Feature 009 (research R12): what each reason means and what to do.
+      .map((r) => ({ code: r.failureCode, reason: r.failureReason ?? 'Unknown reason', count: r._count._all, meaning: failureHelp(r.failureCode, r.failureReason)?.meaning ?? null, action: failureHelp(r.failureCode, r.failureReason)?.action ?? null }))
       .sort((a, b) => b.count - a.count);
     // Feature 009 (research R7, R8): why messages expired.
     const expiredGroups = totals.expired

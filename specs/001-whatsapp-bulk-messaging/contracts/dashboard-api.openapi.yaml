@@ -1441,6 +1441,13 @@ components:
         status: { $ref: '#/components/schemas/MessageStatus' }
         skipReason: { type: [string, 'null'] }
         expiredReason: { type: [string, 'null'], enum: [EXPIRED_BEFORE_SENDING, NOT_DELIVERED_IN_TIME, OFFER_ENDED, null], description: Feature 009 - why an EXPIRED message expired }
+        failureHelp:
+          type: [object, 'null']
+          description: Feature 009 (R12) - the meaning and action of a failed or expired message
+          required: [meaning, action]
+          properties:
+            meaning: { type: string }
+            action: { type: string }
         failureCode: { type: [integer, 'null'] }
         failureReason: { type: [string, 'null'] }
         attempts: { type: integer }
@@ -1464,6 +1471,8 @@ components:
               code: { type: [integer, 'null'] }
               reason: { type: string }
               count: { type: integer }
+              meaning: { type: [string, 'null'], description: Feature 009 (R12) - what the reason means }
+              action: { type: [string, 'null'], description: Feature 009 (R12) - what to do about it }
         expired:
           type: object
           description: Feature 009 (R7, R8) - why messages expired

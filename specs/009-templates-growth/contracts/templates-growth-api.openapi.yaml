@@ -524,7 +524,7 @@ components:
         days: { type: array, items: { allOf: [{ $ref: '#/components/schemas/Counts' }, { type: object, required: [day], properties: { day: { type: string, format: date } } }] } }
         byCategory: { type: array, items: { allOf: [{ $ref: '#/components/schemas/Counts' }, { type: object, required: [category], properties: { category: { type: string, enum: [MARKETING, UTILITY, AUTHENTICATION] } } }] } }
         byNumber: { type: array, items: { allOf: [{ $ref: '#/components/schemas/Counts' }, { type: object, required: [numberId, label], properties: { numberId: { type: string, format: uuid }, label: { type: string } } }] } }
-        failedByReason: { type: array, items: { type: object, required: [reason, count], properties: { code: { type: [integer, 'null'] }, reason: { type: string }, count: { type: integer } } } }
+        failedByReason: { type: array, items: { type: object, required: [reason, count], properties: { code: { type: [integer, 'null'] }, reason: { type: string }, count: { type: integer }, meaning: { type: [string, 'null'] }, action: { type: [string, 'null'] } } } }
     TeamReport:
       type: object
       required: [from, to, members]
