@@ -39,7 +39,7 @@ test('US7: business profile, picture, declined name and the blue tick checklist'
   // Tick two checklist steps; they stay ticked.
   for (const step of ['policy', 'two-step']) {
     const box = page.getByTestId(`oba-step-${step}`).getByRole('checkbox');
-    if (!(await box.isChecked())) await box.check();
+    if (!(await box.isChecked())) await box.click();
     await expect(box).toBeChecked();
   }
   await page.reload();

@@ -62,7 +62,9 @@ test('US6: two-factor sign-in, the company requirement and an admin reset', asyn
 
     // 3. The admin requires 2FA; a new member sets it up at sign-in.
     await page.goto('/settings/security');
-    await page.getByLabel('Require two-factor sign-in for every member').check();
+    const require2fa = page.getByLabel('Require two-factor sign-in for every member');
+    await require2fa.click();
+    await expect(require2fa).toBeChecked();
     await expect(page.getByText('Two-factor sign-in is now required')).toBeVisible();
     const newEmail = `tfa.new.${suffix}@company.test`;
     const newcomer = await invite(page, browser, newEmail, `Newcomer ${suffix}`);
