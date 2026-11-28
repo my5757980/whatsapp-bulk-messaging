@@ -125,7 +125,8 @@ value and earlier messages keep what was sent.
 **Acceptance Scenarios**:
 
 1. **Given** a global attribute, **When** a campaign maps a variable to it, **Then** every recipient
-   gets the value in force at send time, and the launch is refused while the value is empty.
+   gets the value in force when the campaign launches (when all its variables are filled), and the
+   launch is refused while the value is empty.
 2. **Given** a global attribute, **When** an agent inserts it into a reply or a saved reply uses it,
    **Then** the sent text contains the current value.
 3. **Given** a global attribute used in a flow message and in an AI agent's instructions, **When**
