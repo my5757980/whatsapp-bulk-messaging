@@ -15,6 +15,7 @@ import { AiConversationsService } from '../../ai/turns/ai-conversations.service.
 import { FlowSessionService } from '../../flows/engine/session.service.js';
 import { DripLeaving } from '../../growth/drips/drip-leaving.js';
 import { stopContactCarts } from '../../integrations/stores/store-carts.js';
+import { leadSourceText } from '@wbm/shared';
 
 /** PATCH /inbox/conversations/{id}/contact (contracts/inbox-api.openapi.yaml). */
 export const EditContactSchema = z.strictObject({
@@ -55,6 +56,7 @@ export class ChatContactService {
         name: true,
         phoneE164: true,
         leadSource: true,
+        leadSourceKind: true,
         consentStatus: true,
         consentSource: true,
         consentAt: true,
@@ -69,7 +71,8 @@ export class ChatContactService {
       contactId: contact.id,
       name: contact.name,
       phone: contact.phoneE164,
-      leadSource: contact.leadSource,
+      // Feature 010: the kind and label as one readable text.
+      leadSource: leadSourceText(contact.leadSourceKind, contact.leadSource),
       firstMessageTag: contact.firstMessageTag,
       consentStatus: contact.consentStatus,
       consentSource: contact.consentSource,

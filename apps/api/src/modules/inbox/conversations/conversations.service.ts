@@ -29,6 +29,7 @@ import { AdChatInfo } from '../../ads/chats/ad-chat-matcher.js';
 import { AiConversationsService } from '../../ai/turns/ai-conversations.service.js';
 import { FlowSessionService } from '../../flows/engine/session.service.js';
 import { PlatformEvents } from '../../integrations/webhooks/platform-events.js';
+import { leadSourceText } from '@wbm/shared';
 
 export const ConversationListQuerySchema = z.object({
   view: z.enum(['live', 'history']).default('live'),
@@ -288,6 +289,7 @@ export class ConversationsService {
               name: true,
               phoneE164: true,
               leadSource: true,
+              leadSourceKind: true,
               consentStatus: true,
               consentSource: true,
               consentAt: true,
@@ -318,7 +320,7 @@ export class ConversationsService {
         contactId: contact?.id ?? null,
         name: contact?.name ?? null,
         phone: contact?.phoneE164 ?? null,
-        leadSource: contact?.leadSource ?? null,
+        leadSource: contact ? leadSourceText(contact.leadSourceKind, contact.leadSource) : null,
         firstMessageTag: contact?.firstMessageTag ?? null,
         consentStatus: contact?.consentStatus ?? 'UNKNOWN',
         consentSource: contact?.consentSource ?? null,

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, forwardRef } from '@nestjs/common';
 import { z } from 'zod';
 import { AppError, type ErrorDetail } from '../../common/errors/app-error.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
@@ -123,7 +123,8 @@ type Db = PrismaService | Prisma.TransactionClient;
 export class AudienceQueryBuilder {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly segments: SegmentQueryBuilder,
+    // The segment builder imports this file (compileRule), so its class may not exist yet when this one is defined.
+    @Inject(forwardRef(() => SegmentQueryBuilder)) private readonly segments: SegmentQueryBuilder,
   ) {}
 
   async definitions(db: Db = this.prisma): Promise<AttributeDef[]> {
