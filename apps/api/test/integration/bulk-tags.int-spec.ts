@@ -47,7 +47,7 @@ describe('Bulk tag actions (010 US2)', () => {
 
   it('adds a tag to everyone matching a filter, batch by batch, with counts and an audit entry', async () => {
     const done = await runAction({ kind: 'TAG_ADD', tagIds: [vipId], selection: { filter: { tag: [group] } } });
-    expect(done).toMatchObject({ kind: 'TAG_ADD', status: 'DONE', total: 12_000, processed: 12_000, changed: 12_000 });
+    expect(done, String(done.error)).toMatchObject({ kind: 'TAG_ADD', status: 'DONE', total: 12_000, processed: 12_000, changed: 12_000 });
     expect(await withTag(vipId)).toBe(12_000);
     expect(await ctx.prisma.auditLog.count({ where: { targetId: done.id, action: 'contacts.bulk_tagged' } })).toBe(1);
     // Running it again changes nothing.

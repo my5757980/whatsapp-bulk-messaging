@@ -19,6 +19,9 @@ import { SegmentQueryBuilder } from './segment-query.builder.js';
 import { leadSourceFor } from './lead-source.js';
 import { AutoTagService } from './auto-tags.service.js';
 
+/** Contacts per transaction when tags are added to many (feature 010 bulk actions). */
+const TAG_MANY_CHUNK = 1_000;
+
 // Contacts (FR-009, FR-012, T123). Deletion ships with US1 (ContactDeletionService).
 
 export const ContactInputSchema = z
@@ -319,17 +322,27 @@ export class ContactsService {
   async tagMany(contactIds: string[], tagIds: string[], add: boolean): Promise<number> {
     if (!contactIds.length || !tagIds.length) return 0;
     if (add) {
-      return this.prisma.$transaction(async (tx) => {
-        const existing = await tx.contact.findMany({ where: { id: { in: contactIds } }, select: { id: true } });
-        const links = await tx.contactTag.createManyAndReturn({
-          data: existing.flatMap((c) => tagIds.map((tagId) => ({ contactId: c.id, tagId }))),
-          skipDuplicates: true,
-          select: { contactId: true, tagId: true },
-        });
-        await this.dripEvents.recordTagAddedToMany(tx, links);
-        await this.platformEvents.tagLinksChanged(tx, links);
-        return links.length;
-      });
+      // Feature 010 bulk actions send 5,000 contacts at a time; the drip and webhook hooks may write a row per
+      // contact, so each transaction takes 1,000 of them.
+      let added = 0;
+      for (let i = 0; i < contactIds.length; i += TAG_MANY_CHUNK) {
+        const chunk = contactIds.slice(i, i + TAG_MANY_CHUNK);
+        added += await this.prisma.$transaction(
+          async (tx) => {
+            const existing = await tx.contact.findMany({ where: { id: { in: chunk } }, select: { id: true } });
+            const links = await tx.contactTag.createManyAndReturn({
+              data: existing.flatMap((c) => tagIds.map((tagId) => ({ contactId: c.id, tagId }))),
+              skipDuplicates: true,
+              select: { contactId: true, tagId: true },
+            });
+            await this.dripEvents.recordTagAddedToMany(tx, links);
+            await this.platformEvents.tagLinksChanged(tx, links);
+            return links.length;
+          },
+          { maxWait: 10_000, timeout: 120_000 },
+        );
+      }
+      return added;
     }
     const removed = (await this.platformEvents.listens('contact.tags_changed'))
       ? await this.prisma.contactTag.findMany({ where: { tagId: { in: tagIds }, contactId: { in: contactIds } }, select: { contactId: true, tagId: true } })
