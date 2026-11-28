@@ -147,6 +147,8 @@ const SCOPE_HELP: Record<ApiKeyScope, string> = {
   // Feature 008 (contracts/public-payments-v1.openapi.yaml)
   'payments.read': 'Read payment requests by id, reference or phone number',
   'payments.write': 'Make and send payment requests, and cancel waiting ones',
+  // Feature 009 (contracts/public-otp-v1.openapi.yaml)
+  'otp.send': 'Send one-time codes your website or app makes, with an approved code template, and read their status',
 };
 
 function PermissionsDialog({ keyRow, onSaved }: { keyRow: ApiKeyRow; onSaved: () => void }) {

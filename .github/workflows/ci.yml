@@ -108,6 +108,9 @@ jobs:
       REDIS_URL: redis://localhost:6379
       META_GRAPH_BASE_URL: http://localhost:4010
       META_GRAPH_API_VERSION: v27.0
+      # Feature 009: template media samples (carousel cards) use the Resumable Upload API, which needs the
+      # numeric app id; the same value the integration tests use and mock-meta expects.
+      META_APP_ID: '1234567890'
       MOCK_WEBHOOK_TARGET: http://localhost:4000/api/webhooks/meta
       # Feature 004: the e2e run talks to mock-meta's fake Claude endpoint, never the real model.
       ANTHROPIC_BASE_URL: http://localhost:4010/anthropic
@@ -115,6 +118,9 @@ jobs:
       PUBLIC_LINK_BASE_URL: http://localhost:4000/l
       # Feature 006: webhook endpoints and mock stores live on mock-meta at http://localhost:4010.
       OUTBOUND_ALLOW_LOCAL: 'true'
+      # Feature 009: the expired sweep's grace and interval, shortened so the e2e run sees "not delivered in time".
+      EXPIRED_SWEEP_GRACE_SECONDS: '5'
+      EXPIRED_SWEEP_EVERY_SECONDS: '10'
       # Feature 008: the mock Stripe gateway on mock-meta; it posts signed events to APP_URL.
       STRIPE_API_BASE_URL: http://localhost:4010/stripe
       APP_URL: http://localhost:3000

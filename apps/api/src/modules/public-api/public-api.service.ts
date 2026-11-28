@@ -46,6 +46,8 @@ const PUBLIC_STATUS: Record<MessageStatus, string> = {
   FAILED: 'FAILED',
   SKIPPED: 'SKIPPED',
   CANCELLED: 'FAILED',
+  // Feature 009: dropped by the time-to-live or an offer's end; the 001 public status set has no EXPIRED.
+  EXPIRED: 'FAILED',
 };
 const HISTORY_STATUS: Record<MessageEventType, string> = {
   QUEUED: 'QUEUED',
@@ -58,6 +60,8 @@ const HISTORY_STATUS: Record<MessageEventType, string> = {
   SKIPPED: 'SKIPPED',
   CANCELLED: 'CANCELLED',
   REQUEUED: 'QUEUED',
+  // Feature 009: the 001 public history has no EXPIRED value.
+  EXPIRED: 'FAILED',
 };
 
 export interface Accepted {

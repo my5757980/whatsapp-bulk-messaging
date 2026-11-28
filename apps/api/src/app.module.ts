@@ -15,6 +15,7 @@ import { GrowthApiModule } from './modules/growth/growth.module.js';
 import { IntegrationsApiModule } from './modules/integrations/integrations.module.js';
 import { AdsApiModule } from './modules/ads/ads.module.js';
 import { CommerceApiModule } from './modules/commerce/commerce.module.js';
+import { OtpApiModule } from './modules/otp/otp.module.js';
 import { PaymentsApiModule } from './modules/payments/payments.module.js';
 import { InboxApiModule } from './modules/inbox/inbox.module.js';
 import { MetaModule } from './modules/meta/meta.module.js';
@@ -47,6 +48,7 @@ import { WebhooksApiModule } from './modules/webhooks/webhooks.module.js';
     AdsApiModule,
     PaymentsApiModule,
     CommerceApiModule,
+    OtpApiModule,
   ],
 })
 export class AppModule {}

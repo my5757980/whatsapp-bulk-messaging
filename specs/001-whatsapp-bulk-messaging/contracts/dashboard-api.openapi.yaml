@@ -881,6 +881,7 @@ paths:
         - $ref: '#/components/parameters/Page'
         - $ref: '#/components/parameters/PageSize'
         - { name: status, in: query, schema: { $ref: '#/components/schemas/MessageStatus' } }
+        - { name: replied, in: query, schema: { type: string, enum: ['true', 'false'] }, description: 'Feature 009 (R11): delivered messages with a reply (true) or without one (false)' }
       responses:
         '200':
           description: Page of messages
@@ -1261,6 +1262,9 @@ components:
             invalidNumber: { type: integer }
             duplicate: { type: integer }
             missingVariable: { type: integer }
+            paymentAmountMissing: { type: integer, description: Feature 008 - no amount to ask for }
+            offerCodeMissing: { type: integer, description: Feature 009 - no offer code for the recipient }
+            mediaUrlMissing: { type: integer, description: Feature 009 - no media address for the recipient }
     ImportJob:
       type: object
       properties:
@@ -1320,6 +1324,11 @@ components:
             examples: { type: array, items: { type: string } }
         footer: { type: [string, 'null'], maxLength: 60 }
         buttons: { type: array, items: { $ref: '#/components/schemas/TemplateButton' }, maxItems: 10 }
+        kind: { type: string, enum: [STANDARD, CAROUSEL, LIMITED_TIME_OFFER, AUTHENTICATION], description: 'Feature 009; see TemplateKindFields in specs/009-templates-growth/contracts/templates-growth-api.openapi.yaml' }
+        ttlSeconds: { type: [integer, 'null'], description: 'Feature 009: codes 30-900, utility 30-43200, marketing 43200-2592000' }
+        auth: { type: [object, 'null'], description: Feature 009 code options }
+        cards: { type: [array, 'null'], items: { type: object }, description: Feature 009 carousel cards }
+        offer: { type: [object, 'null'], description: Feature 009 limited-time offer details }
     Template:
       type: object
       properties:
@@ -1340,6 +1349,10 @@ components:
               key: { type: string, examples: [BODY.1, HEADER.1, BUTTON.0.1] }
               example: { type: string }
         lastSyncedAt: { type: [string, 'null'], format: date-time }
+        kind: { type: string, enum: [STANDARD, CAROUSEL, LIMITED_TIME_OFFER, AUTHENTICATION] }
+        ttlSeconds: { type: [integer, 'null'] }
+        ttlAppliedBy: { type: [string, 'null'], enum: [META, PLATFORM, null] }
+        options: { type: object, additionalProperties: true }
     CampaignState:
       type: string
       enum: [DRAFT, SCHEDULED, RUNNING, PAUSED, COMPLETED, CANCELLED]
@@ -1350,7 +1363,7 @@ components:
         required: [source]
         properties:
           source: { type: string, enum: [column, field, attribute, static] }
-          key: { type: string, description: 'CSV column, contact field (name, phone) or attribute key' }
+          key: { type: string, description: 'CSV column, contact field (name, phone) or attribute key. Feature 009 keys: CARD.{c}.BODY.{n}, CARD.{c}.BUTTON.{b}.{n} and HEADER.media (a media address)' }
           value: { type: string, description: For static source }
           fallback: { type: [string, 'null'] }
     CampaignInput:
@@ -1363,6 +1376,30 @@ components:
         audienceFilter: { $ref: '#/components/schemas/AudienceFilter' }
         variableMapping: { $ref: '#/components/schemas/VariableMapping' }
         headerMediaAssetId: { type: [string, 'null'], format: uuid }
+        allowDuplicateRows: { type: boolean, description: 'Feature 009 (R10): one message per upload row, even when a number repeats (uploaded audiences only)' }
+        offerConfig:
+          type: [object, 'null']
+          description: Feature 009 (R7) - a limited-time offer's end and where each recipient's code comes from; required for offer templates
+          required: [endsAt, code]
+          properties:
+            endsAt: { type: string, format: date-time }
+            code:
+              type: object
+              required: [source]
+              properties:
+                source: { type: string, enum: [static, column, attribute] }
+                value: { type: string, maxLength: 15, description: For static source }
+                key: { type: string, description: Upload column or contact attribute }
+        cardMedia:
+          type: [array, 'null']
+          description: Feature 009 (R6) - carousel card files; cards not listed use the template's samples
+          maxItems: 10
+          items:
+            type: object
+            required: [cardIndex, mediaAssetId]
+            properties:
+              cardIndex: { type: integer, minimum: 0, maximum: 9 }
+              mediaAssetId: { type: string, format: uuid }
     Campaign:
       allOf:
         - $ref: '#/components/schemas/CampaignInput'
@@ -1390,9 +1427,10 @@ components:
         failed: { type: integer }
         skipped: { type: integer }
         cancelled: { type: integer }
+        expired: { type: integer, description: 'Feature 009: not sent or not delivered in time, or after the offer ended' }
     MessageStatus:
       type: string
-      enum: [PENDING, QUEUED, SENDING, SENT, DELIVERED, READ, FAILED, SKIPPED, CANCELLED]
+      enum: [PENDING, QUEUED, SENDING, SENT, DELIVERED, READ, FAILED, SKIPPED, CANCELLED, EXPIRED]
     Message:
       type: object
       properties:
@@ -1402,6 +1440,14 @@ components:
         contactName: { type: [string, 'null'] }
         status: { $ref: '#/components/schemas/MessageStatus' }
         skipReason: { type: [string, 'null'] }
+        expiredReason: { type: [string, 'null'], enum: [EXPIRED_BEFORE_SENDING, NOT_DELIVERED_IN_TIME, OFFER_ENDED, null], description: Feature 009 - why an EXPIRED message expired }
+        failureHelp:
+          type: [object, 'null']
+          description: Feature 009 (R12) - the meaning and action of a failed or expired message
+          required: [meaning, action]
+          properties:
+            meaning: { type: string }
+            action: { type: string }
         failureCode: { type: [integer, 'null'] }
         failureReason: { type: [string, 'null'] }
         attempts: { type: integer }
@@ -1425,6 +1471,20 @@ components:
               code: { type: [integer, 'null'] }
               reason: { type: string }
               count: { type: integer }
+              meaning: { type: [string, 'null'], description: Feature 009 (R12) - what the reason means }
+              action: { type: [string, 'null'], description: Feature 009 (R12) - what to do about it }
+        expired:
+          type: object
+          description: Feature 009 (R7, R8) - why messages expired
+          required: [expiredBeforeSending, notDeliveredInTime, offerEnded]
+          properties:
+            expiredBeforeSending: { type: integer }
+            notDeliveredInTime: { type: integer }
+            offerEnded: { type: integer }
+        replied: { type: integer, description: 'Feature 009 (R11): distinct contacts who replied within 72 hours of delivery, the 005 Replied group' }
+        replyRate: { type: [number, 'null'], description: Feature 009 - replied over delivered (distinct contacts); null before any delivery }
+        multiMessageRecipients: { type: integer, description: Feature 009 (R10) - contacts who got more than one message (send to every row) }
+        heldBack: { type: integer, description: 'Feature 009: messages held back by Meta''s per-person marketing limit (131049), not charged' }
         estimatedCostUsd: { type: number }
         costIsEstimate: { type: boolean, const: true }
     RateCardEntry:

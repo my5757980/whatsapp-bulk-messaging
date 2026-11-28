@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { findChatRef } from '@wbm/shared';
+import { ruleLabel, type StoredRule } from '../chat-widgets/chat-widgets.service.js';
 import type { Redis } from 'ioredis';
 import { v7 as uuidv7 } from 'uuid';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
@@ -56,6 +57,8 @@ export class ChatLinkMatcher {
           deletedAt: true,
           tagId: true,
           tag: { select: { name: true } },
+          widgetRuleId: true,
+          widget: { select: { rules: true } },
           flow: { select: { id: true, status: true, deletedAt: true, publishedVersionId: true, allNumbers: true, numbers: { where: { numberId: msg.numberId }, select: { numberId: true } } } },
         },
       });
@@ -80,7 +83,9 @@ export class ChatLinkMatcher {
         return inserted > 0;
       });
       if (counted) {
-        await this.journey.recordForContact(msg.contactId, { type: 'CHAT_LINK_STARTED', actorType: 'CUSTOMER', data: { chatLinkId: link.id, chatLinkName: link.name, newContact } });
+        // Feature 009: a website button's start reads "From the website button · {rule or Default}".
+        const label = link.widget ? `From the website button · ${ruleLabel((link.widget.rules ?? []) as unknown as StoredRule[], link.widgetRuleId)}` : link.name;
+        await this.journey.recordForContact(msg.contactId, { type: 'CHAT_LINK_STARTED', actorType: 'CUSTOMER', data: { chatLinkId: link.id, chatLinkName: label, newContact } });
       }
 
       const flow = link.flow;

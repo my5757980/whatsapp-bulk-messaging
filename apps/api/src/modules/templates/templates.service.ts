@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { extractTemplateVariables, validateTemplate, type MetaTemplateComponent } from '@wbm/shared';
+import { extractTemplateVariables, kindOf, metaCreateProblem, ttlAppliedByFor, validateTemplate, type MetaTemplateComponent } from '@wbm/shared';
 import { z } from 'zod';
 import { AppError } from '../../common/errors/app-error.js';
 import { isUniqueViolation } from '../../common/prisma/prisma-errors.js';
@@ -9,7 +9,7 @@ import { MetaResumableUpload } from '../media/meta-resumable-upload.js';
 import { describeMetaError } from '../meta/meta-error-classifier.js';
 import { MetaApiError, MetaGraphClient } from '../meta/meta-graph.client.js';
 import { NumbersService } from '../numbers/numbers.service.js';
-import { buildTemplateComponents, templateToDraft } from './template-components.builder.js';
+import { buildTemplateComponents, kindOptions, templateToDraft } from './template-components.builder.js';
 import { mapTemplateCategory, mapTemplateStatus, toTemplateDto } from './templates-sync.service.js';
 
 // Template authoring (FR-017, FR-018, T140): create and submit, duplicate, delete.
@@ -43,6 +43,35 @@ export const TemplateInputSchema = z
     body: z.object({ text: z.string(), examples: z.array(z.string()).optional() }).strict(),
     footer: z.string().nullish(),
     buttons: z.array(ButtonSchema).max(20).optional(),
+    // Feature 009 (research R1, R2, R6 - R8); the shared validateTemplate checks the rules.
+    kind: z.enum(['STANDARD', 'CAROUSEL', 'LIMITED_TIME_OFFER', 'AUTHENTICATION']).optional(),
+    ttlSeconds: z.number().int().nullish(),
+    auth: z
+      .object({
+        securityNote: z.boolean(),
+        codeExpiryMinutes: z.number().int().nullable(),
+        button: z.enum(['COPY_CODE', 'ONE_TAP']),
+        buttonText: z.string().optional(),
+        autofillText: z.string().optional(),
+        apps: z.array(z.object({ packageName: z.string(), signatureHash: z.string() }).strict()).max(10).optional(),
+      })
+      .strict()
+      .nullish(),
+    cards: z
+      .array(
+        z
+          .object({
+            mediaFormat: z.enum(['IMAGE', 'VIDEO']),
+            sampleMediaAssetId: z.uuid().nullable(),
+            bodyText: z.string().optional(),
+            bodyExamples: z.array(z.string()).optional(),
+            buttons: z.array(ButtonSchema).max(5),
+          })
+          .strict(),
+      )
+      .max(20)
+      .nullish(),
+    offer: z.object({ offerText: z.string(), showsEndTime: z.boolean(), codeExample: z.string() }).strict().nullish(),
   })
   .strict();
 export type TemplateInput = z.infer<typeof TemplateInputSchema>;
@@ -82,7 +111,17 @@ export class TemplatesService {
       media = await this.prisma.mediaAsset.findUnique({ where: { id: input.header?.mediaAssetId as string } });
       if (!media) throw AppError.validation('The template has problems', [{ field: 'header.mediaAssetId', issue: 'media not found; upload it again' }]);
     }
-    const issues = validateTemplate(input, media ? { mimeType: media.mimeType, sizeBytes: media.sizeBytes } : null);
+    // Carousel cards each have a sample file (feature 009, research R6).
+    const cardIds = (input.cards ?? []).map((c) => c.sampleMediaAssetId).filter((id): id is string => Boolean(id));
+    const cardAssets = cardIds.length ? await this.prisma.mediaAsset.findMany({ where: { id: { in: cardIds } } }) : [];
+    const cardMedia = (input.cards ?? []).map((c) => {
+      const asset = cardAssets.find((a) => a.id === c.sampleMediaAssetId);
+      return asset ? { mimeType: asset.mimeType, sizeBytes: asset.sizeBytes } : null;
+    });
+    const issues = validateTemplate(input, media ? { mimeType: media.mimeType, sizeBytes: media.sizeBytes } : null, cardMedia);
+    (input.cards ?? []).forEach((c, i) => {
+      if (c.sampleMediaAssetId && !cardMedia[i]) issues.push({ field: `cards.${i}.sampleMediaAssetId`, issue: 'media not found; upload it again' });
+    });
     if (issues.length) throw AppError.validation('The template has problems', issues);
 
     const token = await this.accountToken(input.wabaId);
@@ -95,16 +134,22 @@ export class TemplatesService {
     }
 
     const headerHandle = media ? await this.resumable.uploadHeaderSample(media, token) : undefined;
-    const components = buildTemplateComponents(input, headerHandle);
+    const cardHandles: string[] = [];
+    for (const card of input.cards ?? []) {
+      const asset = cardAssets.find((a) => a.id === card.sampleMediaAssetId);
+      if (asset) cardHandles.push(await this.resumable.uploadHeaderSample(asset, token));
+    }
+    const components = buildTemplateComponents(input, headerHandle, cardHandles);
+    // Meta applies the TTL of code and utility templates; marketing TTL is applied by our queue (R8).
+    const ttl = input.ttlSeconds ?? null;
+    const metaTtl = ttl !== null && ttlAppliedByFor(input.category) === 'META' ? { message_send_ttl_seconds: ttl } : {};
+    const body = { name: input.name, language: input.language, category: input.category, parameter_format: 'POSITIONAL' as const, components, ...metaTtl };
+    // Our own mapping is checked against Meta's rules before Meta sees it (contracts/meta-templates.md).
+    const metaProblem = metaCreateProblem(body);
+    if (metaProblem) throw AppError.validation(`The template does not fit Meta's rules: ${metaProblem}`, undefined, 'META_RULES');
     let result: { id: string; status: string; category: string };
     try {
-      result = await this.meta.createTemplate(token, input.wabaId, {
-        name: input.name,
-        language: input.language,
-        category: input.category,
-        parameter_format: 'POSITIONAL',
-        components,
-      });
+      result = await this.meta.createTemplate(token, input.wabaId, body);
     } catch (error) {
       throw AppError.validation(`Meta rejected the template: ${metaReason(error)}`, undefined, 'META_ERROR');
     }
@@ -123,6 +168,10 @@ export class TemplatesService {
         headerMediaAssetId: media?.id ?? null,
         createdById: userId,
         lastSyncedAt: new Date(),
+        kind: kindOf(input),
+        options: kindOptions(input) as Prisma.InputJsonValue,
+        ttlSeconds: ttl,
+        ttlAppliedBy: ttl === null ? null : ttlAppliedByFor(input.category),
       };
       const template = draft ? await this.prisma.template.update({ where: { id: draft.id }, data }) : await this.prisma.template.create({ data });
       return toTemplateDto(template);

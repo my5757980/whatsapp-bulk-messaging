@@ -4,6 +4,9 @@ import { AppError } from '../../common/errors/app-error.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { Prisma } from '../../generated/prisma/client.js';
 import { CampaignsService } from './campaigns.service.js';
+import { CLICKED, DELIVERED, REPLIED, REPLY_WINDOW_HOURS } from './replied.sql.js';
+
+export { REPLY_WINDOW_HOURS };
 
 // Retargeting (FR-031, T163): a new DRAFT whose RETARGET audience is the source campaign's
 // recipients in a group. Recipients are snapshotted when it launches, and contacts who have opted
@@ -30,16 +33,8 @@ const LABEL: Record<RetargetGroup, string> = {
   NOT_PAID: 'not paid',
 };
 
-/** Hours after delivery in which a message from the contact counts as a reply (FR-012). */
-export const REPLY_WINDOW_HOURS = 72;
-
-const DELIVERED = Prisma.sql`m.status IN ('DELIVERED', 'READ')`;
-const CLICKED = Prisma.sql`EXISTS (SELECT 1 FROM tracked_links tl JOIN link_clicks lc ON lc.tracked_link_id = tl.id WHERE tl.message_id = m.id)`;
-const REPLIED = Prisma.sql`EXISTS (
-  SELECT 1 FROM conversations cv JOIN chat_messages cm ON cm.conversation_id = cv.id
-   WHERE cv.contact_id = m.contact_id AND cv.number_id = m.number_id AND cm.kind = 'INBOUND'
-     AND cm.occurred_at >= COALESCE(m.delivered_at, m.read_at)
-     AND cm.occurred_at < COALESCE(m.delivered_at, m.read_at) + ${Prisma.raw(`interval '${REPLY_WINDOW_HOURS} hours'`)})`;
+// DELIVERED, CLICKED and REPLIED live in replied.sql.ts (feature 009, research R11): the results and
+// reports count the same contacts as these groups.
 
 // Feature 008 (US4): the recipient's payment request from a campaign with a payment config.
 const PAID = Prisma.sql`EXISTS (SELECT 1 FROM payment_requests pr WHERE pr.message_id = m.id AND pr.status IN ('PAID', 'REFUNDED'))`;
@@ -91,7 +86,8 @@ export class RetargetService {
   /** The number of contacts in each group right now (FR-011); deleted contacts are not counted. */
   async groups(campaignId: string): Promise<{ groups: RetargetGroupSize[] }> {
     await this.campaigns.getRow(campaignId);
-    const columns = Prisma.join(RETARGET_GROUPS.map((g) => Prisma.sql`COUNT(*) FILTER (WHERE ${retargetCondition(g)})::int AS ${Prisma.raw(`"${g}"`)}`));
+    // Distinct contacts: with "send to every row" (feature 009) a contact can have several messages.
+    const columns = Prisma.join(RETARGET_GROUPS.map((g) => Prisma.sql`COUNT(DISTINCT m.contact_id) FILTER (WHERE ${retargetCondition(g)})::int AS ${Prisma.raw(`"${g}"`)}`));
     const [row] = await this.prisma.$queryRaw<Array<Record<RetargetGroup, number>>>`
       SELECT ${columns} FROM messages m WHERE m.campaign_id = ${campaignId}::uuid AND m.contact_id IS NOT NULL`;
     return { groups: RETARGET_GROUPS.map((status) => ({ status, count: row?.[status] ?? 0, available: (row?.[status] ?? 0) > 0 })) };

@@ -1,4 +1,5 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import { failureHelp } from '@wbm/shared';
 import { z } from 'zod';
 import { Require } from '../../common/auth/permissions.guard.js';
 import { AppError } from '../../common/errors/app-error.js';
@@ -6,14 +7,22 @@ import { PhoneField } from '../../common/interceptors/phone-mask.interceptor.js'
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { PageQuerySchema, pageMeta } from '../../common/validation/pagination.js';
 import { ZodValidationPipe } from '../../common/validation/zod.pipe.js';
-import type { Message } from '../../generated/prisma/client.js';
+import { Prisma, type Message } from '../../generated/prisma/client.js';
+import { DELIVERED, REPLIED } from './replied.sql.js';
 
 const MessagesQuerySchema = PageQuerySchema.extend({
-  status: z.enum(['PENDING', 'QUEUED', 'SENDING', 'SENT', 'DELIVERED', 'READ', 'FAILED', 'SKIPPED', 'CANCELLED']).optional(),
+  status: z.enum(['PENDING', 'QUEUED', 'SENDING', 'SENT', 'DELIVERED', 'READ', 'FAILED', 'SKIPPED', 'CANCELLED', 'EXPIRED']).optional(),
+  /** Feature 009 (research R11): delivered messages that got a reply (true) or none (false). */
+  replied: z.enum(['true', 'false']).optional(),
 });
 type MessagesQuery = z.infer<typeof MessagesQuerySchema>;
 
 const iso = (d: Date | null) => d?.toISOString() ?? null;
+
+function helpOf(m: Pick<Message, 'status' | 'failureCode' | 'failureReason' | 'expiredReason'>): { meaning: string; action: string } | null {
+  const help = m.status === 'EXPIRED' ? failureHelp(null, m.expiredReason) : m.status === 'FAILED' ? failureHelp(m.failureCode, m.failureReason) : null;
+  return help ? { meaning: help.meaning, action: help.action } : null;
+}
 
 /** Response shape (contract `Message`); `phone` is masked for agents by PhoneMaskInterceptor. */
 export function toMessageDto(m: Message & { contact?: { name: string | null } | null }) {
@@ -25,8 +34,11 @@ export function toMessageDto(m: Message & { contact?: { name: string | null } | 
     contactName: m.contact?.name ?? null,
     status: m.status,
     skipReason: m.skipReason,
+    expiredReason: m.expiredReason,
     failureCode: m.failureCode,
     failureReason: m.failureReason,
+    // Feature 009 (research R12): the meaning and action of the failure, or of why it expired.
+    failureHelp: helpOf(m),
     attempts: m.attempts,
     sentAt: iso(m.sentAt),
     deliveredAt: iso(m.deliveredAt),
@@ -46,6 +58,7 @@ export class CampaignMessagesController {
   @PhoneField('phone')
   async list(@Param('id', ParseUUIDPipe) id: string, @Query(new ZodValidationPipe(MessagesQuerySchema)) query: MessagesQuery) {
     if (!(await this.prisma.campaign.findUnique({ where: { id }, select: { id: true } }))) throw AppError.notFound('Campaign not found');
+    if (query.replied) return this.byReply(id, query);
     const where = { campaignId: id, ...(query.status ? { status: query.status } : {}) };
     const [items, total] = await Promise.all([
       this.prisma.message.findMany({
@@ -58,5 +71,18 @@ export class CampaignMessagesController {
       this.prisma.message.count({ where }),
     ]);
     return { items: items.map(toMessageDto), page: pageMeta(query, total) };
+  }
+
+  /** The Replied / Not replied lists, with the same rule as the 005 retarget groups. */
+  private async byReply(id: string, query: MessagesQuery) {
+    const reply = query.replied === 'true' ? REPLIED : Prisma.sql`NOT ${REPLIED}`;
+    const status = query.status ? Prisma.sql`AND m.status = ${query.status}::"MessageStatus"` : Prisma.empty;
+    const condition = Prisma.sql`m.campaign_id = ${id}::uuid AND m.contact_id IS NOT NULL AND ${DELIVERED} AND ${reply} ${status}`;
+    const [ids, counted] = await Promise.all([
+      this.prisma.$queryRaw<Array<{ id: string }>>`SELECT m.id FROM messages m WHERE ${condition} ORDER BY m.id OFFSET ${(query.page - 1) * query.pageSize} LIMIT ${query.pageSize}`,
+      this.prisma.$queryRaw<Array<{ n: number }>>`SELECT COUNT(*)::int AS n FROM messages m WHERE ${condition}`,
+    ]);
+    const items = await this.prisma.message.findMany({ where: { id: { in: ids.map((r) => r.id) } }, include: { contact: { select: { name: true } } }, orderBy: { id: 'asc' } });
+    return { items: items.map(toMessageDto), page: pageMeta(query, counted[0]?.n ?? 0) };
   }
 }

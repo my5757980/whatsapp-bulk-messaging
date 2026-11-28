@@ -2,8 +2,8 @@
 
 import { useMutation, useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useState, type FormEvent } from 'react';
 import { RequirePermission } from '@/components/require-permission';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -28,13 +28,18 @@ const MESSAGE_MAX = 500;
 export default function ChatLinksPage() {
   return (
     <RequirePermission permission="campaigns.view">
-      <ChatLinkList />
+      <Suspense fallback={<p className="text-sm text-muted-foreground">Loading…</p>}>
+        <ChatLinkList />
+      </Suspense>
     </RequirePermission>
   );
 }
 
 function ChatLinkList() {
   const links = useQuery({ queryKey: integrationsKeys.chatLinks, queryFn: () => api<ChatLink[]>('/chat-links') });
+  // Feature 009: the link generator opens the form with its number and message.
+  const params = useSearchParams();
+  const prefill = params.get('new') ? { numberId: params.get('numberId') ?? '', message: params.get('message') ?? '' } : null;
 
   return (
     <div className="grid gap-6">
@@ -50,7 +55,7 @@ function ChatLinkList() {
           </p>
         </div>
         <Can permission="campaigns.manage">
-          <NewChatLinkDialog />
+          <NewChatLinkDialog prefill={prefill} />
         </Can>
       </div>
       <Card>
@@ -97,12 +102,12 @@ function ChatLinkList() {
   );
 }
 
-function NewChatLinkDialog() {
+function NewChatLinkDialog({ prefill = null }: { prefill?: { numberId: string; message: string } | null }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(prefill));
   const [name, setName] = useState('');
-  const [numberId, setNumberId] = useState('');
-  const [message, setMessage] = useState('');
+  const [numberId, setNumberId] = useState(prefill?.numberId ?? '');
+  const [message, setMessage] = useState(prefill?.message ?? '');
   const [flowId, setFlowId] = useState('');
   const [tagId, setTagId] = useState('');
   const [error, setError] = useState<string | null>(null);

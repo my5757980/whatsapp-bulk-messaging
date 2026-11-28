@@ -134,6 +134,12 @@ export const AUDIT_ACTIONS = [
   'form.archived',
   'payments.exported',
   'form_answers.exported',
+  // Feature 009 templates and campaign growth (research R17); reports use data.exported
+  'otp_settings.changed',
+  'chat_widget.created',
+  'chat_widget.updated',
+  'chat_widget.deleted',
+  'template_sample.copied',
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];

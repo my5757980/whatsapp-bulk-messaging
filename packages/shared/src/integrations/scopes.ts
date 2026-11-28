@@ -1,6 +1,6 @@
 // API key permissions (feature 006, research R4, FR-010).
 
-export const API_KEY_SCOPES = ['messages.send', 'contacts.read', 'contacts.write', 'campaigns.trigger', 'drips.enrol', 'payments.read', 'payments.write'] as const;
+export const API_KEY_SCOPES = ['messages.send', 'contacts.read', 'contacts.write', 'campaigns.trigger', 'drips.enrol', 'payments.read', 'payments.write', 'otp.send'] as const;
 export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
 
 /** Keys made before feature 006 can only send messages. */
@@ -15,6 +15,8 @@ export const SCOPE_LABELS: Record<ApiKeyScope, string> = {
   // Feature 008 (contracts/public-payments-v1.openapi.yaml)
   'payments.read': 'Read payment requests',
   'payments.write': 'Make, send and cancel payment requests',
+  // Feature 009 (contracts/public-otp-v1.openapi.yaml)
+  'otp.send': 'Send one-time codes',
 };
 
 export function isApiKeyScope(value: unknown): value is ApiKeyScope {

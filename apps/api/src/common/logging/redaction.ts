@@ -62,6 +62,11 @@ const SECRET_KEYS = new Set([
   'previouswebhooksecretenc',
   'previous_webhook_secret_enc',
   'stripe-signature',
+  // One-time codes (feature 009, research R4): the encrypted copy in send jobs and any otp field.
+  'codeenc',
+  'code_enc',
+  'otpcode',
+  'otp_code',
 ]);
 
 const CONTENT_KEYS = new Set([

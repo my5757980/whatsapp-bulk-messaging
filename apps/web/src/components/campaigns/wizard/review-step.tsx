@@ -15,6 +15,10 @@ import { Can } from '@/lib/permissions';
 import { queryKeys } from '@/lib/query';
 import { formatInZone, isValidTimeZone, toZonedInputValue, zonedTimeToUtc } from '@/lib/time';
 import type { Campaign, CampaignDetail, CompanySettings, Estimate } from '@/lib/types';
+import { FrequencyCapNote } from '@/components/help/frequency-cap-note';
+import type { Template } from '@/lib/types';
+import { MediaCheckCard } from './media-check-card';
+import { offerConfigSummary } from './offer-config';
 import { paymentConfigSummary } from './payment-config';
 
 const EXCLUDED_LABELS: Array<[keyof Estimate['excluded'], string]> = [
@@ -24,6 +28,8 @@ const EXCLUDED_LABELS: Array<[keyof Estimate['excluded'], string]> = [
   ['duplicate', 'Duplicate in the file'],
   ['missingVariable', 'Missing variable value'],
   ['paymentAmountMissing', 'No amount to ask for'],
+  ['offerCodeMissing', 'Missing offer code'],
+  ['mediaUrlMissing', 'Missing media address'],
 ];
 
 /** Step 4 (T110, T151): eligible and excluded counts, previews, then send now or schedule. */
@@ -34,6 +40,8 @@ export function ReviewStep({ campaign, onBack, onLaunched }: { campaign: Campaig
     staleTime: 0,
   });
   const settings = useQuery({ queryKey: queryKeys.settings, queryFn: () => api<CompanySettings>('/settings') });
+  // Feature 009 (FR-029): marketing templates get the per-person limit note.
+  const template = useQuery({ queryKey: ['template', campaign.templateId], queryFn: () => api<Template>(`/templates/${campaign.templateId}`), enabled: Boolean(campaign.templateId) });
   const [mode, setMode] = useState<'now' | 'later'>('now');
   const [when, setWhen] = useState('');
   const [zone, setZone] = useState<string | null>(null);
@@ -87,6 +95,21 @@ export function ReviewStep({ campaign, onBack, onLaunched }: { campaign: Campaig
               <p className="mt-2 text-sm" data-testid="payment-summary">
                 {paymentConfigSummary(campaign.paymentConfig)}
               </p>
+            ) : null}
+            {campaign.offerConfig ? (
+              <p className="mt-2 text-sm" data-testid="offer-summary">
+                {offerConfigSummary(campaign.offerConfig)}
+              </p>
+            ) : null}
+            {template.data?.category === 'MARKETING' ? (
+              <div className="mt-3">
+                <FrequencyCapNote />
+              </div>
+            ) : null}
+            {campaign.variableMapping?.['HEADER.media'] ? (
+              <div className="mt-3">
+                <MediaCheckCard campaignId={campaign.id} />
+              </div>
             ) : null}
           </CardContent>
         </Card>

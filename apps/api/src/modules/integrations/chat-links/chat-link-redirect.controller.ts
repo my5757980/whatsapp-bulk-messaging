@@ -20,7 +20,7 @@ export class ChatLinkRedirectController {
       purpose: req.get('purpose'),
       secPurpose: req.get('sec-purpose'),
       ip: req.ip,
-    });
+    }, { widget: typeof req.query.w === 'string' ? req.query.w : undefined, page: typeof req.query.p === 'string' ? req.query.p : undefined });
     res.status(result.status).set(result.headers);
     if (result.body !== undefined) res.send(result.body);
     else res.end();

@@ -11,6 +11,7 @@ import { CampaignsService } from './campaigns/campaigns.service.js';
 import { DispatchScheduler } from './campaigns/dispatch-scheduler.js';
 import { EstimateService } from './campaigns/estimate.service.js';
 import { LaunchService } from './campaigns/launch.service.js';
+import { MediaCheckService } from './campaigns/media-check.service.js';
 import { RetargetService } from './campaigns/retarget.service.js';
 import { ScheduleService } from './campaigns/schedule.service.js';
 import { AttributesController } from './contacts/attributes.controller.js';
@@ -42,8 +43,13 @@ import { RateCardController, RateCardService } from './rate-card/rate-card.contr
 import { ApiMessagesController } from './reports/api-messages.controller.js';
 import { ReportsController } from './reports/export.controller.js';
 import { ReportsService } from './reports/reports.service.js';
+import { ConsentReportService } from './reports/consent-report.service.js';
+import { OverviewReportService } from './reports/overview-report.service.js';
+import { ReportsV2Controller } from './reports/reports-v2.controller.js';
+import { TeamReportService } from './reports/team-report.service.js';
 import { TemplatesSyncService } from './templates/templates-sync.service.js';
 import { TemplatesController } from './templates/templates.controller.js';
+import { TemplateSamplesController, TemplateSamplesService } from './templates/template-samples.controller.js';
 import { TemplatesService } from './templates/templates.service.js';
 import { InvitationsService } from './users/invitations.service.js';
 import { MailerService } from './users/mailer.service.js';
@@ -63,6 +69,7 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     AudienceUploadService,
     EstimateService,
     LaunchService,
+    MediaCheckService,
     CampaignControlService,
     DispatchScheduler,
     AudienceQueryBuilder,
@@ -70,9 +77,13 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     ImportsService,
     MetaResumableUpload,
     TemplatesService,
+    TemplateSamplesService,
     ScheduleService,
     RateCardService,
     ReportsService,
+    OverviewReportService,
+    TeamReportService,
+    ConsentReportService,
     RetargetService,
     ApiKeysService,
     IdempotencyService,
@@ -91,6 +102,7 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     AudienceUploadService,
     EstimateService,
     LaunchService,
+    MediaCheckService,
     CampaignControlService,
     DispatchScheduler,
     AudienceQueryBuilder,
@@ -98,9 +110,13 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     ImportsService,
     MetaResumableUpload,
     TemplatesService,
+    TemplateSamplesService,
     ScheduleService,
     RateCardService,
     ReportsService,
+    OverviewReportService,
+    TeamReportService,
+    ConsentReportService,
     RetargetService,
     ApiKeysService,
     IdempotencyService,
@@ -119,6 +135,8 @@ export class DomainModule {}
   controllers: [
     NumbersController,
     TemplatesController,
+    // Feature 009: the sample template library.
+    TemplateSamplesController,
     MediaController,
     CampaignsController,
     CampaignMessagesController,
@@ -129,6 +147,8 @@ export class DomainModule {}
     AttributesController,
     RateCardController,
     ReportsController,
+    // Feature 009: overview, team member and opt-in reports.
+    ReportsV2Controller,
     UsersController,
     InvitationsController,
     AuditController,

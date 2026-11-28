@@ -122,7 +122,7 @@ function localAllowed(host: string, allowLocal: boolean | undefined): boolean {
 }
 
 export interface SafeRequest {
-  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  method: 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   url: string;
   headers?: Record<string, string>;
   body?: string;
@@ -133,6 +133,8 @@ export interface SafeRequest {
   onLimit?: 'fail' | 'truncate';
   /** OUTBOUND_ALLOW_LOCAL: lets http(s)://localhost through outside production. */
   allowLocal?: boolean;
+  /** Follows up to this many redirects, each address checked like the first (feature 009 media addresses). Default 0: refused. */
+  followRedirects?: number;
 }
 
 export interface SafeResponse {
@@ -177,6 +179,21 @@ export function safeRequest(input: SafeRequest): Promise<SafeResponse> {
       const status = res.statusCode ?? 0;
       if (status >= 300 && status < 400) {
         res.resume();
+        const location = res.headers.location;
+        if (location && (input.followRedirects ?? 0) > 0 && !settled) {
+          let next: string;
+          try {
+            next = new URL(location, url).toString();
+          } catch {
+            finish(new SafeHttpError('BAD_URL', 'The redirect address is not a valid URL'));
+            return;
+          }
+          // The next address gets every check again (https, public addresses) within the time left.
+          settled = true;
+          clearTimeout(timer);
+          safeRequest({ ...input, url: next, followRedirects: (input.followRedirects ?? 0) - 1, timeoutMs: Math.max(1, input.timeoutMs - (Date.now() - started)) }).then(resolve, reject);
+          return;
+        }
         finish(new SafeHttpError('REDIRECT', `The address answered with a redirect (${status}), which is not followed`));
         return;
       }

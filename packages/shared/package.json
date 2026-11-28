@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./page-rules": {
+      "types": "./dist/growth/page-rules.d.ts",
+      "default": "./dist/growth/page-rules.js"
     }
   },
   "scripts": {

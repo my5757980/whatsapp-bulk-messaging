@@ -21,6 +21,8 @@ export const FAILED_SEND_JOB_RETENTION_SECONDS = 7 * 24 * 3600;
 
 export interface SendJobData {
   messageId: string;
+  /** Feature 009 (research R4): a one-time code, encrypted with TokenCipher; only on OTP jobs. */
+  codeEnc?: string;
 }
 
 export interface SessionJobData {
@@ -45,6 +47,18 @@ const retrying = (jobId: string, priority?: number): JobsOptions => ({
 /** A campaign message (dispatcher). */
 export function campaignSendJob(messageId: string): QueuedJob<SendJobData> {
   return { name: 'send', data: { messageId }, opts: retrying(sendJobId(messageId), SEND_PRIORITY.CAMPAIGN) };
+}
+
+/**
+ * A one-time code (feature 009, research R4, R5). No priority, so it runs before chat replies (1) and
+ * campaigns (10) under the number's rate limiter; removed when it ends, so the encrypted code is not kept.
+ */
+export function otpSendJob(messageId: string, codeEnc: string): QueuedJob<SendJobData> {
+  return {
+    name: 'send',
+    data: { messageId, codeEnc },
+    opts: { jobId: sendJobId(messageId), attempts: MAX_SEND_ATTEMPTS, backoff: { type: 'custom' }, removeOnComplete: true, removeOnFail: true },
+  };
 }
 
 /** A template sent from a chat (`messages` origin INBOX), processed by the 001 send processor. */

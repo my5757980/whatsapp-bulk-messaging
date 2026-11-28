@@ -50,6 +50,8 @@ export interface MetaTemplateComponent {
     body_text_named_params?: Array<{ param_name: string; example: string }>;
   };
   buttons?: Array<{ type: string; text?: string; url?: string; example?: string[] }>;
+  /** Feature 009: carousel cards, each with its own header, body and buttons. */
+  cards?: Array<{ components?: MetaTemplateComponent[] }>;
 }
 
 function examplesFor(
@@ -82,6 +84,23 @@ export function extractTemplateVariables(components: MetaTemplateComponent[]): T
         placeholdersIn(button.url).forEach((p, i) =>
           result.push({ key: formatVariableKey({ component: 'BUTTON', index, placeholder: p }), example: button.example?.[i] ?? '' }),
         );
+      });
+    } else if (type === 'CAROUSEL') {
+      // Feature 009 (research R6): CARD.c.BODY.n and CARD.c.BUTTON.b.n, zero-based card and button.
+      (component.cards ?? []).forEach((card, c) => {
+        for (const part of card.components ?? []) {
+          const partType = part.type.toUpperCase();
+          if (partType === 'BODY') {
+            const names = placeholdersIn(part.text);
+            const examples = examplesFor(names, part.example?.body_text?.[0], part.example?.body_text_named_params);
+            names.forEach((p, i) => result.push({ key: `CARD.${c}.BODY.${p}`, example: examples[i] ?? '' }));
+          } else if (partType === 'BUTTONS') {
+            (part.buttons ?? []).forEach((button, b) => {
+              if (button.type.toUpperCase() !== 'URL') return;
+              placeholdersIn(button.url).forEach((p, i) => result.push({ key: `CARD.${c}.BUTTON.${b}.${p}`, example: button.example?.[i] ?? '' }));
+            });
+          }
+        }
       });
     }
   }

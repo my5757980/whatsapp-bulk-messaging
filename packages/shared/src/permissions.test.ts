@@ -32,6 +32,8 @@ const table: Array<[string, Permission[], { ADMIN: boolean; MANAGER: boolean; AG
   ['all payment requests and totals', ['payments.view'], { ADMIN: true, MANAGER: true, AGENT: false }],
   ['payment limits, roles, templates and reminders', ['payments.manage'], { ADMIN: true, MANAGER: false, AGENT: false }],
   ['build and publish WhatsApp Forms', ['forms.manage'], { ADMIN: true, MANAGER: true, AGENT: false }],
+  // Feature 009: overview, team member and consent reports
+  ['overview, team member and opt-in reports', ['reports.view'], { ADMIN: true, MANAGER: true, AGENT: false }],
 ];
 
 describe('permission matrix (spec.md role table)', () => {

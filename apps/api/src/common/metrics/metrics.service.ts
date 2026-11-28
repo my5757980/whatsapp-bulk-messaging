@@ -25,6 +25,14 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  /** Feature 009 (research R12): Meta error codes without a help entry, so maintainers know which to add. */
+  readonly unknownErrorCodes = new Counter({
+    name: 'wbm_unknown_error_codes_total',
+    help: 'Meta error codes seen without an entry in the help meanings',
+    labelNames: ['code'] as const,
+    registers: [this.registry],
+  });
+
   /**
    * Jobs ready to run but not picked up yet. Delayed jobs (retry backoff, the next run of a job
    * scheduler) are left out, so an idle queue reads 0 and a growing value means a backlog.
@@ -314,6 +322,41 @@ export class MetricsService {
     name: 'wbm_catalog_sync_total',
     help: 'Catalog jobs (copy, fill, batch) by result (ok or failed)',
     labelNames: ['job', 'result'] as const,
+    registers: [this.registry],
+  });
+
+  // Feature 009 (research R17): one-time codes, expired messages, website buttons and report downloads.
+  readonly otpSendsTotal = new Counter({
+    name: 'wbm_otp_sends_total',
+    help: 'One-time code messages by result: sent (accepted by Meta) or failed',
+    labelNames: ['result'] as const,
+    registers: [this.registry],
+  });
+
+  readonly otpSendSeconds = new Histogram({
+    name: 'wbm_otp_send_seconds',
+    help: 'Seconds from the code request to Meta accepting the message',
+    buckets: [0.25, 0.5, 1, 2, 5, 10, 30],
+    registers: [this.registry],
+  });
+
+  readonly messagesExpiredTotal = new Counter({
+    name: 'wbm_messages_expired_total',
+    help: 'Messages that expired, by reason (EXPIRED_BEFORE_SENDING, NOT_DELIVERED_IN_TIME, OFFER_ENDED)',
+    labelNames: ['reason'] as const,
+    registers: [this.registry],
+  });
+
+  readonly widgetOpensTotal = new Counter({
+    name: 'wbm_widget_opens_total',
+    help: 'Chat link opens that came from a website chat button',
+    registers: [this.registry],
+  });
+
+  readonly reportsExportedTotal = new Counter({
+    name: 'wbm_reports_exported_total',
+    help: 'Report downloads by type (overview, team, consent, campaign)',
+    labelNames: ['type'] as const,
     registers: [this.registry],
   });
 

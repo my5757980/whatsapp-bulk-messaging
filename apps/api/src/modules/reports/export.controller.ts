@@ -6,9 +6,11 @@ import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { AuditService } from '../audit/audit.service.js';
 import { CampaignsService } from '../campaigns/campaigns.service.js';
 import { csvField } from '../campaigns/csv.js';
+import { REPLIED_AT } from '../campaigns/replied.sql.js';
 import { ReportsService } from './reports.service.js';
 
-const COLUMNS = ['phone', 'name', 'status', 'skip_reason', 'failure_code', 'failure_reason', 'attempts', 'sent_at', 'delivered_at', 'read_at', 'failed_at', 'cost_usd'];
+// Feature 009 (research R11): replied, replied_at and clicks per recipient (FR-037).
+const COLUMNS = ['phone', 'name', 'status', 'skip_reason', 'failure_code', 'failure_reason', 'attempts', 'sent_at', 'delivered_at', 'read_at', 'failed_at', 'cost_usd', 'replied', 'replied_at', 'clicks'];
 const BATCH = 1000;
 
 const iso = (d: Date | null) => d?.toISOString() ?? '';
@@ -54,6 +56,11 @@ export class ReportsController {
       });
       if (!batch.length) break;
       cursor = batch[batch.length - 1]!.id;
+      const extra = await this.prisma.$queryRaw<Array<{ id: string; replied_at: Date | null; clicks: number }>>`
+        SELECT m.id, ${REPLIED_AT} AS replied_at,
+               (SELECT COUNT(*)::int FROM tracked_links tl JOIN link_clicks lc ON lc.tracked_link_id = tl.id WHERE tl.message_id = m.id) AS clicks
+          FROM messages m WHERE m.id = ANY(${batch.map((m) => m.id)}::uuid[])`;
+      const byId = new Map(extra.map((e) => [e.id, e]));
       const chunk = batch
         .map((m) =>
           [
@@ -69,6 +76,9 @@ export class ReportsController {
             iso(m.readAt),
             iso(m.failedAt),
             m.costUsdMicros === null ? '' : (Number(m.costUsdMicros) / 1_000_000).toString(),
+            byId.get(m.id)?.replied_at ? 'yes' : 'no',
+            iso(byId.get(m.id)?.replied_at ?? null),
+            byId.get(m.id)?.clicks ?? 0,
           ]
             .map(csvField)
             .join(','),

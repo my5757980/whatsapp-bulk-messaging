@@ -1,5 +1,5 @@
 // Message status precedence rules (data-model.md §5, FR-025).
-import { MessageStatus } from './enums.js';
+import { ExpiredReason, MessageStatus } from './enums.js';
 
 const RANK: Readonly<Record<MessageStatus, number>> = {
   [MessageStatus.PENDING]: 0,
@@ -12,6 +12,7 @@ const RANK: Readonly<Record<MessageStatus, number>> = {
   [MessageStatus.FAILED]: -1,
   [MessageStatus.SKIPPED]: -1,
   [MessageStatus.CANCELLED]: -1,
+  [MessageStatus.EXPIRED]: -1,
 };
 
 const DELIVERY_PATH = new Set<MessageStatus>([
@@ -35,11 +36,19 @@ export function statusRank(status: MessageStatus): number {
  * - SKIPPED and CANCELLED are platform decisions from PENDING or QUEUED.
  * - The pause path moves QUEUED back to PENDING.
  */
-export function canTransition(current: MessageStatus, next: MessageStatus): boolean {
+export function canTransition(current: MessageStatus, next: MessageStatus, opts: { expiredReason?: ExpiredReason | null } = {}): boolean {
   if (current === next) return false;
+  // Feature 009 (research R8): a late Meta webhook replaces the sweep's "not delivered in time";
+  // messages dropped before sending or after an offer ended never change.
+  if (current === MessageStatus.EXPIRED) {
+    return opts.expiredReason === ExpiredReason.NOT_DELIVERED_IN_TIME && (next === MessageStatus.DELIVERED || next === MessageStatus.READ || next === MessageStatus.FAILED);
+  }
   if (!DELIVERY_PATH.has(current)) return false; // FAILED / SKIPPED / CANCELLED are final
 
   switch (next) {
+    case MessageStatus.EXPIRED:
+      // Dropped at send time (from the queue) or by the sweep (sent, never delivered).
+      return RANK[current] <= RANK[MessageStatus.SENT];
     case MessageStatus.FAILED:
       return RANK[current] < RANK[MessageStatus.DELIVERED];
     case MessageStatus.SKIPPED:
@@ -71,6 +80,7 @@ const LABELS: Readonly<Record<MessageStatus, string>> = {
   [MessageStatus.FAILED]: 'Failed',
   [MessageStatus.SKIPPED]: 'Skipped',
   [MessageStatus.CANCELLED]: 'Cancelled',
+  [MessageStatus.EXPIRED]: 'Expired',
 };
 
 /** User-facing label; internal PENDING/SENDING show as "Queued" (spec FR-025 vocabulary). */

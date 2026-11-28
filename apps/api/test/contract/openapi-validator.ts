@@ -22,7 +22,9 @@ export type ContractFile =
   | 'public-api-v1.openapi.yaml'
   | 'ads-api.openapi.yaml'
   | 'commerce-api.openapi.yaml'
-  | 'public-payments-v1.openapi.yaml';
+  | 'public-payments-v1.openapi.yaml'
+  | 'templates-growth-api.openapi.yaml'
+  | 'public-otp-v1.openapi.yaml';
 
 interface MediaTypeObject {
   schema?: object;
@@ -42,6 +44,8 @@ const specsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 const INTEGRATIONS = '006-integrations-platform';
 /** Feature 008 folder, named once for the same reason. */
 const COMMERCE = '008-commerce-payments';
+/** Feature 009 folder. */
+const TEMPLATES_GROWTH = '009-templates-growth';
 const FEATURE_OF: Record<ContractFile, string> = {
   'dashboard-api.openapi.yaml': '001-whatsapp-bulk-messaging',
   'public-api.openapi.yaml': '001-whatsapp-bulk-messaging',
@@ -54,6 +58,8 @@ const FEATURE_OF: Record<ContractFile, string> = {
   'ads-api.openapi.yaml': '007-ads-manager',
   'commerce-api.openapi.yaml': COMMERCE,
   'public-payments-v1.openapi.yaml': COMMERCE,
+  'templates-growth-api.openapi.yaml': TEMPLATES_GROWTH,
+  'public-otp-v1.openapi.yaml': TEMPLATES_GROWTH,
 };
 const contractsDir = (file: ContractFile) => path.join(specsDir, FEATURE_OF[file], 'contracts');
 

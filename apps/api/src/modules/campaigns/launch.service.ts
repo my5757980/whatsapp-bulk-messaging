@@ -16,6 +16,8 @@ import { CAMPAIGN_PAYMENTS, campaignPaymentConfig, type CampaignPaymentContext, 
 import { CampaignsService, toCampaignDto } from './campaigns.service.js';
 import { DispatchScheduler } from './dispatch-scheduler.js';
 import { unmappedVariables, type VariableMapping } from './variable-resolver.js';
+import { MediaCheckService } from './media-check.service.js';
+import { HEADER_MEDIA_KEY, duplicateRowsProblem, offerEndProblem } from '@wbm/shared';
 
 // Launch (T096): validate, snapshot recipients into `messages`, set RUNNING and start the
 // dispatcher. The snapshot and the state change commit together, so a half-written campaign is
@@ -47,6 +49,7 @@ export class LaunchService {
     private readonly rateCard: RateCardService,
     private readonly trackedLinks: TrackedLinksService,
     private readonly codes: TrackedLinkCodes,
+    private readonly mediaCheck: MediaCheckService,
     @Optional() @Inject(CAMPAIGN_PAYMENTS) private readonly payments?: CampaignPaymentsPort,
   ) {}
 
@@ -100,9 +103,23 @@ export class LaunchService {
         untracked.map((key) => ({ field: `trackedLinks.${key}`, issue: 'needs a destination' })),
       );
     }
-    if (headerMediaType(components) && !campaign.headerMediaAssetId) {
+    // Feature 009 (research R9): the header media may come from a web address instead of a file.
+    const mapping = (campaign.variableMapping ?? {}) as VariableMapping;
+    if (headerMediaType(components) && !campaign.headerMediaAssetId && !mapping[HEADER_MEDIA_KEY]) {
       throw AppError.validation('This template needs header media', [{ field: 'headerMediaAssetId', issue: 'is required' }]);
     }
+    // Feature 009 (research R7, R10): an offer needs a future end after the start; every row needs an upload.
+    if (template.kind === 'LIMITED_TIME_OFFER') {
+      const offer = campaign.offerConfig as { endsAt?: string } | null;
+      if (!offer?.endsAt) throw AppError.validation('Set when the offer ends and its code', [{ field: 'offerConfig', issue: 'is required for offer templates' }]);
+      const problem = offerEndProblem(new Date(offer.endsAt), campaign.scheduledAt, new Date());
+      if (problem) throw AppError.validation(problem === 'OFFER_ENDED' ? 'The offer has already ended' : 'The offer ends before the campaign starts', [{ field: 'offerConfig.endsAt', issue: problem === 'OFFER_ENDED' ? 'is in the past' : 'is before the scheduled start' }], problem);
+    }
+    if (duplicateRowsProblem(campaign.audienceType, campaign.allowDuplicateRows)) {
+      throw AppError.validation('"Send to every row" works with uploaded lists only', [{ field: 'allowDuplicateRows', issue: 'needs an uploaded audience' }], 'DUPLICATES_NEED_UPLOAD');
+    }
+    // Feature 009 (research R6, R9): card files uploaded to the number, media addresses checked.
+    await this.mediaCheck.assertReady({ ...campaign, template, number });
     await this.snapshot.assertReady(campaign);
     return { template, number };
   }
@@ -123,7 +140,7 @@ export class LaunchService {
       async (tx) => {
         const { count } = await tx.campaign.updateMany({
           where: { id: campaignId, state: fromState },
-          data: { state: 'RUNNING', launchedAt: new Date(), pausedReason: null, totals: {} },
+          data: { state: 'RUNNING', launchedAt: new Date(), pausedReason: null, totals: {}, launchedById: actor.userId ?? null },
         });
         if (!count) throw AppError.conflict(fromState === 'DRAFT' ? 'Only draft campaigns can be launched' : 'The campaign is no longer scheduled');
         await tx.message.deleteMany({ where: { campaignId } });
@@ -132,6 +149,8 @@ export class LaunchService {
         const trackedKeys = await this.snapshot.trackedKeys(campaignId, variables, tx);
         const targets = (await this.trackedLinks.targetsOf(campaignId, tx)).filter((t) => trackedKeys.has(t.variableKey));
 
+        // Feature 009 (research R10): each repeated row of a contact is its own message (copy_index 0, 1, 2…).
+        const copies = new Map<string, number>();
         for await (const batch of this.snapshot.evaluate(campaign, template, tx, payment)) {
           for (let i = 0; i < batch.length; i += INSERT_BATCH) {
             const slice = batch.slice(i, i + INSERT_BATCH).map((r) => ({ ...r, id: uuidv7() }));
@@ -141,11 +160,15 @@ export class LaunchService {
                   targets,
                 )
               : null;
-            const data = slice.map((r) => ({
+            const data = slice.map((r) => {
+              const copyIndex = copies.get(r.contactId) ?? 0;
+              copies.set(r.contactId, copyIndex + 1);
+              return {
               id: r.id,
               origin: 'CAMPAIGN' as const,
               campaignId,
               contactId: r.contactId,
+              copyIndex,
               phoneE164: r.phoneE164,
               recipientCountry: r.countryCode,
               numberId: number.id,
@@ -153,7 +176,8 @@ export class LaunchService {
               resolvedParams: { ...r.params, ...(plan?.params.get(r.id) ?? {}) } as Prisma.InputJsonValue,
               status: r.status,
               skipReason: r.skipReason,
-            }));
+              };
+            });
             if (plan || payment) {
               const inserted = await tx.message.createManyAndReturn({ data, skipDuplicates: true, select: { id: true } });
               const ids = new Set(inserted.map((m) => m.id));

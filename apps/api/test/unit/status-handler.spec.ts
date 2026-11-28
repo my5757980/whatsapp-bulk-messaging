@@ -47,6 +47,17 @@ describe('computeStatusUpdate', () => {
   it('records deleted as event only', () => {
     expect(computeStatusUpdate(snapshot('READ'), { status: 'deleted', timestamp: at(100) })).toBeNull();
   });
+
+  it('lets a late webhook replace "not delivered in time", but never a message dropped before sending (feature 009)', () => {
+    const late = snapshot('EXPIRED', { sentAt: at(10), expiredReason: 'NOT_DELIVERED_IN_TIME' });
+    expect(computeStatusUpdate(late, { status: 'delivered', timestamp: at(900) })).toEqual({ expiredReason: null, status: 'DELIVERED', deliveredAt: at(900) });
+    expect(computeStatusUpdate(late, { status: 'read', timestamp: at(950) })).toEqual({ expiredReason: null, status: 'READ', readAt: at(950) });
+    expect(computeStatusUpdate(late, { status: 'failed', timestamp: at(960), error: { code: 131026, message: 'Message undeliverable' } })).toMatchObject({ expiredReason: null, status: 'FAILED', failureCode: 131026 });
+    for (const expiredReason of ['EXPIRED_BEFORE_SENDING', 'OFFER_ENDED']) {
+      expect(computeStatusUpdate(snapshot('EXPIRED', { expiredReason }), { status: 'delivered', timestamp: at(900) })).toEqual({ deliveredAt: at(900) });
+      expect(computeStatusUpdate(snapshot('EXPIRED', { expiredReason }), { status: 'failed', timestamp: at(900) })).toBeNull();
+    }
+  });
 });
 
 describe('parseStatuses', () => {
