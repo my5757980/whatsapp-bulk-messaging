@@ -29,6 +29,8 @@ import { ChatLinkMatcher } from '../../integrations/chat-links/chat-link-matcher
 import { parseInboundMessage, previewOf, type ParsedInbound } from './message-parser.js';
 import { stopContactCarts } from '../../integrations/stores/store-carts.js';
 import { leadSourceFor } from '../../contacts/lead-source.js';
+import { REPLY_WINDOW_HOURS } from '../../campaigns/replied.sql.js';
+import { AutoTagService } from '../../contacts/auto-tags.service.js';
 
 interface LockedChat {
   id: string;
@@ -70,6 +72,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly cod: CodService,
     private readonly chatLinks: ChatLinkMatcher,
     private readonly adChats: AdChatMatcher,
+    private readonly autoTags: AutoTagService,
     @Optional() @Inject(CHAT_ORDERS) private readonly chatOrders?: ChatOrdersPort,
     @Optional() @Inject(FORM_ANSWERS) private readonly formAnswers?: FormAnswersPort,
   ) {}
@@ -150,6 +153,16 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
       await this.drips.onEvent(contact.id, { kind: 'REPLIED', numberId }, tx);
       // A reply on a store's number stops that store's cart reminders for the contact (feature 006, FR-042).
       await stopContactCarts(tx, contact.id, 'replied', numberId);
+      // Automatic tags for campaign replies (feature 010, R4), only when a rule listens.
+      if (await this.autoTags.listens('CAMPAIGN_REPLY')) {
+        const replied = await tx.$queryRaw<Array<{ one: number }>>`
+          SELECT 1 AS one FROM messages m
+           WHERE m.contact_id = ${contact.id}::uuid AND m.number_id = ${numberId}::uuid AND m.origin = 'CAMPAIGN'
+             AND m.status IN ('DELIVERED', 'READ')
+             AND COALESCE(m.delivered_at, m.read_at) BETWEEN ${msg.occurredAt}::timestamptz - make_interval(hours => ${REPLY_WINDOW_HOURS}) AND ${msg.occurredAt}::timestamptz
+           LIMIT 1`;
+        if (replied.length) await this.autoTags.apply(tx, 'CAMPAIGN_REPLY', contact.id);
+      }
       // Outbound webhooks (feature 006, FR-002); text is removed later for endpoints that chose so.
       const buttonPayload = typeof msg.payload.payload === 'string' ? msg.payload.payload : typeof msg.payload.id === 'string' ? msg.payload.id : null;
       await this.platformEvents.messageReceived(tx, {

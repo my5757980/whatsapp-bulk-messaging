@@ -16,7 +16,10 @@ import { RetargetService } from './campaigns/retarget.service.js';
 import { ScheduleService } from './campaigns/schedule.service.js';
 import { AttributesController } from './contacts/attributes.controller.js';
 import { AudienceQueryBuilder } from './contacts/audience-query.builder.js';
+import { AutoTagsController } from './contacts/auto-tags.controller.js';
+import { AutoTagService } from './contacts/auto-tags.service.js';
 import { BulkActionsController } from './contacts/bulk-actions.controller.js';
+import { ContactsExportController } from './contacts/contacts-export.controller.js';
 import { BulkActionsService } from './contacts/bulk-actions.service.js';
 import { SegmentQueryBuilder } from './contacts/segment-query.builder.js';
 import { SegmentsController } from './contacts/segments.controller.js';
@@ -95,10 +98,11 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     IdempotentResponses,
     PublicApiService,
     QueueDepthCollector,
-    // Feature 010: segments and bulk actions.
+    // Feature 010: segments, bulk actions and automatic tags.
     SegmentQueryBuilder,
     SegmentsService,
     BulkActionsService,
+    AutoTagService,
   ],
   exports: [
     NumbersService,
@@ -134,6 +138,7 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     SegmentQueryBuilder,
     SegmentsService,
     BulkActionsService,
+    AutoTagService,
   ],
 })
 export class DomainModule {}
@@ -154,10 +159,12 @@ export class DomainModule {}
     CampaignMessagesController,
     ImportsController,
     ContactDeletionController,
-    ContactsController,
-    // Feature 010: segments and bulk actions.
-    SegmentsController,
+    // Feature 010: before ContactsController, whose GET /contacts/:id would catch these paths.
     BulkActionsController,
+    ContactsExportController,
+    ContactsController,
+    SegmentsController,
+    AutoTagsController,
     TagsController,
     AttributesController,
     RateCardController,
