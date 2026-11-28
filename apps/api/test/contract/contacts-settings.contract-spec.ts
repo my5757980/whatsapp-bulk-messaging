@@ -99,4 +99,23 @@ describe('Contacts, settings and security API (010) contract', () => {
       await check('delete', '/global-attributes/{id}', await send(admin, 'delete', `/global-attributes/${created.body.id}`), 404);
     });
   });
+
+  describe('US4 keyword replies', () => {
+    it('/settings/keyword-replies', async () => {
+      await check('get', '/settings/keyword-replies', await manager.agent.get('/api/settings/keyword-replies'), 200);
+      const number = await seedNumber(ctx);
+      const marketing = await seedTemplate(ctx, number.wabaId, { category: 'MARKETING' });
+      const utility = await seedTemplate(ctx, number.wabaId, { category: 'UTILITY' });
+      const refused = await send(admin, 'put', '/settings/keyword-replies', { optOut: { kind: 'NONE' }, optIn: { kind: 'TEMPLATE', templateId: marketing.id, variables: { 'BODY.1': { source: 'static', value: 'friend' } } } });
+      await check('put', '/settings/keyword-replies', refused, 422);
+      expect(refused.body.code).toBe('TEMPLATE_NOT_UTILITY');
+      await check(
+        'put',
+        '/settings/keyword-replies',
+        await send(admin, 'put', '/settings/keyword-replies', { optOut: { kind: 'TEXT', text: 'You are unsubscribed.' }, optIn: { kind: 'TEMPLATE', templateId: utility.id, variables: { 'BODY.1': { source: 'static', value: 'friend' } } } }),
+        200,
+      );
+      await check('put', '/settings/keyword-replies', await send(admin, 'put', '/settings/keyword-replies', { optOut: { kind: 'NONE' }, optIn: { kind: 'NONE' } }), 200);
+    });
+  });
 });

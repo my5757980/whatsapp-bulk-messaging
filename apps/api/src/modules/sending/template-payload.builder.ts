@@ -22,6 +22,9 @@ export const FLOW_TOKEN_PARAM = '$flowToken';
 /** Feature 009 (research R7): resolved_params key holding an offer's end as Unix milliseconds. */
 export const OFFER_ENDS_PARAM = '$offerEndsAt';
 
+/** Feature 010 (US4): resolved_params marker of a keyword reply, so an opt-out confirmation still reaches the person. */
+export const KEYWORD_REPLY_PARAM = '$keywordReply';
+
 interface ProductChoices {
   thumbnailRetailerId?: string | null;
   sections?: Array<{ title?: string | null; retailerIds?: string[] }>;

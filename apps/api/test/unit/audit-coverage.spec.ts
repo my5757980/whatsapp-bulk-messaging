@@ -9,7 +9,6 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../sr
 /** Actions listed before the code that records them exists (empty: every action is recorded). */
 const PENDING = new Set<string>([
   // Feature 010: recorded by their stories (tasks.md T085 empties this list)
-  'keyword_replies.changed',
   'date_automation.created',
   'date_automation.updated',
   'date_automation.deleted',

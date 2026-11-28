@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
+import { KeywordRepliesCard } from '@/components/settings/keyword-replies-card';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -19,7 +20,7 @@ const toList = (value: FormDataEntryValue | null) =>
     .map((k) => k.trim())
     .filter(Boolean);
 
-/** Settings > Consent keywords, default country and timezone (T130, FR-013). */
+/** Settings > Consent keywords, default country and timezone (T130, FR-013), and the keyword replies (010 US4). */
 export default function KeywordsPage() {
   const queryClient = useQueryClient();
   const { can } = usePermissions();
@@ -51,8 +52,8 @@ export default function KeywordsPage() {
     });
   }
 
-  return (
-    <Card className="max-w-2xl">
+  const keywords = (
+    <Card>
       <CardHeader>
         <CardTitle className="text-base">Consent keywords</CardTitle>
         <CardDescription>
@@ -98,5 +99,11 @@ export default function KeywordsPage() {
         </form>
       </CardContent>
     </Card>
+  );
+  return (
+    <div className="grid max-w-2xl gap-6">
+      {keywords}
+      <KeywordRepliesCard editable={editable} />
+    </div>
   );
 }

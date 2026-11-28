@@ -18,6 +18,7 @@ import { AttributesController } from './contacts/attributes.controller.js';
 import { AudienceQueryBuilder } from './contacts/audience-query.builder.js';
 import { AutoTagsController } from './contacts/auto-tags.controller.js';
 import { GlobalAttributesController } from './settings/global-attributes.controller.js';
+import { KeywordRepliesController, KeywordRepliesService } from './settings/keyword-replies.js';
 import { GlobalAttributesService } from './settings/global-attributes.service.js';
 import { AutoTagService } from './contacts/auto-tags.service.js';
 import { BulkActionsController } from './contacts/bulk-actions.controller.js';
@@ -106,6 +107,7 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     BulkActionsService,
     AutoTagService,
     GlobalAttributesService,
+    KeywordRepliesService,
   ],
   exports: [
     NumbersService,
@@ -143,6 +145,7 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     BulkActionsService,
     AutoTagService,
     GlobalAttributesService,
+    KeywordRepliesService,
   ],
 })
 export class DomainModule {}
@@ -170,6 +173,7 @@ export class DomainModule {}
     SegmentsController,
     AutoTagsController,
     GlobalAttributesController,
+    KeywordRepliesController,
     TagsController,
     AttributesController,
     RateCardController,

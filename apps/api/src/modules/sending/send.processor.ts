@@ -15,7 +15,7 @@ import { DripLeaving } from '../growth/drips/drip-leaving.js';
 import { StatusHandler } from '../webhooks/handlers/status.handler.js';
 import { decideSendFailure, preSendCheck } from './send-outcome.js';
 import { deliveryDeadline, sendExpiry } from './send-expiry.js';
-import { OFFER_ENDS_PARAM } from './template-payload.builder.js';
+import { KEYWORD_REPLY_PARAM, OFFER_ENDS_PARAM } from './template-payload.builder.js';
 import { FLOW_TOKEN_PARAM, HEADER_MEDIA_URL_PARAM, authenticationPayload, buildTemplatePayload, headerMediaType } from './template-payload.builder.js';
 import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
 import { TEMPLATE_FORM_TOKENS, type TemplateFormTokensPort } from './template-form-tokens.port.js';
@@ -109,6 +109,7 @@ export class SendProcessor {
       sendingEnabled: m.number.sendingEnabled,
       consent: m.contact?.consentStatus ?? 'UNKNOWN',
       marketing: m.template.category === 'MARKETING',
+      consentReply: m.origin === 'INBOX' && m.template.category === 'UTILITY' && ((m.resolvedParams ?? {}) as Record<string, string>)[KEYWORD_REPLY_PARAM] === '1',
     });
 
     switch (decision.action) {
