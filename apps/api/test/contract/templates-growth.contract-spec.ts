@@ -1,4 +1,5 @@
 import nock from 'nock';
+import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { FakeTemplatesGraph } from '../support/fake-templates-graph.js';
 import { digits, restoreNetwork, seedNumber, seedTemplate, useNockLocalOnly } from '../support/fixtures.js';
@@ -73,6 +74,36 @@ describe('Templates and growth API (009) contract', () => {
       expect(res.body.cardMedia).toEqual([expect.objectContaining({ cardIndex: 0, result: 'READY' }), expect.objectContaining({ cardIndex: 1, result: 'READY' })]);
       await ctx.prisma.campaign.update({ where: { id: draft.body.id }, data: { state: 'COMPLETED' } });
       await check('post', '/campaigns/{id}/media-check', await manager.agent.post(`/api/campaigns/${draft.body.id}/media-check`).set('X-CSRF-Token', manager.csrf), 409);
+    });
+  });
+
+  describe('US8 website button and generator', () => {
+    it('the /chat-widgets routes, /tools/whatsapp-link and the public config', async () => {
+      const send = (method: 'post' | 'put' | 'delete', url: string, body?: object) => manager.agent[method](`/api${url}`).set('X-CSRF-Token', manager.csrf).send(body ?? {});
+      const input = (name: string) => ({
+        name,
+        numberId: number.id,
+        look: { colour: '#0A7B55', buttonText: 'Chat with us', corner: 'BOTTOM_RIGHT', offsetX: 20, offsetY: 20, radius: 24 },
+        brandName: 'Lamp & Co',
+        brandImageAssetId: null,
+        greeting: 'Hi!',
+        message: 'Hello',
+        rules: [{ match: 'PREFIX', value: '/products', hide: false, greeting: 'About this product?', message: 'Hi about a product' }],
+      });
+      const name = `Contract button ${digits(6)}`;
+      const created = await send('post', '/chat-widgets', input(name));
+      await check('post', '/chat-widgets', created, 201);
+      await check('post', '/chat-widgets', await send('post', '/chat-widgets', input(name)), 409);
+      await check('get', '/chat-widgets', await manager.agent.get('/api/chat-widgets'), 200);
+      await check('get', '/chat-widgets/{id}', await manager.agent.get(`/api/chat-widgets/${created.body.id}`), 200);
+      await check('put', '/chat-widgets/{id}', await send('put', `/chat-widgets/${created.body.id}`, input(name)), 200);
+      await check('post', '/chat-widgets/{id}/pause', await send('post', `/chat-widgets/${created.body.id}/pause`), 200);
+      await check('post', '/chat-widgets/{id}/resume', await send('post', `/chat-widgets/${created.body.id}/resume`), 200);
+      await check('get', '/chat-widgets/{id}/stats', await manager.agent.get(`/api/chat-widgets/${created.body.id}/stats`), 200);
+      await check('get', '/l/w/{key}/config.json', await request(ctx.server()).get(`/l/w/${created.body.key}/config.json`), 200);
+      await check('post', '/tools/whatsapp-link', await send('post', '/tools/whatsapp-link', { phone: '+971501234567', message: 'Hi' }), 200);
+      await check('post', '/tools/whatsapp-link', await send('post', '/tools/whatsapp-link', { phone: '123' }), 422);
+      await check('delete', '/chat-widgets/{id}', await send('delete', `/chat-widgets/${created.body.id}`), 204);
     });
   });
 

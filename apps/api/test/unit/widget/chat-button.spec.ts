@@ -36,7 +36,7 @@ describe('the chat button', () => {
     window.history.replaceState({}, '', '/about');
     const root = render(window, config(), 'AbCdEfGhIjKl')!;
     expect(root).not.toBeNull();
-    expect(document.querySelector('[data-wbm-chat-button]')).not.toBeNull();
+    expect(document.querySelector('[data-wbm-chat-button]')!.shadowRoot).toBe(root);
     const style = root.querySelector('style')!.textContent!;
     expect(style).toContain('left: 24px');
     expect(style).toContain('bottom: 30px');

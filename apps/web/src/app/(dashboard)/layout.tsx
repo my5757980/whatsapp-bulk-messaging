@@ -31,6 +31,9 @@ const NAV: Array<{ href: string; label: string; permission: Permission }> = [
   { href: '/catalog', label: 'Catalog', permission: 'integrations.manage' },
   { href: '/forms', label: 'Forms', permission: 'forms.manage' },
   { href: '/integrations/stores', label: 'Integrations', permission: 'campaigns.view' },
+  // Feature 009: the website chat button and the link generator.
+  { href: '/website-button', label: 'Website button', permission: 'campaigns.view' },
+  { href: '/tools/whatsapp-link', label: 'Link generator', permission: 'templates.view' },
   { href: '/settings/numbers', label: 'Settings', permission: 'settings.view' },
 ];
 

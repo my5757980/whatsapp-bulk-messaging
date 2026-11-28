@@ -26,7 +26,8 @@
      silently.
   3. Pick the rule: the first rule whose `match` and `value` fit the page (below). A rule with
      `hide: true` stops here.
-  4. Render inside a closed shadow root attached to a `div` at the end of `body`:
+  4. Render inside an open shadow root attached to a `div` at the end of `body` (the site's styles do not
+     reach it; browser tests and accessibility checkers can):
      - a round button in `look.colour`, showing a WhatsApp icon (our own SVG) and `look.buttonText`
      - its position from `look.corner`, `offsetX` and `offsetY`, with `look.radius` corners
      - a `z-index` of 2147483000

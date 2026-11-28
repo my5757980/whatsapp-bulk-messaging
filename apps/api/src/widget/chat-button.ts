@@ -1,6 +1,6 @@
 // Feature 009 (research R15, contracts/website-button.md): the website chat button. Plain ES2019 in an
 // IIFE (scripts/build-widget.mjs bundles the shared page rule matcher), one global guard, no cookies or
-// storage, nothing thrown to the page. Everything is drawn inside a closed shadow root.
+// storage, nothing thrown to the page. Everything is drawn inside an open shadow root (styles stay apart).
 import { pageKey, pickPageRule, type PageRuleLike } from '@wbm/shared/page-rules';
 
 export interface WidgetLook {
@@ -56,7 +56,7 @@ export function render(win: Window, config: WidgetConfig, key: string): ShadowRo
   const side = look.corner === 'BOTTOM_LEFT' ? 'left' : 'right';
   const host = doc.createElement('div');
   host.setAttribute('data-wbm-chat-button', '');
-  const root = host.attachShadow({ mode: 'closed' });
+  const root = host.attachShadow({ mode: 'open' });
   const colour = safeColour(look.colour);
   const radius = clamp(look.radius, 40);
   root.innerHTML = `
