@@ -100,6 +100,10 @@ test('US4: reminders, totals, filters, export and retargeting non-payers', async
     await payMockSession(page, (await sessionFor(page, campaignRequests[0]!.id))!.id);
     await expect.poll(async () => (await requests(page, `campaignId=${campaignId}&status=PAID`)).length, { timeout: 60_000 }).toBe(1);
 
+    // The dialog counts once when it opens, so wait until both unpaid messages show as delivered.
+    await expect
+      .poll(async () => ((await (await page.request.get(`/api/campaigns/${campaignId}/retarget-groups`)).json()) as { groups: Array<{ status: string; count: number }> }).groups.find((g) => g.status === 'NOT_PAID')?.count, { timeout: 60_000 })
+      .toBe(2);
     await page.goto(`/campaigns/${campaignId}/report`);
     await page.getByRole('button', { name: 'Retarget…' }).click();
     await expect(page.getByTestId('retarget-count-NOT_PAID')).toHaveText('2', { timeout: 60_000 });

@@ -66,6 +66,16 @@ regexes = [
 ]
 
 [[allowlists]]
+description = "Feature 010: made-up passwords of the two-factor sign-in tests (apps/api/test/integration/two-factor.int-spec.ts, apps/api/test/contract/contacts-settings.contract-spec.ts, apps/web/e2e/security-us6-2fa.spec.ts); they only sign in to test databases"
+regexTarget = "line"
+regexes = [
+  '''const PASSWORD = 'Two-Factor-Password-12';''',
+  '''const password = 'Contract-2FA-Password-1';''',
+  '''const PASSWORD = 'E2e-Two-Factor-Pass-1';''',
+  '''hashRecoveryCode\(key, 'ABCDE-FGH12'\)''',
+]
+
+[[allowlists]]
 description = "Feature 008: made-up Stripe webhook signing secrets and idempotency keys in the mock gateway and the api tests (signatures checked against fakes only)"
 regexTarget = "line"
 regexes = [

@@ -27,7 +27,7 @@ test('US2: bulk tags, an automatic tag rule, lead sources and the contacts expor
   await page.getByLabel('Tag', { exact: true }).last().selectOption({ label: vip });
   await page.getByRole('button', { name: 'Add tag for 3' }).click();
   await expect(page.getByTestId('bulk-progress')).toContainText('Done: 3 changed of 3.', { timeout: 60_000 });
-  await page.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: 'Done' }).click();
   await expect(page.getByTestId('contact-row').first()).toContainText(vip);
 
   // 2. Remove it from one chosen contact.
@@ -37,7 +37,7 @@ test('US2: bulk tags, an automatic tag rule, lead sources and the contacts expor
   await page.getByLabel('Tag', { exact: true }).last().selectOption({ label: vip });
   await page.getByRole('button', { name: 'Remove tag for 1' }).click();
   await expect(page.getByTestId('bulk-progress')).toContainText('Done: 1 changed of 1.', { timeout: 60_000 });
-  await page.getByRole('button', { name: 'Close' }).click();
+  await page.getByRole('button', { name: 'Done' }).click();
 
   // 3. An automatic tag for contacts added by hand.
   await page.goto('/settings/automatic-tags');

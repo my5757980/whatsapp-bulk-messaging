@@ -103,7 +103,7 @@ export function BulkTagsDialog({ selection, count, tags, onDone }: { selection: 
         )}
         <DialogFooter>
           {actionId ? (
-            <Button onClick={() => close(false)}>{finished ? 'Close' : 'Keep running and close'}</Button>
+            <Button onClick={() => close(false)}>{finished ? 'Done' : 'Keep running and close'}</Button>
           ) : (
             <Button onClick={() => start.mutate()} disabled={!tagId || start.isPending}>
               {kind === 'TAG_ADD' ? 'Add tag' : 'Remove tag'} for {formatNumber(count)}
