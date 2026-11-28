@@ -122,7 +122,8 @@ export class GlobalAttributesService {
       this.prisma.$queryRaw<Array<{ id: string; name: string }>>`
         SELECT c.id, c.name FROM campaigns c
          WHERE c.state IN ('DRAFT', 'SCHEDULED', 'RUNNING', 'PAUSED')
-           AND EXISTS (SELECT 1 FROM jsonb_each(c.variable_mapping) e WHERE e.value ->> 'source' = 'global' AND e.value ->> 'key' = ${key})`,
+           AND EXISTS (SELECT 1 FROM jsonb_each(CASE WHEN jsonb_typeof(c.variable_mapping) = 'object' THEN c.variable_mapping ELSE '{}'::jsonb END) e
+                        WHERE e.value ->> 'source' = 'global' AND e.value ->> 'key' = ${key})`,
       this.prisma.$queryRaw<Array<{ id: string; name: string }>>`SELECT id, name FROM canned_messages WHERE text LIKE ${placeholder}`,
       this.prisma.$queryRaw<Array<{ id: string; name: string }>>`
         SELECT f.id, f.name FROM flows f
@@ -130,13 +131,17 @@ export class GlobalAttributesService {
            AND (f.draft::text LIKE ${placeholder} OR EXISTS (SELECT 1 FROM flow_versions v WHERE v.id = f.published_version_id AND v.graph::text LIKE ${placeholder}))`,
       this.prisma.$queryRaw<Array<{ id: string; name: string }>>`
         SELECT a.id, a.name FROM ai_agents a
-         WHERE a.draft::text LIKE ${placeholder} OR EXISTS (SELECT 1 FROM ai_agent_versions v WHERE v.agent_id = a.id AND v.config::text LIKE ${placeholder})`,
+         WHERE a.deleted_at IS NULL
+           AND (a.draft::text LIKE ${placeholder} OR EXISTS (SELECT 1 FROM ai_agent_versions v WHERE v.id = a.published_version_id AND v.config::text LIKE ${placeholder}))`,
       this.prisma.$queryRaw<Array<{ id: string; name: string }>>`
         SELECT d.id, d.name FROM date_automations d
-         WHERE EXISTS (SELECT 1 FROM jsonb_each(d.variable_mapping) e WHERE e.value ->> 'source' = 'global' AND e.value ->> 'key' = ${key})`,
+         WHERE EXISTS (SELECT 1 FROM jsonb_each(CASE WHEN jsonb_typeof(d.variable_mapping) = 'object' THEN d.variable_mapping ELSE '{}'::jsonb END) e
+                        WHERE e.value ->> 'source' = 'global' AND e.value ->> 'key' = ${key})`,
       this.prisma.$queryRaw<Array<{ id: number }>>`
         SELECT s.id FROM settings s
-         WHERE EXISTS (SELECT 1 FROM jsonb_each(COALESCE(s.opt_out_reply -> 'variables', '{}'::jsonb) || COALESCE(s.opt_in_reply -> 'variables', '{}'::jsonb)) e
+         WHERE EXISTS (SELECT 1 FROM jsonb_each(
+                          CASE WHEN jsonb_typeof(s.opt_out_reply -> 'variables') = 'object' THEN s.opt_out_reply -> 'variables' ELSE '{}'::jsonb END ||
+                          CASE WHEN jsonb_typeof(s.opt_in_reply -> 'variables') = 'object' THEN s.opt_in_reply -> 'variables' ELSE '{}'::jsonb END) e
                         WHERE e.value ->> 'source' = 'global' AND e.value ->> 'key' = ${key})`,
     ]);
     return [

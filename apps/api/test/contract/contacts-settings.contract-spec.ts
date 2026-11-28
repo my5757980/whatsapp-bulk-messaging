@@ -78,4 +78,25 @@ describe('Contacts, settings and security API (010) contract', () => {
       await check('get', '/contacts/export.csv', await manager.agent.get('/api/contacts/export.csv').query({ segmentId: '0190a000-0000-7000-8000-00000000abcd' }), 404);
     });
   });
+
+  describe('US3 global attributes', () => {
+    it('the /global-attributes routes', async () => {
+      const key = `contract_${digits(6)}`;
+      const created = await send(admin, 'post', '/global-attributes', { key, description: 'Contract value', value: 'one' });
+      await check('post', '/global-attributes', created, 201);
+      await check('post', '/global-attributes', await send(admin, 'post', '/global-attributes', { key, value: 'two' }), 409);
+      await check('post', '/global-attributes', await send(admin, 'post', '/global-attributes', { key: 'Not A Key', value: 'x' }), 422);
+      await check('get', '/global-attributes', await manager.agent.get('/api/global-attributes'), 200);
+      await check('put', '/global-attributes/{id}', await send(admin, 'put', `/global-attributes/${created.body.id}`, { description: null, value: 'two' }), 200);
+      await check('put', '/global-attributes/{id}', await send(admin, 'put', '/global-attributes/0190a000-0000-7000-8000-00000000abcd', { value: 'x' }), 404);
+
+      const reply = await send(admin, 'post', '/canned-messages', { name: `Contract reply ${digits(6)}`, type: 'TEXT', text: `Value {global:${key}}` });
+      expect(reply.status).toBe(201);
+      await check('get', '/global-attributes/{id}/usage', await admin.agent.get(`/api/global-attributes/${created.body.id}/usage`), 200);
+      await check('delete', '/global-attributes/{id}', await send(admin, 'delete', `/global-attributes/${created.body.id}`), 409);
+      await send(admin, 'delete', `/canned-messages/${reply.body.id}`);
+      await check('delete', '/global-attributes/{id}', await send(admin, 'delete', `/global-attributes/${created.body.id}`), 204);
+      await check('delete', '/global-attributes/{id}', await send(admin, 'delete', `/global-attributes/${created.body.id}`), 404);
+    });
+  });
 });

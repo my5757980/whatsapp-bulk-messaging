@@ -42,6 +42,7 @@ export class EstimateService {
 
     const excluded = { optedOut: 0, noOptIn: 0, invalidNumber: 0, duplicate: 0, missingVariable: 0, paymentAmountMissing: 0, offerCodeMissing: 0, mediaUrlMissing: 0 };
     if (campaign.audienceType === 'UPLOAD') {
+      await this.snapshot.assertGlobalsFilled(campaign.variableMapping);
       const { job, rows } = await this.snapshot.readyUpload(campaignId);
       excluded.invalidNumber = job.errorCount;
       excluded.duplicate = Math.max(0, job.totalRows - job.errorCount - rows);

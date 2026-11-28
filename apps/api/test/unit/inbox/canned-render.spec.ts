@@ -41,3 +41,25 @@ describe('parameterCount', () => {
     expect(parameterCount('Gap {{3}}')).toBe(3);
   });
 });
+
+// Feature 010 (US3, T042): company-wide values in saved replies.
+describe('renderCanned with global attributes', () => {
+  const globals = { store_hours: '9 am to 9 pm', support_phone: '+971 4 000 0000', empty_one: '' };
+
+  it('fills {global:key} from the given values', () => {
+    expect(renderCanned('We are open {global:store_hours}. Call {global:support_phone}.', { ...contact, globals })).toEqual({
+      ok: true,
+      text: 'We are open 9 am to 9 pm. Call +971 4 000 0000.',
+    });
+  });
+
+  it('uses the fallback for an unknown or empty key, otherwise leaves it blank', () => {
+    expect(renderCanned('Open {global:missing}', { ...contact, globals }, { 'global:missing': 'daily' })).toEqual({ ok: true, text: 'Open daily' });
+    expect(renderCanned('Open {global:empty_one}!', { ...contact, globals })).toEqual({ ok: true, text: 'Open !' });
+    expect(renderCanned('Open {global:store_hours}', contact)).toEqual({ ok: true, text: 'Open ' });
+  });
+
+  it('leaves keys that break the pattern untouched', () => {
+    expect(renderCanned('{global:Store} {global:} {global:1x}', { ...contact, globals })).toEqual({ ok: true, text: '{global:Store} {global:} {global:1x}' });
+  });
+});

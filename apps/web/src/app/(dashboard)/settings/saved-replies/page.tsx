@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, useRef } from 'react';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { savedRepliesKey } from '@/components/inbox/saved-reply-picker';
 import { mediaLibraryKey, type MediaItem } from '@/components/inbox/media-picker';
@@ -15,6 +15,8 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { toast } from '@/components/ui/toaster';
 import { api, ApiError } from '@/lib/api-client';
 import { Can } from '@/lib/permissions';
+import { InsertGlobalAttribute, insertAtCursor } from '@/components/settings/insert-global-attribute';
+import { globalPlaceholder } from '@/lib/global-attributes';
 
 interface SavedReply {
   id: string;
@@ -29,7 +31,7 @@ interface SavedReply {
   createdBy: { id: string; name: string } | null;
 }
 
-const VARIABLES = ['{first_name}', '{last_name}', '{name}', '{phone}', '{attr:city}', '{{1}}'];
+const VARIABLES = ['{first_name}', '{last_name}', '{name}', '{phone}', '{attr:city}', '{global:name}', '{{1}}'];
 
 /** Settings > Saved replies (T066, FR-030): admins and managers create, edit and delete; everyone uses them in chats. */
 export default function SavedRepliesPage() {
@@ -99,6 +101,7 @@ function ReplyEditor({ reply }: { reply?: SavedReply }) {
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<'TEXT' | 'MEDIA'>(reply?.type ?? 'TEXT');
   const [mediaAssetId, setMediaAssetId] = useState(reply?.mediaAssetId ?? '');
+  const textBox = useRef<HTMLTextAreaElement>(null);
   const media = useQuery({ queryKey: mediaLibraryKey, queryFn: () => api<{ items: MediaItem[] }>('/media-library?pageSize=60'), enabled: open && type === 'MEDIA' });
 
   const save = useMutation({
@@ -156,8 +159,17 @@ function ReplyEditor({ reply }: { reply?: SavedReply }) {
             </NativeSelect>
           </div>
           <div className="grid gap-1">
-            <Label htmlFor="reply-text">{type === 'MEDIA' ? 'Caption (optional)' : 'Text'}</Label>
-            <textarea id="reply-text" name="text" defaultValue={reply?.text} maxLength={4096} className="min-h-[96px] rounded-md border bg-background px-3 py-2 text-sm" />
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="reply-text">{type === 'MEDIA' ? 'Caption (optional)' : 'Text'}</Label>
+              {/* Feature 010 (US3): the placeholder, so the value is read when the reply is sent. */}
+              <InsertGlobalAttribute
+                onInsert={(g) => {
+                  const box = textBox.current;
+                  if (box) box.value = insertAtCursor(box, box.value, globalPlaceholder(g.key)).slice(0, 4096);
+                }}
+              />
+            </div>
+            <textarea ref={textBox} id="reply-text" name="text" defaultValue={reply?.text} maxLength={4096} className="min-h-[96px] rounded-md border bg-background px-3 py-2 text-sm" />
           </div>
           {type === 'MEDIA' && (
             <>

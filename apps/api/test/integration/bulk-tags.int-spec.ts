@@ -30,7 +30,14 @@ describe('Bulk tag actions (010 US2)', () => {
     vipId = (await ctx.prisma.tag.create({ data: { name: `vip-${digits(6)}` } })).id;
     trialId = (await ctx.prisma.tag.create({ data: { name: `trial-${digits(6)}` } })).id;
     // 12,000 contacts, so a filter action runs more than two batches of 5,000.
-    const phones = Array.from({ length: 12_000 }, () => uaePhone());
+    // The database is shared with other files, so phones already taken are drawn again.
+    const fresh = new Set<string>();
+    while (fresh.size < 12_000) {
+      const draw = Array.from({ length: 12_000 - fresh.size }, () => uaePhone());
+      const taken = new Set((await ctx.prisma.contact.findMany({ where: { phoneE164: { in: draw } }, select: { phoneE164: true } })).map((c) => c.phoneE164));
+      for (const phone of draw) if (!taken.has(phone)) fresh.add(phone);
+    }
+    const phones = [...fresh];
     await ctx.prisma.contact.createMany({ data: phones.map((phoneE164) => ({ phoneE164, countryCode: 'AE', consentStatus: 'OPTED_IN', consentSource: 'MANUAL' })) });
     contactIds = (await ctx.prisma.contact.findMany({ where: { phoneE164: { in: phones } }, select: { id: true } })).map((c) => c.id);
     await ctx.prisma.contactTag.createMany({ data: contactIds.map((contactId) => ({ contactId, tagId: groupTagId })) });

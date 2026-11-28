@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderBodyPreview, resolveVariables } from '../../src/modules/campaigns/variable-resolver.js';
+import { globalKeys, renderBodyPreview, resolveVariables } from '../../src/modules/campaigns/variable-resolver.js';
 
 // T074: variable mapping sources, fallbacks and MISSING_VARIABLE.
 const variables = [
@@ -70,5 +70,36 @@ describe('renderBodyPreview', () => {
   it('replaces body placeholders with resolved values', () => {
     expect(renderBodyPreview('Hello {{1}}, see you in {{2}}!', { 'BODY.1': 'Ali', 'BODY.2': 'Dubai' })).toBe('Hello Ali, see you in Dubai!');
     expect(renderBodyPreview('Hi {{first_name}}', { 'BODY.first_name': 'Zara' })).toBe('Hi Zara');
+  });
+});
+
+// Feature 010 (US3, T042): the `global` source reads company-wide values.
+describe('resolveVariables with global attributes', () => {
+  const one = [{ key: 'BODY.1', example: '9 am' }];
+
+  it('reads a global attribute by key', () => {
+    expect(resolveVariables(one, { 'BODY.1': { source: 'global', key: 'store_hours' } }, { contact, row: {}, globals: { store_hours: '9 am to 9 pm' } })).toEqual({
+      ok: true,
+      params: { 'BODY.1': '9 am to 9 pm' },
+    });
+  });
+
+  it('treats an unknown or blank value as missing unless there is a fallback', () => {
+    const mapping = { 'BODY.1': { source: 'global' as const, key: 'store_hours' } };
+    expect(resolveVariables(one, mapping, { contact, row: {}, globals: { store_hours: '   ' } })).toEqual({ ok: false, missing: ['BODY.1'] });
+    expect(resolveVariables(one, mapping, { contact, row: {} })).toEqual({ ok: false, missing: ['BODY.1'] });
+    expect(resolveVariables(one, { 'BODY.1': { ...mapping['BODY.1'], fallback: 'all day' } }, { contact, row: {}, globals: {} })).toEqual({ ok: true, params: { 'BODY.1': 'all day' } });
+  });
+
+  it('lists the global attribute keys a mapping uses, once each', () => {
+    expect(
+      globalKeys({
+        'BODY.1': { source: 'global', key: 'store_hours' },
+        'BODY.2': { source: 'attribute', key: 'city' },
+        'BODY.3': { source: 'global', key: 'store_hours' },
+        'BUTTON.0.1': { source: 'global', key: 'promo_code' },
+      }),
+    ).toEqual(['store_hours', 'promo_code']);
+    expect(globalKeys({})).toEqual([]);
   });
 });

@@ -78,15 +78,18 @@ export class AudienceSnapshotService {
     return { type: 'FILTER', filter };
   }
 
+  /** Feature 010 (FR-016): every global attribute a variable uses must have a value (`GLOBAL_ATTRIBUTE_EMPTY`). */
+  async assertGlobalsFilled(variableMapping: unknown): Promise<void> {
+    const keys = globalKeys((variableMapping ?? {}) as VariableMapping);
+    if (!keys.length) return;
+    const values = await this.globals.values();
+    const empty = keys.filter((k) => !values[k]?.trim());
+    if (empty.length) throw AppError.validation('A global attribute used by a variable has no value', empty.map((k) => ({ field: `global.${k}`, issue: 'has no value' })), 'GLOBAL_ATTRIBUTE_EMPTY');
+  }
+
   /** Throws a readable error when the campaign's audience cannot be evaluated yet. */
   async assertReady(campaign: Pick<Campaign, 'id' | 'audienceType' | 'audienceFilter' | 'segmentId' | 'sourceCampaignId' | 'retargetStatus'> & { variableMapping?: unknown }, db: Db = this.prisma): Promise<void> {
-    // Feature 010 (FR-016): every global attribute a variable uses must have a value.
-    const keys = globalKeys((campaign.variableMapping ?? {}) as VariableMapping);
-    if (keys.length) {
-      const values = await this.globals.values();
-      const empty = keys.filter((k) => !values[k]?.trim());
-      if (empty.length) throw AppError.validation('A global attribute used by a variable has no value', empty.map((k) => ({ field: `global.${k}`, issue: 'has no value' })), 'GLOBAL_ATTRIBUTE_EMPTY');
-    }
+    await this.assertGlobalsFilled(campaign.variableMapping);
     if (campaign.audienceType === 'UPLOAD') await this.readyUpload(campaign.id, db);
     else if (campaign.audienceType === 'RETARGET') {
       if (!campaign.sourceCampaignId || !campaign.retargetStatus) {

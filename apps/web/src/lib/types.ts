@@ -76,7 +76,7 @@ export interface StatusTotals {
   expired: number;
 }
 
-export type VariableSourceKind = 'column' | 'field' | 'attribute' | 'static' | 'payment';
+export type VariableSourceKind = 'column' | 'field' | 'attribute' | 'static' | 'payment' | 'global';
 
 /** Feature 008: a campaign that asks every recipient to pay. */
 export interface CampaignPaymentConfig {

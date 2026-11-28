@@ -1,7 +1,8 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { InsertGlobalAttribute, insertAtCursor } from '@/components/settings/insert-global-attribute';
 import { Button } from '@/components/ui/button';
 import { Can } from '@/lib/permissions';
 import { toast } from '@/components/ui/toaster';
@@ -79,6 +80,7 @@ function ReplyComposer({
 }) {
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState('');
+  const box = useRef<HTMLTextAreaElement>(null);
   const timeLeft = useTimeLeft(chat.windowEndsAt);
 
   const send = useMutation({
@@ -162,6 +164,7 @@ function ReplyComposer({
         />
       )}
       <textarea
+        ref={box}
         aria-label="Reply"
         className="min-h-[72px] w-full resize-y rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         placeholder='Type a reply… ("/" for saved replies, Enter to send, Shift+Enter for a new line)'
@@ -176,6 +179,8 @@ function ReplyComposer({
           <span>
             {draft.length}/{MAX_REPLY_LENGTH}
           </span>
+          {/* Feature 010 (US3): inserts the current value of a global attribute. */}
+          <InsertGlobalAttribute disabled={send.isPending} onInsert={(g) => setDraft((d) => insertAtCursor(box.current, d, g.value).slice(0, MAX_REPLY_LENGTH))} />
           <MediaPicker disabled={send.isPending} onSend={(item, caption) => send.mutate({ type: 'media', mediaAssetId: item.id, ...(caption.trim() ? { text: caption.trim() } : {}) })} />
           <PaymentRequestDialog chat={chat} />
           <ProductPicker chat={chat} />
