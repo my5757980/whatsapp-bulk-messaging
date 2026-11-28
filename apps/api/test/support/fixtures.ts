@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import nock from 'nock';
 import { TokenCipher } from '../../src/common/crypto/token-cipher.js';
 import type { Prisma } from '../../src/generated/prisma/client.js';
@@ -70,9 +70,18 @@ export async function seedContact(ctx: TestContext, phoneE164: string, overrides
   });
 }
 
-/** A UAE mobile number that libphonenumber accepts, unique per call. */
+const UAE_MOBILE_PREFIXES = ['50', '52', '54', '55', '56', '58'];
+const usedPhones = new Set<string>();
+
+/** A UAE mobile number that libphonenumber accepts, never repeated in a file and spread over the mobile prefixes. */
 export function uaePhone(): string {
-  return `+97150${digits(7)}`;
+  for (;;) {
+    const phone = `+971${UAE_MOBILE_PREFIXES[randomInt(UAE_MOBILE_PREFIXES.length)]}${digits(7)}`;
+    if (!usedPhones.has(phone)) {
+      usedPhones.add(phone);
+      return phone;
+    }
+  }
 }
 
 /** Creates a RUNNING campaign with PENDING messages for the given contacts (bypasses launch). */
