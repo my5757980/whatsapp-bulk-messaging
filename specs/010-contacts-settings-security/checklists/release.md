@@ -30,7 +30,7 @@ Still open before release (section 4):
 | `npm run test:contract` | ✅ PASS (batches 1–2) | `contacts-settings.contract-spec.ts` (US1–US7); the 001 login contract answers `{ next }` and the 005 enrolment takes a segment |
 | RBAC from all ten contracts (T086) | PENDING (batch 3) | `rbac.int-spec.ts` reads the 001–010 contracts; self-service 2FA and the sign-in steps have no `x-permission` |
 | Audit coverage (T085) | ✅ PASS (local unit) | every 010 action is recorded; the pending list is empty |
-| Retention and erasure (T084) | PENDING (batch 3) | bulk actions after 90 days; occurrences and their messages after 12 months; erasure deletes occurrences and clears automation messages; exports leave deleted contacts out |
+| Retention and erasure (T084) | PENDING (batch 3) | bulk actions after 90 days; occurrences after 12 months (their messages go with the 001 step for messages without a campaign); erasure deletes occurrences and clears automation messages; exports leave deleted contacts out |
 | Metrics and alerts (T083) | PENDING (batch 3) | `wbm_segment_query_seconds`, `wbm_bulk_actions_total{kind,result}`, `wbm_contacts_exported_total`, `wbm_keyword_replies_total{kind,result}`, `wbm_date_automation_messages_total{result}`, `wbm_date_automation_behind`, `wbm_login_second_step_total{result}`; `WbmDateAutomationBehind` and `WbmSecondStepFailures` with cases in `alerts.spec.ts` |
 | Segment perf (T087, SC-001) | PENDING (batch 3) | `segments-perf.int-spec.ts` in `build-test` seeds 200,000 contacts and counts a 10-rule segment; the timing is a CI notice annotation |
 | `npm audit --audit-level=high` | ✅ PASS | CI `build-test` |

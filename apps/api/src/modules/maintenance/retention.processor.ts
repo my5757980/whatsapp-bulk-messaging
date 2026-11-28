@@ -139,7 +139,6 @@ export interface RetentionResult extends LiveChatRetentionResult, AiRetentionRes
   /** Feature 010 (research R13). */
   bulkActions: number;
   dateOccurrences: number;
-  dateAutomationMessages: number;
 }
 
 export function monthsBefore(now: Date, months: number): Date {
@@ -196,7 +195,6 @@ export class RetentionService {
       otpMessages: 0,
       bulkActions: 0,
       dateOccurrences: 0,
-      dateAutomationMessages: 0,
     };
     const failures: string[] = [];
     const step = async (name: string, fn: () => Promise<void>) => {
@@ -250,15 +248,15 @@ export class RetentionService {
 
   /**
    * Feature 010 (research R13): bulk action records after 90 days (they hold counts and selections, never contact
-   * lists); date automation occurrences after 12 months, then their messages, like campaign messages.
+   * lists); date automation occurrences after 12 months. Their messages have no campaign, so the campaigns step
+   * deletes them after 12 months like other messages without one.
    */
-  async purgeContactsSettings(now: Date): Promise<{ bulkActions: number; dateOccurrences: number; dateAutomationMessages: number }> {
+  async purgeContactsSettings(now: Date): Promise<{ bulkActions: number; dateOccurrences: number }> {
     const bulkCutoff = new Date(now.getTime() - BULK_ACTION_DAYS * 86_400_000);
     const cutoff = monthsBefore(now, CAMPAIGN_MONTHS);
     const bulkActions = await this.deleteInBatches('bulk_actions', Prisma.sql`created_at < ${bulkCutoff}`);
     const dateOccurrences = await this.deleteInBatches('date_automation_occurrences', Prisma.sql`due_date < ${cutoff}::date`);
-    const dateAutomationMessages = await this.deleteInBatches('messages', Prisma.sql`origin = 'DATE_AUTOMATION' AND created_at < ${cutoff}`);
-    return { bulkActions, dateOccurrences, dateAutomationMessages };
+    return { bulkActions, dateOccurrences };
   }
 
   /** Completed or cancelled campaigns that ended over 12 months ago, plus old API messages. */

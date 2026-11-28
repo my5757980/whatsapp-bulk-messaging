@@ -430,7 +430,6 @@ describe('Retention', () => {
     const result = await retention.run();
     expect(result.bulkActions).toBeGreaterThanOrEqual(1);
     expect(result.dateOccurrences).toBeGreaterThanOrEqual(1);
-    expect(result.dateAutomationMessages).toBeGreaterThanOrEqual(1);
     expect(await ctx.prisma.bulkAction.findUnique({ where: { id: oldAction.id } })).toBeNull();
     expect(await ctx.prisma.bulkAction.findUnique({ where: { id: newAction.id } })).not.toBeNull();
     expect(await ctx.prisma.dateAutomationOccurrence.findUnique({ where: { id: old.id } })).toBeNull();
@@ -477,7 +476,6 @@ describe('Retention', () => {
       otpMessages: expect.any(Number),
       bulkActions: expect.any(Number),
       dateOccurrences: expect.any(Number),
-      dateAutomationMessages: expect.any(Number),
     });
     const scheduler = await ctx.app.get(QueueRegistry).get(QUEUES.MAINTENANCE).getJobScheduler('retention');
     expect(scheduler?.pattern).toBe('15 3 * * *');
