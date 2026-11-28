@@ -20,6 +20,7 @@ const NAV: Array<{ href: string; label: string; permission: Permission }> = [
   // Feature 009: overview, team member and opt-in reports.
   { href: '/reports', label: 'Reports', permission: 'reports.view' },
   { href: '/drips', label: 'Drips', permission: 'campaigns.view' },
+  { href: '/automations', label: 'Automations', permission: 'campaigns.view' },
   { href: '/contacts', label: 'Contacts', permission: 'contacts.view' },
   { href: '/templates', label: 'Templates', permission: 'templates.view' },
   { href: '/flows', label: 'Flows', permission: 'flows.manage' },

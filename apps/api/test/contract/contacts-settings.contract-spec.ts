@@ -118,4 +118,35 @@ describe('Contacts, settings and security API (010) contract', () => {
       await check('put', '/settings/keyword-replies', await send(admin, 'put', '/settings/keyword-replies', { optOut: { kind: 'NONE' }, optIn: { kind: 'NONE' } }), 200);
     });
   });
+
+  describe('US5 date automations', () => {
+    it('the /date-automations routes', async () => {
+      const attr = await ctx.prisma.attributeDefinition.create({ data: { key: `contract_date_${digits(6)}`, label: 'Contract date', type: 'DATE' } });
+      const text = await ctx.prisma.attributeDefinition.create({ data: { key: `contract_text_${digits(6)}`, label: 'Contract text', type: 'TEXT' } });
+      const number = await seedNumber(ctx);
+      const template = await seedTemplate(ctx, number.wabaId, { category: 'UTILITY' });
+      const pending = await seedTemplate(ctx, number.wabaId, { category: 'UTILITY', status: 'PENDING' });
+      const input = { name: `Contract dates ${digits(6)}`, attributeKey: attr.key, timing: 'YEARLY', offsetDays: 0, sendTime: '09:00', numberId: number.id, templateId: template.id, variableMapping: { 'BODY.1': { source: 'field', key: 'name', fallback: 'friend' } } };
+
+      const created = await send(manager, 'post', '/date-automations', input);
+      await check('post', '/date-automations', created, 201);
+      await check('post', '/date-automations', await send(manager, 'post', '/date-automations', input), 409);
+      await check('post', '/date-automations', await send(manager, 'post', '/date-automations', { ...input, name: `Other ${digits(6)}`, attributeKey: text.key }), 422);
+      await check('get', '/date-automations', await manager.agent.get('/api/date-automations'), 200);
+      await check('get', '/date-automations/{id}', await manager.agent.get(`/api/date-automations/${created.body.id}`), 200);
+      await check('put', '/date-automations/{id}', await send(manager, 'put', `/date-automations/${created.body.id}`, { ...input, sendTime: '10:00' }), 200);
+      await check('post', '/date-automations/preview', await send(manager, 'post', '/date-automations/preview', { attributeKey: attr.key, timing: 'ONCE', offsetDays: -3 }), 200);
+      await check('post', '/date-automations/preview', await send(manager, 'post', '/date-automations/preview', { attributeKey: text.key, timing: 'ONCE', offsetDays: 0 }), 422);
+      await check('post', '/date-automations/{id}/switch', await send(manager, 'post', `/date-automations/${created.body.id}/switch`, { on: true }), 200);
+      await check('post', '/date-automations/{id}/switch', await send(manager, 'post', `/date-automations/${created.body.id}/switch`, { on: false }), 200);
+      const waiting = await send(manager, 'post', '/date-automations', { ...input, name: `Waiting ${digits(6)}`, templateId: pending.id });
+      await check('post', '/date-automations/{id}/switch', await send(manager, 'post', `/date-automations/${waiting.body.id}/switch`, { on: true }), 409);
+      await check('get', '/date-automations/{id}/results', await manager.agent.get(`/api/date-automations/${created.body.id}/results`), 200);
+      await check('get', '/date-automations/{id}/results', await manager.agent.get(`/api/date-automations/${created.body.id}/results`).query({ from: '2027-01-10', to: '2027-01-01' }), 422);
+      await check('get', '/date-automations/{id}/recipients', await manager.agent.get(`/api/date-automations/${created.body.id}/recipients`).query({ date: '2027-01-01' }), 200);
+      await check('delete', '/date-automations/{id}', await send(manager, 'delete', `/date-automations/${waiting.body.id}`), 204);
+      await check('get', '/date-automations/{id}', await manager.agent.get(`/api/date-automations/${waiting.body.id}`), 404);
+      await send(manager, 'delete', `/date-automations/${created.body.id}`);
+    });
+  });
 });
