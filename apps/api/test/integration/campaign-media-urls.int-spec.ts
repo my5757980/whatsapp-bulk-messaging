@@ -175,7 +175,7 @@ describe('Campaign media from a web address (009 US4)', () => {
     expect(refused.body.details.length).toBeLessThanOrEqual(50);
   });
 
-  it('keeps the public API https-only for media addresses', async () => {
+  it('keeps the public API https-only for media addresses (400, as the 001 public API answers bad bodies)', async () => {
     const created = await admin.agent.post('/api/api-keys').set('X-CSRF-Token', admin.csrf).send({ name: `Media key ${digits(5)}`, rateLimitPerMinute: 600 });
     expect(created.status).toBe(201);
     const send = (headerMediaUrl: string) =>
@@ -183,6 +183,6 @@ describe('Campaign media from a web address (009 US4)', () => {
         .post('/api/v1/messages')
         .set('authorization', `Bearer ${created.body.secret}`)
         .send({ numberId: number.id, to: uaePhone(), template: { name: templateName, language: 'en_US' }, params: { 'BODY.1': 'Sara' }, headerMediaUrl });
-    expect((await send('http://files.example.com/a.pdf')).status).toBe(422);
+    expect((await send('http://files.example.com/a.pdf')).status).toBe(400);
   });
 });

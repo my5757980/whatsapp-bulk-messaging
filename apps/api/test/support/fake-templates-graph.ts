@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { metaCreateProblem, metaSendProblem, metaStoredComponents } from '@wbm/shared';
 import nock from 'nock';
 import { META_BASE, META_VERSION } from './fixtures.js';
@@ -37,10 +38,12 @@ export class FakeTemplatesGraph {
   /** Numbers whose sends fail at once with this Meta error (e.g. 131026). */
   readonly failSends = new Map<string, { status: number; code: number; message: string }>();
   private n = 0;
+  /** Ids carry this per-instance tag, so wamids never repeat across test files sharing the database. */
+  private readonly tag = randomUUID().slice(0, 8);
 
   /** Registers a template Meta already has (seeded rows), so sends can be checked against it. */
   know(template: Omit<FakeTemplate, 'id'> & { id?: string }): FakeTemplate {
-    const stored = { ...template, id: template.id ?? `T${++this.n}`, components: metaStoredComponents(template.category, template.components) };
+    const stored = { ...template, id: template.id ?? `T${this.tag}${++this.n}`, components: metaStoredComponents(template.category, template.components) };
     this.templates.set(stored.id, stored);
     return stored;
   }
@@ -75,13 +78,13 @@ export class FakeTemplatesGraph {
     const error = (status: number, code: number, message: string): [number, unknown] => [status, { error: { message, type: 'OAuthException', code, fbtrace_id: 'TRACE' } }];
 
     if (req.method === 'POST' && edge === 'uploads') {
-      const session = `upload:S${++this.n}`;
+      const session = `upload:S${this.tag}${++this.n}`;
       this.resumableUploads.push(session);
       return [200, { id: session }];
     }
-    if (req.method === 'POST' && id.startsWith('upload:')) return [200, { h: `4::H${++this.n}` }];
+    if (req.method === 'POST' && id.startsWith('upload:')) return [200, { h: `4::H${this.tag}${++this.n}` }];
     if (req.method === 'POST' && edge === 'media') {
-      const media = { phoneNumberId: id, id: `media-${++this.n}` };
+      const media = { phoneNumberId: id, id: `media-${this.tag}-${++this.n}` };
       this.mediaUploads.push(media);
       return [200, { id: media.id }];
     }
@@ -111,7 +114,7 @@ export class FakeTemplatesGraph {
         const problem = template ? metaSendProblem(template, body.template?.components ?? []) : null;
         if (problem) return error(400, 132000, problem);
       }
-      const wamid = `wamid.F${++this.n}`;
+      const wamid = `wamid.F${this.tag}${++this.n}`;
       this.sends.push({ phoneNumberId: id, to: String(body.to), body, wamid });
       return [200, { messaging_product: 'whatsapp', contacts: [{ input: body.to, wa_id: body.to }], messages: [{ id: wamid }] }];
     }

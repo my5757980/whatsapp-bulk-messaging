@@ -60,7 +60,8 @@ describe('Campaign report and export', () => {
     expect(res.headers['content-type']).toMatch(/text\/csv/);
     expect(res.headers['content-disposition']).toMatch(/attachment; filename=".+\.csv"/);
     const lines = res.text.trim().split('\n');
-    expect(lines[0]).toBe('phone,name,status,skip_reason,failure_code,failure_reason,attempts,sent_at,delivered_at,read_at,failed_at,cost_usd');
+    // Feature 009 (FR-037) adds replied, replied_at and clicks.
+    expect(lines[0]).toBe('phone,name,status,skip_reason,failure_code,failure_reason,attempts,sent_at,delivered_at,read_at,failed_at,cost_usd,replied,replied_at,clicks');
     const statuses = lines.slice(1).map((l) => l.split(',')[2]);
     expect(statuses.sort()).toEqual(['DELIVERED', 'FAILED', 'READ', 'READ', 'SENT', 'SKIPPED']);
     expect(lines.slice(1).every((l) => /^\+9715\d{8},Report \d,/.test(l))).toBe(true);
