@@ -24,8 +24,8 @@ export class DripSegmentEnrolProcessor implements OnModuleInit {
   }
 
   async run(actionId: string): Promise<void> {
-    const action = await this.bulk.start(actionId);
-    if (!action || action.kind !== 'DRIP_ENROL') return;
+    const action = await this.bulk.start(actionId, ['DRIP_ENROL']);
+    if (!action) return;
     const { dripId } = (action.params ?? {}) as { dripId?: string };
     const selection = action.selection as unknown as { segmentId?: string };
     try {

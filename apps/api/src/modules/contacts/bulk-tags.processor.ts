@@ -26,8 +26,8 @@ export class BulkTagsProcessor implements OnModuleInit {
   }
 
   async run(actionId: string): Promise<void> {
-    const action = await this.bulk.start(actionId);
-    if (!action || (action.kind !== 'TAG_ADD' && action.kind !== 'TAG_REMOVE')) return;
+    const action = await this.bulk.start(actionId, ['TAG_ADD', 'TAG_REMOVE']);
+    if (!action) return;
     const selection = action.selection as unknown as Selection;
     const tagIds = ((action.params ?? {}) as { tagIds?: string[] }).tagIds ?? [];
     const add = action.kind === 'TAG_ADD';

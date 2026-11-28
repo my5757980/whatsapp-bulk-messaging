@@ -22,6 +22,7 @@ import { headerMediaType } from '../../sending/template-payload.builder.js';
 import { AdsConnectionService, type AdsAccess } from '../connection/ads-connection.service.js';
 import { MetaAdsClient, type MetaLead } from '../meta-ads.client.js';
 import { leadSourceFor } from '../../contacts/lead-source.js';
+import { AutoTagService } from '../../contacts/auto-tags.service.js';
 
 // Lead forms and leads (feature 007 US7, FR-035 – FR-039, research R9): forms made at Meta with the
 // page token and a WhatsApp consent checkbox; each lead becomes a contact with the form's tag, is opted
@@ -78,6 +79,7 @@ export class AdLeadFormsService {
     private readonly queues: QueueRegistry,
     private readonly settings: SettingsService,
     private readonly metrics: MetricsService,
+    private readonly autoTags: AutoTagService,
   ) {}
 
   async list() {
@@ -217,6 +219,7 @@ export class AdLeadFormsService {
       created = await this.prisma.$transaction(async (tx) => {
         let contactId: string | null = null;
         if (phone) {
+          const known = await tx.contact.findUnique({ where: { phoneE164: phone.e164 }, select: { id: true } });
           const contact = await tx.contact.upsert({
             where: { phoneE164: phone.e164 },
             create: { phoneE164: phone.e164, countryCode: phone.country, name, ...leadSourceFor('LEAD_FORM', form.name) },
@@ -224,6 +227,8 @@ export class AdLeadFormsService {
             select: { id: true },
           });
           contactId = contact.id;
+          // Automatic tags for a contact this lead created (feature 010, R4).
+          if (!known) await this.autoTags.apply(tx, 'CONTACT_CREATED', contact.id, 'LEAD_FORM');
           if (form.tagId) {
             const added = await tx.contactTag.createManyAndReturn({ data: [{ contactId, tagId: form.tagId }], skipDuplicates: true, select: { contactId: true, tagId: true } });
             if (added.length) {

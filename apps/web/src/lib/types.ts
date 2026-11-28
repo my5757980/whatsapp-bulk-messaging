@@ -119,7 +119,9 @@ export interface Campaign {
   name: string;
   numberId?: string;
   templateId?: string;
-  audienceType: 'FILTER' | 'ALL_OPTED_IN' | 'UPLOAD' | 'RETARGET';
+  audienceType: 'FILTER' | 'ALL_OPTED_IN' | 'UPLOAD' | 'RETARGET' | 'SEGMENT';
+  /** Feature 010: the saved segment of a SEGMENT audience. */
+  segmentId?: string | null;
   audienceFilter?: AudienceFilter;
   sourceCampaignId?: string | null;
   retargetStatus?: 'FAILED' | 'NOT_READ' | 'READ' | 'DELIVERED' | 'CLICKED' | 'NOT_CLICKED' | 'REPLIED' | 'NOT_REPLIED' | 'HELD_BACK' | 'PAID' | 'NOT_PAID' | null;
@@ -207,6 +209,9 @@ export interface Contact {
   consentStatus: ConsentStatusValue;
   consentSource: string | null;
   consentAt: string | null;
+  /** Feature 010: where the contact first came from. */
+  leadSource?: string;
+  leadSourceLabel?: string | null;
   createdAt: string;
 }
 

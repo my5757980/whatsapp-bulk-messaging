@@ -314,6 +314,8 @@ paths:
         - { name: q, in: query, schema: { type: string }, description: Name or phone search }
         - { name: tag, in: query, schema: { type: array, items: { type: string } }, style: form, explode: true }
         - { name: consent, in: query, schema: { $ref: '#/components/schemas/ConsentStatus' } }
+        - { name: leadSource, in: query, schema: { type: string, enum: [UNKNOWN, ORGANIC, API, IMPORT, CAMPAIGN_UPLOAD, CHAT_LINK, AD, LEAD_FORM, FORM, WEBSITE_BUTTON, STORE, CUSTOM] }, description: 'Feature 010 (FR-012)' }
+        - { name: segmentId, in: query, schema: { type: string, format: uuid }, description: 'Feature 010 (FR-007): contacts in a saved segment' }
       responses:
         '200':
           description: Page of contacts
@@ -1210,6 +1212,8 @@ components:
         consentStatus: { $ref: '#/components/schemas/ConsentStatus' }
         consentSource: { type: [string, 'null'] }
         consentAt: { type: [string, 'null'], format: date-time }
+        leadSource: { type: string, description: 'Feature 010: the lead source kind, set when the contact was created' }
+        leadSourceLabel: { type: [string, 'null'], description: 'Feature 010: an import label, a custom label or a chat link name' }
         createdAt: { type: string, format: date-time }
     ContactInput:
       type: object
@@ -1362,7 +1366,7 @@ components:
         type: object
         required: [source]
         properties:
-          source: { type: string, enum: [column, field, attribute, static] }
+          source: { type: string, enum: [column, field, attribute, static, payment, global], description: 'payment (008); global (010) reads a global attribute named by key' }
           key: { type: string, description: 'CSV column, contact field (name, phone) or attribute key. Feature 009 keys: CARD.{c}.BODY.{n}, CARD.{c}.BUTTON.{b}.{n} and HEADER.media (a media address)' }
           value: { type: string, description: For static source }
           fallback: { type: [string, 'null'] }
@@ -1372,7 +1376,8 @@ components:
         name: { type: string, maxLength: 120 }
         numberId: { type: string, format: uuid }
         templateId: { type: string, format: uuid }
-        audienceType: { type: string, enum: [FILTER, ALL_OPTED_IN, UPLOAD, RETARGET], description: 'RETARGET is set only by POST /campaigns/{id}/retarget' }
+        audienceType: { type: string, enum: [FILTER, ALL_OPTED_IN, UPLOAD, RETARGET, SEGMENT], description: 'RETARGET is set only by POST /campaigns/{id}/retarget; SEGMENT (feature 010) needs segmentId' }
+        segmentId: { type: [string, 'null'], format: uuid, description: 'Feature 010: the saved segment of a SEGMENT audience' }
         audienceFilter: { $ref: '#/components/schemas/AudienceFilter' }
         variableMapping: { $ref: '#/components/schemas/VariableMapping' }
         headerMediaAssetId: { type: [string, 'null'], format: uuid }

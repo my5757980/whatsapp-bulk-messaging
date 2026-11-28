@@ -19,6 +19,9 @@ import { consentLabel, formatDateTime } from '@/lib/format';
 import { Can, usePermissions } from '@/lib/permissions';
 import { queryKeys } from '@/lib/query';
 import type { AttributeDefinition, Contact, ConsentStatusValue, Paged, Tag } from '@/lib/types';
+import { LEAD_SOURCE_KINDS, LEAD_SOURCE_LABELS, leadSourceText, type LeadSourceKind } from '@wbm/shared';
+import { BulkTagsDialog } from '@/components/contacts/bulk-tags-dialog';
+import { contacts010Keys, type BulkSelection, type Segment } from '@/lib/contacts-010';
 
 const PAGE_SIZE = 50;
 
@@ -39,10 +42,13 @@ function ContactsList() {
   const [q, setQ] = useState(params.get('q') ?? '');
   const [tag, setTag] = useState('');
   const [consent, setConsent] = useState<'' | ConsentStatusValue>('');
+  // Feature 010: a saved segment and the lead source (FR-007, FR-012).
+  const [segmentId, setSegmentId] = useState(params.get('segmentId') ?? '');
+  const [leadSource, setLeadSource] = useState<'' | LeadSourceKind>('');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const filters = { q, tag, consent, page };
+  const filters = { q, tag, consent, segmentId, leadSource, page };
   const contacts = useQuery({
     queryKey: queryKeys.contacts(filters),
     queryFn: () => {
@@ -50,10 +56,16 @@ function ContactsList() {
       if (q) qs.set('q', q);
       if (tag) qs.set('tag', tag);
       if (consent) qs.set('consent', consent);
+      if (segmentId) qs.set('segmentId', segmentId);
+      if (leadSource) qs.set('leadSource', leadSource);
       return api<Paged<Contact>>(`/contacts?${qs}`);
     },
   });
   const tags = useQuery({ queryKey: queryKeys.tags, queryFn: () => api<Tag[]>('/tags') });
+  const segments = useQuery({ queryKey: contacts010Keys.segments, queryFn: () => api<{ items: Segment[] }>('/segments') });
+  // The same selection the list shows, for the export and for "all matching" bulk actions.
+  const matching: BulkSelection = segmentId ? { segmentId } : { filter: { ...(q ? { q } : {}), ...(tag ? { tag: [tag] } : {}), ...(consent ? { consent } : {}), ...(leadSource ? { leadSource } : {}) } };
+  const exportQuery = new URLSearchParams({ ...(segmentId ? { segmentId } : {}), ...(q ? { q } : {}), ...(tag ? { tag } : {}), ...(consent ? { consent } : {}), ...(leadSource ? { leadSource } : {}) });
   const pages = Math.max(1, Math.ceil((contacts.data?.page.total ?? 0) / PAGE_SIZE));
   const items = contacts.data?.items ?? [];
   const allSelected = items.length > 0 && items.every((c) => selected.has(c.id));
@@ -80,6 +92,9 @@ function ContactsList() {
         </div>
         <Can permission="contacts.manage">
           <div className="flex gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/contacts/segments">Segments</Link>
+            </Button>
             <Button variant="outline" asChild>
               <Link href="/contacts/import">Import</Link>
             </Button>
@@ -136,10 +151,62 @@ function ContactsList() {
             <option value="OPTED_OUT">Opted out</option>
           </NativeSelect>
         </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="contact-lead-source">Lead source</Label>
+          <NativeSelect
+            id="contact-lead-source"
+            className="w-44"
+            value={leadSource}
+            onChange={(e) => {
+              setLeadSource(e.target.value as '' | LeadSourceKind);
+              setPage(1);
+            }}
+          >
+            <option value="">Any</option>
+            {LEAD_SOURCE_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {LEAD_SOURCE_LABELS[k]}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="contact-segment">Segment</Label>
+          <NativeSelect
+            id="contact-segment"
+            className="w-48"
+            value={segmentId}
+            onChange={(e) => {
+              setSegmentId(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">No segment</option>
+            {(segments.data?.items ?? []).map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
         <Button type="submit" variant="secondary">
           Search
         </Button>
       </form>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Can permission="contacts.manage">
+          <BulkTagsDialog selection={matching} count={contacts.data?.page.total ?? 0} tags={tags.data ?? []} onDone={() => void refresh()} />
+          {selected.size ? <BulkTagsDialog selection={{ contactIds: [...selected] }} count={selected.size} tags={tags.data ?? []} onDone={() => void refresh()} /> : null}
+        </Can>
+        <Can permission="data.export">
+          <Button variant="outline" size="sm" asChild>
+            <a href={`/api/contacts/export.csv?${exportQuery}`} download>
+              Export CSV
+            </a>
+          </Button>
+        </Can>
+      </div>
 
       {selected.size && can('contacts.manage') ? <BulkBar ids={[...selected]} tags={tags.data ?? []} onDone={refresh} /> : null}
 
@@ -166,6 +233,7 @@ function ContactsList() {
                   <TableHead>Contact</TableHead>
                   <TableHead>Tags</TableHead>
                   <TableHead>Consent</TableHead>
+                  <TableHead>Lead source</TableHead>
                   <TableHead>Added</TableHead>
                 </TableRow>
               </TableHeader>
@@ -192,6 +260,9 @@ function ContactsList() {
                     </TableCell>
                     <TableCell>
                       <Badge variant={consentLabel[c.consentStatus].variant}>{consentLabel[c.consentStatus].label}</Badge>
+                    </TableCell>
+                    <TableCell className="text-xs" data-testid="lead-source">
+                      {c.leadSource ? leadSourceText(c.leadSource as LeadSourceKind, c.leadSourceLabel) : '—'}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground">{formatDateTime(c.createdAt)}</TableCell>
                   </TableRow>

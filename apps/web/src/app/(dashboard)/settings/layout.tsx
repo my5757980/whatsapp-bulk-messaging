@@ -10,6 +10,8 @@ import { cn } from '@/lib/utils';
 const TABS: Array<{ href: string; label: string; permission: Permission }> = [
   { href: '/settings/numbers', label: 'WhatsApp numbers', permission: 'numbers.view' },
   { href: '/settings/attributes', label: 'Attributes & tags', permission: 'contacts.view' },
+  // Feature 010: tags added automatically.
+  { href: '/settings/automatic-tags', label: 'Automatic tags', permission: 'settings.view' },
   { href: '/settings/keywords', label: 'Consent keywords', permission: 'settings.view' },
   { href: '/settings/rate-card', label: 'Rate card', permission: 'campaigns.view' },
   { href: '/settings/team', label: 'Team', permission: 'users.manage' },

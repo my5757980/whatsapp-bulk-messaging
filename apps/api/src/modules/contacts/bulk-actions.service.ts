@@ -92,8 +92,10 @@ export class BulkActionsService {
 
   // ---------- Used by the processors ----------
 
-  /** Marks the action running and returns it, or null when it is missing or already finished. */
-  async start(id: string): Promise<BulkAction | null> {
+  /** Marks the action of this kind running and returns it, or null when it is missing, finished or of another kind. */
+  async start(id: string, kinds: readonly BulkActionKind[]): Promise<BulkAction | null> {
+    const action = await this.prisma.bulkAction.findUnique({ where: { id }, select: { kind: true } });
+    if (!action || !kinds.includes(action.kind)) return null;
     const { count } = await this.prisma.bulkAction.updateMany({ where: { id, status: { in: ['QUEUED', 'RUNNING'] } }, data: { status: 'RUNNING', startedAt: new Date() } });
     return count ? this.prisma.bulkAction.findUnique({ where: { id } }) : null;
   }

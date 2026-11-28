@@ -16,6 +16,7 @@ import { DripEvents } from '../growth/drips/drip-events.js';
 import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
 import { IdempotencyService, requestHash } from './idempotency.service.js';
 import { leadSourceFor } from '../contacts/lead-source.js';
+import { AutoTagService } from '../contacts/auto-tags.service.js';
 
 // POST /api/v1/messages and GET /api/v1/messages/{id} (FR-033-FR-036, T189).
 
@@ -79,6 +80,7 @@ export class PublicApiService {
     private readonly idempotency: IdempotencyService,
     private readonly dripEvents: DripEvents,
     private readonly platformEvents: PlatformEvents,
+    private readonly autoTags: AutoTagService,
   ) {}
 
   private async sendingNumber(numberId: string | undefined): Promise<WhatsAppNumber> {
@@ -134,6 +136,8 @@ export class PublicApiService {
           update: {},
         });
         if (input.contact?.name && !contact.name) await tx.contact.update({ where: { id: contact.id }, data: { name: input.contact.name } });
+        // Automatic tags for a contact this send created (feature 010, R4).
+        if (!existing) await this.autoTags.apply(tx, 'CONTACT_CREATED', contact.id, 'API');
         if (wantsOptIn && contact.consentStatus === 'UNKNOWN') {
           await tx.contact.update({ where: { id: contact.id }, data: { consentStatus: 'OPTED_IN', consentSource: 'API', consentSourceNote: note, consentAt: now } });
           await tx.consentEvent.create({ data: { contactId: contact.id, status: 'OPTED_IN', source: 'API', note: note ?? null, createdAt: now } });

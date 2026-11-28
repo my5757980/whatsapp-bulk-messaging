@@ -17,6 +17,7 @@ import { normaliseTag } from './tags.controller.js';
 import { contactFilterSql } from './contact-filter.sql.js';
 import { SegmentQueryBuilder } from './segment-query.builder.js';
 import { leadSourceFor } from './lead-source.js';
+import { AutoTagService } from './auto-tags.service.js';
 
 // Contacts (FR-009, FR-012, T123). Deletion ships with US1 (ContactDeletionService).
 
@@ -110,6 +111,7 @@ export class ContactsService {
     private readonly dripEvents: DripEvents,
     private readonly platformEvents: PlatformEvents,
     private readonly segments: SegmentQueryBuilder,
+    private readonly autoTags: AutoTagService,
   ) {}
 
   private async attributeTypes(): Promise<Map<string, AttributeType>> {
@@ -249,6 +251,8 @@ export class ContactsService {
             ...(status ? { consentStatus: status, consentSource: 'MANUAL' as const, consentSourceNote: input.consentSourceNote ?? null, consentAt: now } : {}),
           },
         });
+        // Automatic tags for new contacts (feature 010, R4).
+        await this.autoTags.apply(tx, 'CONTACT_CREATED', contact.id, LEAD_KIND[source]);
         if (status) {
           await tx.consentEvent.create({
             data: { contactId: contact.id, status, source: 'MANUAL', note: input.consentSourceNote ?? null, actorUserId, createdAt: now },
