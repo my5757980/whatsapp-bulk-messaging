@@ -14,7 +14,6 @@ import { toast } from '@/components/ui/toaster';
 import { api } from '@/lib/api-client';
 import { errorMessage } from '@/lib/errors';
 import { formatNumber } from '@/lib/format';
-import { growthKeys, type TrackedLinkConfig } from '@/lib/growth';
 import { Can } from '@/lib/permissions';
 import { queryKeys } from '@/lib/query';
 import type { WhatsAppNumber } from '@/lib/types';
@@ -71,7 +70,17 @@ function Designer() {
   const queryClient = useQueryClient();
   const widget = useQuery({ queryKey: ['chat-widget', id], queryFn: () => api<ChatWidget>(`/chat-widgets/${id}`), enabled: !isNew });
   const numbers = useQuery({ queryKey: queryKeys.numbers, queryFn: () => api<WhatsAppNumber[]>('/numbers') });
-  const linkConfig = useQuery({ queryKey: growthKeys.linkConfig, queryFn: () => api<TrackedLinkConfig>('/tracked-links/config'), staleTime: 5 * 60_000 });
+  // The real button script, from this origin: the dashboard's CSP (inherited by the preview frame) allows
+  // inline scripts and this origin only, so the preview runs the script's text inline.
+  const script = useQuery({
+    queryKey: ['chat-widget-script'],
+    queryFn: async () => {
+      const res = await fetch('/w/widget.js');
+      if (!res.ok) throw new Error('The button script could not be loaded');
+      return res.text();
+    },
+    staleTime: Infinity,
+  });
   const stats = useQuery({ queryKey: ['chat-widget', id, 'stats'], queryFn: () => api<ChatWidgetStats>(`/chat-widgets/${id}/stats`), enabled: !isNew });
   const [form, setForm] = useState<ChatWidgetInput>(EMPTY);
   const [error, setError] = useState<string | null>(null);
@@ -129,12 +138,11 @@ function Designer() {
     onError: (e) => setError(errorMessage(e)),
   });
 
-  const base = linkConfig.data?.baseUrl?.replace(/\/+$/, '') ?? null;
   const preview = useMemo(() => {
-    if (!base) return null;
+    if (!script.data) return null;
     const config = { hidden: false, version: 'preview', look: form.look, brandName: form.brandName || 'Your business', brandImageUrl: null, greeting: form.greeting, startUrl: 'about:blank', rules: [] };
-    return `<!doctype html><html><body style="margin:0;min-height:100vh;background:#f4f4f5;font-family:sans-serif"><p style="padding:16px;color:#71717a">Your website</p><script src="${base}/w/widget.js" data-preview='${attr(JSON.stringify(config))}'></script></body></html>`;
-  }, [base, form.look, form.brandName, form.greeting]);
+    return `<!doctype html><html><body style="margin:0;min-height:100vh;background:#f4f4f5;font-family:sans-serif"><p style="padding:16px;color:#71717a">Your website</p><script data-preview='${attr(JSON.stringify(config))}'>${script.data.replace(/<\/script/gi, '<\\/script')}</script></body></html>`;
+  }, [script.data, form.look, form.brandName, form.greeting]);
 
   if (!isNew && widget.isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (!isNew && widget.error) return <p className="text-sm text-destructive">{errorMessage(widget.error)}</p>;
@@ -323,7 +331,7 @@ function Designer() {
               {preview ? (
                 size === 'phone' ? <ScaledFrame key="phone" srcDoc={preview} width={375} height={667} /> : <ScaledFrame key="desktop" srcDoc={preview} width={1280} height={800} />
               ) : (
-                <p className="text-sm text-muted-foreground">The preview needs the public link address on the server.</p>
+                <p className="text-sm text-muted-foreground">{script.error ? errorMessage(script.error) : 'Loading the preview…'}</p>
               )}
               <p className="mt-2 text-xs text-muted-foreground">Click the button in the preview to see the greeting.</p>
             </CardContent>

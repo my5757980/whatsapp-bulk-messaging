@@ -65,9 +65,9 @@ test('US8: the website chat button on a site, its counts, and the link generator
   await expect(page.getByTestId('widget-stats')).toContainText('Pages containing /products');
 
   // 4. No button on the checkout page.
-  const [config] = await Promise.all([site.waitForResponse((r) => r.url().includes(`/w/${key}/config.json`)), site.goto(`${MOCK_META}/mock/site/checkout?key=${key}`)]);
-  expect(config.status()).toBe(200);
-  await site.waitForTimeout(500);
+  await site.goto(`${MOCK_META}/mock/site/checkout?key=${key}`);
+  await expect.poll(() => site.evaluate(() => Boolean((window as unknown as { __wbmChatButton?: boolean }).__wbmChatButton)), { timeout: 15_000 }).toBe(true);
+  await site.waitForLoadState('networkidle');
   await expect(site.locator('[data-wbm-chat-button]')).toHaveCount(0);
 
   // 5. The generator: a link and a QR code; a chat link form opens filled in from it.

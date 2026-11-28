@@ -45,7 +45,11 @@ const nextConfig: NextConfig = {
     return [{ source: '/((?!api/).*)', headers: securityHeaders(process.env.NODE_ENV !== 'production') }];
   },
   async rewrites() {
-    return [{ source: '/api/:path*', destination: `${apiInternalUrl}/api/:path*` }];
+    return [
+      { source: '/api/:path*', destination: `${apiInternalUrl}/api/:path*` },
+      // Feature 009: the website button script, for the designer's preview (the CSP allows only this origin).
+      { source: '/w/widget.js', destination: `${apiInternalUrl}/l/w/widget.js` },
+    ];
   },
 };
 

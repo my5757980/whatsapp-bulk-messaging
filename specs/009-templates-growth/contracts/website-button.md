@@ -36,6 +36,11 @@
   6. **Start chat** opens `startUrl` (the rule's, else the default) with `?w={key}&p={encoded path}`
      in a new tab (`noopener`). On phones it uses the same tab.
 - **Never:** cookies, storage, page data beyond the path, or exceptions thrown to the page.
+- **The designer's preview:** the dashboard serves the same file at `/w/widget.js` (a rewrite to
+  this route), because its Content Security Policy allows scripts from its own origin and inline
+  only, and preview frames inherit that policy. The designer runs the file's text inline in a
+  sandboxed `srcdoc` frame, with the draft settings in `data-preview` instead of `data-key`: no
+  config is fetched and **Start chat** goes nowhere.
 
 ### Page rule matching
 
