@@ -27,6 +27,19 @@ type SamplesQuery = z.infer<typeof SamplesQuerySchema>;
 const CopySchema = z.object({ wabaId: z.string().trim().min(1), name: z.string().regex(/^[a-z0-9_]{1,512}$/, 'use lower-case letters, numbers and underscores only') }).strict();
 type CopyInput = z.infer<typeof CopySchema>;
 
+/** Removes `example.header_handle: [null]` left by media headers and cards without a sample file. */
+function withoutMissingHandles(components: unknown[]): unknown[] {
+  const clean = (part: unknown): unknown => {
+    if (!part || typeof part !== 'object') return part;
+    const c = { ...(part as Record<string, unknown>) };
+    const example = c.example as { header_handle?: unknown[] } | undefined;
+    if (example?.header_handle && example.header_handle.every((h) => h === null)) delete c.example;
+    if (Array.isArray(c.cards)) c.cards = (c.cards as Array<{ components?: unknown[] }>).map((card) => ({ ...card, components: (card.components ?? []).map(clean) }));
+    return c;
+  };
+  return components.map(clean);
+}
+
 @Injectable()
 export class TemplateSamplesService {
   constructor(
@@ -50,8 +63,9 @@ export class TemplateSamplesService {
       throw AppError.validation('Unknown WhatsApp Business Account', [{ field: 'wabaId', issue: 'connect a number for this account first' }]);
     }
     const draft = { ...sample.draft, wabaId: input.wabaId, name: input.name };
-    // No media yet: the editor asks for the header or card files before submitting.
-    const components = buildTemplateComponents(draft, undefined, []);
+    // No media yet: the editor asks for the header or card files before submitting. The JSON round trip
+    // drops the missing sample handles, which Prisma's JSON columns refuse as undefined.
+    const components = withoutMissingHandles(JSON.parse(JSON.stringify(buildTemplateComponents(draft, undefined, []))) as unknown[]);
     try {
       const template = await this.prisma.template.create({
         data: {
