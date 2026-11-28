@@ -398,6 +398,18 @@ describe('Retention', () => {
     await ctx.prisma.form.delete({ where: { id: form.id } });
   });
 
+  it('deletes one-time code messages after 30 days (009 T091)', async () => {
+    const number = await seedNumber(ctx);
+    const template = await seedTemplate(ctx, number.wabaId, { category: 'AUTHENTICATION', kind: 'AUTHENTICATION' });
+    const code = (daysAgo: number) =>
+      ctx.prisma.message.create({ data: { origin: 'OTP', phoneE164: uaePhone(), recipientCountry: 'AE', numberId: number.id, templateId: template.id, status: 'DELIVERED', resolvedParams: { 'BODY.1': '••••' }, createdAt: new Date(Date.now() - daysAgo * DAY) } });
+    const [old, recent] = [await code(31), await code(29)];
+    const result = await retention.run();
+    expect(result.otpMessages).toBeGreaterThanOrEqual(1);
+    expect(await ctx.prisma.message.findUnique({ where: { id: old.id } })).toBeNull();
+    expect(await ctx.prisma.message.findUnique({ where: { id: recent.id } })).not.toBeNull();
+  });
+
   it('runs every step daily on the maintenance queue', async () => {
     expect(await retention.run()).toEqual({
       linkClicks: expect.any(Number),
@@ -433,6 +445,7 @@ describe('Retention', () => {
       removedProducts: expect.any(Number),
       paymentRequests: expect.any(Number),
       chatOrders: expect.any(Number),
+      otpMessages: expect.any(Number),
     });
     const scheduler = await ctx.app.get(QueueRegistry).get(QUEUES.MAINTENANCE).getJobScheduler('retention');
     expect(scheduler?.pattern).toBe('15 3 * * *');

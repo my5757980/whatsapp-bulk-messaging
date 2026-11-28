@@ -55,7 +55,8 @@ export class ScheduleService {
 
     const campaign = await this.launches.load(campaignId);
     if (campaign.state !== 'DRAFT') throw AppError.conflict('Only draft campaigns can be scheduled');
-    await this.launches.validate(campaign);
+    // Checked against the new start (feature 009: an offer must not end before it).
+    await this.launches.validate({ ...campaign, scheduledAt: at });
 
     const { count } = await this.prisma.campaign.updateMany({
       where: { id: campaignId, state: 'DRAFT' },

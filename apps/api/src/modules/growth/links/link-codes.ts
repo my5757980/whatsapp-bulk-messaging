@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
-import { makeLinkCode, trackedLinkUrl } from '@wbm/shared';
+import { makeLinkCode, parseCardKey, trackedLinkUrl } from '@wbm/shared';
 import { APP_CONFIG } from '../../../common/config/config.module.js';
 import type { AppConfig } from '../../../common/config/config.js';
 import type { Prisma } from '../../../generated/prisma/client.js';
@@ -29,7 +29,8 @@ export class TrackedLinkCodes {
 
   /** What a tracked variable carries: the code in a URL button (its address ends with the code), the whole short link in text. */
   valueFor(variableKey: string, code: string): string {
-    return variableKey.startsWith('BUTTON.') ? code : trackedLinkUrl(this.config.PUBLIC_LINK_BASE_URL ?? '', code);
+    const button = variableKey.startsWith('BUTTON.') || parseCardKey(variableKey)?.part === 'BUTTON';
+    return button ? code : trackedLinkUrl(this.config.PUBLIC_LINK_BASE_URL ?? '', code);
   }
 
   /** The value previews show for a tracked variable. */

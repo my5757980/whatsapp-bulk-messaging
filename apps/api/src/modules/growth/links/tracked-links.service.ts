@@ -4,6 +4,7 @@ import {
   destinationProblem,
   extractTemplateVariables,
   isTrackedButtonUrl,
+  parseCardKey,
   parseVariableKey,
   trackedButtonUrl,
   type MetaTemplateComponent,
@@ -88,12 +89,18 @@ export class TrackedLinksService {
   trackable(components: MetaTemplateComponent[]): TrackableVariable[] {
     const base = this.config.PUBLIC_LINK_BASE_URL;
     const buttons = components.find((c) => c.type.toUpperCase() === 'BUTTONS')?.buttons ?? [];
+    // Feature 009 (research R6): a carousel card's URL buttons can carry a tracked link too.
+    const cards = components.find((c) => c.type.toUpperCase() === 'CAROUSEL')?.cards ?? [];
     return extractTemplateVariables(components).map(({ key }) => {
       const ref = parseVariableKey(key);
-      const kind = ref?.component === 'BUTTON' ? 'URL_BUTTON' : 'TEXT_VARIABLE';
+      const card = parseCardKey(key);
+      const kind = ref?.component === 'BUTTON' || card?.part === 'BUTTON' ? 'URL_BUTTON' : 'TEXT_VARIABLE';
       if (!base) return { variableKey: key, kind, trackable: false, reason: 'Link tracking is not set up on this server' };
       if (kind === 'TEXT_VARIABLE') return { variableKey: key, kind, trackable: true, reason: null };
-      const url = buttons[ref?.index ?? 0]?.url ?? '';
+      const url =
+        card?.part === 'BUTTON'
+          ? ((cards[card.card]?.components ?? []).find((c) => c.type.toUpperCase() === 'BUTTONS')?.buttons?.[card.button]?.url ?? '')
+          : (buttons[ref?.index ?? 0]?.url ?? '');
       return isTrackedButtonUrl(url, base)
         ? { variableKey: key, kind, trackable: true, reason: null }
         : {

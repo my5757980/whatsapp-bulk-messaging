@@ -40,7 +40,7 @@ export class EstimateService {
     if (!campaign) throw AppError.notFound('Campaign not found');
     if (!campaign.template) throw AppError.validation('Choose a template first', [{ field: 'templateId', issue: 'is required' }]);
 
-    const excluded = { optedOut: 0, noOptIn: 0, invalidNumber: 0, duplicate: 0, missingVariable: 0, paymentAmountMissing: 0 };
+    const excluded = { optedOut: 0, noOptIn: 0, invalidNumber: 0, duplicate: 0, missingVariable: 0, paymentAmountMissing: 0, offerCodeMissing: 0, mediaUrlMissing: 0 };
     if (campaign.audienceType === 'UPLOAD') {
       const { job, rows } = await this.snapshot.readyUpload(campaignId);
       excluded.invalidNumber = job.errorCount;
@@ -65,6 +65,9 @@ export class EstimateService {
         else if (r.skipReason === 'NO_OPT_IN') excluded.noOptIn++;
         else if (r.skipReason === 'MISSING_VARIABLE') excluded.missingVariable++;
         else if (r.skipReason === 'PAYMENT_AMOUNT_MISSING') excluded.paymentAmountMissing++;
+        // Feature 009 (research R7, R9).
+        else if (r.skipReason === 'OFFER_CODE_MISSING') excluded.offerCodeMissing++;
+        else if (r.skipReason === 'MEDIA_URL_MISSING') excluded.mediaUrlMissing++;
       }
     }
 

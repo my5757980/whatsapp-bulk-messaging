@@ -171,13 +171,15 @@ function PatternForm({ trigger, index, problems, onChange, onRemove }: FormProps
   );
 }
 
-/** Quick-reply button texts of a template. */
+/** Quick-reply button texts of a template, carousel cards included (feature 009). */
 const quickReplies = (template: Template | undefined) =>
   (template?.components ?? [])
+    .flatMap((c) => (c.type.toUpperCase() === 'CAROUSEL' ? (c.cards ?? []).flatMap((card) => card.components ?? []) : [c]))
     .filter((c) => c.type.toUpperCase() === 'BUTTONS')
     .flatMap((c) => c.buttons ?? [])
     .filter((b) => b.type.toUpperCase() === 'QUICK_REPLY' && b.text)
-    .map((b) => b.text!);
+    .map((b) => b.text!)
+    .filter((text, i, all) => all.indexOf(text) === i);
 
 function TemplateButtonForm({ trigger, index, problems, onChange, onRemove }: FormProps<Of<'TEMPLATE_BUTTON'>>) {
   const id = `trigger-${trigger.id}`;

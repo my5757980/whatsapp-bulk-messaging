@@ -50,6 +50,7 @@ export interface MetaTemplate {
   parameter_format?: string;
   rejected_reason?: string;
   components: MetaTemplateComponent[];
+  message_send_ttl_seconds?: number;
 }
 
 export interface CreateTemplateBody {
@@ -58,6 +59,8 @@ export interface CreateTemplateBody {
   category: string;
   components: Array<Record<string, unknown>>;
   parameter_format?: 'POSITIONAL' | 'NAMED';
+  /** Feature 009 (research R8): authentication 30–900 s, utility 30–43200 s. */
+  message_send_ttl_seconds?: number;
 }
 
 /**

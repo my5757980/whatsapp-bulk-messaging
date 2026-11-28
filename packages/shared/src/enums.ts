@@ -73,6 +73,8 @@ export const MessageStatus = {
   FAILED: 'FAILED',
   SKIPPED: 'SKIPPED',
   CANCELLED: 'CANCELLED',
+  /** Feature 009 (research R8): dropped by the time-to-live or the offer end; see ExpiredReason. */
+  EXPIRED: 'EXPIRED',
 } as const;
 export type MessageStatus = (typeof MessageStatus)[keyof typeof MessageStatus];
 
@@ -83,8 +85,19 @@ export const SkipReason = {
   DUPLICATE: 'DUPLICATE',
   MISSING_VARIABLE: 'MISSING_VARIABLE',
   PAYMENT_AMOUNT_MISSING: 'PAYMENT_AMOUNT_MISSING',
+  /** Feature 009: an offer recipient without a code, or a media recipient without an address. */
+  OFFER_CODE_MISSING: 'OFFER_CODE_MISSING',
+  MEDIA_URL_MISSING: 'MEDIA_URL_MISSING',
 } as const;
 export type SkipReason = (typeof SkipReason)[keyof typeof SkipReason];
+
+/** Why a message is EXPIRED (feature 009, research R8). */
+export const ExpiredReason = {
+  EXPIRED_BEFORE_SENDING: 'EXPIRED_BEFORE_SENDING',
+  NOT_DELIVERED_IN_TIME: 'NOT_DELIVERED_IN_TIME',
+  OFFER_ENDED: 'OFFER_ENDED',
+} as const;
+export type ExpiredReason = (typeof ExpiredReason)[keyof typeof ExpiredReason];
 
 export const NotificationType = {
   CAMPAIGN_COMPLETED: 'CAMPAIGN_COMPLETED',
@@ -115,6 +128,8 @@ export const NotificationType = {
   PAYMENT_PAID_LATE: 'PAYMENT_PAID_LATE',
   PAYMENTS_CONNECTION_ERROR: 'PAYMENTS_CONNECTION_ERROR',
   CATALOG_SYNC_FAILED: 'CATALOG_SYNC_FAILED',
+  // Feature 009 templates and growth
+  CHAT_WIDGET_NUMBER_DISCONNECTED: 'CHAT_WIDGET_NUMBER_DISCONNECTED',
 } as const;
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
 

@@ -23,7 +23,7 @@ async function readColumns(file: File): Promise<string[]> {
   return header.split(delimiter).map((c, i) => c.trim().replace(/^"(.*)"$/, '$1') || `column_${i + 1}`);
 }
 
-function UploadSummary({ job }: { job: ImportJob }) {
+function UploadSummary({ job, everyRow }: { job: ImportJob; everyRow: boolean }) {
   if (job.status === 'QUEUED' || job.status === 'PROCESSING') {
     return <p className="text-sm text-muted-foreground">Processing the list…</p>;
   }
@@ -36,7 +36,7 @@ function UploadSummary({ job }: { job: ImportJob }) {
         {formatNumber(valid)} recipients ready ({formatNumber(job.createdCount)} new contacts, {formatNumber(job.updatedCount)} existing)
       </div>
       <div className="text-muted-foreground">
-        {formatNumber(job.skippedCount)} skipped (duplicates or opted out) · {formatNumber(job.errorCount)} invalid numbers
+        {formatNumber(job.skippedCount)} skipped ({everyRow ? 'repeated rows are kept; opted out' : 'duplicates or opted out'}) · {formatNumber(job.errorCount)} invalid numbers
       </div>
     </div>
   );
@@ -53,6 +53,13 @@ function UploadAudience({ campaign, onBack, onDone }: { campaign: CampaignDetail
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(campaign.audienceUpload?.id ?? null);
+  // Feature 009 (research R10): one message per row, even when a number repeats.
+  const [everyRow, setEveryRow] = useState(Boolean(campaign.allowDuplicateRows));
+  const saveEveryRow = useMutation({
+    mutationFn: (on: boolean) => api<Campaign>(`/campaigns/${campaign.id}`, { method: 'PATCH', json: { allowDuplicateRows: on } }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: queryKeys.campaign(campaign.id) }),
+    onError: (e) => setError(errorMessage(e)),
+  });
 
   const job = useQuery({
     queryKey: ['import', jobId],
@@ -138,6 +145,22 @@ function UploadAudience({ campaign, onBack, onDone }: { campaign: CampaignDetail
             </div>
           </div>
         ) : null}
+        <label className="flex items-start gap-2 text-sm" data-testid="every-row">
+          <input
+            type="checkbox"
+            className="mt-0.5 h-4 w-4"
+            checked={everyRow}
+            disabled={saveEveryRow.isPending}
+            onChange={(e) => {
+              setEveryRow(e.target.checked);
+              saveEveryRow.mutate(e.target.checked);
+            }}
+          />
+          <span>
+            Send to every row: a number on several rows gets one message per row, each with that row&apos;s values.
+            {jobId ? ' Upload the list again after changing this.' : ''}
+          </span>
+        </label>
         <div className="grid gap-3 rounded-md border p-4">
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" className="mt-0.5 h-4 w-4" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
@@ -166,7 +189,7 @@ function UploadAudience({ campaign, onBack, onDone }: { campaign: CampaignDetail
           </Button>
         </div>
       </form>
-      {job.data ? <UploadSummary job={job.data} /> : null}
+      {job.data ? <UploadSummary job={job.data} everyRow={everyRow} /> : null}
       <div className="flex gap-2">
         <Button variant="outline" onClick={onBack}>
           Back

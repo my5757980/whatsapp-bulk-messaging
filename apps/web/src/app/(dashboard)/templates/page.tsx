@@ -39,6 +39,9 @@ export default function TemplatesPage() {
           <Button variant="outline" onClick={() => sync.mutate()} disabled={sync.isPending}>
             <RefreshCw className="h-4 w-4" /> {sync.isPending ? 'Syncing…' : 'Sync from Meta'}
           </Button>
+          <Button variant="outline" asChild>
+            <Link href="/templates/samples">Samples</Link>
+          </Button>
           <Can permission="templates.manage">
             <Button asChild>
               <Link href="/templates/new">New template</Link>

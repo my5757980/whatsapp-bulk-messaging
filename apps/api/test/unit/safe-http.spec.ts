@@ -73,6 +73,19 @@ describe('safeRequest', () => {
     expect(scope.isDone()).toBe(true);
   });
 
+  it('follows redirects only when asked, checking every address again (feature 009 media addresses)', async () => {
+    nock('https://media.example.com').head('/a.pdf').reply(302, '', { location: '/files/a.pdf' }).head('/files/a.pdf').reply(200, '', { 'content-type': 'application/pdf', 'content-length': '2048' });
+    const res = await safeRequest({ method: 'HEAD', url: 'https://media.example.com/a.pdf', timeoutMs: 1000, followRedirects: 3 });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toBe('application/pdf');
+    nock('https://media.example.com').head('/b.pdf').reply(302, '', { location: 'https://10.0.0.1/b.pdf' });
+    expect((await failure(safeRequest({ method: 'HEAD', url: 'https://media.example.com/b.pdf', timeoutMs: 1000, followRedirects: 3 }))).reason).toBe('BLOCKED_ADDRESS');
+    nock('https://media.example.com').head('/c.pdf').reply(301, '', { location: 'http://media.example.com/c.pdf' });
+    expect((await failure(safeRequest({ method: 'HEAD', url: 'https://media.example.com/c.pdf', timeoutMs: 1000, followRedirects: 3 }))).reason).toBe('NOT_HTTPS');
+    nock('https://media.example.com').head('/loop').times(5).reply(302, '', { location: '/loop' });
+    expect((await failure(safeRequest({ method: 'HEAD', url: 'https://media.example.com/loop', timeoutMs: 1000, followRedirects: 2 }))).reason).toBe('REDIRECT');
+  });
+
   it('refuses redirects instead of following them', async () => {
     nock('https://hooks.example.com').post('/in').reply(302, '', { location: 'https://elsewhere.example.com/' });
     expect((await failure(safeRequest({ method: 'POST', url: 'https://hooks.example.com/in', body: '{}', timeoutMs: 1000 }))).reason).toBe('REDIRECT');

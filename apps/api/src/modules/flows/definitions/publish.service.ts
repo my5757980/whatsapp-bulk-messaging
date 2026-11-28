@@ -127,8 +127,11 @@ export class PublishService {
       if (!template || template.status === 'DELETED') {
         return [{ code: 'MISSING_CONTENT', message: 'The template no longer exists', stepId: null, triggerId: trigger.id, field: 'templateId' }];
       }
-      const components = (Array.isArray(template.components) ? template.components : []) as Array<{ type?: string; buttons?: Array<{ type?: string; text?: string }> }>;
-      const quickReplies = components
+      type Part = { type?: string; buttons?: Array<{ type?: string; text?: string }>; cards?: Array<{ components?: Part[] }> };
+      const components = (Array.isArray(template.components) ? template.components : []) as Part[];
+      // Feature 009 (research R6): a carousel card's quick replies are the template's buttons too.
+      const parts = components.flatMap((c) => ((c.type ?? '').toUpperCase() === 'CAROUSEL' ? (c.cards ?? []).flatMap((card) => card.components ?? []) : [c]));
+      const quickReplies = parts
         .filter((c) => (c.type ?? '').toUpperCase() === 'BUTTONS')
         .flatMap((c) => c.buttons ?? [])
         .filter((b) => (b.type ?? '').toUpperCase() === 'QUICK_REPLY')

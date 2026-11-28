@@ -72,6 +72,8 @@ export class ContactDeletionService {
       this.prisma.paymentRequest.updateMany({ where: { contactId, status: 'WAITING' }, data: { status: 'CANCELLED', cancelledAt: new Date(), nextReminderAt: null } }),
       this.prisma.paymentRequest.updateMany({ where: { OR: [{ contactId }, { phoneE164: contact.phoneE164 }] }, data: { phoneE164: null, customerName: null } }),
       this.prisma.chatOrder.updateMany({ where: { contactId }, data: { customerText: null } }),
+      // Feature 009: one-time code messages have no contact; those sent to this phone lose it.
+      this.prisma.message.updateMany({ where: { origin: 'OTP', phoneE164: contact.phoneE164 }, data: { phoneE164: null } }),
     ]);
     // Saved audiences that sent their phone hash are updated now rather than at the daily sync (007).
     const audienceIds = (await this.prisma.adAudienceMember.findMany({ where: { contactId }, select: { audienceId: true }, distinct: ['audienceId'] })).map((m) => m.audienceId);

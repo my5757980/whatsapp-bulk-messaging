@@ -39,6 +39,8 @@ export interface TemplateComponent {
   format?: string;
   text?: string;
   buttons?: Array<{ type: string; text?: string; url?: string }>;
+  /** Feature 009: carousel cards, each with its own header, body and buttons. */
+  cards?: Array<{ components?: TemplateComponent[] }>;
 }
 
 export interface Template {
@@ -54,6 +56,11 @@ export interface Template {
   components: TemplateComponent[];
   variables: TemplateVariable[];
   lastSyncedAt: string | null;
+  /** Feature 009 (research R1, R8). */
+  kind?: 'STANDARD' | 'CAROUSEL' | 'LIMITED_TIME_OFFER' | 'AUTHENTICATION';
+  ttlSeconds?: number | null;
+  ttlAppliedBy?: 'META' | 'PLATFORM' | null;
+  options?: Record<string, unknown>;
 }
 
 export interface StatusTotals {
@@ -65,6 +72,8 @@ export interface StatusTotals {
   failed: number;
   skipped: number;
   cancelled: number;
+  /** Feature 009: not sent or not delivered in time, or after an offer ended. */
+  expired: number;
 }
 
 export type VariableSourceKind = 'column' | 'field' | 'attribute' | 'static' | 'payment';
@@ -76,6 +85,26 @@ export interface CampaignPaymentConfig {
   expiryMinutes: number;
   tagId?: string | null;
   flowId?: string | null;
+}
+
+/** Feature 009 (research R7): a limited-time offer's end and where each recipient's code comes from. */
+export interface CampaignOfferConfig {
+  endsAt: string;
+  code: { source: 'static' | 'column' | 'attribute'; value?: string; key?: string };
+}
+
+/** Feature 009 (research R6): a carousel card's file for one campaign. */
+export interface CampaignCardMedia {
+  cardIndex: number;
+  mediaAssetId: string;
+}
+
+/** POST /campaigns/{id}/media-check (feature 009). */
+export interface MediaCheckResult {
+  checked: number;
+  sampled: boolean;
+  problems: Array<{ url: string; rows?: number[]; reason: 'NOT_HTTPS' | 'NOT_PUBLIC' | 'UNREACHABLE' | 'WRONG_TYPE' | 'TOO_LARGE' | 'TIMEOUT' }>;
+  cardMedia: Array<{ cardIndex: number; result: 'READY' | 'WRONG_TYPE' | 'TOO_LARGE' | 'UPLOAD_FAILED'; detail?: string }>;
 }
 
 export interface VariableSource {
@@ -97,6 +126,10 @@ export interface Campaign {
   variableMapping: Record<string, VariableSource>;
   headerMediaAssetId: string | null;
   paymentConfig?: CampaignPaymentConfig | null;
+  /** Feature 009. */
+  offerConfig?: CampaignOfferConfig | null;
+  cardMedia?: CampaignCardMedia[] | null;
+  allowDuplicateRows?: boolean;
   state: CampaignState;
   scheduledAt: string | null;
   timezone: string;
@@ -121,6 +154,10 @@ export interface CampaignMessage {
   contactName: string | null;
   status: MessageStatus;
   skipReason: string | null;
+  /** Feature 009: why an EXPIRED message expired. */
+  expiredReason?: 'EXPIRED_BEFORE_SENDING' | 'NOT_DELIVERED_IN_TIME' | 'OFFER_ENDED' | null;
+  /** Feature 009 (research R12): what the failure means and what to do. */
+  failureHelp?: { meaning: string; action: string } | null;
   failureCode: number | null;
   failureReason: string | null;
   attempts: number;
@@ -147,7 +184,7 @@ export interface ImportJob {
 
 export interface Estimate {
   eligible: number;
-  excluded: { optedOut: number; noOptIn: number; invalidNumber: number; duplicate: number; missingVariable: number; paymentAmountMissing: number };
+  excluded: { optedOut: number; noOptIn: number; invalidNumber: number; duplicate: number; missingVariable: number; paymentAmountMissing: number; offerCodeMissing: number; mediaUrlMissing: number };
   messagingLimitWarning: string | null;
   previews: Array<{ phoneMasked: string; text: string }>;
   estimatedCostUsd?: number;

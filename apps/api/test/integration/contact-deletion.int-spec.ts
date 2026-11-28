@@ -262,6 +262,20 @@ describe('Contact deletion', () => {
     await ctx.prisma.form.delete({ where: { id: form.id } });
   });
 
+  it('clears code messages sent to their phone and every repeated-row message of theirs (009 T091)', async () => {
+    const phone = uaePhone();
+    const contact = await seedContact(ctx, phone, { name: 'Code Person' });
+    const number = await seedNumber(ctx);
+    const template = await seedTemplate(ctx, number.wabaId);
+    const otp = await ctx.prisma.message.create({ data: { origin: 'OTP', phoneE164: phone, recipientCountry: 'AE', numberId: number.id, templateId: template.id, status: 'DELIVERED', resolvedParams: { 'BODY.1': '••••' } } });
+    const campaign = await seedRunningCampaign(ctx, { numberId: number.id, templateId: template.id, createdById: admin.userId, contacts: [contact] });
+    const repeat = await ctx.prisma.message.create({ data: { origin: 'CAMPAIGN', campaignId: campaign.id, contactId: contact.id, copyIndex: 1, phoneE164: phone, recipientCountry: 'AE', numberId: number.id, templateId: template.id, status: 'DELIVERED', resolvedParams: { 'BODY.1': 'Order A-2' } } });
+    expect((await admin.agent.delete(`/api/contacts/${contact.id}`).set('x-csrf-token', admin.csrf)).status).toBe(204);
+    expect(await ctx.prisma.message.findUniqueOrThrow({ where: { id: otp.id } })).toMatchObject({ phoneE164: null, status: 'DELIVERED' });
+    expect(await ctx.prisma.message.findUniqueOrThrow({ where: { id: repeat.id } })).toMatchObject({ contactId: null, phoneE164: null, resolvedParams: {}, status: 'DELIVERED' });
+    expect(await ctx.prisma.message.count({ where: { campaignId: campaign.id, contactId: { not: null } } })).toBe(0);
+  });
+
   it('is admin-only and returns 404 for unknown contacts', async () => {
     const contact = await seedContact(ctx, uaePhone());
     const manager = await signIn(ctx, 'MANAGER');

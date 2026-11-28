@@ -27,6 +27,8 @@ import { Prisma } from '../../generated/prisma/client.js';
 
 const DAY_MS = 24 * 3600 * 1000;
 const CAMPAIGN_MONTHS = 12;
+/** Feature 009 (research R17): one-time code messages are kept 30 days. */
+const OTP_DAYS = 30;
 /** Meta's numbers stay longer so results can be compared year over year (007 R13). */
 const AD_RESULT_MONTHS = 25;
 const SHORT_LIVED_DAYS = 30;
@@ -127,6 +129,8 @@ export interface RetentionResult extends LiveChatRetentionResult, AiRetentionRes
   files: number;
   /** Chatbot flow sessions (and their step records) that ended over 12 months ago (003). */
   flowSessions: number;
+  /** One-time code messages older than 30 days (009). */
+  otpMessages: number;
 }
 
 export function monthsBefore(now: Date, months: number): Date {
@@ -180,6 +184,7 @@ export class RetentionService {
       removedProducts: 0,
       paymentRequests: 0,
       chatOrders: 0,
+      otpMessages: 0,
     };
     const failures: string[] = [];
     const step = async (name: string, fn: () => Promise<void>) => {
@@ -218,6 +223,10 @@ export class RetentionService {
     });
     await step('commerce', async () => {
       Object.assign(result, await this.purgeCommerce(now));
+    });
+    await step('one-time codes', async () => {
+      const cutoff = new Date(now.getTime() - OTP_DAYS * 86_400_000);
+      result.otpMessages = await this.deleteInBatches('messages', Prisma.sql`origin = 'OTP' AND created_at < ${cutoff}`);
     });
     this.logger.log({ ...result }, 'Retention run finished');
     if (failures.length) throw new Error(`Retention partly failed: ${failures.join('; ')}`);

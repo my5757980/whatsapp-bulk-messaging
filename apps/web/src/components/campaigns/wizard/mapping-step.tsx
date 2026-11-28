@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { destinationProblem } from '@wbm/shared';
+import { destinationProblem, parseCardKey } from '@wbm/shared';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,10 @@ import { api } from '@/lib/api-client';
 import { errorMessage } from '@/lib/errors';
 import { growthKeys, type TrackedLinkConfig, type TrackedLinkSet } from '@/lib/growth';
 import { queryKeys } from '@/lib/query';
-import type { CampaignDetail, CampaignPaymentConfig, Estimate, Template, VariableSource, VariableSourceKind } from '@/lib/types';
+import type { CampaignCardMedia, CampaignDetail, CampaignOfferConfig, CampaignPaymentConfig, Estimate, Template, VariableSource, VariableSourceKind } from '@/lib/types';
+import { CardMediaCard } from './card-media';
+import { MediaSourceCard, HEADER_MEDIA_KEY, headerMediaFormat, mediaChoiceComplete, mediaChoiceFrom, mediaChoicePatch, type MediaChoice } from './media-source';
+import { OfferConfigCard, defaultOfferConfig, offerConfigComplete } from './offer-config';
 import { PAYMENT_VARIABLE_KEYS, PaymentConfigCard, payLinkButtonKey, paymentConfigComplete } from './payment-config';
 import { ProductChoicesCard, choicesComplete, choicesFrom, choicesMapping, productButtonKind, type ProductChoices } from './product-choices';
 
@@ -26,6 +29,13 @@ const SOURCES: Array<{ value: VariableSourceKind; label: string }> = [
 interface TrackedChoice {
   destination: string;
   addCampaignTags: boolean;
+}
+
+/** Feature 009: which card a carousel variable belongs to. */
+function cardLabel(key: string): string | null {
+  const ref = parseCardKey(key);
+  if (!ref) return null;
+  return ref.part === 'BODY' ? `Card ${ref.card + 1} text` : `Card ${ref.card + 1}, button ${ref.button + 1} link`;
 }
 
 function isComplete(m: VariableSource | undefined): boolean {
@@ -62,6 +72,14 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
   const productKind = productButtonKind(template.data);
   const [choices, setChoices] = useState<ProductChoices>(() => choicesFrom(campaign.variableMapping ?? {}));
   const [tracked, setTracked] = useState<Record<string, TrackedChoice> | null>(null);
+  // Feature 009: carousel card files, and a limited-time offer's end and codes.
+  const carousel = template.data?.kind === 'CAROUSEL';
+  const isOffer = template.data?.kind === 'LIMITED_TIME_OFFER';
+  const [cardMedia, setCardMedia] = useState<CampaignCardMedia[]>(campaign.cardMedia ?? []);
+  const [offer, setOffer] = useState<CampaignOfferConfig>(() => campaign.offerConfig ?? defaultOfferConfig());
+  // Feature 009 (US4): the header media from a library file or a web address.
+  const mediaFormat = headerMediaFormat(template.data);
+  const [mediaChoice, setMediaChoice] = useState<MediaChoice>(() => mediaChoiceFrom(campaign.headerMediaAssetId, campaign.variableMapping ?? {}));
   const [previews, setPreviews] = useState<Estimate['previews'] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const variables = template.data?.variables ?? [];
@@ -99,8 +117,19 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
             return [key, m.source === 'static' ? { source: 'static', value: m.value ?? '', fallback } : { source: m.source, key: m.key ?? '', fallback }];
           }),
       );
-      const withProducts = productKind ? { ...clean, $products: choicesMapping(productKind, choices) } : clean;
-      await api(`/campaigns/${campaign.id}`, { method: 'PATCH', json: { variableMapping: withProducts, paymentConfig: payKey ? payment : null } });
+      const media = mediaFormat ? mediaChoicePatch(mediaChoice) : null;
+      const withMedia = media?.address ? { ...clean, [HEADER_MEDIA_KEY]: media.address } : clean;
+      const withProducts = productKind ? { ...withMedia, $products: choicesMapping(productKind, choices) } : withMedia;
+      await api(`/campaigns/${campaign.id}`, {
+        method: 'PATCH',
+        json: {
+          variableMapping: withProducts,
+          paymentConfig: payKey ? payment : null,
+          ...(carousel ? { cardMedia: cardMedia.length ? cardMedia : null } : {}),
+          ...(isOffer ? { offerConfig: offer } : {}),
+          ...(media ? { headerMediaAssetId: media.headerMediaAssetId } : {}),
+        },
+      });
       await api(`/campaigns/${campaign.id}/tracked-links`, {
         method: 'PUT',
         json: { links: Object.entries(links).map(([variableKey, c]) => ({ variableKey, destination: c.destination.trim(), addCampaignTags: c.addCampaignTags })) },
@@ -120,6 +149,8 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
   const body = template.data?.components.find((c) => c.type.toUpperCase() === 'BODY')?.text ?? '';
   const ready =
     paymentConfigComplete(payKey ? payment : null) &&
+    (!isOffer || offerConfigComplete(offer)) &&
+    (!mediaFormat || mediaChoiceComplete(mediaChoice)) &&
     choicesComplete(productKind, choices) &&
     variables.every(({ key }) => {
       if (paying && key === payKey) return true;
@@ -137,6 +168,9 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
       {!variables.length ? <p className="text-sm text-muted-foreground">This template has no variables. Continue to review.</p> : null}
       {payKey ? <PaymentConfigCard value={payment} onChange={setPayment} /> : null}
       {productKind ? <ProductChoicesCard kind={productKind} value={choices} onChange={setChoices} /> : null}
+      {isOffer ? <OfferConfigCard value={offer} onChange={setOffer} columns={columns} /> : null}
+      {carousel ? <CardMediaCard campaignId={campaign.id} template={template.data} value={cardMedia} onChange={setCardMedia} /> : null}
+      {mediaFormat ? <MediaSourceCard format={mediaFormat} value={mediaChoice} onChange={setMediaChoice} columns={columns} allowColumn={allowColumn} /> : null}
       {variables.map(({ key, example }) => {
         if (paying && key === payKey) {
           return (
@@ -155,6 +189,7 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
           <div key={key} className="grid gap-3 rounded-md border p-4 sm:grid-cols-[10rem_1fr_1fr_1fr]" data-testid={`mapping-${key}`}>
             <div>
               <div className="font-mono text-sm font-medium">{key}</div>
+              {cardLabel(key) ? <div className="text-xs text-muted-foreground">{cardLabel(key)}</div> : null}
               {example ? <div className="text-xs text-muted-foreground">e.g. {example}</div> : null}
               {mustTrack ? <div className="text-xs text-muted-foreground">Tracked link button</div> : null}
             </div>

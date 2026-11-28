@@ -7,7 +7,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter.js';
 export function configureApp(app: INestApplication): INestApplication {
   // /metrics stays outside the /api prefix (scraped by Prometheus with X-Ops-Token), and so do
   // tracked links (/l/:code, feature 005), which phones open on the company's public address.
-  app.setGlobalPrefix('api', { exclude: ['metrics', 'l/:code', 'l/c/:code', 'l/a/:code', 'l/p/:code'] });
+  app.setGlobalPrefix('api', { exclude: ['metrics', 'l/:code', 'l/c/:code', 'l/a/:code', 'l/p/:code', 'l/w/widget.js', 'l/w/:key/config.json', 'l/w/:key/image'] });
   // The web app proxies /api/*. Trusting X-Forwarded-For from loopback/private peers only gives
   // the login throttle and the audit log the real client IP (ADR-0005), not the proxy's.
   const express = app.getHttpAdapter().getInstance() as { set(setting: string, value: unknown): unknown };

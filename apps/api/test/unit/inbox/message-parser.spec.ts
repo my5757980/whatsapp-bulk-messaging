@@ -108,6 +108,14 @@ describe('parseInboundMessage', () => {
     });
   });
 
+  it('reads carousel card quick replies with their card (feature 009)', () => {
+    const reply = parse({ type: 'button', button: { text: 'Tell me more', payload: 'wbm:c1:b0' } });
+    expect(reply).toMatchObject({ contentType: 'BUTTON_REPLY', text: 'Tell me more', payload: { payload: 'wbm:c1:b0', title: 'Tell me more', card: { cardIndex: 1, buttonIndex: 0 } } });
+    // The inbox list shows which card; a plain button reply stays as it was.
+    expect(previewOf({ contentType: 'BUTTON_REPLY', text: 'Tell me more', payload: reply!.payload as Record<string, unknown> })).toBe('Card 2 · Tell me more');
+    expect(previewOf({ contentType: 'BUTTON_REPLY', text: 'Yes', payload: { title: 'Yes', payload: 'yes' } })).toBe('Yes');
+  });
+
   it('reads form replies', () => {
     expect(parse({ type: 'interactive', interactive: { type: 'nfm_reply', nfm_reply: { name: 'flow', body: 'Sent', response_json: '{"size":"M"}' } } })).toMatchObject({
       contentType: 'FORM_REPLY',

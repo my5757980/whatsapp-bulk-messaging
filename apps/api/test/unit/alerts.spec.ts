@@ -64,6 +64,11 @@ describe('alert rules', () => {
     expect(rule('WbmPaymentNotificationsMissing')).toMatch(/wbm_payment_events_total\{source="RECONCILE"[\s\S]*wbm_payment_events_total\{source="WEBHOOK"\}\[24h\]\)\) == 0[\s\S]*wbm_payment_links_total/);
   });
 
+  it('warn when one-time codes fail or are slow (009 T090)', () => {
+    expect(rule('WbmOtpFailing')).toMatch(/wbm_otp_sends_total\{result="failed"\}\[15m\][\s\S]*> 0\.20[\s\S]*>= 10/);
+    expect(rule('WbmOtpSlow')).toMatch(/histogram_quantile\(0\.95[\s\S]*wbm_otp_send_seconds_bucket\[10m\][\s\S]*> 5[\s\S]*for: 10m/);
+  });
+
   it('give every alert a severity and a summary', () => {
     const names = [...ALERTS.matchAll(/- alert: (\w+)/g)].map((m) => m[1]!);
     expect(names.length).toBeGreaterThanOrEqual(5);

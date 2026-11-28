@@ -12,6 +12,10 @@ import { ChatLinkRedirectController } from './chat-links/chat-link-redirect.cont
 import { ChatLinkRedirectService } from './chat-links/chat-link-redirect.service.js';
 import { ChatLinksController } from './chat-links/chat-links.controller.js';
 import { ChatLinksService } from './chat-links/chat-links.service.js';
+import { ChatWidgetsController } from './chat-widgets/chat-widgets.controller.js';
+import { ChatWidgetsService } from './chat-widgets/chat-widgets.service.js';
+import { WidgetPublicController } from './chat-widgets/widget-public.controller.js';
+import { WhatsappLinkController } from '../tools/whatsapp-link.controller.js';
 import { NumberWizardController } from './number-wizard/number-wizard.controller.js';
 import { NumberWizardService } from './number-wizard/number-wizard.service.js';
 import { CodService } from './stores/cod.service.js';
@@ -56,6 +60,8 @@ const API_PROVIDERS: Provider[] = [
   ChatLinksService,
   ChatLinkRedirectService,
   NumberWizardService,
+  // Feature 009: website chat buttons.
+  ChatWidgetsService,
   // Chat link openings share the 005 per-client limit (the same Redis keys as tracked links).
   {
     provide: LinkRateLimiter,
@@ -63,7 +69,7 @@ const API_PROVIDERS: Provider[] = [
     useFactory: (redis: Redis, config: AppConfig) => new LinkRateLimiter(redis, config.TOKEN_ENCRYPTION_KEY),
   },
 ];
-const CONTROLLERS: Type[] = [WebhookEndpointsController, ApiCampaignsController, StoresController, StoreWebhooksController, ChatLinksController, ChatLinkRedirectController, NumberWizardController];
+const CONTROLLERS: Type[] = [WebhookEndpointsController, ApiCampaignsController, StoresController, StoreWebhooksController, ChatLinksController, ChatLinkRedirectController, NumberWizardController, ChatWidgetsController, WidgetPublicController, WhatsappLinkController];
 
 /** Webhook endpoint, API campaign, store, chat link and number wizard endpoints (HTTP app only). */
 @Module({

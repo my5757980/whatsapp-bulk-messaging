@@ -35,6 +35,8 @@ export const EVENT_TYPES = [
   'chat_order.received',
   'chat_order.paid',
   'form.submitted',
+  // Feature 009 (contracts/public-otp-v1.openapi.yaml): one-time code status, never the code.
+  'otp.status',
   'test.ping',
 ] as const;
 export type EventType = (typeof EVENT_TYPES)[number];
@@ -42,7 +44,7 @@ export type EventType = (typeof EVENT_TYPES)[number];
 /** Types an endpoint can choose (the test ping is sent on request only). */
 export const SUBSCRIBABLE_EVENT_TYPES = EVENT_TYPES.filter((t) => t !== 'test.ping') as Exclude<EventType, 'test.ping'>[];
 
-export type EventGroup = 'messages' | 'contacts' | 'links' | 'drips' | 'live_chat' | 'api_campaigns' | 'stores' | 'ads' | 'payments' | 'commerce' | 'forms' | 'test';
+export type EventGroup = 'messages' | 'contacts' | 'links' | 'drips' | 'live_chat' | 'api_campaigns' | 'stores' | 'ads' | 'payments' | 'commerce' | 'forms' | 'otp' | 'test';
 
 export const EVENT_GROUPS: Record<EventType, EventGroup> = {
   'message.status': 'messages',
@@ -74,6 +76,7 @@ export const EVENT_GROUPS: Record<EventType, EventGroup> = {
   'chat_order.received': 'commerce',
   'chat_order.paid': 'commerce',
   'form.submitted': 'forms',
+  'otp.status': 'otp',
   'test.ping': 'test',
 };
 
@@ -107,6 +110,7 @@ export const EVENT_LABELS: Record<EventType, string> = {
   'chat_order.received': 'Order received in chat',
   'chat_order.paid': 'Chat order paid',
   'form.submitted': 'WhatsApp Form answered',
+  'otp.status': 'One-time code status (sent, delivered, read, failed, expired)',
   'test.ping': 'Test event',
 };
 

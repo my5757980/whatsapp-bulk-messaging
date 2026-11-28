@@ -16,7 +16,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { toast } from '@/components/ui/toaster';
 import { api } from '@/lib/api-client';
 import { errorMessage, toastError } from '@/lib/errors';
-import { campaignStateVariant, formatDateTime, formatNumber, messageStatusBadge, progressPercent, titleCase, totalRecipients } from '@/lib/format';
+import { ErrorMeaning } from '@/components/help/error-meaning';
+import { campaignStateVariant, expiredReasonLabel, formatDateTime, formatNumber, messageStatusBadge, progressPercent, skipReasonLabel, titleCase, totalRecipients } from '@/lib/format';
 import { Can } from '@/lib/permissions';
 import { queryKeys } from '@/lib/query';
 import { formatInZone } from '@/lib/time';
@@ -33,9 +34,11 @@ const TOTALS: Array<{ key: keyof StatusTotals | 'inQueue'; label: string }> = [
   { key: 'failed', label: 'Failed' },
   { key: 'skipped', label: 'Skipped' },
   { key: 'cancelled', label: 'Cancelled' },
+  // Feature 009: not sent or not delivered in time, or after an offer ended.
+  { key: 'expired', label: 'Expired' },
 ];
 
-const FILTERS: Array<{ value: '' | MessageStatus; label: string }> = [
+const FILTERS: Array<{ value: '' | MessageStatus | 'REPLIED'; label: string }> = [
   { value: '', label: 'All statuses' },
   { value: 'PENDING', label: 'Queued' },
   { value: 'SENT', label: 'Sent' },
@@ -44,13 +47,16 @@ const FILTERS: Array<{ value: '' | MessageStatus; label: string }> = [
   { value: 'FAILED', label: 'Failed' },
   { value: 'SKIPPED', label: 'Skipped' },
   { value: 'CANCELLED', label: 'Cancelled' },
+  { value: 'EXPIRED', label: 'Expired' },
+  // Feature 009 (research R11): delivered recipients who wrote back within 3 days.
+  { value: 'REPLIED', label: 'Replied' },
 ];
 
 /** Campaign detail with live totals and recipient statuses (T111). */
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
-  const [status, setStatus] = useState<'' | MessageStatus>('');
+  const [status, setStatus] = useState<'' | MessageStatus | 'REPLIED'>('');
   const [page, setPage] = useState(1);
 
   const campaign = useQuery({
@@ -61,7 +67,7 @@ export default function CampaignDetailPage() {
   const running = campaign.data?.state === 'RUNNING';
   const messages = useQuery({
     queryKey: queryKeys.campaignMessages(id, { status, page }),
-    queryFn: () => api<Paged<CampaignMessage>>(`/campaigns/${id}/messages?page=${page}&pageSize=${PAGE_SIZE}${status ? `&status=${status}` : ''}`),
+    queryFn: () => api<Paged<CampaignMessage>>(`/campaigns/${id}/messages?page=${page}&pageSize=${PAGE_SIZE}${status === 'REPLIED' ? '&replied=true' : status ? `&status=${status}` : ''}`),
     enabled: Boolean(campaign.data && campaign.data.state !== 'DRAFT'),
     refetchInterval: running ? POLL_MS : false,
   });
@@ -161,7 +167,7 @@ export default function CampaignDetailPage() {
           <div className="h-2 w-full overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100}>
             <div className="h-full bg-primary transition-all" style={{ width: `${percent}%` }} />
           </div>
-          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
             {TOTALS.map(({ key, label }) => (
               <div key={key} className="rounded-md border p-3">
                 <dt className="text-xs text-muted-foreground">{label}</dt>
@@ -182,7 +188,7 @@ export default function CampaignDetailPage() {
             className="w-48"
             value={status}
             onChange={(e) => {
-              setStatus(e.target.value as '' | MessageStatus);
+              setStatus(e.target.value as '' | MessageStatus | 'REPLIED');
               setPage(1);
             }}
           >
@@ -222,8 +228,9 @@ export default function CampaignDetailPage() {
                         <Badge variant={badge.variant}>{badge.label}</Badge>
                       </TableCell>
                       <TableCell className="max-w-xs text-xs">
-                        {m.failureReason ?? (m.skipReason ? titleCase(m.skipReason) : '')}
+                        {m.failureReason ?? (m.skipReason ? skipReasonLabel(m.skipReason) : m.expiredReason ? expiredReasonLabel(m.expiredReason) : '')}
                         {m.failureCode ? <span className="text-muted-foreground"> ({m.failureCode})</span> : null}
+                        <ErrorMeaning meaning={m.failureHelp?.meaning} action={m.failureHelp?.action} />
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">{formatDateTime(m.sentAt)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{formatDateTime(m.deliveredAt)}</TableCell>

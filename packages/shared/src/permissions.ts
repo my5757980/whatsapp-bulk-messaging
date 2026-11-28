@@ -42,6 +42,8 @@ export const ALL_PERMISSIONS = [
   'payments.view',
   'payments.manage',
   'forms.manage',
+  // Feature 009 reports (contracts/templates-growth-api.openapi.yaml header)
+  'reports.view',
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];
@@ -70,6 +72,7 @@ const MANAGER_PERMISSIONS: readonly Permission[] = [
   'assistant.use',
   'payments.view',
   'forms.manage',
+  'reports.view',
 ];
 
 const AGENT_PERMISSIONS: readonly Permission[] = ['contacts.view', 'templates.view', 'campaigns.view', 'inbox.view', 'inbox.reply'];

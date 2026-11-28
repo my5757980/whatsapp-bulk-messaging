@@ -36,7 +36,7 @@ const EnvSchema = z.object({
     .string()
     .regex(/^v\d+\.\d+$/, 'must look like v27.0')
     .default('v27.0'),
-  /** Numeric Meta app id; needed only for media template headers (Resumable Upload API). */
+  /** Numeric Meta app id; needed for media template headers and carousel card samples (Resumable Upload API). */
   META_APP_ID: z
     .string()
     .trim()
@@ -106,6 +106,7 @@ const EnvSchema = z.object({
   /**
    * Local runs and tests only (feature 006): lets webhook endpoints and stores use http://localhost.
    * Outbound requests are otherwise https-only and never reach private addresses. Refused in production.
+   * Feature 009: campaign media addresses on http://localhost pass the launch check too.
    */
   OUTBOUND_ALLOW_LOCAL: boolString,
   /**
@@ -113,6 +114,13 @@ const EnvSchema = z.object({
    * chat as information. It never changes what may be sent.
    */
   ADS_FREE_WINDOW_HOURS: z.coerce.number().int().min(1).max(168).default(72),
+  /**
+   * Templates (feature 009, research R8): how long after a Meta-applied time-to-live a sent message
+   * without a delivered status is marked "not delivered in time", and how often the sweep runs. E2E
+   * shortens both.
+   */
+  EXPIRED_SWEEP_GRACE_SECONDS: z.coerce.number().int().min(0).max(86_400).default(600),
+  EXPIRED_SWEEP_EVERY_SECONDS: z.coerce.number().int().min(5).max(3_600).default(300),
   /**
    * Payments (feature 008, research R1): Stripe's API address (mock-meta in local runs and e2e) and the
    * pinned API version, upgraded on purpose like META_GRAPH_API_VERSION. Stripe keys are entered on

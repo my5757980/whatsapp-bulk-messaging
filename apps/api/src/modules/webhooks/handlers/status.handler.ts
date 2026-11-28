@@ -1,4 +1,5 @@
 import { Inject, Injectable, type OnModuleInit } from '@nestjs/common';
+import { META_ERROR_MEANINGS } from '@wbm/shared';
 import type { Redis } from 'ioredis';
 import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { isUniqueViolation } from '../../../common/prisma/prisma-errors.js';
@@ -106,7 +107,7 @@ export class StatusHandler implements WebhookChangeHandler, OnModuleInit {
         });
         const current = await tx.message.findUniqueOrThrow({
           where: { id: known.id },
-          select: { status: true, sentAt: true, deliveredAt: true, readAt: true, failedAt: true },
+          select: { status: true, sentAt: true, deliveredAt: true, readAt: true, failedAt: true, expiredReason: true },
         });
         const update = computeStatusUpdate(current, status);
         if (update) {
@@ -115,6 +116,8 @@ export class StatusHandler implements WebhookChangeHandler, OnModuleInit {
         }
         // Each Meta status once (duplicates fail on the event's dedupe key above): feature 006, FR-002.
         await this.platformEvents.messageStatus(tx, known.id, status);
+        // Feature 009: one-time codes also tell the company system through otp.status.
+        if (known.origin === 'OTP' && update) await this.platformEvents.otpStatus(tx, known.id);
       }, { maxWait: 10_000 });
     } catch (error) {
       if (isUniqueViolation(error)) return true; // duplicate delivery of the same event
@@ -122,6 +125,9 @@ export class StatusHandler implements WebhookChangeHandler, OnModuleInit {
     }
 
     if (newStatus === 'DELIVERED' || newStatus === 'READ' || status.pricing?.billable === true) await this.setCost(known.id);
+    // Feature 009 (research R12): failure codes without a help entry are counted.
+    const failedCode = status.status === 'failed' ? status.error?.code : undefined;
+    if (failedCode !== undefined && !META_ERROR_MEANINGS[failedCode]) this.metrics.unknownErrorCodes.inc({ code: String(failedCode) });
     this.metrics.webhookLag.observe(Math.max(0, (Date.now() - status.timestamp.getTime()) / 1000));
     if (newStatus) {
       const message = await this.prisma.message.findUnique({ where: { id: known.id }, select: { number: { select: { phoneNumberId: true } } } });

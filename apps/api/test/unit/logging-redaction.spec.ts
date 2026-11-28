@@ -143,4 +143,11 @@ describe('sanitizeLogObject: integrations (feature 006)', () => {
     expect(redactRequestPath('/l/c/Zz99')).toBe('/l/[REDACTED]');
     expect(redactRequestPath('/l/AbCdEf1234')).toBe('/l/[REDACTED]');
   });
+
+  it('removes one-time codes but keeps error codes (feature 009)', () => {
+    const out = sanitizeLogObject({ job: { messageId: 'm1', codeEnc: 'v1:abc' }, otp: { otpCode: '482913', otp_code: '482913' }, err: { code: 131026, message: 'undeliverable' } }) as Record<string, Record<string, unknown>>;
+    expect(out.job).toEqual({ messageId: 'm1', codeEnc: '[REDACTED]' });
+    expect(out.otp).toEqual({ otpCode: '[REDACTED]', otp_code: '[REDACTED]' });
+    expect(out.err).toEqual({ code: 131026, message: 'undeliverable' });
+  });
 });

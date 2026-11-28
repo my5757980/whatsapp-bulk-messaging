@@ -150,6 +150,8 @@ enum MessageOrigin {
   ADS
   /// A payment template, a payment reminder or a store pay link (feature 008).
   PAYMENTS
+  /// A one-time code sent for a company system through POST /api/v1/otp (feature 009, R3).
+  OTP
 }
 
 enum MessageStatus {
@@ -162,6 +164,8 @@ enum MessageStatus {
   FAILED
   SKIPPED
   CANCELLED
+  /// Dropped by the time-to-live or an offer's end (feature 009, R8); see expiredReason.
+  EXPIRED
 }
 
 enum SkipReason {
@@ -172,6 +176,9 @@ enum SkipReason {
   MISSING_VARIABLE
   /// A payment campaign recipient without a valid amount (feature 008, R5).
   PAYMENT_AMOUNT_MISSING
+  /// An offer recipient without a code, or a media recipient without an address (feature 009).
+  OFFER_CODE_MISSING
+  MEDIA_URL_MISSING
 }
 
 enum MessageEventType {
@@ -185,6 +192,8 @@ enum MessageEventType {
   SKIPPED
   CANCELLED
   REQUEUED
+  /// Feature 009: dropped by the time-to-live or an offer's end (research R8).
+  EXPIRED
 }
 
 enum RateCategory {
@@ -224,6 +233,8 @@ enum NotificationType {
   PAYMENT_PAID_LATE
   PAYMENTS_CONNECTION_ERROR
   CATALOG_SYNC_FAILED
+  /// Feature 009: a website chat button is hidden because its number is not connected.
+  CHAT_WIDGET_NUMBER_DISCONNECTED
 }
 
 // ---------- Live chat enums (feature 002) ----------
@@ -523,6 +534,9 @@ model WhatsAppNumber {
   connectionChecks NumberConnectionCheck[]
   // Feature 007
   adCampaigns      AdCampaign[]
+  // Feature 009
+  otpSettings      OtpSettings[]
+  chatWidgets      ChatWidget[]
 
   @@map("whatsapp_numbers")
 }
@@ -634,6 +648,7 @@ model ConsentEvent {
   createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz
 
   @@index([contactId])
+  @@index([createdAt])
   @@map("consent_events")
 }
 
@@ -672,7 +687,9 @@ model CampaignUploadRow {
   /// Raw CSV columns, used for variable mapping.
   data       Json     @default("{}")
 
-  @@unique([campaignId, phoneE164])
+  /// Feature 009 (research R10): one row per upload line; "send to every row" keeps repeated numbers.
+  @@unique([campaignId, rowNumber])
+  @@index([campaignId, phoneE164])
   @@map("campaign_upload_rows")
 }
 
@@ -692,6 +709,12 @@ model Template {
   rejectionReason    String?          @map("rejection_reason")
   headerMediaAssetId String?          @map("header_media_asset_id") @db.Uuid
   headerMediaAsset   MediaAsset?      @relation("TemplateHeaderMedia", fields: [headerMediaAssetId], references: [id], onDelete: SetNull)
+  /// Feature 009 (R1): the kind decides the components; options hold the kind's settings.
+  kind               TemplateKind     @default(STANDARD)
+  /// Seconds (R8): codes 30-900 and utility 30-43200 go to Meta; marketing 43200-2592000 is applied by our queue.
+  ttlSeconds         Int?             @map("ttl_seconds")
+  ttlAppliedBy       TtlAppliedBy?    @map("ttl_applied_by")
+  options            Json             @default("{}")
   lastSyncedAt       DateTime?        @map("last_synced_at") @db.Timestamptz
   createdById        String?          @map("created_by_id") @db.Uuid
   createdBy          User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
@@ -706,6 +729,8 @@ model Template {
   apiCampaigns    ApiCampaign[]
   adLeadForms     AdLeadForm[]
   paymentSettings PaymentSettings[]
+  // Feature 009
+  otpDefaults     OtpSettings[]
 
   @@unique([wabaId, name, language])
   @@index([status])
@@ -729,11 +754,13 @@ model MediaAsset {
   removedAt        DateTime?    @map("removed_at") @db.Timestamptz
   createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz
 
-  templates      Template[]      @relation("TemplateHeaderMedia")
-  campaigns      Campaign[]      @relation("CampaignHeaderMedia")
-  chatMessages   ChatMessage[]
-  cannedMessages CannedMessage[]
-  dripSteps      DripStep[]      @relation("DripStepHeaderMedia")
+  templates        Template[]      @relation("TemplateHeaderMedia")
+  campaigns        Campaign[]      @relation("CampaignHeaderMedia")
+  chatMessages     ChatMessage[]
+  cannedMessages   CannedMessage[]
+  // Feature 009: website chat button brand images
+  chatWidgetImages ChatWidget[]    @relation("ChatWidgetBrandImage")
+  dripSteps        DripStep[]      @relation("DripStepHeaderMedia")
 
   apiCampaignHeaders ApiCampaign[] @relation("ApiCampaignHeaderMedia")
   // Feature 007
@@ -788,6 +815,12 @@ model Campaign {
   /// Payment requests per recipient (feature 008, R5): {amount: {source, minor?, attributeKey?}, description,
   /// expiryMinutes, tagId?, flowId?}; null when the campaign asks for no payment.
   paymentConfig      Json?                @map("payment_config")
+  /// Feature 009: one message per upload row (R10), the offer's end and code source (R7), the carousel
+  /// card files [{cardIndex, mediaAssetId}] (R6), and who launched it (R14, backfilled from audit entries).
+  allowDuplicateRows Boolean              @default(false) @map("allow_duplicate_rows")
+  offerConfig        Json?                @map("offer_config")
+  cardMedia          Json?                @map("card_media")
+  launchedById       String?              @map("launched_by_id") @db.Uuid
 
   @@index([state])
   @@map("campaigns")
@@ -860,9 +893,16 @@ model Message {
   apiCampaignTriggers ApiCampaignTrigger[]
   storeOrderMessages  StoreOrderMessage[]
   storeCartReminders  StoreCartReminder[]
+  /// Feature 009: 0, 1, 2… for extra rows of one contact with allowDuplicateRows (R10); why EXPIRED (R8); and
+  /// sent_at + ttl for templates whose time-to-live Meta applies, read by the expired sweep.
+  copyIndex           Int                  @default(0) @map("copy_index")
+  expiredReason       ExpiredReason?       @map("expired_reason")
+  expiresAt           DateTime?            @map("expires_at") @db.Timestamptz
 
-  @@unique([campaignId, contactId])
+  @@unique([campaignId, contactId, copyIndex])
   @@index([campaignId, status])
+  @@index([createdAt])
+  @@index([status, expiresAt])
   @@index([apiKeyId, createdAt])
   @@index([dripStepId])
   @@index([dripEnrolmentId])
@@ -2600,23 +2640,29 @@ model StoreCartReminder {
 
 /// A chat link and its QR code (FR-045 - FR-050).
 model ChatLink {
-  id          String         @id @default(uuid(7)) @db.Uuid
-  name        String         @db.Citext
-  numberId    String         @map("number_id") @db.Uuid
-  number      WhatsAppNumber @relation(fields: [numberId], references: [id], onDelete: Restrict)
-  message     String         @db.VarChar(500)
-  ref         String         @unique @db.Char(6)
-  code        String         @unique @db.Char(10)
-  flowId      String?        @map("flow_id") @db.Uuid
-  flow        Flow?          @relation(fields: [flowId], references: [id], onDelete: SetNull)
-  tagId       String?        @map("tag_id") @db.Uuid
-  tag         Tag?           @relation(fields: [tagId], references: [id], onDelete: SetNull)
-  status      ChatLinkStatus @default(ACTIVE)
-  deletedAt   DateTime?      @map("deleted_at") @db.Timestamptz
-  createdById String?        @map("created_by_id") @db.Uuid
-  createdBy   User?          @relation("ChatLinkCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt   DateTime       @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+  id           String         @id @default(uuid(7)) @db.Uuid
+  name         String         @db.Citext
+  numberId     String         @map("number_id") @db.Uuid
+  number       WhatsAppNumber @relation(fields: [numberId], references: [id], onDelete: Restrict)
+  message      String         @db.VarChar(500)
+  ref          String         @unique @db.Char(6)
+  code         String         @unique @db.Char(10)
+  flowId       String?        @map("flow_id") @db.Uuid
+  flow         Flow?          @relation(fields: [flowId], references: [id], onDelete: SetNull)
+  tagId        String?        @map("tag_id") @db.Uuid
+  tag          Tag?           @relation(fields: [tagId], references: [id], onDelete: SetNull)
+  status       ChatLinkStatus @default(ACTIVE)
+  deletedAt    DateTime?      @map("deleted_at") @db.Timestamptz
+  /// Feature 009 (R15): links made for a website chat button are hidden from the chat links list.
+  source       ChatLinkSource @default(MANUAL)
+  widgetId     String?        @map("widget_id") @db.Uuid
+  widget       ChatWidget?    @relation(fields: [widgetId], references: [id], onDelete: Cascade)
+  /// The page rule whose message the link carries; null for the button's default message.
+  widgetRuleId String?        @map("widget_rule_id") @db.VarChar(40)
+  createdById  String?        @map("created_by_id") @db.Uuid
+  createdBy    User?          @relation("ChatLinkCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz
 
   opens  ChatLinkOpen[]
   starts ChatLinkStart[]
@@ -2624,6 +2670,7 @@ model ChatLink {
   @@index([numberId])
   @@index([flowId])
   @@index([tagId])
+  @@index([widgetId])
   @@map("chat_links")
 }
 
@@ -2634,8 +2681,11 @@ model ChatLinkOpen {
   chatLink   ChatLink    @relation(fields: [chatLinkId], references: [id], onDelete: Cascade)
   device     ClickDevice
   openedAt   DateTime    @default(now()) @map("opened_at") @db.Timestamptz
+  /// Feature 009 (R15): the page path a website chat button was opened on (no query or fragment).
+  page       String?     @db.VarChar(200)
 
   @@index([chatLinkId, openedAt])
+  @@index([chatLinkId, page])
   @@index([openedAt])
   @@map("chat_link_opens")
 }
@@ -3405,4 +3455,79 @@ model FormAnswer {
   @@index([contactId, submittedAt])
   @@index([submittedAt])
   @@map("form_answers")
+}
+
+// ---------- Feature 009: templates and campaign growth (specs/009-templates-growth/data-model.md) ----------
+
+enum TemplateKind {
+  STANDARD
+  CAROUSEL
+  LIMITED_TIME_OFFER
+  AUTHENTICATION
+}
+
+enum TtlAppliedBy {
+  META
+  PLATFORM
+}
+
+enum ExpiredReason {
+  EXPIRED_BEFORE_SENDING
+  NOT_DELIVERED_IN_TIME
+  OFFER_ENDED
+}
+
+enum ChatLinkSource {
+  MANUAL
+  WIDGET
+}
+
+enum ChatWidgetStatus {
+  ACTIVE
+  PAUSED
+}
+
+/// The one-time code settings (one row, R3).
+model OtpSettings {
+  id                 String          @id @default(uuid(7)) @db.Uuid
+  defaultTemplateId  String?         @map("default_template_id") @db.Uuid
+  defaultTemplate    Template?       @relation(fields: [defaultTemplateId], references: [id], onDelete: SetNull)
+  defaultNumberId    String?         @map("default_number_id") @db.Uuid
+  defaultNumber      WhatsAppNumber? @relation(fields: [defaultNumberId], references: [id], onDelete: SetNull)
+  limitPerPhone      Int             @default(5) @map("limit_per_phone")
+  limitWindowMinutes Int             @default(15) @map("limit_window_minutes")
+  updatedById        String?         @map("updated_by_id") @db.Uuid
+  updatedAt          DateTime        @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("otp_settings")
+}
+
+/// A WhatsApp chat button for the company's website (R15).
+model ChatWidget {
+  id                   String           @id @default(uuid(7)) @db.Uuid
+  /// Public key in the snippet (12 characters, the 005 link code alphabet).
+  key                  String           @unique @db.Char(12)
+  name                 String           @unique @db.Citext
+  numberId             String           @map("number_id") @db.Uuid
+  number               WhatsAppNumber   @relation(fields: [numberId], references: [id], onDelete: Restrict)
+  /// {colour, buttonText, corner, offsetX, offsetY, radius}
+  look                 Json
+  brandName            String           @map("brand_name") @db.VarChar(60)
+  brandImageAssetId    String?          @map("brand_image_asset_id") @db.Uuid
+  brandImageAsset      MediaAsset?      @relation("ChatWidgetBrandImage", fields: [brandImageAssetId], references: [id], onDelete: SetNull)
+  greeting             String           @db.VarChar(300)
+  message              String           @db.VarChar(500)
+  /// Ordered [{id, match, value, hide, greeting?, message?}], up to 50.
+  rules                Json             @default("[]")
+  status               ChatWidgetStatus @default(ACTIVE)
+  /// Set when the number disconnects, so managers are told once per disconnection.
+  disconnectNotifiedAt DateTime?        @map("disconnect_notified_at") @db.Timestamptz
+  createdById          String?          @map("created_by_id") @db.Uuid
+  createdAt            DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt            DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  links ChatLink[]
+
+  @@index([numberId])
+  @@map("chat_widgets")
 }

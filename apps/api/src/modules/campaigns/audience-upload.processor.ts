@@ -53,22 +53,30 @@ export class AudienceUploadProcessor implements OnModuleInit {
 
     try {
       const { defaultCountryCode } = await this.settings.get();
+      // Feature 009 (research R10): "send to every row" keeps repeated numbers, each row with its own values.
+      const everyRow = Boolean((await this.prisma.campaign.findUnique({ where: { id: campaignId }, select: { allowDuplicateRows: true } }))?.allowDuplicateRows);
       const seen = new Set<string>();
+      let repeats: PendingRow[] = [];
       const errors: Array<{ row: number; value: string; reason: string }> = [];
       const counts = { total: 0, created: 0, updated: 0, duplicates: 0, optedOut: 0 };
       let batch: PendingRow[] = [];
 
       const flush = async () => {
-        if (!batch.length) return;
-        const result = await this.consent.bulkConfirmOptIn(batch, job.optInSourceNote ?? '', job.createdById);
-        counts.created += result.created;
-        counts.updated += result.updated;
-        counts.optedOut += result.optedOut;
+        if (!batch.length && !repeats.length) return;
+        if (batch.length) {
+          const result = await this.consent.bulkConfirmOptIn(batch, job.optInSourceNote ?? '', job.createdById);
+          counts.created += result.created;
+          counts.updated += result.updated;
+          counts.optedOut += result.optedOut;
+        }
+        // Repeated rows are stored with the rest, in file order; their consent came with the first row.
+        const rows = [...batch, ...repeats].sort((a, b) => a.rowNumber - b.rowNumber);
         await this.prisma.campaignUploadRow.createMany({
-          data: batch.map((r) => ({ campaignId, rowNumber: r.rowNumber, phoneE164: r.phoneE164, data: r.data as Prisma.InputJsonValue })),
+          data: rows.map((r) => ({ campaignId, rowNumber: r.rowNumber, phoneE164: r.phoneE164, data: r.data as Prisma.InputJsonValue })),
           skipDuplicates: true,
         });
         batch = [];
+        repeats = [];
       };
 
       await this.prisma.campaignUploadRow.deleteMany({ where: { campaignId } });
@@ -85,6 +93,7 @@ export class AudienceUploadProcessor implements OnModuleInit {
         }
         if (seen.has(phone.e164)) {
           counts.duplicates++;
+          if (everyRow) repeats.push({ rowNumber: counts.total, phoneE164: phone.e164, countryCode: phone.country, name: null, data: record });
           continue;
         }
         seen.add(phone.e164);

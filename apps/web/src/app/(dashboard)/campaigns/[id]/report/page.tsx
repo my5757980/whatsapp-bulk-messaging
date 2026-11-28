@@ -14,6 +14,8 @@ import { errorMessage } from '@/lib/errors';
 import { formatNumber, totalRecipients } from '@/lib/format';
 import { Can } from '@/lib/permissions';
 import { queryKeys } from '@/lib/query';
+import { ErrorMeaning } from '@/components/help/error-meaning';
+import { FrequencyCapNote } from '@/components/help/frequency-cap-note';
 import type { CampaignDetail, StatusTotals } from '@/lib/types';
 
 interface CampaignReport {
@@ -21,7 +23,14 @@ interface CampaignReport {
   totals: StatusTotals;
   deliveryRate: number;
   readRate: number;
-  failureReasons: Array<{ code: number | null; reason: string; count: number }>;
+  failureReasons: Array<{ code: number | null; reason: string; count: number; meaning?: string | null; action?: string | null }>;
+  /** Feature 009: why messages expired. */
+  expired?: { expiredBeforeSending: number; notDeliveredInTime: number; offerEnded: number };
+  /** Feature 009 (research R10, R11). */
+  replied?: number;
+  replyRate?: number | null;
+  multiMessageRecipients?: number;
+  heldBack?: number;
   estimatedCostUsd: number;
   costIsEstimate: true;
 }
@@ -108,7 +117,59 @@ export default function CampaignReportPage() {
         </Card>
       </div>
 
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardDescription>Replied (contacts who wrote back within 3 days)</CardDescription>
+            <CardTitle className="text-3xl" data-testid="replied">
+              {formatNumber(r.replied ?? 0)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Reply rate (of delivered contacts)</CardDescription>
+            <CardTitle className="text-3xl" data-testid="reply-rate">
+              {r.replyRate === null || r.replyRate === undefined ? '—' : percent(r.replyRate)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardDescription>Contacts with more than one message</CardDescription>
+            <CardTitle className="text-3xl" data-testid="multi-message">
+              {formatNumber(r.multiMessageRecipients ?? 0)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
+
+      {r.heldBack ? <FrequencyCapNote heldBack={r.heldBack} /> : null}
+
       <ClickResults campaignId={id} />
+
+      {r.totals.expired && r.expired ? (
+        <Card data-testid="expired-reasons">
+          <CardHeader>
+            <CardTitle className="text-base">Expired ({formatNumber(r.totals.expired)})</CardTitle>
+            <CardDescription>Messages that were not sent or not delivered in time, or whose offer ended first.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-1 text-sm">
+            {(
+              [
+                ['expiredBeforeSending', 'Not sent within the time-to-live'],
+                ['notDeliveredInTime', 'Not delivered in time'],
+                ['offerEnded', 'Offer ended before sending'],
+              ] as const
+            ).map(([key, label]) => (
+              <div key={key} className="flex justify-between">
+                <span className="text-muted-foreground">{label}</span>
+                <span data-testid={`expired-${key}`}>{formatNumber(r.expired![key])}</span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -127,7 +188,10 @@ export default function CampaignReportPage() {
               <TableBody>
                 {r.failureReasons.map((f) => (
                   <TableRow key={`${f.code}-${f.reason}`}>
-                    <TableCell>{f.reason}</TableCell>
+                    <TableCell>
+                      {f.reason}
+                      <ErrorMeaning meaning={f.meaning} action={f.action} />
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{f.code ?? '—'}</TableCell>
                     <TableCell className="text-right">{formatNumber(f.count)}</TableCell>
                   </TableRow>

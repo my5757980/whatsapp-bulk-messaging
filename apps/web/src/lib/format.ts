@@ -42,6 +42,7 @@ const MESSAGE_VARIANT: Record<MessageStatus, Variant> = {
   FAILED: 'destructive',
   SKIPPED: 'warning',
   CANCELLED: 'secondary',
+  EXPIRED: 'warning',
 };
 
 export function messageStatusBadge(status: MessageStatus): { label: string; variant: Variant } {
@@ -50,6 +51,18 @@ export function messageStatusBadge(status: MessageStatus): { label: string; vari
 
 export function titleCase(value: string): string {
   return value.charAt(0) + value.slice(1).toLowerCase().replace(/_/g, ' ');
+}
+
+/** Why a campaign recipient was skipped; feature 009 reasons get their own words. */
+const SKIP_WORDS: Record<string, string> = { OFFER_CODE_MISSING: 'Missing offer code', MEDIA_URL_MISSING: 'Missing media address' };
+export function skipReasonLabel(reason: string): string {
+  return SKIP_WORDS[reason] ?? titleCase(reason);
+}
+
+/** Why a message expired (feature 009, research R7, R8). */
+const EXPIRED_WORDS: Record<string, string> = { EXPIRED_BEFORE_SENDING: 'Not sent in time', NOT_DELIVERED_IN_TIME: 'Not delivered in time', OFFER_ENDED: 'Offer ended' };
+export function expiredReasonLabel(reason: string): string {
+  return EXPIRED_WORDS[reason] ?? titleCase(reason);
 }
 
 export function totalRecipients(t: StatusTotals): number {

@@ -20,6 +20,7 @@ WhatsApp Cloud API. One company, a small team, prices in USD.
 | Integrations (feature 006) | Signed webhooks for other systems, API key permissions and a contacts API, API campaigns, Shopify and WooCommerce order notifications, COD confirmation and cart reminders, QR chat links, and a guided number connection wizard. See [Integrations](#integrations). |
 | Ads (feature 007) | Click-to-WhatsApp, lead form and website ads from the company's own Meta ad account: a connection with checks, a guided builder with AI texts, Meta's review, chats from ads with the free window, flows and tags, hourly results with cost per chat, a monthly spending cap, audiences from contacts and lookalikes, and lead forms that become contacts. See [Ads](#ads). |
 | Commerce and payments (feature 008) | Stripe payment links from live chat, flows, campaigns, the API and store orders, with live statuses, reminders, a payments page and retargeting of non-payers; the Meta catalog with product, list and catalog messages; carts in chat that become orders with a payment link; WhatsApp Forms; and product, catalog, form and payment steps in flows. See [Commerce and payments](#commerce-and-payments). |
+| Templates and growth (feature 009) | One-time codes with authentication templates and a code API, carousel and limited-time offer templates, a time-to-live per template, campaign media from web addresses, replied counts and sending to every row, overview, team and opt-in reports, 70 sample templates, help for every failure reason, a website chat button and a WhatsApp link and QR generator. See [Templates and growth](#templates-and-growth). |
 
 ## Architecture
 
@@ -436,6 +437,92 @@ links. Card details are typed on Stripe's page and never reach the platform.
   of the links fail in 15 minutes, and `WbmPaymentNotificationsMissing` when the reconciler finds
   missed payments or no notification arrives in 24 hours while links are being made.
 
+## Templates and growth
+
+Feature 009 ([spec](specs/009-templates-growth/spec.md), [quickstart](specs/009-templates-growth/quickstart.md)).
+
+- **One-time codes:** *Templates → New → One-time code* makes an authentication template with Meta's
+  fixed wording, an optional security note, the code validity and a copy-code or one-tap button
+  (one-tap needs the Android app's package name and signature hash). *Settings → One-time codes*
+  sets the default template and number and the limit per phone (5 in 15 minutes by default).
+  Company systems call `POST /api/v1/otp` with `{ "to", "code" }` (4 to 15 letters or digits), an
+  optional `template` or `numberId` and an `Idempotency-Key`, with a key that has the *Send
+  one-time codes* permission (`otp.send`). The answer is `202` with an id; `GET /api/v1/otp/{id}`
+  reads the status and the outbound event `otp.status` reports each change
+  ([contract](specs/009-templates-growth/contracts/public-otp-v1.openapi.yaml)).
+  - Codes go ahead of campaign and drip messages on the number's queue.
+  - They reach people who opted out of marketing, never blocked numbers, and do not change consent
+    or add contacts. Above the limit the answer is `429 TOO_MANY_CODES`.
+  - The code is never stored: it travels only in an encrypted send job that is deleted when it ends,
+    and shows as `••••` in messages, logs, exports, audit entries and events.
+- **Carousels:** a message text and 2 to 10 image or video cards (the same type on every card), each
+  with a card text and up to 2 buttons in the same layout. The editor checks Meta's rules on each
+  card. A campaign chooses each card's media (uploaded to Meta once per number) and fills the
+  variables, with a preview. Button replies show in live chat with their card and can start flows.
+- **Limited-time offers:** marketing templates with an offer heading, an optional end time, a
+  copy-code button and a website button. The campaign sets the end time and the code (one value, or
+  per recipient from a column or attribute). Recipients without a code are skipped as *missing offer
+  code*, and messages not sent before the end count as *offer ended*.
+- **Time-to-live:** codes (30 seconds to 15 minutes) and utility (30 seconds to 12 hours) send it to
+  Meta with the template; marketing (12 hours to 30 days) is applied by our queue.
+  - Messages still waiting when it passes are *expired before sending*.
+  - Every 5 minutes, sent messages past their time-to-live plus 10 minutes are marked *not delivered
+    in time*; a later delivery report replaces the mark. Retry rounds leave them out.
+- **Media from web addresses:** a media header can come from a secure address, one for all
+  recipients or one per recipient from a column or attribute. *Check media* (and the launch) tests
+  every distinct address up to 1,000, and a sample above that: reachable, the header's type and
+  within the size limit, listing up to 50 problems. The public API refuses addresses that are not
+  `https`.
+- **Replies and every row:**
+  - Results show replied (the 005 definition) and the reply rate, with a *Replied* filter on the
+    recipients.
+  - *Send to every row* gives a number on several upload rows one message per row with that row's
+    values; opted-out, blocked and invalid numbers are still skipped. The estimate and results count
+    messages and show how many recipients got more than one.
+  - Marketing messages held back by Meta's per-person limit (`131049`) are counted with an
+    explanation.
+- **Reports:** *Reports* shows the overview (totals by day, category and number with the estimated
+  cost), the team member report (campaigns launched and live chat activity) and the opt-in/opt-out
+  report. Ranges are up to 366 days within the last 12 months, in the company's time zone. Downloads
+  stream CSV, mask phones for roles that see them masked and are audited as `data.exported`. The
+  campaign export adds replied, clicked and the new statuses.
+- **Samples and help:**
+  - *Templates → Samples* has 70 sample templates written by us (60 English, 10 Arabic) across
+    industries, purposes and types; *Use this sample* makes a draft to edit and submit.
+  - The editor shows guidelines for each section and common rejection reasons. Every failure reason
+    in results and message details shows its meaning and what to do, and the campaign wizard explains
+    the per-person marketing limit.
+  - Help content lives in `packages/shared/src/help`, with the date it was last checked against
+    Meta's pages.
+- **Website chat button:** *Website button* designs a button for a connected number (colour, text,
+  corner, distances, roundness, brand name and image, greeting and message) with a live preview at
+  desktop and phone sizes. Page rules (page is, starts with, contains) hide the button or change the
+  greeting and message, and the first match applies.
+  - Paste the snippet once before `</body>`:
+    `<script async src="<PUBLIC_LINK_BASE_URL>/w/widget.js" data-key="<key>"></script>`. The api
+    answers it at `/l/w/…`, the same mapping as the 005–008 links ([contract](specs/009-templates-growth/contracts/website-button.md)).
+  - Later changes apply without pasting again. The script sets no cookies, keeps no storage and never
+    breaks the page. If the site has a Content Security Policy, allow the link host in `script-src`,
+    `connect-src` and `img-src`.
+  - *Start chat* goes through a 006 chat link, so live chat shows the button and rule it came from.
+    Opens are counted per page and chats per rule, without robots and link previews.
+  - The button hides while its number is disconnected, and admins are told.
+- **Link generator:** makes a `wa.me` link and a QR code (PNG or SVG) for any number and message,
+  without saving anything. For one of the company's numbers, *Save as chat link* opens the 006 form
+  so scans and chats are counted.
+- **Permissions:** the new template kinds and time-to-live follow `templates.manage`, the code
+  settings `settings.manage`, and website buttons `campaigns.manage` (`campaigns.view` to see
+  them). Reports need `reports.view` (managers and admins) and downloads `data.export`. Samples,
+  help and the generator are open to every member.
+- **Data handling:** code messages are deleted after 30 days, website button opens follow chat link
+  opens (12 months) and reports store nothing. Deleting a contact clears the phone on code messages
+  sent to them, and every-row messages are cleared like other campaign messages.
+- **Monitoring:** `wbm_otp_sends_total{result}`, `wbm_otp_send_seconds`,
+  `wbm_messages_expired_total{reason}`, `wbm_widget_opens_total`,
+  `wbm_reports_exported_total{type}` and `wbm_unknown_error_codes_total{code}`. The alert
+  `WbmOtpFailing` fires when more than 20% of codes fail in 15 minutes (at least 10 sent), and
+  `WbmOtpSlow` when the p95 from the request to Meta's acceptance is above 5 seconds for 10 minutes.
+
 ## Getting started
 
 Prerequisites: Node.js 26, npm 11 and Docker Desktop. The full walkthrough, including how to
@@ -581,6 +668,15 @@ the web proxy.
   [Meta commerce Graph calls](specs/008-commerce-payments/contracts/meta-commerce-graph.md),
   [quickstart](specs/008-commerce-payments/quickstart.md), [tasks](specs/008-commerce-payments/tasks.md) and
   [release checklist](specs/008-commerce-payments/checklists/release.md)
+- Templates and growth (feature 009): [spec](specs/009-templates-growth/spec.md),
+  [plan](specs/009-templates-growth/plan.md), [research](specs/009-templates-growth/research.md),
+  [data model](specs/009-templates-growth/data-model.md),
+  [templates and growth API](specs/009-templates-growth/contracts/templates-growth-api.openapi.yaml),
+  [one-time codes API v1](specs/009-templates-growth/contracts/public-otp-v1.openapi.yaml),
+  [Meta template calls](specs/009-templates-growth/contracts/meta-templates.md),
+  [website button](specs/009-templates-growth/contracts/website-button.md),
+  [quickstart](specs/009-templates-growth/quickstart.md), [tasks](specs/009-templates-growth/tasks.md) and
+  [release checklist](specs/009-templates-growth/checklists/release.md)
 - Architecture decisions:
   - [ADR-0001 Frontend stack](history/adr/0001-frontend-stack.md)
   - [ADR-0002 Backend runtime, process model and monorepo](history/adr/0002-backend-runtime-process-model-and-monorepo.md)
