@@ -2,6 +2,7 @@ import { attributeText } from '../conversations/visibility.js';
 
 // Saved-reply text with variables and numbered parameters (T061, FR-030, FR-031). Pure.
 //   {first_name} {last_name} {name} {phone} {attr:<key>}  - contact values, each with an optional fallback
+//   {global:<key>}                                      - company-wide values (feature 010), given in `globals`
 //   {{1}} ... {{n}}                                     - parameters the member fills in before sending
 // WhatsApp formatting is left as written; unknown placeholders are left untouched.
 
@@ -9,11 +10,13 @@ export interface CannedContact {
   name: string | null;
   phoneE164: string | null;
   attributes: Record<string, unknown>;
+  /** Feature 010: global attribute values by key. */
+  globals?: Readonly<Record<string, string>>;
 }
 
 export type RenderResult = { ok: true; text: string } | { ok: false; missing: string[] };
 
-const VARIABLE = /\{(first_name|last_name|name|phone|attr:[A-Za-z0-9_]+)\}/g;
+const VARIABLE = /\{(first_name|last_name|name|phone|attr:[A-Za-z0-9_]+|global:[a-z][a-z0-9_]{0,39})\}/g;
 const PARAMETER = /\{\{(\d{1,2})\}\}/g;
 
 /** The highest parameter number used, i.e. how many parameters the member must fill in. */
@@ -46,6 +49,7 @@ export function renderCanned(
       case 'phone':
         return contact.phoneE164;
       default:
+        if (key.startsWith('global:')) return contact.globals?.[key.slice('global:'.length)] || null;
         return attributeText(contact.attributes[key.slice('attr:'.length)]);
     }
   };

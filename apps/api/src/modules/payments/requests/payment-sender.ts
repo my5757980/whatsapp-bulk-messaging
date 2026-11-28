@@ -13,6 +13,7 @@ import { InboxPublisher } from '../../inbox/realtime/inbox-publisher.js';
 import { chatTemplateSendJob, requestSendWorkerSync, sessionSendJob } from '../../sending/send-jobs.js';
 import { assertConsent } from '../../sending/template-send-rules.js';
 import { chatSummary, fillSessionText, paymentWords } from './payment-views.js';
+import { GlobalAttributesService } from '../../settings/global-attributes.service.js';
 
 // Sending a payment request (feature 008 US2/US3, FR-007, research R5): inside the 24-hour window an
 // interactive cta_url "Pay now" message through the 002 priority send path; outside it the payment
@@ -31,6 +32,7 @@ export class PaymentSender {
     private readonly queues: QueueRegistry,
     private readonly publisher: InboxPublisher,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly globals: GlobalAttributesService,
   ) {}
 
   linkBase(): string {
@@ -110,6 +112,7 @@ export class PaymentSender {
     const resolved = resolveVariables(keys, mapping, {
       contact: { name: contact.name, phone: contact.phoneE164, attributes: contact.attributes },
       row: {},
+      globals: await this.globals.values(),
       payment: paymentWords(row, this.linkBase(), await this.timeZone()),
     });
     if (!resolved.ok) throw AppError.validation(`The payment template has variables without a value: ${resolved.missing.join(', ')}`, [], 'MISSING_VARIABLE');

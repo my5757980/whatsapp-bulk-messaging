@@ -71,6 +71,8 @@ function infoFields(info: PhoneNumberInfo) {
     verifiedName: info.verifiedName,
     qualityRating: mapQuality(info.qualityRating),
     throughputLevel: info.throughputLevel ?? null,
+    // Feature 010 (R11): the portfolio limit replaces the deprecated messaging_limit_tier field; the column stays.
+    ...(info.messagingLimit ? { messagingLimitTier: info.messagingLimit } : {}),
     lastSyncedAt: new Date(),
     lastError: null,
   };

@@ -42,7 +42,7 @@ test('US5: profile, journey and blocking', async ({ page }) => {
   await row.click();
 
   const profile = page.getByRole('complementary', { name: 'Contact' });
-  await expect(profile).toContainText('Organic');
+  await expect(profile).toContainText('Wrote to us first');
   await expect(profile).toContainText('0 template · 0 replies');
 
   await profile.getByLabel('Add a tag').selectOption({ label: tagName });

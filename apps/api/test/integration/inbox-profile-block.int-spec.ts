@@ -38,7 +38,7 @@ describe('Live chat: profile, journey and blocking (US5)', () => {
 
   it('shows the profile with counts, source, recent campaigns and a masked phone for agents', async () => {
     const phone = uaePhone();
-    const contact = await seedContact(ctx, phone, { leadSource: 'Import', attributes: { city: 'Dubai' } });
+    const contact = await seedContact(ctx, phone, { leadSourceKind: 'IMPORT', attributes: { city: 'Dubai' } });
     const template = await seedTemplate(ctx, number.wabaId);
     const campaign = await seedRunningCampaign(ctx, { numberId: number.id, templateId: template.id, createdById: admin.userId, contacts: [contact] });
     await ctx.prisma.message.updateMany({ where: { campaignId: campaign.id }, data: { status: 'READ', waMessageId: `wamid.${randomUUID()}`, sentAt: new Date() } });
@@ -139,6 +139,6 @@ describe('Live chat: profile, journey and blocking (US5)', () => {
   it('records where new contacts come from', async () => {
     const phone = uaePhone();
     await inbound(phone, 'hi');
-    expect((await ctx.prisma.contact.findUniqueOrThrow({ where: { phoneE164: phone } })).leadSource).toBe('Organic');
+    expect((await ctx.prisma.contact.findUniqueOrThrow({ where: { phoneE164: phone } })).leadSourceKind).toBe('ORGANIC');
   });
 });

@@ -29,6 +29,12 @@ describe('preSendCheck', () => {
     expect(preSendCheck({ ...ok, consent: 'UNKNOWN', marketing: false })).toEqual({ action: 'send' });
   });
 
+  it('sends a keyword reply that confirms an opt-out, but never while sending is off (feature 010 US4)', () => {
+    expect(preSendCheck({ ...ok, campaignState: null, marketing: false, consent: 'OPTED_OUT', consentReply: true })).toEqual({ action: 'send' });
+    expect(preSendCheck({ ...ok, campaignState: null, marketing: false, consent: 'OPTED_OUT', consentReply: false })).toEqual({ action: 'skip', reason: 'OPTED_OUT' });
+    expect(preSendCheck({ ...ok, campaignState: null, marketing: false, consent: 'OPTED_OUT', consentReply: true, sendingEnabled: false })).toEqual({ action: 'requeue', pauseReason: 'sending_disabled' });
+  });
+
   it('sends API-origin messages without campaign checks', () => {
     expect(preSendCheck({ ...ok, campaignState: null })).toEqual({ action: 'send' });
   });

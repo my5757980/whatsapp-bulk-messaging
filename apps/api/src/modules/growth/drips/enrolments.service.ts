@@ -17,8 +17,10 @@ export const EnrolInputSchema = z
   .union([
     z.object({ contactIds: z.array(z.uuid()).min(1).max(1000) }).strict(),
     z.object({ filter: AudienceFilterSchema }).strict(),
+    // Feature 010 (FR-005): a saved segment's current members, enrolled as a background bulk action.
+    z.object({ segmentId: z.uuid() }).strict(),
   ])
-  .refine((v) => ('contactIds' in v ? true : v.filter.all.length > 0), { message: 'Add at least one filter rule' });
+  .refine((v) => ('filter' in v ? v.filter.all.length > 0 : true), { message: 'Add at least one filter rule' });
 export type EnrolInput = z.infer<typeof EnrolInputSchema>;
 
 export const EnrolmentListQuerySchema = PageQuerySchema.extend({
@@ -62,6 +64,13 @@ export class EnrolmentsService {
     private readonly metrics: MetricsService,
     private readonly platformEvents: PlatformEvents,
   ) {}
+
+  /** Feature 010: the drip exists and is active, before a segment enrolment is queued. */
+  async assertCanEnrol(dripId: string): Promise<void> {
+    const drip = await this.prisma.drip.findUnique({ where: { id: dripId }, select: { status: true } });
+    if (!drip) throw AppError.notFound('Drip not found');
+    if (drip.status !== 'ACTIVE') throw AppError.conflict('Contacts can join an active drip only', 'NOT_ACTIVE');
+  }
 
   /** Enrols chosen contacts or a filter (FR-025). Opted-out and blocked contacts, and contacts already in, are counted and skipped. */
   async enrol(dripId: string, input: EnrolInput, actor: AuditActor, dryRun = false): Promise<EnrolResult> {
@@ -122,7 +131,7 @@ export class EnrolmentsService {
 
     if (!dryRun) {
       if (result.enrolled) this.metrics.dripEnrolmentsTotal.inc({ via: 'manual' }, result.enrolled);
-      await this.audit.record(actor, 'drip.contacts_enrolled', { type: 'drip', id: dripId }, { ...result, by: 'contactIds' in input ? 'contacts' : 'filter' });
+      await this.audit.record(actor, 'drip.contacts_enrolled', { type: 'drip', id: dripId }, { ...result, by: 'contactIds' in input ? 'contacts' : 'segmentId' in input ? 'segment' : 'filter' });
     }
     return result;
   }
@@ -177,7 +186,7 @@ export class EnrolmentsService {
       if (found.length) yield found.map((c) => ({ id: c.id, consent: c.consentStatus, blocked: c.blockedAt !== null }));
       return;
     }
-    for await (const batch of this.audience.iterate({ type: 'FILTER', filter: input.filter })) {
+    for await (const batch of this.audience.iterate('segmentId' in input ? { type: 'SEGMENT', segmentId: input.segmentId } : { type: 'FILTER', filter: input.filter })) {
       const blocked = new Set(
         (await this.prisma.contact.findMany({ where: { id: { in: batch.map((c) => c.id) }, blockedAt: { not: null } }, select: { id: true } })).map((c) => c.id),
       );

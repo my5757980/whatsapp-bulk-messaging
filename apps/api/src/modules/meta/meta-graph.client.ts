@@ -95,7 +95,31 @@ export interface PhoneNumberInfo {
   qualityRating: string | undefined;
   status: string | undefined;
   throughputLevel: string | undefined;
+  /** Feature 010 (R11): `whatsapp_business_manager_messaging_limit`, shared by the business portfolio. */
+  messagingLimit?: string | undefined;
 }
+
+/** Feature 010 (US7): the WhatsApp Business profile as Meta holds it. */
+export interface BusinessProfileInfo {
+  about?: string;
+  address?: string;
+  description?: string;
+  email?: string;
+  profile_picture_url?: string;
+  websites?: string[];
+  vertical?: string;
+}
+
+/** Feature 010 (US7): the display name status, quality and messaging limit of a number. */
+export interface NumberStatusInfo {
+  verifiedName: string | null;
+  nameStatus: string | null;
+  newNameStatus: string | null;
+  qualityRating: string | null;
+  messagingLimit: string | null;
+}
+
+const limitText = (limit: string | { tier?: string } | undefined): string | undefined => (typeof limit === 'string' ? limit : limit?.tier);
 
 /** GET /debug_token (feature 006 US8, research R13). `expiresAt` 0 means the token never expires. */
 export interface TokenDebugInfo {
@@ -272,8 +296,9 @@ export class MetaGraphClient {
       quality_rating?: string;
       status?: string;
       throughput?: { level?: string };
+      whatsapp_business_manager_messaging_limit?: string | { tier?: string };
     }>('GET', `/${phoneNumberId}`, token, {
-      query: { fields: 'id,display_phone_number,verified_name,quality_rating,code_verification_status,status,throughput' },
+      query: { fields: 'id,display_phone_number,verified_name,quality_rating,code_verification_status,status,throughput,whatsapp_business_manager_messaging_limit' },
     });
     return {
       id: body.id,
@@ -282,6 +307,38 @@ export class MetaGraphClient {
       qualityRating: body.quality_rating,
       status: body.status,
       throughputLevel: body.throughput?.level,
+      messagingLimit: limitText(body.whatsapp_business_manager_messaging_limit),
+    };
+  }
+
+  /** Feature 010 (US7, contracts/meta-business-profile.md §1). */
+  async getBusinessProfile(token: string, phoneNumberId: string): Promise<BusinessProfileInfo> {
+    const body = await this.request<{ data?: BusinessProfileInfo[] }>('GET', `/${phoneNumberId}/whatsapp_business_profile`, token, {
+      query: { fields: 'about,address,description,email,profile_picture_url,websites,vertical' },
+    });
+    return body.data?.[0] ?? {};
+  }
+
+  /** Feature 010 (US7, §2): only the given fields change; `messaging_product` is always sent. */
+  async updateBusinessProfile(token: string, phoneNumberId: string, fields: Record<string, unknown>): Promise<void> {
+    await this.request('POST', `/${phoneNumberId}/whatsapp_business_profile`, token, { json: { messaging_product: 'whatsapp', ...fields } });
+  }
+
+  /** Feature 010 (US7, §4): display name status, quality and the portfolio's messaging limit. */
+  async getNumberStatus(token: string, phoneNumberId: string): Promise<NumberStatusInfo> {
+    const body = await this.request<{
+      verified_name?: string;
+      name_status?: string;
+      new_name_status?: string;
+      quality_rating?: string;
+      whatsapp_business_manager_messaging_limit?: string | { tier?: string };
+    }>('GET', `/${phoneNumberId}`, token, { query: { fields: 'verified_name,name_status,new_name_status,quality_rating,whatsapp_business_manager_messaging_limit' } });
+    return {
+      verifiedName: body.verified_name ?? null,
+      nameStatus: body.name_status ?? null,
+      newNameStatus: body.new_name_status ?? null,
+      qualityRating: body.quality_rating ?? null,
+      messagingLimit: limitText(body.whatsapp_business_manager_messaging_limit) ?? null,
     };
   }
 

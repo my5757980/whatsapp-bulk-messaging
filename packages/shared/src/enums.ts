@@ -130,6 +130,7 @@ export const NotificationType = {
   CATALOG_SYNC_FAILED: 'CATALOG_SYNC_FAILED',
   // Feature 009 templates and growth
   CHAT_WIDGET_NUMBER_DISCONNECTED: 'CHAT_WIDGET_NUMBER_DISCONNECTED',
+  DATE_AUTOMATION_PAUSED: 'DATE_AUTOMATION_PAUSED',
 } as const;
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
 

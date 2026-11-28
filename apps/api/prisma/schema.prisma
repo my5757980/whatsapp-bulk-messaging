@@ -120,6 +120,8 @@ enum AudienceType {
   ALL_OPTED_IN
   UPLOAD
   RETARGET
+  /// Feature 010: a saved segment, worked out at launch (R2).
+  SEGMENT
 }
 
 enum RetargetStatus {
@@ -152,6 +154,8 @@ enum MessageOrigin {
   PAYMENTS
   /// A one-time code sent for a company system through POST /api/v1/otp (feature 009, R3).
   OTP
+  /// A birthday or other date automation (feature 010, R9).
+  DATE_AUTOMATION
 }
 
 enum MessageStatus {
@@ -235,6 +239,65 @@ enum NotificationType {
   CATALOG_SYNC_FAILED
   /// Feature 009: a website chat button is hidden because its number is not connected.
   CHAT_WIDGET_NUMBER_DISCONNECTED
+  /// Feature 010: a date automation paused itself (template or number problem).
+  DATE_AUTOMATION_PAUSED
+}
+
+// ---------- Contacts, settings and security enums (feature 010) ----------
+
+/// Where a contact first came from (R5); set only when the contact is created.
+enum LeadSourceKind {
+  UNKNOWN
+  ORGANIC
+  API
+  IMPORT
+  CAMPAIGN_UPLOAD
+  CHAT_LINK
+  AD
+  LEAD_FORM
+  FORM
+  WEBSITE_BUTTON
+  STORE
+  CUSTOM
+}
+
+enum BulkActionKind {
+  TAG_ADD
+  TAG_REMOVE
+  DRIP_ENROL
+}
+
+enum BulkActionStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum AutoTagEvent {
+  CONTACT_CREATED
+  CAMPAIGN_REPLY
+  LINK_CLICK
+  OPTED_IN
+  OPTED_OUT
+}
+
+enum DateAutomationTiming {
+  YEARLY
+  ONCE
+}
+
+enum DateAutomationStatus {
+  OFF
+  ON
+  PAUSED
+}
+
+enum OccurrenceStatus {
+  PENDING
+  SENT
+  SKIPPED
+  FAILED
 }
 
 // ---------- Live chat enums (feature 002) ----------
@@ -425,6 +488,16 @@ model User {
   createdAdAudiences      AdAudience[]            @relation("AdAudienceCreatedBy")
   createdAdLeadForms      AdLeadForm[]            @relation("AdLeadFormCreatedBy")
   paymentRequestsCreated  PaymentRequest[]        @relation("PaymentRequestCreatedBy")
+  // Feature 010
+  segments                Segment[]
+  bulkActions             BulkAction[]
+  autoTagRules            AutoTagRule[]
+  globalAttributes        GlobalAttribute[]
+  dateAutomations         DateAutomation[]
+  twoFactor               UserTwoFactor?
+  recoveryCodes           UserRecoveryCode[]
+  businessProfileChanges  NumberBusinessProfile[]
+  obaChecklistUpdates     ObaChecklist[]
 
   @@map("users")
 }
@@ -490,6 +563,11 @@ model Settings {
   aiAssistantLimit   Int      @default(300) @map("ai_assistant_limit")
   aiPrices           Json     @default("{\"model\":\"claude-opus-5-5\",\"input\":4,\"output\":20,\"cacheRead\":0.2,\"cacheWrite\":5}") @map("ai_prices")
   aiLimitMessage     String?  @map("ai_limit_message")
+  /// Feature 010: replies sent after opt-out and opt-in keywords (R8): {kind: NONE | TEXT | TEMPLATE, text?, templateId?, variables?}.
+  optOutReply        Json     @default("{\"kind\":\"NONE\"}") @map("opt_out_reply")
+  optInReply         Json     @default("{\"kind\":\"NONE\"}") @map("opt_in_reply")
+  /// Feature 010: every member must use two-factor authentication (FR-028).
+  require2fa         Boolean  @default(false) @map("require_2fa")
   updatedAt          DateTime @updatedAt @map("updated_at") @db.Timestamptz
 
   @@map("settings")
@@ -537,6 +615,9 @@ model WhatsAppNumber {
   // Feature 009
   otpSettings      OtpSettings[]
   chatWidgets      ChatWidget[]
+  // Feature 010
+  dateAutomations  DateAutomation[]
+  businessProfile  NumberBusinessProfile?
 
   @@map("whatsapp_numbers")
 }
@@ -559,6 +640,8 @@ model Contact {
   blockedBy         User?          @relation("ContactBlockedBy", fields: [blockedById], references: [id], onDelete: SetNull)
   /// Organic, API, Campaign upload, Import or a custom source (002 FR-033).
   leadSource        String?        @map("lead_source") @db.VarChar(80)
+  /// Feature 010 (R5): the kind of lead source; `leadSource` is now its label.
+  leadSourceKind    LeadSourceKind @default(UNKNOWN) @map("lead_source_kind")
   firstMessageTagId String?        @map("first_message_tag_id") @db.Uuid
   firstMessageTag   Tag?           @relation("ContactFirstMessageTag", fields: [firstMessageTagId], references: [id], onDelete: SetNull)
   createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz
@@ -585,8 +668,11 @@ model Contact {
   paymentRequests     PaymentRequest[]
   chatOrders          ChatOrder[]
   formAnswers         FormAnswer[]
+  // Feature 010
+  dateAutomationOccurrences DateAutomationOccurrence[]
 
   @@index([consentStatus])
+  @@index([leadSourceKind])
   @@index([attributes], type: Gin)
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "contacts_name_trgm_idx")
   @@index([phoneE164(ops: raw("gin_trgm_ops"))], type: Gin, map: "contacts_phone_trgm_idx")
@@ -610,6 +696,8 @@ model Tag {
   adCampaigns     AdCampaign[]
   adLeadForms     AdLeadForm[]
   paymentSettings PaymentSettings[]
+  // Feature 010
+  autoTagRules    AutoTagRule[]
 
   @@map("tags")
 }
@@ -660,6 +748,8 @@ model ImportJob {
   fileKey         String       @map("file_key")
   mapping         Json         @default("{}")
   optInSourceNote String?      @map("opt_in_source_note")
+  /// Feature 010 (FR-011): the lead source label of contacts this import creates.
+  leadSourceLabel String?      @map("lead_source_label") @db.VarChar(80)
   status          ImportStatus @default(QUEUED)
   totalRows       Int          @default(0) @map("total_rows")
   createdCount    Int          @default(0) @map("created_count")
@@ -731,6 +821,8 @@ model Template {
   paymentSettings PaymentSettings[]
   // Feature 009
   otpDefaults     OtpSettings[]
+  // Feature 010
+  dateAutomations DateAutomation[]
 
   @@unique([wabaId, name, language])
   @@index([status])
@@ -821,9 +913,199 @@ model Campaign {
   offerConfig        Json?                @map("offer_config")
   cardMedia          Json?                @map("card_media")
   launchedById       String?              @map("launched_by_id") @db.Uuid
+  /// Feature 010: the saved segment of a SEGMENT audience (R2).
+  segmentId          String?              @map("segment_id") @db.Uuid
+  segment            Segment?             @relation(fields: [segmentId], references: [id], onDelete: Restrict)
 
   @@index([state])
   @@map("campaigns")
+}
+
+// ---------- Contacts, settings and security (feature 010) ----------
+
+/// A saved audience (R1); members are worked out every time it is used.
+model Segment {
+  id          String     @id @default(uuid(7)) @db.Uuid
+  name        String     @unique @db.VarChar(80)
+  description String?    @db.VarChar(300)
+  /// SegmentRulesSchema (@wbm/shared): 1–5 groups, 1–30 rules in total.
+  rules       Json
+  createdById String?    @map("created_by_id") @db.Uuid
+  createdBy   User?      @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.Timestamptz
+  campaigns   Campaign[]
+
+  @@map("segments")
+}
+
+/// A bulk change run on the `bulk` queue (R3); kept 90 days.
+model BulkAction {
+  id          String           @id @default(uuid(7)) @db.Uuid
+  kind        BulkActionKind
+  /// {tagIds} for tags, {dripId} for drip enrolment.
+  params      Json             @default("{}")
+  /// {contactIds} (up to 10,000), {filter} or {segmentId}.
+  selection   Json
+  status      BulkActionStatus @default(QUEUED)
+  total       Int?
+  processed   Int              @default(0)
+  changed     Int              @default(0)
+  result      Json?
+  error       String?          @db.VarChar(300)
+  createdById String?          @map("created_by_id") @db.Uuid
+  createdBy   User?            @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  startedAt   DateTime?        @map("started_at") @db.Timestamptz
+  finishedAt  DateTime?        @map("finished_at") @db.Timestamptz
+
+  @@index([createdAt])
+  @@map("bulk_actions")
+}
+
+/// Adds a tag when an event happens (R4); never removes tags.
+model AutoTagRule {
+  id             String          @id @default(uuid(7)) @db.Uuid
+  event          AutoTagEvent
+  /// Required for CONTACT_CREATED, empty otherwise (check constraint).
+  leadSourceKind LeadSourceKind? @map("lead_source_kind")
+  tagId          String          @map("tag_id") @db.Uuid
+  tag            Tag             @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  enabled        Boolean         @default(true)
+  createdById    String?         @map("created_by_id") @db.Uuid
+  createdBy      User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz
+
+  /// NULLS NOT DISTINCT in the migration, so rules without a lead source cannot repeat.
+  @@unique([event, leadSourceKind, tagId])
+  @@map("auto_tag_rules")
+}
+
+/// A company-wide value for templates, chats, flows and AI agents (R7).
+model GlobalAttribute {
+  id          String   @id @default(uuid(7)) @db.Uuid
+  key         String   @unique @db.VarChar(40)
+  description String?  @db.VarChar(200)
+  value       String   @default("") @db.VarChar(1024)
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  updatedBy   User?    @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("global_attributes")
+}
+
+/// Sends a template on a date stored in a contact attribute (R9).
+model DateAutomation {
+  id              String                     @id @default(uuid(7)) @db.Uuid
+  name            String                     @unique @db.VarChar(80)
+  attributeKey    String                     @map("attribute_key") @db.VarChar(40)
+  timing          DateAutomationTiming
+  offsetDays      Int                        @default(0) @map("offset_days") @db.SmallInt
+  /// HH:mm in the company time zone.
+  sendTime        String                     @map("send_time") @db.Char(5)
+  numberId        String                     @map("number_id") @db.Uuid
+  number          WhatsAppNumber             @relation(fields: [numberId], references: [id], onDelete: Restrict)
+  templateId      String                     @map("template_id") @db.Uuid
+  template        Template                   @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  variableMapping Json                       @default("{}") @map("variable_mapping")
+  status          DateAutomationStatus       @default(OFF)
+  pausedReason    String?                    @map("paused_reason") @db.VarChar(120)
+  lastRunDate     DateTime?                  @map("last_run_date") @db.Date
+  createdById     String?                    @map("created_by_id") @db.Uuid
+  createdBy       User?                      @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt       DateTime                   @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime                   @updatedAt @map("updated_at") @db.Timestamptz
+  occurrences     DateAutomationOccurrence[]
+
+  @@index([status])
+  @@map("date_automations")
+}
+
+/// One contact due on one date for one automation; the unique key prevents double sends (SC-004).
+model DateAutomationOccurrence {
+  id           String           @id @default(uuid(7)) @db.Uuid
+  automationId String           @map("automation_id") @db.Uuid
+  automation   DateAutomation   @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  contactId    String           @map("contact_id") @db.Uuid
+  contact      Contact          @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  dueDate      DateTime         @map("due_date") @db.Date
+  status       OccurrenceStatus @default(PENDING)
+  reason       String?          @db.VarChar(40)
+  messageId    String?          @map("message_id") @db.Uuid
+  message      Message?         @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@unique([automationId, contactId, dueDate])
+  @@index([automationId, dueDate, status])
+  @@index([messageId])
+  @@map("date_automation_occurrences")
+}
+
+/// A member's authenticator app secret (R10), encrypted with TokenCipher.
+model UserTwoFactor {
+  userId    String    @id @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  secretEnc String    @map("secret_enc")
+  /// Empty while setup is not confirmed.
+  enabledAt DateTime? @map("enabled_at") @db.Timestamptz
+  /// The last accepted time step; older or equal steps are refused (no replay).
+  lastStep  BigInt?   @map("last_step")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("user_two_factor")
+}
+
+/// A one-time recovery code, stored as an HMAC-SHA256 (R10).
+model UserRecoveryCode {
+  id        String    @id @default(uuid(7)) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String    @map("code_hash") @db.Char(64)
+  usedAt    DateTime? @map("used_at") @db.Timestamptz
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([userId])
+  @@map("user_recovery_codes")
+}
+
+/// What Meta last returned for a number's business profile and name status (R11).
+model NumberBusinessProfile {
+  numberId          String         @id @map("number_id") @db.Uuid
+  number            WhatsAppNumber @relation(fields: [numberId], references: [id], onDelete: Cascade)
+  about             String?
+  address           String?
+  description       String?
+  email             String?
+  vertical          String?
+  websites          String[]       @default([])
+  profilePictureUrl String?        @map("profile_picture_url")
+  verifiedName      String?        @map("verified_name") @db.VarChar(200)
+  nameStatus        String?        @map("name_status") @db.VarChar(20)
+  newNameStatus     String?        @map("new_name_status") @db.VarChar(20)
+  readAt            DateTime       @map("read_at") @db.Timestamptz
+  changedAt         DateTime?      @map("changed_at") @db.Timestamptz
+  changedById       String?        @map("changed_by_id") @db.Uuid
+  changedBy         User?          @relation(fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@map("number_business_profiles")
+}
+
+/// The blue tick checklist progress (R12); a single row.
+model ObaChecklist {
+  id          Int       @id @default(1) @db.SmallInt
+  /// {stepId: {done, at, byId}} with step ids from @wbm/shared.
+  steps       Json      @default("{}")
+  appliedAt   DateTime? @map("applied_at") @db.Date
+  result      String?   @db.VarChar(20)
+  note        String?   @db.VarChar(500)
+  updatedById String?   @map("updated_by_id") @db.Uuid
+  updatedBy   User?     @relation(fields: [updatedById], references: [id], onDelete: SetNull)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz
+
+  @@map("oba_checklist")
 }
 
 model Message {
@@ -898,8 +1180,11 @@ model Message {
   copyIndex           Int                  @default(0) @map("copy_index")
   expiredReason       ExpiredReason?       @map("expired_reason")
   expiresAt           DateTime?            @map("expires_at") @db.Timestamptz
+  // Feature 010
+  dateAutomationOccurrences DateAutomationOccurrence[]
 
   @@unique([campaignId, contactId, copyIndex])
+  @@index([contactId, createdAt])
   @@index([campaignId, status])
   @@index([createdAt])
   @@index([status, expiresAt])

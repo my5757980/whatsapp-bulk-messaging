@@ -37,6 +37,11 @@ export const QUEUES = {
   PAYMENTS: 'payments',
   /** Catalog: the hourly product copy and the store fill (feature 008, research R8, R9). */
   CATALOG: 'catalog',
+  /**
+   * Bulk contact work: tag actions and segment drip enrolments, one at a time and in order (feature 010,
+   * research R3).
+   */
+  BULK: 'bulk',
 } as const;
 
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];

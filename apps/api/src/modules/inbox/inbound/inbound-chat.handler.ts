@@ -28,6 +28,10 @@ import { AdChatMatcher } from '../../ads/chats/ad-chat-matcher.js';
 import { ChatLinkMatcher } from '../../integrations/chat-links/chat-link-matcher.js';
 import { parseInboundMessage, previewOf, type ParsedInbound } from './message-parser.js';
 import { stopContactCarts } from '../../integrations/stores/store-carts.js';
+import { leadSourceFor } from '../../contacts/lead-source.js';
+import { REPLY_WINDOW_HOURS } from '../../campaigns/replied.sql.js';
+import { AutoTagService } from '../../contacts/auto-tags.service.js';
+import { KeywordRepliesService } from '../../settings/keyword-replies.js';
 
 interface LockedChat {
   id: string;
@@ -69,6 +73,8 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     private readonly cod: CodService,
     private readonly chatLinks: ChatLinkMatcher,
     private readonly adChats: AdChatMatcher,
+    private readonly autoTags: AutoTagService,
+    private readonly keywordReplies: KeywordRepliesService,
     @Optional() @Inject(CHAT_ORDERS) private readonly chatOrders?: ChatOrdersPort,
     @Optional() @Inject(FORM_ANSWERS) private readonly formAnswers?: FormAnswersPort,
   ) {}
@@ -114,7 +120,7 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     }
     const contact = await this.prisma.contact.upsert({
       where: { phoneE164: phone.e164 },
-      create: { phoneE164: phone.e164, countryCode: phone.country, name: msg.profileName?.slice(0, 120) ?? null, leadSource: 'Organic' },
+      create: { phoneE164: phone.e164, countryCode: phone.country, name: msg.profileName?.slice(0, 120) ?? null, ...leadSourceFor('ORGANIC') },
       update: {},
       select: { id: true, blockedAt: true },
     });
@@ -149,6 +155,16 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
       await this.drips.onEvent(contact.id, { kind: 'REPLIED', numberId }, tx);
       // A reply on a store's number stops that store's cart reminders for the contact (feature 006, FR-042).
       await stopContactCarts(tx, contact.id, 'replied', numberId);
+      // Automatic tags for campaign replies (feature 010, R4), only when a rule listens.
+      if (await this.autoTags.listens('CAMPAIGN_REPLY')) {
+        const replied = await tx.$queryRaw<Array<{ one: number }>>`
+          SELECT 1 AS one FROM messages m
+           WHERE m.contact_id = ${contact.id}::uuid AND m.number_id = ${numberId}::uuid AND m.origin = 'CAMPAIGN'
+             AND m.status IN ('DELIVERED', 'READ')
+             AND COALESCE(m.delivered_at, m.read_at) BETWEEN ${msg.occurredAt}::timestamptz - make_interval(hours => ${REPLY_WINDOW_HOURS}) AND ${msg.occurredAt}::timestamptz
+           LIMIT 1`;
+        if (replied.length) await this.autoTags.apply(tx, 'CAMPAIGN_REPLY', contact.id);
+      }
       // Outbound webhooks (feature 006, FR-002); text is removed later for endpoints that chose so.
       const buttonPayload = typeof msg.payload.payload === 'string' ? msg.payload.payload : typeof msg.payload.id === 'string' ? msg.payload.id : null;
       await this.platformEvents.messageReceived(tx, {
@@ -204,6 +220,10 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
     else await this.notifier.queue({ kind: 'message', conversationId: outcome.conversationId, itemId });
     // An opt-out stops the AI agent at once; the flow router below ends flows and answers it (004 FR-027).
     if (optOutKeyword) await this.aiAgents.onOptOut(outcome.conversationId);
+    // Feature 010 (US4, R8): the confirmation reply to a consent keyword (the 001 handler has applied it). Sent
+    // here because the chat exists now, so a text reply shows in it; at most once a day per contact and kind.
+    const keywordReplied =
+      consentKeyword && (await this.keywordReplies.send({ conversationId: outcome.conversationId, contactId: contact.id, numberId, kind: optOutKeyword ? 'OPT_OUT' : 'OPT_IN' })) === 'SENT';
     // COD answers (feature 006 US5): a cod1: button tap is answered here, before flows and the AI agent.
     const tappedPayload = typeof msg.payload.payload === 'string' ? msg.payload.payload : null;
     if (tappedPayload && (await this.cod.handleButton(tappedPayload, { conversationId: outcome.conversationId, contactId: contact.id }))) return;
@@ -260,6 +280,8 @@ export class InboundChatHandler implements WebhookChangeHandler, OnModuleInit {
       message: { contentType: msg.contentType, text: msg.text, replyId: typeof msg.payload.id === 'string' ? msg.payload.id : null, replyToWaId: msg.replyToWaId },
     });
     if (flowAnswered) return;
+    // A sent opt-in confirmation answers START; the AI agent does not answer it as well.
+    if (keywordReplied) return;
     // AI agents answer what flows left (004 research R5); a queued AI turn replaces welcome/off-hours (FR-021).
     const aiQueued = await this.aiAgents.onCustomerMessage({
       messageId: itemId,

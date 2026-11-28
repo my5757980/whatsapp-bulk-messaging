@@ -54,12 +54,15 @@ import { DispatcherProcessor } from './modules/sending/dispatcher.processor.js';
 import { SendQueueManager } from './modules/sending/send-queue.manager.js';
 import { ExpiredSweepProcessor } from './modules/sending/expired-sweep.processor.js';
 import { ChatWidgetCheckProcessor } from './modules/integrations/chat-widgets/chat-widget-check.processor.js';
+import { BulkTagsProcessor } from './modules/contacts/bulk-tags.processor.js';
+import { DripSegmentEnrolProcessor } from './modules/growth/drips/drip-segment-enrol.processor.js';
 import { SendProcessor } from './modules/sending/send.processor.js';
 import { InboundHandler } from './modules/webhooks/handlers/inbound.handler.js';
 import { QualityHandler } from './modules/webhooks/handlers/quality.handler.js';
 import { StatusHandler } from './modules/webhooks/handlers/status.handler.js';
 import { TemplateStatusHandler } from './modules/webhooks/handlers/template-status.handler.js';
 import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
+import { DateAutomationTickProcessor } from './modules/automations/date-automation-tick.processor.js';
 
 /**
  * Background processors and webhook handlers (ADR-0002). Imported by the worker process and by
@@ -86,6 +89,10 @@ import { WebhooksWorkerModule } from './modules/webhooks/webhooks.module.js';
     ExpiredSweepProcessor,
     // Feature 009: website buttons whose number disconnected.
     ChatWidgetCheckProcessor,
+    // Feature 010: bulk tag actions and segment drip enrolments on the `bulk` queue.
+    BulkTagsProcessor,
+    DateAutomationTickProcessor,
+    DripSegmentEnrolProcessor,
     SendQueueManager,
     DispatcherProcessor,
     AudienceUploadProcessor,

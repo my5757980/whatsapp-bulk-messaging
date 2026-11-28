@@ -84,7 +84,7 @@ describe('Live chat: receive and answer (US1)', () => {
     const wamid = await inbound(phone, text('Is the blue one available?'), { name: 'Sara Khan' });
 
     const contact = await ctx.prisma.contact.findUniqueOrThrow({ where: { phoneE164: phone } });
-    expect(contact).toMatchObject({ name: 'Sara Khan', leadSource: 'Organic' });
+    expect(contact).toMatchObject({ name: 'Sara Khan', leadSourceKind: 'ORGANIC' });
     const chat = await chatOf(phone);
     expect(chat).toMatchObject({ numberId: number.id, state: 'ACTIVE', intervenedById: null, lastMessagePreview: 'Is the blue one available?' });
     expect(chat.lastCustomerMessageAt).not.toBeNull();

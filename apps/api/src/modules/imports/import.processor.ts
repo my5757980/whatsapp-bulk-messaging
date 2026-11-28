@@ -17,6 +17,7 @@ import { SettingsService } from '../settings/settings.service.js';
 import type { ImportJobData, StoredImportMapping } from './imports.service.js';
 import { DripEvents } from '../growth/drips/drip-events.js';
 import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
+import { AutoTagService } from '../contacts/auto-tags.service.js';
 
 const BATCH_SIZE = 1000;
 
@@ -53,6 +54,7 @@ export class ImportProcessor implements OnModuleInit {
     private readonly consent: ConsentService,
     private readonly dripEvents: DripEvents,
     private readonly platformEvents: PlatformEvents,
+    private readonly autoTags: AutoTagService,
   ) {}
 
   onModuleInit(): void {
@@ -80,7 +82,7 @@ export class ImportProcessor implements OnModuleInit {
 
       const flush = async () => {
         if (!batch.length) return;
-        const result = await this.upsertBatch(batch, job.createdById);
+        const result = await this.upsertBatch(batch, job.createdById, job.leadSourceLabel ?? null);
         counts.created += result.created;
         counts.updated += result.updated;
         batch = [];
@@ -166,17 +168,17 @@ export class ImportProcessor implements OnModuleInit {
     }
   }
 
-  private async upsertBatch(rows: ImportRow[], actorUserId: string): Promise<{ created: number; updated: number }> {
+  private async upsertBatch(rows: ImportRow[], actorUserId: string, leadSourceLabel: string | null = null): Promise<{ created: number; updated: number }> {
     return this.prisma.$transaction(
       async (tx) => {
         const now = new Date();
         const values = rows.map((r) => {
           const optIn = r.optInNote !== null;
           return Prisma.sql`(${uuidv7()}::uuid, ${r.phoneE164}, ${r.countryCode}, ${r.name}, ${JSON.stringify(r.attributes)}::jsonb,
-            ${optIn ? 'OPTED_IN' : 'UNKNOWN'}::"ConsentStatus", ${optIn ? 'IMPORT' : null}::"ConsentSource", ${r.optInNote}, ${optIn ? now : null}::timestamptz, 'Import', ${now}, ${now})`;
+            ${optIn ? 'OPTED_IN' : 'UNKNOWN'}::"ConsentStatus", ${optIn ? 'IMPORT' : null}::"ConsentSource", ${r.optInNote}, ${optIn ? now : null}::timestamptz, ${leadSourceLabel}, 'IMPORT'::"LeadSourceKind", ${now}, ${now})`;
         });
         const upserted = await tx.$queryRaw<Array<{ id: string; phone_e164: string; inserted: boolean }>>`
-          INSERT INTO contacts (id, phone_e164, country_code, name, attributes, consent_status, consent_source, consent_source_note, consent_at, lead_source, created_at, updated_at)
+          INSERT INTO contacts (id, phone_e164, country_code, name, attributes, consent_status, consent_source, consent_source_note, consent_at, lead_source, lead_source_kind, created_at, updated_at)
           VALUES ${Prisma.join(values)}
           ON CONFLICT (phone_e164) DO UPDATE
              SET name = COALESCE(EXCLUDED.name, contacts.name),
@@ -197,6 +199,8 @@ export class ImportProcessor implements OnModuleInit {
         await this.dripEvents.recordCreated(tx, 'IMPORTED', upserted.filter((u) => u.inserted).map((u) => u.id));
         // Outbound webhooks (feature 006, FR-002).
         await this.platformEvents.contactsCreated(tx, upserted.filter((u) => u.inserted).map((u) => u.id), 'import');
+        // Automatic tags for new contacts from imports (feature 010, R4).
+        await this.autoTags.applyToMany(tx, 'CONTACT_CREATED', upserted.filter((u) => u.inserted).map((u) => u.id), 'IMPORT');
 
         const tagNames = [...new Set(rows.flatMap((r) => r.tags))];
         if (tagNames.length) {

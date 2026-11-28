@@ -12,6 +12,7 @@ import { api } from '@/lib/api-client';
 import { useInboxEvents, useNewMessageSound } from '@/lib/inbox-events';
 import { queryKeys } from '@/lib/query';
 import { useMe } from '@/lib/session';
+import { myTwoFactorKey, type MyTwoFactor } from '@/lib/two-factor';
 import { cn } from '@/lib/utils';
 
 const NAV: Array<{ href: string; label: string; permission: Permission }> = [
@@ -20,6 +21,7 @@ const NAV: Array<{ href: string; label: string; permission: Permission }> = [
   // Feature 009: overview, team member and opt-in reports.
   { href: '/reports', label: 'Reports', permission: 'reports.view' },
   { href: '/drips', label: 'Drips', permission: 'campaigns.view' },
+  { href: '/automations', label: 'Automations', permission: 'campaigns.view' },
   { href: '/contacts', label: 'Contacts', permission: 'contacts.view' },
   { href: '/templates', label: 'Templates', permission: 'templates.view' },
   { href: '/flows', label: 'Flows', permission: 'flows.manage' },
@@ -54,6 +56,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     refetchInterval: 60_000,
     retry: false,
   });
+
+  // Feature 010 (US6): members who must set up two-factor sign-in see a reminder until they do.
+  const twoFactor = useQuery({ queryKey: myTwoFactorKey, queryFn: () => api<MyTwoFactor>('/me/2fa'), enabled: Boolean(me.data), staleTime: 60_000, retry: false });
+  const mustSetUp = twoFactor.data?.required === true && !twoFactor.data.enabled;
 
   async function signOut() {
     await api('/auth/logout', { method: 'POST' }).catch(() => undefined);
@@ -105,6 +111,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           )}
           {permissions.has('assistant.use') && <AssistantButton />}
           <NotificationsBell />
+          <Link href="/account/two-factor" className="text-muted-foreground hover:text-foreground">
+            Two-factor
+          </Link>
           <span className="text-muted-foreground">
             {me.data.name} · {me.data.role.toLowerCase()}
           </span>
@@ -112,6 +121,14 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             Sign out
           </Button>
         </header>
+        {mustSetUp && !pathname.startsWith('/account/two-factor') ? (
+          <div role="status" className="border-b bg-warning/20 px-6 py-2 text-sm" data-testid="two-factor-banner">
+            Your company requires two-factor sign-in.{' '}
+            <Link href="/account/two-factor" className="font-medium underline">
+              Set it up now
+            </Link>
+          </div>
+        ) : null}
         <main className="flex-1 p-6">{children}</main>
       </div>
     </div>

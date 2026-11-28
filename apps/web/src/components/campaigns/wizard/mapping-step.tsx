@@ -17,12 +17,15 @@ import { MediaSourceCard, HEADER_MEDIA_KEY, headerMediaFormat, mediaChoiceComple
 import { OfferConfigCard, defaultOfferConfig, offerConfigComplete } from './offer-config';
 import { PAYMENT_VARIABLE_KEYS, PaymentConfigCard, payLinkButtonKey, paymentConfigComplete } from './payment-config';
 import { ProductChoicesCard, choicesComplete, choicesFrom, choicesMapping, productButtonKind, type ProductChoices } from './product-choices';
+import { useGlobalAttributes } from '@/lib/global-attributes';
 
 const SOURCES: Array<{ value: VariableSourceKind; label: string }> = [
   { value: 'column', label: 'Uploaded column' },
   { value: 'field', label: 'Contact field' },
   { value: 'attribute', label: 'Contact attribute' },
   { value: 'static', label: 'Same text for everyone' },
+  // Feature 010 (US3): a company-wide value, read at launch.
+  { value: 'global', label: 'Global attribute' },
 ];
 
 /** A tracked link (feature 005): where it goes and whether campaign tags are added. */
@@ -63,6 +66,7 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
   const columns = uploaded ? (campaign.audienceUpload?.columns ?? []) : [];
   const defaultSource: VariableSourceKind = uploaded ? 'column' : 'field';
   const [payment, setPayment] = useState<CampaignPaymentConfig | null>(campaign.paymentConfig ?? null);
+  const globals = useGlobalAttributes();
   // Feature 008: a template with a pay link button can ask every recipient to pay.
   const payKey = payLinkButtonKey(template.data, linkConfig.data?.baseUrl);
   const paying = Boolean(payKey && payment);
@@ -244,7 +248,7 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
             ) : (
               <>
                 <div className="grid gap-1.5">
-                  <Label htmlFor={`${id}-value`}>{m.source === 'static' ? 'Text' : m.source === 'attribute' ? 'Attribute key' : 'Value from'}</Label>
+                  <Label htmlFor={`${id}-value`}>{m.source === 'static' ? 'Text' : m.source === 'attribute' ? 'Attribute key' : m.source === 'global' ? 'Global attribute' : 'Value from'}</Label>
                   {m.source === 'column' && !columns.length ? (
                     <Input id={`${id}-value`} value={m.key ?? ''} onChange={(e) => update(key, { key: e.target.value })} placeholder="column name" />
                   ) : m.source === 'column' ? (
@@ -264,6 +268,20 @@ export function MappingStep({ campaign, onBack, onDone }: { campaign: CampaignDe
                     </NativeSelect>
                   ) : m.source === 'attribute' ? (
                     <Input id={`${id}-value`} value={m.key ?? ''} onChange={(e) => update(key, { key: e.target.value })} placeholder="city" />
+                  ) : m.source === 'global' ? (
+                    <>
+                      <NativeSelect id={`${id}-value`} value={m.key ?? ''} onChange={(e) => update(key, { key: e.target.value })}>
+                        <option value="">Choose a global attribute…</option>
+                        {(globals.data?.items ?? []).map((g) => (
+                          <option key={g.id} value={g.key}>
+                            {g.key}
+                          </option>
+                        ))}
+                      </NativeSelect>
+                      {m.key && !globals.data?.items.find((g) => g.key === m.key)?.value.trim() ? (
+                        <p className="text-xs text-destructive">This global attribute has no value yet; the campaign cannot launch until it has one.</p>
+                      ) : null}
+                    </>
                   ) : m.source === 'payment' ? (
                     <NativeSelect id={`${id}-value`} value={m.key ?? ''} onChange={(e) => update(key, { key: e.target.value })}>
                       <option value="">Choose…</option>

@@ -18,6 +18,8 @@ export interface PreSendState {
   consent: 'OPTED_IN' | 'OPTED_OUT' | 'UNKNOWN';
   /** MARKETING templates need an explicit opt-in. */
   marketing: boolean;
+  /** Feature 010 (US4): a utility keyword reply confirms an opt-out, so it goes to the person who opted out. */
+  consentReply?: boolean;
 }
 
 export type PreSendDecision =
@@ -32,7 +34,7 @@ export function preSendCheck(s: PreSendState): PreSendDecision {
   if (s.campaignState === 'CANCELLED') return { action: 'cancel' };
   if (s.campaignState !== null && s.campaignState !== 'RUNNING') return { action: 'requeue' };
   if (!s.sendingEnabled) return { action: 'requeue', pauseReason: 'sending_disabled' };
-  if (s.consent === 'OPTED_OUT') return { action: 'skip', reason: 'OPTED_OUT' };
+  if (s.consent === 'OPTED_OUT' && !s.consentReply) return { action: 'skip', reason: 'OPTED_OUT' };
   if (s.marketing && s.consent !== 'OPTED_IN') return { action: 'skip', reason: 'NO_OPT_IN' };
   return { action: 'send' };
 }

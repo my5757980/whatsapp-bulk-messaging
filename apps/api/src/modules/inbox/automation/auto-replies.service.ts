@@ -13,6 +13,7 @@ import { InboxPublisher } from '../realtime/inbox-publisher.js';
 import { LiveChatSettingsService, type AutoContent } from '../settings/live-chat-settings.service.js';
 import { decideAutoReply, type AutoReplyKind } from './auto-replies.js';
 import { isWithinHours } from './working-hours.js';
+import { GlobalAttributesService } from '../../settings/global-attributes.service.js';
 
 /** One off-hours message per contact every 12 hours (FR-035). */
 const OFF_HOURS_GAP_SECONDS = 12 * 3600;
@@ -40,6 +41,7 @@ export class AutoRepliesService {
     private readonly publisher: InboxPublisher,
     private readonly queues: QueueRegistry,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly globals: GlobalAttributesService,
   ) {}
 
   async handle(input: AutoReplyInput): Promise<AutoReplyKind | null> {
@@ -91,10 +93,21 @@ export class AutoRepliesService {
     await this.send(conversationId, { kind: 'TEXT', text }, chat.contact);
   }
 
+  /** Feature 010 (US4): a keyword reply in a chat; `extraParams` ride along on a template message. */
+  async sendContent(conversationId: string, content: NonNullable<AutoContent>, extraParams: Record<string, string> = {}): Promise<void> {
+    const chat = await this.prisma.conversation.findUniqueOrThrow({
+      where: { id: conversationId },
+      select: { contact: { select: { name: true, phoneE164: true, attributes: true, consentStatus: true, countryCode: true } } },
+    });
+    if (!chat.contact) return;
+    await this.send(conversationId, content, chat.contact, extraParams);
+  }
+
   private async send(
     conversationId: string,
     content: NonNullable<AutoContent>,
     contact: { name: string | null; phoneE164: string; attributes: unknown; consentStatus: string; countryCode: string },
+    extraParams: Record<string, string> = {},
   ): Promise<void> {
     const chat = await this.prisma.conversation.findUniqueOrThrow({ where: { id: conversationId }, select: { numberId: true, contactId: true } });
     const now = new Date();
@@ -106,7 +119,7 @@ export class AutoRepliesService {
       if (template.category === 'MARKETING' && contact.consentStatus !== 'OPTED_IN') throw new Error('Marketing template needs an opt-in');
       const mapping = VariableMappingSchema.safeParse(content.variables ?? {});
       const variables = (Array.isArray(template.variables) ? template.variables : []) as Array<{ key: string }>;
-      const resolved = resolveVariables(variables, mapping.success ? mapping.data : {}, { contact: { name: contact.name, phone: contact.phoneE164, attributes: contact.attributes }, row: {} });
+      const resolved = resolveVariables(variables, mapping.success ? mapping.data : {}, { contact: { name: contact.name, phone: contact.phoneE164, attributes: contact.attributes }, row: {}, globals: await this.globals.values() });
       if (!resolved.ok) throw new Error(`Template variables without a value or fallback: ${resolved.missing.join(', ')}`);
       const message = await this.prisma.$transaction(async (tx) => {
         const created = await tx.message.create({
@@ -118,7 +131,7 @@ export class AutoRepliesService {
             recipientCountry: contact.countryCode,
             numberId: chat.numberId,
             templateId: template.id,
-            resolvedParams: resolved.params as Prisma.InputJsonValue,
+            resolvedParams: { ...resolved.params, ...extraParams } as Prisma.InputJsonValue,
             status: 'QUEUED',
             queuedAt: now,
           },

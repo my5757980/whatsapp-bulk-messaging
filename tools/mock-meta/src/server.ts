@@ -10,6 +10,7 @@ import { env } from './env.js';
 import { handleShopify } from './shopify.js';
 import { handleWoo } from './woocommerce.js';
 import { handleWizard } from './wizard.js';
+import { handleBusinessProfile } from './business-profile.js';
 import { handleAds } from './ads.js';
 import { commerceInteractiveProblem, handleCommerce } from './commerce.js';
 import { handleStripe } from './stripe.js';
@@ -246,6 +247,8 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   if (await handleWizard(req, res, url)) return;
   // Feature 008: catalog, commerce settings, items_batch and WhatsApp Flows (src/commerce.ts).
   if (await handleCommerce(req, res, url)) return;
+  // Feature 010: the business profile and the number status fields (src/business-profile.ts).
+  if (await handleBusinessProfile(req, res, url)) return;
 
   // Feature 006: the request catcher for outbound webhooks (src/catch.ts).
   const caughtAt = catchName(url.pathname);

@@ -6,6 +6,8 @@ import { DripEvents } from '../growth/drips/drip-events.js';
 import { DripLeaving } from '../growth/drips/drip-leaving.js';
 import { PlatformEvents } from '../integrations/webhooks/platform-events.js';
 import { stopContactCarts } from '../integrations/stores/store-carts.js';
+import { AutoTagService } from './auto-tags.service.js';
+import { leadSourceFor } from './lead-source.js';
 
 // Consent changes (FR-012-FR-014, T092). Every status change and its consent_events row are
 // written in one transaction, and an opt-out can only be undone by the contact (keyword) or an
@@ -35,6 +37,7 @@ export class ConsentService {
     private readonly drips: DripLeaving,
     private readonly dripEvents: DripEvents,
     private readonly platformEvents: PlatformEvents,
+    private readonly autoTags: AutoTagService,
   ) {}
 
   async setStatus(
@@ -70,6 +73,8 @@ export class ConsentService {
       // Outbound webhooks (feature 006, FR-002).
       if (status === 'OPTED_IN') await this.platformEvents.optedIn(tx, contactId, source, opts.note ?? null);
       if (status === 'OPTED_OUT') await this.platformEvents.optedOut(tx, contactId, source);
+      // Automatic tags (feature 010, R4).
+      if (status === 'OPTED_IN' || status === 'OPTED_OUT') await this.autoTags.apply(tx, status, contactId);
       return 'changed';
     });
   }
@@ -135,7 +140,7 @@ export class ConsentService {
                 consentSource: 'UPLOAD_CONFIRMATION' as const,
                 consentSourceNote: note,
                 consentAt: now,
-                leadSource: 'Campaign upload',
+                ...leadSourceFor('CAMPAIGN_UPLOAD'),
               })),
               skipDuplicates: true,
               select: { id: true },

@@ -29,6 +29,8 @@ const EnvSchema = z.object({
   OPS_TOKEN: z.string().min(16, 'must be at least 16 characters'),
   COOKIE_SECURE: boolString,
   APP_URL: z.string().url().default('http://localhost:3000'),
+  /** Feature 010 (US6): the issuer shown in authenticator apps. */
+  APP_NAME: z.string().trim().min(1).max(60).default('WhatsApp Platform'),
   API_PORT: z.coerce.number().int().positive().default(4000),
   WORKER_PORT: z.coerce.number().int().positive().default(4001),
   META_GRAPH_BASE_URL: z.string().url().default('https://graph.facebook.com'),

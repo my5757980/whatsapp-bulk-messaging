@@ -49,13 +49,22 @@ export class AuthService {
   }
 
   async login(email: string, password: string, meta: { ip?: string; userAgent?: string }): Promise<LoginResult> {
+    return this.createSession(await this.verifyPassword(email, password), meta);
+  }
+
+  /** The member whose email and password these are (active members only); 401 otherwise. */
+  async verifyPassword(email: string, password: string): Promise<User> {
     const user = await this.prisma.user.findUnique({ where: { email: AuthService.normalizeEmail(email) } });
     const valid =
       user?.status === 'ACTIVE' && user.passwordHash !== null && (await argon2.verify(user.passwordHash, password));
     if (!user || !valid) {
       throw AppError.unauthorized('Invalid email or password');
     }
+    return user;
+  }
 
+  /** A new session for a member who passed every sign-in step (feature 010 adds the second step). */
+  async createSession(user: User, meta: { ip?: string; userAgent?: string }): Promise<LoginResult> {
     const sessionToken = newRandomToken();
     const now = new Date();
     await this.prisma.$transaction([

@@ -15,6 +15,7 @@ import { errorMessage, toastError } from '@/lib/errors';
 import { formatDateTime, formatNumber } from '@/lib/format';
 import { LEFT_REASON_LABEL, growthKeys, type EnrolResult, type Enrolment, type EnrolmentStatus } from '@/lib/growth';
 import { Can } from '@/lib/permissions';
+import { contacts010Keys, type BulkAction, type Segment } from '@/lib/contacts-010';
 
 const PAGE_SIZE = 50;
 
@@ -150,9 +151,12 @@ export function DripEnrolments({
 /** Enrol contacts by hand (FR-025): everyone with a tag, with the counts before anyone joins. */
 function EnrolDialog({ dripId, onClose, onDone }: { dripId: string; onClose: () => void; onDone: () => Promise<void> }) {
   const [tag, setTag] = useState('');
+  // Feature 010 (FR-005): or a saved segment, enrolled in the background.
+  const [segmentId, setSegmentId] = useState('');
+  const segments = useQuery({ queryKey: contacts010Keys.segments, queryFn: () => api<{ items: Segment[] }>('/segments') });
   const [preview, setPreview] = useState<EnrolResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const input = () => ({ filter: { all: [{ tag: tag.trim().toLowerCase() }] } });
+  const input = () => (segmentId ? { segmentId } : { filter: { all: [{ tag: tag.trim().toLowerCase() }] } });
   const check = useMutation({
     mutationFn: () => api<EnrolResult>(`/drips/${dripId}/enrolments/preview`, { method: 'POST', json: input() }),
     onSuccess: (result) => {
@@ -162,9 +166,9 @@ function EnrolDialog({ dripId, onClose, onDone }: { dripId: string; onClose: () 
     onError: (e) => setError(errorMessage(e)),
   });
   const enrol = useMutation({
-    mutationFn: () => api<EnrolResult>(`/drips/${dripId}/enrolments`, { method: 'POST', json: input() }),
+    mutationFn: () => api<EnrolResult | BulkAction>(`/drips/${dripId}/enrolments`, { method: 'POST', json: input() }),
     onSuccess: async (result) => {
-      toast.success(`${formatNumber(result.enrolled)} joined the drip`);
+      toast.success('enrolled' in result ? `${formatNumber(result.enrolled)} joined the drip` : 'The segment is being enrolled in the background');
       await onDone();
     },
     onError: (e) => setError(errorMessage(e)),
@@ -190,10 +194,28 @@ function EnrolDialog({ dripId, onClose, onDone }: { dripId: string; onClose: () 
                 }}
                 placeholder="new-lead"
               />
-              <Button variant="outline" disabled={!tag.trim() || check.isPending} onClick={() => check.mutate()}>
+              <Button variant="outline" disabled={(!tag.trim() && !segmentId) || check.isPending} onClick={() => check.mutate()}>
                 Check
               </Button>
             </div>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="enrol-segment">Or everyone in a segment</Label>
+            <NativeSelect
+              id="enrol-segment"
+              value={segmentId}
+              onChange={(e) => {
+                setSegmentId(e.target.value);
+                setPreview(null);
+              }}
+            >
+              <option value="">No segment</option>
+              {(segments.data?.items ?? []).map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </NativeSelect>
           </div>
           {preview ? (
             <div className="rounded-md border bg-muted/40 p-3 text-sm" data-testid="enrol-preview">

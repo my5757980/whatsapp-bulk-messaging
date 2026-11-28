@@ -1,0 +1,921 @@
+openapi: 3.1.0
+info:
+  title: WhatsApp Platform - Contacts, Settings and Security API
+  version: 0.1.0
+  description: >
+    Segments, bulk tag actions, the contacts export, automatic tag rules, global attributes, keyword
+    replies, date automations, two-factor authentication, the business profile and the blue tick
+    checklist for the Next.js dashboard (feature 010-contacts-settings-security). Same conventions as
+    001–009: httpOnly session cookie, an X-CSRF-Token header on every mutating request, an
+    x-permission on every role-limited operation, and the error shape {code, message, details,
+    requestId}. Permissions (existing; no new permission):
+      contacts.view     ADMIN, MANAGER, AGENT - segments as filters and counts, bulk action progress, global attributes list
+      contacts.manage   ADMIN, MANAGER        - bulk tag actions
+      campaigns.view    ADMIN, MANAGER, AGENT - date automations and their results
+      campaigns.manage  ADMIN, MANAGER        - creating and changing segments and date automations
+      campaigns.launch  ADMIN, MANAGER        - switching date automations on and off
+      data.export       ADMIN, MANAGER        - the contacts export (phones masked without phones.full)
+      settings.view     ADMIN, MANAGER        - automatic tag rules and keyword replies
+      settings.manage   ADMIN                 - changing automatic tag rules, global attributes, keyword replies
+      users.manage      ADMIN                 - requiring 2FA, members' 2FA status, resets
+      numbers.view      ADMIN, MANAGER        - the business profile, name status and checklist
+      numbers.manage    ADMIN                 - changing the business profile and checklist
+
+    Operations without x-permission are open to every signed-in member (/me/2fa) or are part of
+    sign-in (/auth/login/*, security: [], using the pending sign-in cookie; contracts/login-2fa.md).
+    Changes to earlier contracts, made with the tasks: the 001 campaign gains audienceType SEGMENT
+    with segmentId; the 001 contact list takes segmentId and leadSource and returns leadSource; the
+    001 POST /auth/login may answer {next}; the 001 variable mapping gains source "global"; the 005
+    POST /drips/{id}/enrolments accepts {segmentId} and then answers 202 with a BulkAction.
+servers:
+  - url: /api
+security:
+  - sessionCookie: []
+tags:
+  - name: segments
+  - name: bulk-actions
+  - name: contacts-export
+  - name: auto-tags
+  - name: global-attributes
+  - name: keyword-replies
+  - name: date-automations
+  - name: two-factor
+  - name: sign-in
+  - name: business-profile
+  - name: oba-checklist
+paths:
+  /segments:
+    get:
+      tags: [segments]
+      summary: Saved segments (without counts; ask each count separately)
+      x-permission: contacts.view
+      responses:
+        '200': { description: Segments, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/Segment' } } } } } } }
+    post:
+      tags: [segments]
+      summary: Save a segment (FR-001, FR-002)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SegmentInput' } } } }
+      responses:
+        '201': { description: Saved, content: { application/json: { schema: { $ref: '#/components/schemas/Segment' } } } }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /segments/preview:
+    post:
+      tags: [segments]
+      summary: Counts and a sample for rules being edited (FR-003); broken rules are listed, not refused
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [rules], properties: { rules: { $ref: '#/components/schemas/SegmentRules' } } } } } }
+      responses:
+        '200': { description: Counts and sample, content: { application/json: { schema: { $ref: '#/components/schemas/SegmentPreview' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /segments/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [segments]
+      summary: One segment
+      x-permission: contacts.view
+      responses:
+        '200': { description: Segment, content: { application/json: { schema: { $ref: '#/components/schemas/Segment' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [segments]
+      summary: Change a segment
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/SegmentInput' } } } }
+      responses:
+        '200': { description: Changed, content: { application/json: { schema: { $ref: '#/components/schemas/Segment' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [segments]
+      summary: Delete a segment that no unfinished campaign uses
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'SEGMENT_IN_USE, with the campaigns in details', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /segments/{id}/count:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [segments]
+      summary: How many contacts match now, and how many can get marketing messages
+      x-permission: contacts.view
+      responses:
+        '200': { description: Counts, content: { application/json: { schema: { $ref: '#/components/schemas/SegmentCount' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /segments/{id}/copy:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [segments]
+      summary: Copy a segment under a new name
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [name], properties: { name: { type: string, minLength: 1, maxLength: 80 } } } } } }
+      responses:
+        '201': { description: Copied, content: { application/json: { schema: { $ref: '#/components/schemas/Segment' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /contacts/bulk-actions:
+    get:
+      tags: [bulk-actions]
+      summary: The last 50 bulk actions
+      x-permission: contacts.view
+      responses:
+        '200': { description: Actions, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/BulkAction' } } } } } } }
+    post:
+      tags: [bulk-actions]
+      summary: Add or remove tags on chosen contacts, a filter or a segment (FR-008, FR-009; audited)
+      x-permission: contacts.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BulkTagInput' } } } }
+      responses:
+        '202': { description: Queued, content: { application/json: { schema: { $ref: '#/components/schemas/BulkAction' } } } }
+        '404': { description: 'SEGMENT_NOT_FOUND or TAG_NOT_FOUND', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /contacts/bulk-actions/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [bulk-actions]
+      summary: Progress and result of one bulk action
+      x-permission: contacts.view
+      responses:
+        '200': { description: Action, content: { application/json: { schema: { $ref: '#/components/schemas/BulkAction' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /contacts/export.csv:
+    get:
+      tags: [contacts-export]
+      summary: Streamed CSV of a segment, the list's filter or everyone (FR-013; audited as data.exported)
+      x-permission: data.export
+      parameters:
+        - { name: segmentId, in: query, schema: { type: string, format: uuid } }
+        - { name: search, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: tag, in: query, schema: { type: string } }
+        - { name: consent, in: query, schema: { type: string, enum: [OPTED_IN, OPTED_OUT, UNKNOWN] } }
+        - { name: leadSource, in: query, schema: { $ref: '#/components/schemas/LeadSourceKind' } }
+      responses:
+        '200': { description: 'CSV: name, phone, tags, one column per attribute, consent_status, consent_source, consent_at, lead_source, lead_source_label, added_at, last_message_at', content: { text/csv: { schema: { type: string } } } }
+        '404': { description: SEGMENT_NOT_FOUND, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: SEGMENT_BROKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /auto-tag-rules:
+    get:
+      tags: [auto-tags]
+      summary: Automatic tag rules (FR-010)
+      x-permission: settings.view
+      responses:
+        '200': { description: Rules, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/AutoTagRule' } } } } } } }
+    post:
+      tags: [auto-tags]
+      summary: Add a rule (applies to later events only)
+      x-permission: settings.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/AutoTagRuleInput' } } } }
+      responses:
+        '201': { description: Added, content: { application/json: { schema: { $ref: '#/components/schemas/AutoTagRule' } } } }
+        '409': { description: RULE_EXISTS, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /auto-tag-rules/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [auto-tags]
+      summary: Switch a rule on or off
+      x-permission: settings.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [enabled], properties: { enabled: { type: boolean } } } } } }
+      responses:
+        '200': { description: Changed, content: { application/json: { schema: { $ref: '#/components/schemas/AutoTagRule' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [auto-tags]
+      summary: Remove a rule (tags already added stay)
+      x-permission: settings.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Removed }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /global-attributes:
+    get:
+      tags: [global-attributes]
+      summary: Global attributes with their values (FR-014)
+      x-permission: contacts.view
+      responses:
+        '200': { description: Global attributes, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/GlobalAttribute' } } } } } } }
+    post:
+      tags: [global-attributes]
+      summary: Add a global attribute
+      x-permission: settings.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [key, value]
+              properties:
+                key: { type: string, pattern: '^[a-z][a-z0-9_]{0,39}$' }
+                description: { type: [string, 'null'], maxLength: 200 }
+                value: { type: string, maxLength: 1024 }
+      responses:
+        '201': { description: Added, content: { application/json: { schema: { $ref: '#/components/schemas/GlobalAttribute' } } } }
+        '409': { description: KEY_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+  /global-attributes/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    put:
+      tags: [global-attributes]
+      summary: Change the description or value (the key stays)
+      x-permission: settings.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [value]
+              properties:
+                description: { type: [string, 'null'], maxLength: 200 }
+                value: { type: string, maxLength: 1024 }
+      responses:
+        '200': { description: Changed, content: { application/json: { schema: { $ref: '#/components/schemas/GlobalAttribute' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+    delete:
+      tags: [global-attributes]
+      summary: Delete a global attribute nothing uses (FR-016)
+      x-permission: settings.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'GLOBAL_ATTRIBUTE_IN_USE, with the users in details', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /global-attributes/{id}/usage:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [global-attributes]
+      summary: Where a global attribute is used
+      x-permission: settings.manage
+      responses:
+        '200':
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [kind, id, name]
+                      properties:
+                        kind: { type: string, enum: [CAMPAIGN, SAVED_REPLY, FLOW, AI_AGENT, DATE_AUTOMATION, KEYWORD_REPLY] }
+                        id: { type: string }
+                        name: { type: string }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /settings/keyword-replies:
+    get:
+      tags: [keyword-replies]
+      summary: Replies sent after opt-in and opt-out keywords (FR-017)
+      x-permission: settings.view
+      responses:
+        '200': { description: Replies, content: { application/json: { schema: { $ref: '#/components/schemas/KeywordReplies' } } } }
+    put:
+      tags: [keyword-replies]
+      summary: Change the replies (audited)
+      x-permission: settings.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/KeywordReplies' } } } }
+      responses:
+        '200': { description: Changed, content: { application/json: { schema: { $ref: '#/components/schemas/KeywordReplies' } } } }
+        '422': { description: 'VALIDATION_FAILED or TEMPLATE_NOT_UTILITY', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /date-automations:
+    get:
+      tags: [date-automations]
+      summary: Date automations with their last 7 days (FR-020, FR-024)
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Automations, content: { application/json: { schema: { type: object, required: [items], properties: { items: { type: array, items: { $ref: '#/components/schemas/DateAutomation' } } } } } } }
+    post:
+      tags: [date-automations]
+      summary: Create a date automation (it starts OFF)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DateAutomationInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/DateAutomation' } } } }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: 'VALIDATION_FAILED, ATTRIBUTE_NOT_DATE or VARIABLES_UNMAPPED', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /date-automations/preview:
+    post:
+      tags: [date-automations]
+      summary: How many contacts are due on each of the next 7 days for a date rule
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [attributeKey, timing, offsetDays]
+              properties:
+                attributeKey: { type: string }
+                timing: { type: string, enum: [YEARLY, ONCE] }
+                offsetDays: { type: integer, minimum: -30, maximum: 30 }
+      responses:
+        '200': { description: Due counts, content: { application/json: { schema: { type: object, required: [days], properties: { days: { type: array, items: { type: object, required: [date, due], properties: { date: { type: string, format: date }, due: { type: integer } } } } } } } } }
+        '422': { description: 'VALIDATION_FAILED or ATTRIBUTE_NOT_DATE', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /date-automations/{id}:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [date-automations]
+      summary: One date automation
+      x-permission: campaigns.view
+      responses:
+        '200': { description: Automation, content: { application/json: { schema: { $ref: '#/components/schemas/DateAutomation' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [date-automations]
+      summary: Change a date automation (applies from the next run)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/DateAutomationInput' } } } }
+      responses:
+        '200': { description: Changed, content: { application/json: { schema: { $ref: '#/components/schemas/DateAutomation' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NAME_TAKEN, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: 'VALIDATION_FAILED, ATTRIBUTE_NOT_DATE or VARIABLES_UNMAPPED', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      tags: [date-automations]
+      summary: Delete a date automation (its results go with it)
+      x-permission: campaigns.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /date-automations/{id}/switch:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [date-automations]
+      summary: Switch on, off, or resume after a pause (FR-023; resuming never sends past days)
+      x-permission: campaigns.launch
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [on], properties: { on: { type: boolean } } } } } }
+      responses:
+        '200': { description: Switched, content: { application/json: { schema: { $ref: '#/components/schemas/DateAutomation' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: 'TEMPLATE_NOT_APPROVED, NUMBER_NOT_CONNECTED or SENDING_OFF', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /date-automations/{id}/results:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [date-automations]
+      summary: Results per due day (FR-024)
+      x-permission: campaigns.view
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date } }
+        - { name: to, in: query, schema: { type: string, format: date } }
+      responses:
+        '200': { description: Results, content: { application/json: { schema: { type: object, required: [days], properties: { days: { type: array, items: { $ref: '#/components/schemas/AutomationDay' } } } } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { description: RANGE_INVALID, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /date-automations/{id}/recipients:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [date-automations]
+      summary: The contacts due on one day and what happened (phones masked by role)
+      x-permission: campaigns.view
+      parameters:
+        - { name: date, in: query, required: true, schema: { type: string, format: date } }
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PageSize' }
+      responses:
+        '200':
+          description: Recipients
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  total: { type: integer }
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [contactId, name, phone, status]
+                      properties:
+                        contactId: { type: string, format: uuid }
+                        name: { type: [string, 'null'] }
+                        phone: { type: string }
+                        status: { type: string, enum: [PENDING, SENT, SKIPPED, FAILED] }
+                        reason: { type: [string, 'null'] }
+                        messageStatus: { type: [string, 'null'], description: 001 message status when sent }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /settings/security:
+    get:
+      tags: [two-factor]
+      summary: Whether 2FA is required, and each member's 2FA state
+      x-permission: users.manage
+      responses:
+        '200': { description: Security settings, content: { application/json: { schema: { $ref: '#/components/schemas/SecuritySettings' } } } }
+    put:
+      tags: [two-factor]
+      summary: Require 2FA for everyone, or stop requiring it (audited)
+      x-permission: users.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, additionalProperties: false, required: [require2fa], properties: { require2fa: { type: boolean } } } } } }
+      responses:
+        '200': { description: Changed, content: { application/json: { schema: { $ref: '#/components/schemas/SecuritySettings' } } } }
+  /users/{id}/2fa/reset:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [two-factor]
+      summary: Reset another member's 2FA and end their sessions (FR-029; audited)
+      x-permission: users.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '204': { description: Reset }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: CANNOT_RESET_SELF, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /me/2fa:
+    get:
+      tags: [two-factor]
+      summary: The signed-in member's 2FA state
+      responses:
+        '200': { description: State, content: { application/json: { schema: { $ref: '#/components/schemas/MyTwoFactor' } } } }
+  /me/2fa/setup:
+    post:
+      tags: [two-factor]
+      summary: Start setup; a new secret replaces an unconfirmed one
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      responses:
+        '200': { description: The secret to add to an authenticator app, content: { application/json: { schema: { $ref: '#/components/schemas/TwoFactorSetup' } } } }
+        '409': { description: ALREADY_ENABLED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /me/2fa/confirm:
+    post:
+      tags: [two-factor]
+      summary: Confirm setup with a code; returns the recovery codes once (audited)
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CodeInput' } } } }
+      responses:
+        '200': { description: Enabled, content: { application/json: { schema: { $ref: '#/components/schemas/RecoveryCodes' } } } }
+        '409': { description: 'NO_SETUP or ALREADY_ENABLED', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: INVALID_CODE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /me/2fa/disable:
+    post:
+      tags: [two-factor]
+      summary: Turn 2FA off with a current code (refused while required; audited)
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CodeInput' } } } }
+      responses:
+        '204': { description: Turned off }
+        '409': { description: 'TWO_FACTOR_REQUIRED or NOT_ENABLED', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: INVALID_CODE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /me/2fa/recovery-codes:
+    post:
+      tags: [two-factor]
+      summary: Make 10 new recovery codes with a current code (old ones stop working; audited)
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CodeInput' } } } }
+      responses:
+        '200': { description: New codes, content: { application/json: { schema: { $ref: '#/components/schemas/RecoveryCodes' } } } }
+        '409': { description: NOT_ENABLED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: INVALID_CODE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /auth/login/code:
+    post:
+      tags: [sign-in]
+      summary: Second sign-in step with an app code or a recovery code (contracts/login-2fa.md)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              minProperties: 1
+              maxProperties: 1
+              properties:
+                code: { type: string, pattern: '^[0-9]{6}$' }
+                recoveryCode: { type: string, minLength: 10, maxLength: 11 }
+      responses:
+        '200': { description: 'Signed in; sets the sid and csrf cookies and clears sid_2fa (001 User)', content: { application/json: { schema: { type: object, required: [id, email, role], properties: { id: { type: string, format: uuid }, email: { type: string }, role: { type: string } } } } } }
+        '401': { description: PENDING_SIGN_IN_EXPIRED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: INVALID_CODE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '429': { description: 'SECOND_STEP_LOCKED, with Retry-After', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /auth/login/setup:
+    post:
+      tags: [sign-in]
+      summary: Start the 2FA setup required at sign-in (pending sign-in cookie)
+      security: []
+      responses:
+        '200': { description: The secret, content: { application/json: { schema: { $ref: '#/components/schemas/TwoFactorSetup' } } } }
+        '401': { description: PENDING_SIGN_IN_EXPIRED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /auth/login/setup/confirm:
+    post:
+      tags: [sign-in]
+      summary: Confirm the required setup; signs in and returns the recovery codes once
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CodeInput' } } } }
+      responses:
+        '200': { description: 'Signed in, with the recovery codes', content: { application/json: { schema: { $ref: '#/components/schemas/RecoveryCodes' } } } }
+        '401': { description: PENDING_SIGN_IN_EXPIRED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: INVALID_CODE, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '429': { description: 'SECOND_STEP_LOCKED, with Retry-After', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /numbers/{id}/business-profile:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    get:
+      tags: [business-profile]
+      summary: The profile, display name status, quality rating and messaging limit as Meta holds them (FR-031, FR-032)
+      x-permission: numbers.view
+      responses:
+        '200': { description: Profile, content: { application/json: { schema: { $ref: '#/components/schemas/BusinessProfile' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NUMBER_NOT_CONNECTED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '502': { description: 'META_UNAVAILABLE or META_REFUSED, with Meta''s message in details', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    put:
+      tags: [business-profile]
+      summary: Change profile fields; only changed fields are sent to Meta (audited)
+      x-permission: numbers.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BusinessProfileInput' } } } }
+      responses:
+        '200': { description: The profile as Meta now returns it, content: { application/json: { schema: { $ref: '#/components/schemas/BusinessProfile' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NUMBER_NOT_CONNECTED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+        '502': { description: 'META_UNAVAILABLE or META_REFUSED, with Meta''s message in details', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /numbers/{id}/business-profile/picture:
+    parameters: [{ $ref: '#/components/parameters/Id' }]
+    post:
+      tags: [business-profile]
+      summary: Upload a new profile picture (JPEG or PNG, square, 192 px or more, up to 5 MB)
+      x-permission: numbers.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { type: object, required: [file], properties: { file: { type: string, format: binary } } }
+      responses:
+        '200': { description: The profile as Meta now returns it, content: { application/json: { schema: { $ref: '#/components/schemas/BusinessProfile' } } } }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { description: NUMBER_NOT_CONNECTED, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '422': { description: PICTURE_RULES, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '502': { description: 'META_UNAVAILABLE or META_REFUSED', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /oba-checklist:
+    get:
+      tags: [oba-checklist]
+      summary: The blue tick checklist with its steps and progress (FR-033)
+      x-permission: numbers.view
+      responses:
+        '200': { description: Checklist, content: { application/json: { schema: { $ref: '#/components/schemas/ObaChecklist' } } } }
+    put:
+      tags: [oba-checklist]
+      summary: Mark steps and record the application (audited)
+      x-permission: numbers.manage
+      security: [{ sessionCookie: [], csrfHeader: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                steps: { type: object, additionalProperties: { type: boolean }, description: 'stepId → done' }
+                appliedAt: { type: [string, 'null'], format: date }
+                result: { type: [string, 'null'], enum: [PENDING, APPROVED, DECLINED, null] }
+                note: { type: [string, 'null'], maxLength: 500 }
+      responses:
+        '200': { description: Checklist, content: { application/json: { schema: { $ref: '#/components/schemas/ObaChecklist' } } } }
+        '422': { $ref: '#/components/responses/ValidationFailed' }
+components:
+  securitySchemes:
+    sessionCookie: { type: apiKey, in: cookie, name: sid }
+    csrfHeader: { type: apiKey, in: header, name: X-CSRF-Token }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: pageSize, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+  responses:
+    NotFound:
+      description: Not found
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationFailed:
+      description: VALIDATION_FAILED, with field details
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, examples: [VALIDATION_FAILED, NAME_TAKEN, SEGMENT_IN_USE, SEGMENT_BROKEN, KEY_TAKEN, GLOBAL_ATTRIBUTE_IN_USE, TEMPLATE_NOT_UTILITY, INVALID_CODE, SECOND_STEP_LOCKED, META_REFUSED] }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: object, properties: { field: { type: string }, issue: { type: string } } }
+        requestId: { type: string }
+    LeadSourceKind: { type: string, enum: [UNKNOWN, ORGANIC, API, IMPORT, CAMPAIGN_UPLOAD, CHAT_LINK, AD, LEAD_FORM, FORM, WEBSITE_BUTTON, STORE, CUSTOM] }
+    SegmentRule:
+      type: object
+      description: 'One rule (research R1). kind selects the other fields.'
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [tag, attr, consent, lead_source, added, last_inbound, blocked, behaviour] }
+        tag: { type: string, description: tag name (kind tag) }
+        has: { type: boolean, description: 'kind tag: true has, false has not' }
+        attr: { type: string, description: attribute key (kind attr) }
+        op: { type: string, description: '001 operators by type, plus is_empty and is_not_empty' }
+        value: { description: 'value for attr, added (date) and last_inbound / added windows (days)' }
+        statuses: { type: array, items: { type: string, enum: [OPTED_IN, OPTED_OUT, UNKNOWN] } }
+        sources: { type: array, items: { $ref: '#/components/schemas/LeadSourceKind' } }
+        within: { type: boolean, description: 'kind last_inbound: true within the window, false not within' }
+        days: { type: integer, minimum: 1, maximum: 365 }
+        before: { type: string, format: date }
+        after: { type: string, format: date }
+        blocked: { type: boolean }
+        event: { type: string, enum: [sent, delivered, read, replied, clicked, failed] }
+        did: { type: boolean, description: 'kind behaviour: false for "did not"' }
+        campaignId: { type: string, format: uuid, description: 'kind behaviour: one campaign, or omit and give days 7, 30 or 90' }
+    SegmentRules:
+      type: object
+      required: [groups]
+      properties:
+        groups:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items:
+            type: object
+            required: [match, rules]
+            properties:
+              match: { type: string, enum: [all, any] }
+              rules: { type: array, minItems: 1, maxItems: 30, items: { $ref: '#/components/schemas/SegmentRule' } }
+    SegmentInput:
+      type: object
+      additionalProperties: false
+      required: [name, rules]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        description: { type: [string, 'null'], maxLength: 300 }
+        rules: { $ref: '#/components/schemas/SegmentRules' }
+    Segment:
+      type: object
+      required: [id, name, rules, broken, usedBy, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: [string, 'null'] }
+        rules: { $ref: '#/components/schemas/SegmentRules' }
+        broken: { type: array, items: { $ref: '#/components/schemas/BrokenRule' } }
+        usedBy: { type: array, items: { type: object, required: [id, name, state], properties: { id: { type: string, format: uuid }, name: { type: string }, state: { type: string } } }, description: Unfinished campaigns using it }
+        createdBy: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    BrokenRule:
+      type: object
+      required: [group, rule, issue]
+      properties:
+        group: { type: integer }
+        rule: { type: integer }
+        issue: { type: string, enum: [TAG_MISSING, ATTRIBUTE_MISSING, CAMPAIGN_MISSING] }
+    SegmentCount:
+      type: object
+      required: [count, marketable, broken]
+      properties:
+        count: { type: integer }
+        marketable: { type: integer, description: 'Opted in, not blocked, valid' }
+        broken: { type: array, items: { $ref: '#/components/schemas/BrokenRule' } }
+    SegmentPreview:
+      type: object
+      required: [count, marketable, broken, sample]
+      properties:
+        count: { type: integer }
+        marketable: { type: integer }
+        broken: { type: array, items: { $ref: '#/components/schemas/BrokenRule' } }
+        sample: { type: array, maxItems: 20, items: { type: object, required: [id, name, phone], properties: { id: { type: string, format: uuid }, name: { type: [string, 'null'] }, phone: { type: string, description: Masked unless phones.full } } } }
+    BulkTagInput:
+      type: object
+      additionalProperties: false
+      required: [kind, tagIds, selection]
+      properties:
+        kind: { type: string, enum: [TAG_ADD, TAG_REMOVE] }
+        tagIds: { type: array, minItems: 1, maxItems: 20, items: { type: string, format: uuid } }
+        selection: { $ref: '#/components/schemas/Selection' }
+    Selection:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      maxProperties: 1
+      properties:
+        contactIds: { type: array, minItems: 1, maxItems: 10000, items: { type: string, format: uuid } }
+        filter: { type: object, description: 'The contact list filter (search, tag, consent, leadSource)' }
+        segmentId: { type: string, format: uuid }
+    BulkAction:
+      type: object
+      required: [id, kind, status, processed, changed, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [TAG_ADD, TAG_REMOVE, DRIP_ENROL] }
+        status: { type: string, enum: [QUEUED, RUNNING, DONE, FAILED] }
+        total: { type: [integer, 'null'] }
+        processed: { type: integer }
+        changed: { type: integer }
+        result: { type: [object, 'null'], description: 'DRIP_ENROL: enrolled, skippedOptedOut, skippedAlreadyIn, skippedNotFound' }
+        error: { type: [string, 'null'] }
+        createdBy: { type: [string, 'null'] }
+        createdAt: { type: string, format: date-time }
+        finishedAt: { type: [string, 'null'], format: date-time }
+    AutoTagRuleInput:
+      type: object
+      additionalProperties: false
+      required: [event, tagId]
+      properties:
+        event: { type: string, enum: [CONTACT_CREATED, CAMPAIGN_REPLY, LINK_CLICK, OPTED_IN, OPTED_OUT] }
+        leadSource: { $ref: '#/components/schemas/LeadSourceKind' }
+        tagId: { type: string, format: uuid }
+    AutoTagRule:
+      type: object
+      required: [id, event, tagId, tagName, enabled, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        event: { type: string, enum: [CONTACT_CREATED, CAMPAIGN_REPLY, LINK_CLICK, OPTED_IN, OPTED_OUT] }
+        leadSource: { oneOf: [{ $ref: '#/components/schemas/LeadSourceKind' }, { type: 'null' }] }
+        tagId: { type: string, format: uuid }
+        tagName: { type: string }
+        enabled: { type: boolean }
+        createdAt: { type: string, format: date-time }
+    GlobalAttribute:
+      type: object
+      required: [id, key, value, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        key: { type: string }
+        description: { type: [string, 'null'] }
+        value: { type: string }
+        updatedBy: { type: [string, 'null'] }
+        updatedAt: { type: string, format: date-time }
+    KeywordReply:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [NONE, TEXT, TEMPLATE] }
+        text: { type: [string, 'null'], maxLength: 1024 }
+        templateId: { type: [string, 'null'], format: uuid, description: An approved UTILITY template }
+        variables: { type: object, description: '001 VariableMapping (field, attribute, static or global sources)' }
+    KeywordReplies:
+      type: object
+      required: [optOut, optIn]
+      properties:
+        optOut: { $ref: '#/components/schemas/KeywordReply' }
+        optIn: { $ref: '#/components/schemas/KeywordReply' }
+    DateAutomationInput:
+      type: object
+      additionalProperties: false
+      required: [name, attributeKey, timing, offsetDays, sendTime, numberId, templateId, variableMapping]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        attributeKey: { type: string, description: A DATE attribute }
+        timing: { type: string, enum: [YEARLY, ONCE] }
+        offsetDays: { type: integer, minimum: -30, maximum: 30, description: Negative is before the date }
+        sendTime: { type: string, pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$', description: Company time zone }
+        numberId: { type: string, format: uuid }
+        templateId: { type: string, format: uuid }
+        variableMapping: { type: object, description: '001 VariableMapping (field, attribute, static or global sources)' }
+    DateAutomation:
+      type: object
+      required: [id, name, attributeKey, timing, offsetDays, sendTime, numberId, templateId, variableMapping, status, last7Days, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        attributeKey: { type: string }
+        timing: { type: string, enum: [YEARLY, ONCE] }
+        offsetDays: { type: integer }
+        sendTime: { type: string }
+        numberId: { type: string, format: uuid }
+        numberLabel: { type: string }
+        templateId: { type: string, format: uuid }
+        templateName: { type: string }
+        variableMapping: { type: object }
+        status: { type: string, enum: [OFF, ON, PAUSED] }
+        pausedReason: { type: [string, 'null'], enum: [TEMPLATE_NOT_APPROVED, NUMBER_DISCONNECTED, SENDING_OFF, null] }
+        last7Days: { type: object, required: [sent, failed, skipped], properties: { sent: { type: integer }, failed: { type: integer }, skipped: { type: integer } } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    AutomationDay:
+      type: object
+      required: [date, due, sent, delivered, read, replied, failed, skipped]
+      properties:
+        date: { type: string, format: date }
+        due: { type: integer }
+        sent: { type: integer }
+        delivered: { type: integer }
+        read: { type: integer }
+        replied: { type: integer }
+        failed: { type: integer }
+        skipped: { type: object, additionalProperties: { type: integer }, description: 'reason → count (opted_out, blocked, invalid, no_date, missing_value, not_opted_in, too_late)' }
+    SecuritySettings:
+      type: object
+      required: [require2fa, members]
+      properties:
+        require2fa: { type: boolean }
+        members:
+          type: array
+          items:
+            type: object
+            required: [userId, name, email, role, twoFactorEnabled]
+            properties:
+              userId: { type: string, format: uuid }
+              name: { type: [string, 'null'] }
+              email: { type: string }
+              role: { type: string, enum: [ADMIN, MANAGER, AGENT] }
+              twoFactorEnabled: { type: boolean }
+              enabledAt: { type: [string, 'null'], format: date-time }
+    MyTwoFactor:
+      type: object
+      required: [enabled, required, recoveryCodesLeft]
+      properties:
+        enabled: { type: boolean }
+        enabledAt: { type: [string, 'null'], format: date-time }
+        required: { type: boolean, description: The company requires 2FA }
+        recoveryCodesLeft: { type: integer, minimum: 0, maximum: 10 }
+    TwoFactorSetup:
+      type: object
+      required: [secret, otpauthUrl, qrSvg]
+      properties:
+        secret: { type: string, description: 'base32, to type into the app' }
+        otpauthUrl: { type: string }
+        qrSvg: { type: string }
+    CodeInput:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code: { type: string, pattern: '^[0-9]{6}$' }
+    RecoveryCodes:
+      type: object
+      required: [recoveryCodes]
+      properties:
+        recoveryCodes: { type: array, minItems: 10, maxItems: 10, items: { type: string } }
+    BusinessProfileInput:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        about: { type: string, minLength: 1, maxLength: 139 }
+        address: { type: string, maxLength: 256 }
+        description: { type: string, maxLength: 512 }
+        email: { type: string, format: email, maxLength: 128 }
+        websites: { type: array, maxItems: 2, items: { type: string, maxLength: 256, pattern: '^https?://' } }
+        vertical: { type: string, enum: ['', ALCOHOL, APPAREL, AUTO, BEAUTY, EDU, ENTERTAIN, EVENT_PLAN, FINANCE, GOVT, GROCERY, HEALTH, HOTEL, NONPROFIT, ONLINE_GAMBLING, OTC_DRUGS, OTHER, PHYSICAL_GAMBLING, PROF_SERVICES, RESTAURANT, RETAIL, TRAVEL] }
+    BusinessProfile:
+      type: object
+      required: [numberId, about, address, description, email, websites, vertical, profilePictureUrl, verifiedName, nameStatus, newNameStatus, qualityRating, messagingLimit, readAt]
+      properties:
+        numberId: { type: string, format: uuid }
+        about: { type: [string, 'null'] }
+        address: { type: [string, 'null'] }
+        description: { type: [string, 'null'] }
+        email: { type: [string, 'null'] }
+        websites: { type: array, items: { type: string } }
+        vertical: { type: [string, 'null'] }
+        profilePictureUrl: { type: [string, 'null'] }
+        verifiedName: { type: [string, 'null'] }
+        nameStatus: { type: [string, 'null'], description: 'APPROVED, DECLINED, EXPIRED, PENDING_REVIEW or NONE' }
+        newNameStatus: { type: [string, 'null'], description: Only for a requested name change }
+        qualityRating: { type: [string, 'null'] }
+        messagingLimit: { type: [string, 'null'], description: 'whatsapp_business_manager_messaging_limit (shared by the business portfolio)' }
+        readAt: { type: string, format: date-time }
+        changedAt: { type: [string, 'null'], format: date-time }
+    ObaChecklist:
+      type: object
+      required: [steps, appliedAt, result, note, checkedAt]
+      properties:
+        steps:
+          type: array
+          items:
+            type: object
+            required: [id, title, body, links, done]
+            properties:
+              id: { type: string }
+              title: { type: string }
+              body: { type: string }
+              links: { type: array, items: { type: object, required: [label, url], properties: { label: { type: string }, url: { type: string } } } }
+              done: { type: boolean }
+              at: { type: [string, 'null'], format: date-time }
+        appliedAt: { type: [string, 'null'], format: date }
+        result: { type: [string, 'null'], enum: [PENDING, APPROVED, DECLINED, null] }
+        note: { type: [string, 'null'] }
+        checkedAt: { type: string, format: date, description: When the steps were last checked against Meta's pages }

@@ -16,6 +16,22 @@ import { RetargetService } from './campaigns/retarget.service.js';
 import { ScheduleService } from './campaigns/schedule.service.js';
 import { AttributesController } from './contacts/attributes.controller.js';
 import { AudienceQueryBuilder } from './contacts/audience-query.builder.js';
+import { AutoTagsController } from './contacts/auto-tags.controller.js';
+import { GlobalAttributesController } from './settings/global-attributes.controller.js';
+import { KeywordRepliesController, KeywordRepliesService } from './settings/keyword-replies.js';
+import { DateAutomationsController } from './automations/date-automations.controller.js';
+import { DateAutomationsService } from './automations/date-automations.service.js';
+import { BusinessProfileController, ObaChecklistController } from './numbers/business-profile.controller.js';
+import { BusinessProfileService } from './numbers/business-profile.service.js';
+import { ObaChecklistService } from './numbers/oba-checklist.service.js';
+import { GlobalAttributesService } from './settings/global-attributes.service.js';
+import { AutoTagService } from './contacts/auto-tags.service.js';
+import { BulkActionsController } from './contacts/bulk-actions.controller.js';
+import { ContactsExportController } from './contacts/contacts-export.controller.js';
+import { BulkActionsService } from './contacts/bulk-actions.service.js';
+import { SegmentQueryBuilder } from './contacts/segment-query.builder.js';
+import { SegmentsController } from './contacts/segments.controller.js';
+import { SegmentsService } from './contacts/segments.service.js';
 import { ConsentService } from './contacts/consent.service.js';
 import { ContactsController } from './contacts/contacts.controller.js';
 import { ContactsService } from './contacts/contacts.service.js';
@@ -90,6 +106,16 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     IdempotentResponses,
     PublicApiService,
     QueueDepthCollector,
+    // Feature 010: segments, bulk actions, automatic tags and global attributes.
+    SegmentQueryBuilder,
+    SegmentsService,
+    BulkActionsService,
+    AutoTagService,
+    GlobalAttributesService,
+    KeywordRepliesService,
+    DateAutomationsService,
+    BusinessProfileService,
+    ObaChecklistService,
   ],
   exports: [
     NumbersService,
@@ -122,6 +148,15 @@ import { InvitationsController, UsersController, UsersService } from './users/us
     IdempotencyService,
     IdempotentResponses,
     PublicApiService,
+    SegmentQueryBuilder,
+    SegmentsService,
+    BulkActionsService,
+    AutoTagService,
+    GlobalAttributesService,
+    KeywordRepliesService,
+    DateAutomationsService,
+    BusinessProfileService,
+    ObaChecklistService,
   ],
 })
 export class DomainModule {}
@@ -142,7 +177,17 @@ export class DomainModule {}
     CampaignMessagesController,
     ImportsController,
     ContactDeletionController,
+    // Feature 010: before ContactsController, whose GET /contacts/:id would catch these paths.
+    BulkActionsController,
+    ContactsExportController,
     ContactsController,
+    SegmentsController,
+    AutoTagsController,
+    GlobalAttributesController,
+    KeywordRepliesController,
+    DateAutomationsController,
+    BusinessProfileController,
+    ObaChecklistController,
     TagsController,
     AttributesController,
     RateCardController,

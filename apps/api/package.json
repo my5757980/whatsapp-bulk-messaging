@@ -17,7 +17,10 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "inbox:age": "tsx scripts/inbox-age.ts"
+    "inbox:age": "tsx scripts/inbox-age.ts",
+    "auth:reset-2fa": "tsx scripts/reset-2fa.ts",
+    "tool:totp": "tsx scripts/totp.ts",
+    "perf:segments": "PERF_SEGMENTS=1 vitest run --project integration test/integration/segments-perf.int-spec.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.6.0",

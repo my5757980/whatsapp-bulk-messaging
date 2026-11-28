@@ -523,6 +523,83 @@ Feature 009 ([spec](specs/009-templates-growth/spec.md), [quickstart](specs/009-
   `WbmOtpFailing` fires when more than 20% of codes fail in 15 minutes (at least 10 sent), and
   `WbmOtpSlow` when the p95 from the request to Meta's acceptance is above 5 seconds for 10 minutes.
 
+## Contacts, settings and security
+
+Feature 010 ([spec](specs/010-contacts-settings-security/spec.md), [quickstart](specs/010-contacts-settings-security/quickstart.md),
+[contract](specs/010-contacts-settings-security/contracts/contacts-settings-api.openapi.yaml)).
+
+- **Segments:** *Contacts → Segments* saves rule groups (all or any) over tags, attributes, consent,
+  lead source, when a contact was added, the last message from them, blocking, and campaign behaviour
+  (sent, delivered, read, replied with the 009 definition, clicked, failed) for one campaign or the last
+  7, 30 or 90 days. Members are worked out when used, never stored.
+  - The preview counts members and how many can get marketing, with a sample; counts are cached 10
+    seconds and stop after 10 seconds.
+  - Campaigns (audience *Segment*) and drip enrolments read the segment at launch or enrolment. A rule
+    that names a deleted tag, attribute or campaign marks the segment *broken*, and campaigns refuse it
+    (`SEGMENT_BROKEN`). A segment in use cannot be deleted.
+- **Bulk tags and automatic tags:**
+  - *Tags for all matching…* and *Tags for chosen…* add or remove tags in the background, 5,000
+    contacts at a time, with progress.
+  - *Settings → Automatic tags* adds a tag when a contact is created from a lead source, replies to a
+    campaign, clicks a campaign link, or opts in or out. Rules apply from now on and never remove tags.
+- **Lead source:** every new contact keeps where it came from (wrote to us first, import, API, chat
+  link, ad, lead form, form, website button, store, campaign upload or added by hand) with an optional
+  label; the contact list shows and filters it.
+- **Export:** *Export CSV* streams the filtered list or a segment, masking phones for roles that see
+  them masked, audited as `data.exported`.
+- **Global attributes:** *Settings → Global attributes* keeps company-wide values (opening hours, a
+  support number). Map them to template variables (source *Global attribute*), or write
+  `{global:name}` in saved replies, flow messages and AI agent instructions. Messages use the value in
+  force when they are made (each process caches values 30 seconds). A campaign cannot launch while a
+  mapped value is empty (`GLOBAL_ATTRIBUTE_EMPTY`), and a value still in use cannot be deleted.
+- **Keyword replies:** *Settings → Consent keywords* sets a confirmation after an opt-out and an
+  opt-in keyword: a text, or an approved utility template with variables. It goes from the number the
+  customer wrote to, at most once a day per contact and kind, never to blocked contacts or while the
+  number's sending is off. A keyword cannot be in both lists.
+- **Date automations:** *Automations* sends a template on a date stored in a contact attribute
+  (birthday, renewal): every year on the day and month or once on the exact date, up to 30 days
+  before or after, at a set time in the company time zone.
+  - A minute tick records each due contact once (`date_automation_occurrences`), so nobody gets two
+    messages for one date; 29 February birthdays go out on 28 February in other years.
+  - Skips are counted with reasons (opted out, blocked, invalid number, no date, missing value, not
+    opted in for marketing). Messages not made on their day are *too late*.
+  - A rejected template, a disconnected number or sending turned off pauses the automation and tells
+    the admins; resuming never sends past days.
+  - Results per day show sent, delivered, read, replied, failed and skipped, with the contacts of a
+    day.
+- **Two-factor sign-in:** members turn on codes from an authenticator app in *Two-factor* (QR code
+  or key, 10 recovery codes shown once). Admins can require it for everyone in *Settings → Security*,
+  and reset a member who lost their phone (which signs them out).
+  - With 2FA, the password alone never creates a session: `POST /auth/login` answers
+    `{ "next": "CODE" }` (or `"SETUP"` when it is required but not set up) with a 5-minute pending
+    cookie, and `POST /auth/login/code` finishes the sign-in ([contract](specs/010-contacts-settings-security/contracts/login-2fa.md)).
+  - Five wrong codes lock the second step for 15 minutes. Codes, secrets and recovery codes never
+    reach logs or audit details. API keys are not affected.
+  - Operator reset from the server shell (for the only admin who lost both the phone and the codes):
+    `npm run auth:reset-2fa -w @wbm/api -- --email <email>`. `npm run tool:totp -w @wbm/api --
+    --secret <key>` prints the current code for manual checks.
+- **Business profile and blue tick:** *Settings → WhatsApp numbers → Profile* edits the WhatsApp
+  Business profile through Meta (about, description, address, email, websites, category and the
+  picture), checking Meta's limits first, and shows the display name status (with steps when it is
+  declined), the quality rating and the portfolio's messaging limit. The blue tick checklist tracks
+  Meta's eligibility steps and the application.
+- **Number guides:** the numbers page links two guides, for moving a number here and back to the
+  WhatsApp Business app; removing a number asks for the number to be typed.
+- **Permissions:** segments follow `campaigns.manage` (`contacts.view` to use them), bulk tags
+  `contacts.manage`, exports `data.export`, automatic tags, global attributes and keyword replies
+  `settings.manage`, date automations `campaigns.manage` and `campaigns.launch` to switch on, the 2FA
+  requirement and resets `users.manage`, and the profile and checklist `numbers.manage`
+  (`numbers.view` to see them).
+- **Data handling:** bulk action records are kept 90 days and date automation occurrences 12 months
+  with their messages. Deleting a contact deletes their occurrences, and exports never include
+  deleted contacts.
+- **Monitoring:** `wbm_segment_query_seconds`, `wbm_bulk_actions_total{kind,result}`,
+  `wbm_contacts_exported_total`, `wbm_keyword_replies_total{kind,result}`,
+  `wbm_date_automation_messages_total{result}`, `wbm_date_automation_behind` and
+  `wbm_login_second_step_total{result}`. The alert `WbmDateAutomationBehind` fires when occurrences
+  are still pending 30 minutes after their send time, and `WbmSecondStepFailures` when more than 30
+  sign-in codes fail in 15 minutes.
+
 ## Getting started
 
 Prerequisites: Node.js 26, npm 11 and Docker Desktop. The full walkthrough, including how to

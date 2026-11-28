@@ -7,7 +7,7 @@ import { AUDIT_ACTIONS } from '../../src/modules/audit/audit-actions.js';
 // T175: every audited action of data-model.md §1 is recorded somewhere in the code base.
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
 /** Actions listed before the code that records them exists (empty: every action is recorded). */
-const PENDING = new Set<string>();
+const PENDING = new Set<string>([]);
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {
@@ -151,6 +151,29 @@ describe('audit coverage', () => {
       'chat_widget.updated',
       'chat_widget.deleted',
       'template_sample.copied',
+      'segment.created',
+      'segment.updated',
+      'segment.deleted',
+      'contacts.bulk_tagged',
+      'auto_tag_rule.changed',
+      'global_attribute.created',
+      'global_attribute.updated',
+      'global_attribute.deleted',
+      'keyword_replies.changed',
+      'date_automation.created',
+      'date_automation.updated',
+      'date_automation.deleted',
+      'date_automation.switched',
+      'auth.2fa_enabled',
+      'auth.2fa_disabled',
+      'auth.2fa_reset',
+      'auth.2fa_recovery_used',
+      'auth.2fa_recovery_regenerated',
+      'auth.2fa_failed',
+      'auth.2fa_locked',
+      'security.2fa_required_changed',
+      'business_profile.changed',
+      'oba_checklist.changed',
     ]);
   });
 

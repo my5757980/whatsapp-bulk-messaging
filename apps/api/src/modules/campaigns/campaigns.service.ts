@@ -20,7 +20,9 @@ export const CampaignInputSchema = z
     name: z.string().trim().min(1).max(120),
     numberId: z.uuid().nullable(),
     templateId: z.uuid().nullable(),
-    audienceType: z.enum(['FILTER', 'ALL_OPTED_IN', 'UPLOAD']),
+    audienceType: z.enum(['FILTER', 'ALL_OPTED_IN', 'UPLOAD', 'SEGMENT']),
+    /** Feature 010: the saved segment of a SEGMENT audience. */
+    segmentId: z.uuid().nullable(),
     audienceFilter: AudienceFilterSchema.nullable(),
     variableMapping: VariableMappingSchema,
     headerMediaAssetId: z.uuid().nullable(),
@@ -101,13 +103,19 @@ type CampaignWithRefs = Campaign & {
 
 const iso = (d: Date | null) => d?.toISOString() ?? null;
 
+/** Feature 010: a SEGMENT audience names its segment; other audiences have none. */
+function assertSegmentAudience(audienceType: string, segmentId: string | null): void {
+  if (audienceType === 'SEGMENT' && !segmentId) throw AppError.validation('Choose a segment', [{ field: 'segmentId', issue: 'is required for a segment audience' }]);
+}
+
 export function toCampaignDto(c: CampaignWithRefs, totals?: StatusTotals) {
   return {
     id: c.id,
     name: c.name,
     ...(c.numberId ? { numberId: c.numberId } : {}),
     ...(c.templateId ? { templateId: c.templateId } : {}),
-    audienceType: c.audienceType as 'FILTER' | 'ALL_OPTED_IN' | 'UPLOAD',
+    audienceType: c.audienceType as 'FILTER' | 'ALL_OPTED_IN' | 'UPLOAD' | 'SEGMENT',
+    segmentId: c.segmentId,
     ...(c.audienceFilter ? { audienceFilter: c.audienceFilter } : {}),
     variableMapping: c.variableMapping ?? {},
     headerMediaAssetId: c.headerMediaAssetId,
@@ -241,6 +249,7 @@ export class CampaignsService {
     }
     const offer = input.offerConfig;
     if (offer && offer.code.source === 'static' ? !offer.code.value : offer ? !offer.code.key : false) details.push({ field: 'offerConfig.code', issue: 'give the code, or the column or attribute it comes from' });
+    if (input.segmentId && !(await this.prisma.segment.findUnique({ where: { id: input.segmentId }, select: { id: true } }))) details.push({ field: 'segmentId', issue: 'Segment not found' });
     if (details.length) throw AppError.validation('Request failed validation', details);
     if (input.audienceFilter) await this.audience.compile(input.audienceFilter);
   }
@@ -251,6 +260,8 @@ export class CampaignsService {
       ...(input.numberId !== undefined ? { numberId: input.numberId } : {}),
       ...(input.templateId !== undefined ? { templateId: input.templateId } : {}),
       ...(input.audienceType !== undefined ? { audienceType: input.audienceType } : {}),
+      // Feature 010: only SEGMENT audiences keep a segment (a database check enforces it).
+      ...(input.audienceType !== undefined && input.audienceType !== 'SEGMENT' ? { segmentId: null } : input.segmentId !== undefined ? { segmentId: input.segmentId } : {}),
       ...(input.audienceFilter !== undefined ? { audienceFilter: (input.audienceFilter ?? undefined) as Prisma.InputJsonValue | undefined } : {}),
       ...(input.variableMapping !== undefined ? { variableMapping: input.variableMapping as Prisma.InputJsonValue } : {}),
       ...(input.headerMediaAssetId !== undefined ? { headerMediaAssetId: input.headerMediaAssetId } : {}),
@@ -262,6 +273,7 @@ export class CampaignsService {
   }
 
   async create(input: CampaignInput & { name: string }, userId: string) {
+    assertSegmentAudience(input.audienceType ?? 'UPLOAD', input.segmentId ?? null);
     await this.assertRefs(input);
     const campaign = await this.prisma.campaign.create({
       data: { ...this.data(input), name: input.name, audienceType: input.audienceType ?? 'UPLOAD', createdById: userId },
@@ -273,6 +285,7 @@ export class CampaignsService {
   async update(id: string, input: CampaignInput) {
     const campaign = await this.getRow(id);
     if (campaign.state !== 'DRAFT') throw AppError.conflict('Only draft campaigns can be edited');
+    assertSegmentAudience(input.audienceType ?? campaign.audienceType, input.segmentId !== undefined ? input.segmentId : campaign.segmentId);
     await this.assertRefs(input);
     const updated = await this.prisma.campaign.update({ where: { id }, data: this.data(input), include: REFS });
     return toCampaignDto(updated, emptyTotals());

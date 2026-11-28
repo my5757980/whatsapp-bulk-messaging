@@ -410,6 +410,34 @@ describe('Retention', () => {
     expect(await ctx.prisma.message.findUnique({ where: { id: recent.id } })).not.toBeNull();
   });
 
+  it('deletes bulk actions after 90 days, and date automation occurrences with their messages after 12 months (010 T084)', async () => {
+    const number = await seedNumber(ctx);
+    const template = await seedTemplate(ctx, number.wabaId);
+    const contact = await seedContact(ctx, uaePhone());
+    const action = (daysAgo: number) =>
+      ctx.prisma.bulkAction.create({ data: { kind: 'TAG_ADD', params: { tagIds: [] }, selection: { contactIds: [] }, status: 'DONE', createdAt: new Date(Date.now() - daysAgo * DAY) } });
+    const [oldAction, newAction] = [await action(91), await action(89)];
+    const automation = await ctx.prisma.dateAutomation.create({
+      data: { name: `Retention dates ${randomUUID().slice(0, 6)}`, attributeKey: 'birthday', timing: 'YEARLY', sendTime: '09:00', numberId: number.id, templateId: template.id, variableMapping: {} },
+    });
+    const occurrence = async (when: Date) => {
+      const message = await ctx.prisma.message.create({ data: { origin: 'DATE_AUTOMATION', contactId: contact.id, phoneE164: contact.phoneE164, recipientCountry: 'AE', numberId: number.id, templateId: template.id, status: 'DELIVERED', resolvedParams: {}, createdAt: when } });
+      const day = new Date(`${when.toISOString().slice(0, 10)}T00:00:00.000Z`);
+      return ctx.prisma.dateAutomationOccurrence.create({ data: { automationId: automation.id, contactId: contact.id, dueDate: day, status: 'SENT', messageId: message.id } });
+    };
+    const [old, recent] = [await occurrence(monthsAgo(13)), await occurrence(monthsAgo(11))];
+
+    const result = await retention.run();
+    expect(result.bulkActions).toBeGreaterThanOrEqual(1);
+    expect(result.dateOccurrences).toBeGreaterThanOrEqual(1);
+    expect(await ctx.prisma.bulkAction.findUnique({ where: { id: oldAction.id } })).toBeNull();
+    expect(await ctx.prisma.bulkAction.findUnique({ where: { id: newAction.id } })).not.toBeNull();
+    expect(await ctx.prisma.dateAutomationOccurrence.findUnique({ where: { id: old.id } })).toBeNull();
+    expect(await ctx.prisma.message.findUnique({ where: { id: old.messageId! } })).toBeNull();
+    expect(await ctx.prisma.dateAutomationOccurrence.findUnique({ where: { id: recent.id } })).not.toBeNull();
+    expect(await ctx.prisma.message.findUnique({ where: { id: recent.messageId! } })).not.toBeNull();
+  });
+
   it('runs every step daily on the maintenance queue', async () => {
     expect(await retention.run()).toEqual({
       linkClicks: expect.any(Number),
@@ -446,6 +474,8 @@ describe('Retention', () => {
       paymentRequests: expect.any(Number),
       chatOrders: expect.any(Number),
       otpMessages: expect.any(Number),
+      bulkActions: expect.any(Number),
+      dateOccurrences: expect.any(Number),
     });
     const scheduler = await ctx.app.get(QueueRegistry).get(QUEUES.MAINTENANCE).getJobScheduler('retention');
     expect(scheduler?.pattern).toBe('15 3 * * *');

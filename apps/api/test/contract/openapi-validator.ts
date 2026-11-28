@@ -24,7 +24,8 @@ export type ContractFile =
   | 'commerce-api.openapi.yaml'
   | 'public-payments-v1.openapi.yaml'
   | 'templates-growth-api.openapi.yaml'
-  | 'public-otp-v1.openapi.yaml';
+  | 'public-otp-v1.openapi.yaml'
+  | 'contacts-settings-api.openapi.yaml';
 
 interface MediaTypeObject {
   schema?: object;
@@ -60,6 +61,7 @@ const FEATURE_OF: Record<ContractFile, string> = {
   'public-payments-v1.openapi.yaml': COMMERCE,
   'templates-growth-api.openapi.yaml': TEMPLATES_GROWTH,
   'public-otp-v1.openapi.yaml': TEMPLATES_GROWTH,
+  'contacts-settings-api.openapi.yaml': '010-contacts-settings-security',
 };
 const contractsDir = (file: ContractFile) => path.join(specsDir, FEATURE_OF[file], 'contracts');
 

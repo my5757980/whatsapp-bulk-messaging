@@ -13,6 +13,8 @@ import { formatNumber } from '@/lib/format';
 import { queryKeys } from '@/lib/query';
 import type { AttributeDefinition, AudienceCounts, AudienceRule, Campaign, CampaignDetail, ImportJob, Tag, Template } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { contacts010Keys, type Segment, type SegmentCount } from '@/lib/contacts-010';
+import Link from 'next/link';
 
 /** Reads the header row in the browser so the user can pick the phone and name columns. */
 async function readColumns(file: File): Promise<string[]> {
@@ -244,6 +246,8 @@ const MODES: Array<{ value: AudienceMode; label: string; hint: string }> = [
   { value: 'UPLOAD', label: 'Upload a list', hint: 'A CSV file of people who opted in' },
   { value: 'FILTER', label: 'Filter contacts', hint: 'Tags and attributes from your contacts' },
   { value: 'ALL_OPTED_IN', label: 'All opted-in contacts', hint: 'Everyone who opted in' },
+  // Feature 010 (FR-004): a saved segment, read at launch.
+  { value: 'SEGMENT', label: 'Saved segment', hint: 'A segment from Contacts' },
 ];
 
 function CountsBox({ counts, loading }: { counts: AudienceCounts | undefined; loading: boolean }) {
@@ -334,6 +338,58 @@ function AllOptedInAudience({ onBack, onDone }: { onBack: () => void; onDone: ()
   );
 }
 
+/** Feature 010 (US1, FR-004): a saved segment as the audience, with its counts now. */
+function SegmentAudience({ campaign, onBack, onDone }: { campaign: CampaignDetail; onBack: () => void; onDone: () => void }) {
+  const queryClient = useQueryClient();
+  const segments = useQuery({ queryKey: contacts010Keys.segments, queryFn: () => api<{ items: Segment[] }>('/segments') });
+  const [segmentId, setSegmentId] = useState(campaign.audienceType === 'SEGMENT' ? (campaign.segmentId ?? '') : '');
+  const count = useQuery({ queryKey: contacts010Keys.segmentCount(segmentId || 'none'), queryFn: () => api<SegmentCount>(`/segments/${segmentId}/count`), enabled: Boolean(segmentId) });
+  const choose = useMutation({
+    mutationFn: (id: string) => api<Campaign>(`/campaigns/${campaign.id}`, { method: 'PATCH', json: { audienceType: 'SEGMENT', segmentId: id } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.campaign(campaign.id) }),
+    onError: toastError,
+  });
+  return (
+    <div className="grid max-w-3xl gap-5">
+      <div className="grid gap-1.5">
+        <Label htmlFor="audience-segment">Segment</Label>
+        <NativeSelect
+          id="audience-segment"
+          value={segmentId}
+          onChange={(e) => {
+            setSegmentId(e.target.value);
+            if (e.target.value) choose.mutate(e.target.value);
+          }}
+        >
+          <option value="">Choose a segment</option>
+          {(segments.data?.items ?? []).map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </NativeSelect>
+        <p className="text-xs text-muted-foreground">
+          The members are worked out when the campaign launches. <Link href="/contacts/segments" className="underline">Manage segments</Link>
+        </p>
+      </div>
+      {count.data ? (
+        <div className="rounded-md border bg-muted/40 p-4 text-sm" data-testid="segment-audience-count">
+          {formatNumber(count.data.count)} contacts match now · {formatNumber(count.data.marketable)} can get marketing messages
+          {count.data.broken.length ? <p className="mt-1 text-destructive">The segment needs a fix before launch.</p> : null}
+        </div>
+      ) : null}
+      <div className="flex gap-2">
+        <Button variant="outline" onClick={onBack}>
+          Back
+        </Button>
+        <Button onClick={onDone} disabled={!segmentId || choose.isPending || !count.data?.count || Boolean(count.data?.broken.length)}>
+          Continue
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /** Step 2 (T109, T131): choose how recipients are selected. */
 export function AudienceStep({ campaign, onBack, onDone }: { campaign: CampaignDetail; onBack: () => void; onDone: () => void }) {
   const queryClient = useQueryClient();
@@ -349,7 +405,7 @@ export function AudienceStep({ campaign, onBack, onDone }: { campaign: CampaignD
 
   return (
     <div className="grid gap-6">
-      <fieldset className="grid max-w-3xl gap-2 sm:grid-cols-3">
+      <fieldset className="grid max-w-3xl gap-2 sm:grid-cols-4">
         <legend className="sr-only">Audience type</legend>
         {(campaign.audienceType === 'RETARGET' ? [{ value: 'RETARGET' as const, label: 'Retarget', hint: 'From an earlier campaign' }, ...MODES] : MODES).map((m) => (
           <label key={m.value} className={cn('cursor-pointer rounded-md border p-3 text-sm', mode === m.value && 'border-primary ring-1 ring-primary')}>
@@ -359,7 +415,7 @@ export function AudienceStep({ campaign, onBack, onDone }: { campaign: CampaignD
               className="sr-only"
               checked={mode === m.value}
               disabled={switchMode.isPending}
-              onChange={() => switchMode.mutate(m.value)}
+              onChange={() => (m.value === 'SEGMENT' ? setMode('SEGMENT') : switchMode.mutate(m.value))}
             />
             <div className="font-medium">{m.label}</div>
             <div className="text-xs text-muted-foreground">{m.hint}</div>
@@ -370,6 +426,7 @@ export function AudienceStep({ campaign, onBack, onDone }: { campaign: CampaignD
       {mode === 'FILTER' ? <FilterAudience campaign={campaign} onBack={onBack} onDone={onDone} /> : null}
       {mode === 'ALL_OPTED_IN' ? <AllOptedInAudience onBack={onBack} onDone={onDone} /> : null}
       {mode === 'RETARGET' ? <RetargetAudience campaign={campaign} onBack={onBack} onDone={onDone} /> : null}
+      {mode === 'SEGMENT' ? <SegmentAudience campaign={campaign} onBack={onBack} onDone={onDone} /> : null}
     </div>
   );
 }
