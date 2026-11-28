@@ -13,8 +13,14 @@ test('US8: the website chat button on a site, its counts, and the link generator
   const suffix = Date.now().toString().slice(-6);
   await signInAsAdmin(page);
   const number = await connectNumber(page, 'Widget', suffix);
-  // WhatsApp itself is not reached from CI: the chat link's redirect target is answered here.
-  await context.route('https://wa.me/**', (route) => route.fulfill({ status: 200, contentType: 'text/html', body: '<p>WhatsApp</p>' }));
+  // The chat link answers with a redirect to WhatsApp. The test reads it instead of following it: the
+  // request still reaches the api (so the open is counted) and the popup stops on this page.
+  let whatsappUrl = '';
+  await context.route(/\/l\/c\/[A-Za-z0-9]+\?/, async (route) => {
+    const answer = await route.fetch({ maxRedirects: 0 });
+    whatsappUrl = answer.headers()['location'] ?? '';
+    await route.fulfill({ status: 200, contentType: 'text/html', body: '<p>Opening WhatsApp</p>' });
+  });
 
   // 1. The designer: a product rule with its own greeting and message, and no button on the checkout.
   await page.goto('/website-button/new');
@@ -51,8 +57,12 @@ test('US8: the website chat button on a site, its counts, and the link generator
   await open.click();
   await expect(site.locator('[data-wbm-chat-button] .greeting')).toHaveText('Questions about this lamp?');
   const [popup] = await Promise.all([context.waitForEvent('page'), site.locator('[data-wbm-chat-button] .start').click()]);
-  await popup.waitForURL(/^https:\/\/wa\.me\//, { timeout: 15_000 });
-  const text = new URL(popup.url()).searchParams.get('text') ?? '';
+  await popup.waitForURL(/\/l\/c\/[A-Za-z0-9]+\?/, { timeout: 15_000 });
+  const opened = new URL(popup.url());
+  expect(opened.searchParams.get('w')).toBe(key);
+  expect(opened.searchParams.get('p')).toBe('/mock/site/products/lamp');
+  await expect.poll(() => whatsappUrl, { timeout: 15_000 }).toMatch(/^https:\/\/wa\.me\//);
+  const text = new URL(whatsappUrl).searchParams.get('text') ?? '';
   expect(text).toMatch(/^Hi, I am looking at a product.*ref [A-Z0-9]{6}/);
 
   // 3. The customer sends the message: the chat counts for the product rule.
