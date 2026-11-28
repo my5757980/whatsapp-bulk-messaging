@@ -408,7 +408,7 @@ reset a member (quickstart US6).
   - **unaffected:** API keys keep working
   - **records:** audit entries for every event, and no code, secret or recovery code in logs or audit details
 - [X] T066 [P] [US6] Write the contract cases for `/settings/security`, `/users/{id}/2fa/reset`, `/me/2fa*` and `/auth/login/*`
-- [ ] T067 [P] [US6] Write the Playwright e2e apps/web/e2e/security-us6-2fa.spec.ts:
+- [X] T067 [P] [US6] Write the Playwright e2e apps/web/e2e/security-us6-2fa.spec.ts:
   - turn on 2FA, computing codes with apps/web/e2e/totp.ts from the shown secret
   - sign out and in with a code
   - require 2FA, and sign in as a member who must set it up
@@ -455,7 +455,7 @@ tick checklist steps (quickstart US7).
   - the checklist `GET` and `PUT`
   - managers can read, only admins can change
 - [X] T075 [P] [US7] Write the contract cases for `/numbers/{id}/business-profile*` and `/oba-checklist`
-- [ ] T076 [P] [US7] Write the Playwright e2e apps/web/e2e/numbers-us7-profile.spec.ts:
+- [X] T076 [P] [US7] Write the Playwright e2e apps/web/e2e/numbers-us7-profile.spec.ts:
   - edit the profile and upload a picture
   - a refused picture
   - a `DECLINED` name status set through mock-meta
@@ -469,7 +469,7 @@ tick checklist steps (quickstart US7).
   - error mapping; audit `business_profile.changed` with field names; remove it from `PENDING`
 - [X] T078 [US7] Read the messaging limit from `whatsapp_business_manager_messaging_limit` in the 001 number sync (apps/api/src/modules/numbers/number-sync.processor.ts), keeping the `messaging_limit_tier` column
 - [X] T079 [US7] Write apps/api/src/modules/numbers/oba-checklist.service.ts and oba-checklist.controller.ts (shared steps plus the stored progress; audit `oba_checklist.changed`; remove it from `PENDING`)
-- [ ] T080 [P] [US7] Write apps/web/src/app/(dashboard)/numbers/[id]/profile/page.tsx:
+- [X] T080 [P] [US7] Write apps/web/src/app/(dashboard)/numbers/[id]/profile/page.tsx:
   - the profile form with the shared limits, and a picture upload with a square check before upload
   - name status, quality and limit badges, with the steps for declined names
   - the blue tick checklist
@@ -502,7 +502,7 @@ tick checklist steps (quickstart US7).
   - README.md: a Contacts, settings and security section
   - specs/010-contacts-settings-security/quickstart.md, if steps changed
   - docs/research/aisensy/feature-inventory-2026-11-19.md: mark items 1.3, 1.4, 1.6, 2.3, 3.2, 3.3, 3.5, 3.8, 3.9, 3.10 and 5.11; also mark the 002 and 003 rows built earlier (2.4, 2.5, 3.11, 6.1–6.11, 6.13, 6.14, 7.1, 7.2); update the roadmap
-- [ ] T089 Run every quickstart row end to end (in CI where the machine's memory does not allow it) and record the results in specs/010-contacts-settings-security/checklists/release.md, with the pre-release items:
+- [X] T089 Run every quickstart row end to end (in CI where the machine's memory does not allow it) and record the results in specs/010-contacts-settings-security/checklists/release.md, with the pre-release items:
   - **2FA:** required for admins, and the operator reset in the runbook
   - **Profile:** the real profile changed once and seen on a phone; picture limits confirmed
   - **Templates:** the birthday and keyword reply templates approved
