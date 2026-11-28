@@ -59,3 +59,10 @@ export * from './reports/ranges.js';
 export * from './templates/samples.js';
 export * from './help/template-guidelines.js';
 export * from './growth/page-rules.js';
+// Feature 010 (contacts, settings and security)
+export * from './contacts/segment-rules.js';
+export * from './contacts/lead-source.js';
+export * from './contacts/date-automation.js';
+export * from './settings/business-profile.js';
+export * from './settings/oba-checklist.js';
+export * from './settings/number-guides.js';

@@ -304,14 +304,15 @@ Each decision lists what was chosen, why, and what else was considered. Meta fac
   - **Content:** the checklist steps and both migration guides are versioned data in `@wbm/shared`
     (`settings/oba-checklist.ts`, `settings/number-guides.ts`). They are in our own words, with
     links to Meta's pages and a `checkedAt` date, like the 009 help content.
-  - **Checklist steps:**
-    - business verification
-    - an approved display name
+  - **Checklist steps** (Meta's current eligibility list, checked 2026-11-28):
+    - following the WhatsApp Business Messaging Policy
+    - the number on the platform for at least 30 days
+    - business verification of the portfolio
     - two-step verification on the number
-    - a complete business profile
-    - three or more articles about the business in well-known news sources, which are not paid or
-      promotional (from Meta's notability guidance)
-    - applying in WhatsApp Manager
+    - an approved display name
+    - applying in WhatsApp Manager; after a refusal, Meta takes a new request after 30 days
+  - **Optional steps:** a complete business profile, and public articles about the business. Older Meta
+    help pages asked for news coverage; the current developer docs do not.
   - **Progress** is one `oba_checklist` row: step states, the application date, Meta's answer and a
     note. Changes are audited.
   - The "move back to the app" guide links to the existing number removal, which asks for a typed

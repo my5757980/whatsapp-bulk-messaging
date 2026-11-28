@@ -248,9 +248,9 @@ declined names; tick the checklist steps.
    **Then** the status and, for declined names, Meta's reason and the steps to request again in
    Meta's tools are shown.
 4. **Given** the blue tick checklist, **When** an admin works through it, **Then** each step shows
-   what is needed (business verification, an approved display name, two-step verification on the
-   number, public articles about the business) with links to Meta's pages, and the admin can mark
-   steps done and record the application date and result.
+   what is needed (following the messaging policy, 30 days on the platform, business verification,
+   two-step verification on the number, an approved display name) with links to Meta's pages, and the
+   admin can mark steps done and record the application date and result.
 
 ---
 
