@@ -70,8 +70,8 @@ npm run dev                   # api, worker and web
    - Open the mock test site on `/products/lamp`: the button and greeting match the preview.
    - **Start chat**: the chat arrives with the product message, and the counts show one open on
      `/products/lamp` and one chat for that rule. On `/checkout` there is no button.
-   - Tools → **WhatsApp link**: a number and message give a link and QR; **Save as chat link** opens
-     the 006 form.
+   - **Link generator**: a number and message give a link and QR; **Save as chat link** opens the
+     006 form filled in.
 
 ## 4. Tests
 

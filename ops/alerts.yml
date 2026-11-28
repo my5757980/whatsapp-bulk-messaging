@@ -244,3 +244,34 @@ groups:
             Payments show late. Check the Stripe endpoint for this server (enabled, the six events,
             the signing secret saved in Payments > Stripe connection) and run the notification
             check there; the 15-minute reconciler keeps statuses right meanwhile.
+
+      # Feature 009 (research R17): one-time codes.
+      - alert: WbmOtpFailing
+        expr: |
+          (
+            sum(increase(wbm_otp_sends_total{result="failed"}[15m]))
+              /
+            sum(increase(wbm_otp_sends_total[15m]))
+          ) > 0.20
+          and sum(increase(wbm_otp_sends_total[15m])) >= 10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: More than 20% of one-time codes failed in the last 15 minutes
+          description: >-
+            Customers are not getting their codes. Check the code number in Settings > One-time codes
+            (connected, sending on), the code template's status in Templates, and the worker logs for
+            "Send failed" on the number's send queue.
+
+      - alert: WbmOtpSlow
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(wbm_otp_send_seconds_bucket[10m]))) > 5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: One-time codes take more than 5 seconds to reach Meta (p95 over 10 minutes)
+          description: >-
+            Codes wait in the number's send queue. Check that the worker runs and keeps up, the
+            number's sending speed, and Meta's status page.

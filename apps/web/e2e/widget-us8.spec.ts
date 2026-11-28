@@ -19,7 +19,8 @@ test('US8: the website chat button on a site, its counts, and the link generator
   // 1. The designer: a product rule with its own greeting and message, and no button on the checkout.
   await page.goto('/website-button/new');
   await page.getByLabel('Name', { exact: true }).fill(`Shop ${suffix}`);
-  await page.getByLabel('Number').selectOption({ label: `${number.label} (+1 555 010 0000)` });
+  const option = await page.getByLabel('Number').locator('option', { hasText: number.label }).getAttribute('value');
+  await page.getByLabel('Number').selectOption(option!);
   await page.getByLabel('Brand name').fill('Lamp & Co');
   await page.getByLabel('Greeting', { exact: true }).fill('Hi! How can we help?');
   await page.getByLabel('Default message').fill('Hello, I have a question');
@@ -55,7 +56,7 @@ test('US8: the website chat button on a site, its counts, and the link generator
   expect(text).toMatch(/^Hi, I am looking at a product.*ref [A-Z0-9]{6}/);
 
   // 3. The customer sends the message: the chat counts for the product rule.
-  execSync(`npm run mock:inbound -- --from +97157${suffix}1 --text "${text}" --phone-number-id ${number.phoneNumberId}`, { cwd: REPO_ROOT, stdio: 'ignore' });
+  execSync(`npm run mock:inbound -- --from +97155${suffix}7 --name "Site visitor ${suffix}" --text "${text}" --phone-number-id ${number.phoneNumberId}`, { cwd: REPO_ROOT, stdio: 'ignore' });
   await expect(async () => {
     await page.goto(designerUrl);
     await expect(page.getByTestId('widget-stats')).toContainText('1 opens · 1 chats started', { timeout: 3_000 });

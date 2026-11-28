@@ -6,14 +6,8 @@ import { AUDIT_ACTIONS } from '../../src/modules/audit/audit-actions.js';
 
 // T175: every audited action of data-model.md §1 is recorded somewhere in the code base.
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../src');
-/** Actions listed before the code that records them exists (feature 006 T014; each story removes its own). */
 /** Actions listed before the code that records them exists (empty: every action is recorded). */
-const PENDING = new Set<string>([
-  // Feature 009: recorded by their stories (tasks.md T093 empties this list)
-  'chat_widget.created',
-  'chat_widget.updated',
-  'chat_widget.deleted',
-]);
+const PENDING = new Set<string>();
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((name) => {

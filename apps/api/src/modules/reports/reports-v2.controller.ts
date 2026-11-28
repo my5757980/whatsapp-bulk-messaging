@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { Require } from '../../common/auth/permissions.guard.js';
 import { CurrentUser, clientIp, type AuthedRequest, type RequestUser } from '../../common/auth/request-user.js';
 import { maskPhone } from '../../common/phone/phone.js';
+import { MetricsService } from '../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { PageQuerySchema } from '../../common/validation/pagination.js';
 import { ZodValidationPipe } from '../../common/validation/zod.pipe.js';
@@ -33,6 +34,7 @@ export class ReportsV2Controller {
     private readonly overview: OverviewReportService,
     private readonly team: TeamReportService,
     private readonly consent: ConsentReportService,
+    private readonly metrics: MetricsService,
   ) {}
 
   @Get('overview')
@@ -95,6 +97,7 @@ export class ReportsV2Controller {
   /** Audits the download and starts the CSV answer. */
   private async start(res: Response, user: RequestUser, req: AuthedRequest, report: 'overview' | 'team' | 'consent', range: ReportRange, rows: number): Promise<void> {
     await this.audit.record({ userId: user.id, ip: clientIp(req) ?? null }, 'data.exported', { type: 'report', id: null }, { report, from: range.from, to: range.to, rows, format: 'csv' });
+    this.metrics.reportsExportedTotal.inc({ type: report });
     res.status(200);
     res.setHeader('content-type', 'text/csv; charset=utf-8');
     res.setHeader('content-disposition', `attachment; filename="${report}-report-${range.from}-to-${range.to}.csv"`);

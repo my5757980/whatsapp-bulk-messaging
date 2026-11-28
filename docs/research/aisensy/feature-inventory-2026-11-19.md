@@ -9,7 +9,7 @@
 - Where a page leaves a detail out, we choose a sensible default and mark it "default". Nothing undocumented is claimed as "identical".
 
 **Status legend:**
-- ✅ built (features 001 to 008)
+- ✅ built (features 001 to 009)
 - 🟡 partly built
 - ❌ missing
 - ➖ not applicable to a single company running its own WhatsApp account
@@ -61,17 +61,17 @@
 
 | # | Capability | Our status | Planned in |
 |---|---|---|---|
-| 4.1 | Create and submit marketing, utility and authentication templates; approval status sync (1 min–24 h) | 🟡 Marketing and utility work. Authentication (OTP) templates are refused by our editor. | Templates & growth |
+| 4.1 | Create and submit marketing, utility and authentication templates; approval status sync (1 min–24 h) | ✅ Marketing, utility and authentication templates are created, submitted and synced (001, 009) | 009 Templates and growth |
 | 4.2 | Text, media (image/video/document) headers; quick-reply, URL (dynamic) and call buttons; variables | ✅ | – |
-| 4.3 | **Carousel templates**: up to 10 cards, each with an image or video and a card body; per card 2 buttons max (2 CTA, 2 quick replies, or 1+1); media attached when sending | ❌ | Templates & growth |
-| 4.4 | **Limited-time offer** templates (offer expiry countdown) | ❌ | Templates & growth |
-| 4.5 | **Authentication / OTP templates** with copy-code button and automation | ❌ | Templates & growth |
-| 4.6 | **Template TTL**: stop delivery attempts after a time window | ❌ | Templates & growth |
-| 4.7 | Media-link templates (media from a URL) | 🟡 We upload media; sending media by URL is missing for campaigns | Templates & growth |
+| 4.3 | **Carousel templates**: up to 10 cards, each with an image or video and a card body; per card 2 buttons max (2 CTA, 2 quick replies, or 1+1); media attached when sending | ✅ Carousel templates with 2–10 image or video cards, card texts and up to 2 buttons per card; card media chosen per campaign and uploaded once per number (009) | 009 Templates and growth |
+| 4.4 | **Limited-time offer** templates (offer expiry countdown) | ✅ Limited-time offer templates with an offer heading, an optional end time, a copy-code and a website button; the end time and code set per campaign, ended offers not sent (009) | 009 Templates and growth |
+| 4.5 | **Authentication / OTP templates** with copy-code button and automation | ✅ Authentication templates with a copy-code or one-tap button, and the code API `POST /api/v1/otp` with its own key permission, a per-phone limit and the code never stored (009) | 009 Templates and growth |
+| 4.6 | **Template TTL**: stop delivery attempts after a time window | ✅ A time-to-live per template: Meta's for codes and utility, our queue's for marketing; results show not delivered in time and expired before sending (009) | 009 Templates and growth |
+| 4.7 | Media-link templates (media from a URL) | ✅ Campaign header media from a secure web address, one for all or one per recipient, checked before launch (009) | 009 Templates and growth |
 | 4.8 | Catalog / product templates (multi-product) | ✅ Catalog and multi-product template buttons, with the products chosen per campaign (008) | 008 Commerce and payments |
-| 4.9 | Sample template library (100+ samples by industry) | ❌ We will write our own originals | Templates & growth |
+| 4.9 | Sample template library (100+ samples by industry) | ✅ 70 original sample templates (60 English, 10 Arabic) by industry, purpose and type, copied into drafts (009) | 009 Templates and growth |
 | 4.10 | AI template generator | ❌ | AI agent |
-| 4.11 | Template guidelines and broadcast error meanings (help content) | 🟡 Error reasons are shown; guidelines are missing | Templates & growth |
+| 4.11 | Template guidelines and broadcast error meanings (help content) | ✅ Guidelines in the template editor, and the meaning and action for every failure reason (009) | 009 Templates and growth |
 
 ## 5. Broadcasts and campaigns
 
@@ -79,18 +79,18 @@
 |---|---|---|---|
 | 5.1 | Bulk broadcast to a CSV upload or filtered contacts; personalisation | ✅ | – |
 | 5.2 | Scheduler, up to 2 months ahead, time-zone aware | ✅ (no 2-month cap; time zones supported) | – |
-| 5.3 | Option to message duplicate numbers in a CSV | ❌ We always dedupe (one per contact) | Templates & growth (option) |
+| 5.3 | Option to message duplicate numbers in a CSV | ✅ Send to every row: a number on several rows gets one message per row (009) | 009 Templates and growth |
 | 5.4 | Throughput per number (their plans: 40–1,000 msg/s) | ✅ Up to 80 msg/s per number (Meta's default). Higher only if Meta upgrades the number. | – |
 | 5.5 | **Failed retries**: a "Retry Campaign" toggle per broadcast, up to 3 retries with set delays, all within 24 h; a "Scheduled Retries" section | ✅ Retry rounds per campaign: up to 3, delays of 30 minutes to 12 hours, all within 24 hours of launch; only failures that may pass are retried (Meta's 131049 hold-back never); a Scheduled retries page with cancelling (005) | 005 Campaign growth |
-| 5.6 | Campaign analytics: sent, delivered, read, replied, clicked, failed with reasons; budget and cost | 🟡 Clicked shows in the campaign results with a click rate (005); replied is a retarget group with its size (005) but not yet a report column | Templates & growth (replied column) |
+| 5.6 | Campaign analytics: sent, delivered, read, replied, clicked, failed with reasons; budget and cost | ✅ Results show sent, delivered, read, replied with the reply rate, clicked and failed with reasons and cost (001, 005, 009) | 009 Templates and growth |
 | 5.7 | **Retargeting** by Read, Replied, Clicked, Delivered (from the campaign tabs) | ✅ Retarget by failed, not read, read, delivered, clicked, not clicked, replied, not replied and held back, with each group's size first (005) | 005 Campaign growth |
 | 5.8 | **Click tracking**: URL CTA buttons only; "Clicked" tab with per-user click counts; one-tap retarget of clickers | ✅ A tracked link per recipient on URL buttons and text variables; a Clicked view with first and last clicks and counts, an export, and one-click retargeting of clickers; previews and robots are not counted (005) | 005 Campaign growth |
 | 5.9 | **API campaigns**: a named "Live" campaign bound to one template, triggered by API with params, media, tags and attributes; auto-creates contacts | ✅ Named API campaigns with a template, variable mapping, header media, tags, attributes and a daily limit, called by API name; contacts are created on the first call; results per day and an export (006) | 006 Integrations |
 | 5.10 | **QR code campaigns**: name, pre-filled message, optional linked flow; "Set Live and generate QR"; download the QR or a printable standee; track Scanned → Replied leads, then export, broadcast or tag them | ✅ Chat links: a short link, QR images (PNG, SVG) and a printable poster of our own design; openings, chats started and new contacts per day; the link's flow and tag; the contacts can be exported or tagged for a campaign (006) | 006 Integrations |
 | 5.11 | **Birthday automation**: a date-of-birth attribute; a toggle with send time; "skip opted-out"; a chosen template; analytics. Default: any date attribute. | ❌ | Contacts & settings |
 | 5.12 | **Drip sequences**: time-based follow-ups after an action | ✅ Drips of up to 10 timed template steps with quiet hours; contacts join by hand or on a tag, an opt-in, an import, the API or a link click, and leave on a reply, a stop tag, an opt-out and more; results per step (005) | 005 Campaign growth |
-| 5.13 | Campaign reports download (campaign, user, overview, opt-in/opt-out) | 🟡 Campaign export works; overview and opt-in/out reports are missing | Templates & growth |
-| 5.14 | Meta frequency capping awareness (marketing messages limited per user) | 🟡 Errors are shown; an explanation is missing | Templates & growth |
+| 5.13 | Campaign reports download (campaign, user, overview, opt-in/opt-out) | ✅ The campaign export, plus overview, team member and opt-in/opt-out reports with CSV downloads (009) | 009 Templates and growth |
+| 5.14 | Meta frequency capping awareness (marketing messages limited per user) | ✅ Meta's per-person marketing limit explained in the wizard, and held-back messages counted in the results (009) | 009 Templates and growth |
 
 ## 6. Live chat (team inbox)
 
@@ -173,8 +173,8 @@
 
 | # | Capability | Our status | Planned in |
 |---|---|---|---|
-| 12.1 | **Website chat button / widget**: number, colour, CTA text, position, margins, corner radius, pre-filled message, widget brand name, image and greeting, per-URL settings; "Generate Snippet" | ❌ | Templates & growth |
-| 12.2 | WhatsApp link and QR generator | ❌ | Templates & growth |
+| 12.1 | **Website chat button / widget**: number, colour, CTA text, position, margins, corner radius, pre-filled message, widget brand name, image and greeting, per-URL settings; "Generate Snippet" | ✅ A website chat button with a designer and preview, page rules and a snippet; opens and chats counted through chat links (009) | 009 Templates and growth |
+| 12.2 | WhatsApp link and QR generator | ✅ A WhatsApp link and QR generator, with saving as a tracked chat link for our numbers (009) | 009 Templates and growth |
 | 12.3 | Website popup builder, pricing calculator, free AI tools (lead magnets) | ➖ Their marketing tools; a link/QR/widget generator covers our use | – |
 | 12.4 | Android and iOS apps: live chat with push, broadcasts, drip, ads, contact sync, templates, AI agents | ❌ | Mobile (installable web app with push first) |
 
@@ -190,10 +190,10 @@
 
 ## Roadmap to full functional parity
 
-Feature numbers follow the order specs are started. 002 to 008 are built; each remaining row gets the
+Feature numbers follow the order specs are started. 002 to 009 are built; each remaining row gets the
 next free number when its spec starts. Agreed order: the AI agent, campaign growth (click tracking
-and drips), integrations, click-to-WhatsApp ads and payments are built; the other rows are scheduled
-around them.
+and drips), integrations, click-to-WhatsApp ads, payments and templates growth are built; the other
+rows are scheduled around them.
 
 | Feature | Scope | Depends on |
 |---|---|---|
@@ -202,9 +202,9 @@ around them.
 | **004 AI agent and AI suite** ✅ built | Items 9.1–9.6: agents answering from knowledge, skills, hand-over, starter agents, usage and limits, the team assistant drafting templates, flows and campaigns. Still open: more starter agents (9.3) and ads in the assistant (9.5) | 002, 003 |
 | **005 Campaign growth** ✅ built | Items 5.5, 5.7, 5.8 and 5.12, and clicked in 5.6: tracked links and clicks, retargeting by clicked, replied and held back, retry rounds, drips with starting events, leaving rules and results | 001, 002 |
 | **006 Integrations and developer platform** ✅ built | Items 1.1 (guided connect), 5.9, 5.10 (chat links and QR codes, also the QR trigger of 7.2) and 11.2–11.7: signed webhooks, key permissions and the contacts API, API campaigns, Shopify and WooCommerce notifications, COD confirmation and cart reminders. Still open: Dialogflow (7.8, optional) and named CRM connectors (11.7) | 002, 003 |
-| **Templates and campaign growth** | Items 4.1, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9 and 4.11; 5.3, 5.6 (replied column), 5.13 and 5.14; 12.1 and 12.2 | 001 |
 | **007 Ads manager** ✅ built | Items 10.1–10.4 and the texts of 9.7: connection with checks, chat, lead form and website ads with Meta's review, chats from ads with the free window, flows and tags, results and a spending cap, audiences and lookalikes, lead forms. Still open: AI images and videos (9.7) and website visitor audiences (10.2) | 003, 006 |
 | **008 Commerce and payments** ✅ built | Items 3.13, 4.8, 6.12, 7.4, 8.1–8.4 (8.3 as Stripe payment links) and 11.8: payment requests from chat, flows, campaigns, the API and store orders with statuses, reminders, reports and retargeting; the Meta catalog with product messages and carts into chat orders; WhatsApp Forms; commerce flow steps. Still open: webviews (8.5, optional) | 003, 006 |
+| **009 Templates and growth** ✅ built | Items 4.1, 4.3–4.7, 4.9 and 4.11; 5.3, 5.6 (replied), 5.13 and 5.14; 12.1 and 12.2: one-time codes with authentication templates and a code API, carousel and limited-time offer templates, time-to-live, media from web addresses, replied counts and every row, overview, team and opt-in reports, samples, help, the website chat button and the link generator | 001, 006 |
 | **Contacts, settings and security** | Items 1.3, 1.4, 1.6 and 2.3; 3.2, 3.3, 3.5, 3.8, 3.9 and 3.10 (3.7 first-message tags came with 003); 5.11 (birthday and date automations) | 001 |
 | **Mobile (installable app with push)** | Item 12.4 | 002 |
 

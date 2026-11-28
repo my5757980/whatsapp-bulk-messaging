@@ -65,6 +65,7 @@ export class ExpiredSweepProcessor implements OnModuleInit, OnApplicationBootstr
           if (changed) {
             marked++;
             this.metrics.messagesTotal.inc({ status: 'EXPIRED', number: m.number.phoneNumberId });
+            this.metrics.messagesExpiredTotal.inc({ reason: 'NOT_DELIVERED_IN_TIME' });
           }
         } catch (error) {
           this.logger.warn({ messageId: m.id, err: (error as Error).message }, 'Could not mark a message as not delivered in time');

@@ -5,6 +5,7 @@ import { QueueRegistry } from '../../src/common/queue/queue.module.js';
 import { OutboundEvents } from '../../src/modules/integrations/webhooks/outbound-events.js';
 import { campaignSendJob } from '../../src/modules/sending/send-jobs.js';
 import { sendJobId } from '../../src/modules/sending/dispatch-planner.js';
+import { OTP_SETTINGS_ID } from '../../src/modules/otp/otp.service.js';
 import { SendProcessor } from '../../src/modules/sending/send.processor.js';
 import { WebhooksProcessor } from '../../src/modules/webhooks/webhooks.processor.js';
 import { FakeTemplatesGraph } from '../support/fake-templates-graph.js';
@@ -68,6 +69,19 @@ describe('One-time codes API (009 US1)', () => {
     const got = await admin.agent.get('/api/otp/settings');
     expect(got.body).toMatchObject({ defaultTemplateId: template.id, defaultNumberId: number.id, limitPerPhone: 5, limitWindowMinutes: 15, last24h: { requested: expect.any(Number) } });
     expect(await ctx.prisma.auditLog.count({ where: { action: 'otp_settings.changed' } })).toBeGreaterThan(0);
+  });
+
+  it('reads and saves one settings row, even when another row exists (e2e US1 regression)', async () => {
+    const stray = await ctx.prisma.otpSettings.create({ data: { limitPerPhone: 1 } });
+    try {
+      expect((await settings({ defaultTemplateId: template.id, defaultNumberId: number.id, limitPerPhone: 7, limitWindowMinutes: 15 })).status).toBe(200);
+      expect((await admin.agent.get('/api/otp/settings')).body).toMatchObject({ defaultTemplateId: template.id, limitPerPhone: 7 });
+      const sent = await sendCode(ctx, key, { to: uaePhone(), code: '135790' });
+      expect(sent.status, JSON.stringify(sent.body)).toBe(202);
+      expect((await ctx.prisma.otpSettings.findUniqueOrThrow({ where: { id: OTP_SETTINGS_ID } })).defaultTemplateId).toBe(template.id);
+    } finally {
+      await ctx.prisma.otpSettings.delete({ where: { id: stray.id } });
+    }
   });
 
   it('accepts a code at once, sends it ahead of campaigns, and never keeps the code', async () => {

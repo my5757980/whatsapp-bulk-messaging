@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { RequirePermission } from '@/components/require-permission';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -36,6 +36,26 @@ const EMPTY: ChatWidgetInput = {
 
 const attr = (value: string) => value.replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/</g, '&lt;');
 
+/** The preview page drawn at a real screen size and scaled down to the space it has (FR-040). */
+function ScaledFrame({ srcDoc, width, height }: { srcDoc: string; width: number; height: number }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const fit = () => setScale(Math.min(1, el.clientWidth / width));
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [width]);
+  return (
+    <div ref={box} className="mx-auto w-full overflow-hidden rounded border" style={{ maxWidth: width, height: Math.round(height * scale) }}>
+      <iframe title="Button preview" sandbox="allow-scripts" srcDoc={srcDoc} data-testid="widget-preview" style={{ width, height, border: 0, transform: `scale(${scale})`, transformOrigin: 'top left' }} />
+    </div>
+  );
+}
+
 export default function WebsiteButtonPage() {
   return (
     <RequirePermission permission="campaigns.view">
@@ -55,6 +75,7 @@ function Designer() {
   const stats = useQuery({ queryKey: ['chat-widget', id, 'stats'], queryFn: () => api<ChatWidgetStats>(`/chat-widgets/${id}/stats`), enabled: !isNew });
   const [form, setForm] = useState<ChatWidgetInput>(EMPTY);
   const [error, setError] = useState<string | null>(null);
+  const [size, setSize] = useState<'desktop' | 'phone'>('desktop');
 
   useEffect(() => {
     if (widget.data) {
@@ -142,7 +163,7 @@ function Designer() {
         ) : null}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
+      <div className="grid gap-6 lg:grid-cols-[1fr_26rem]">
         <div className="grid gap-4">
           <Card>
             <CardHeader>
@@ -288,11 +309,23 @@ function Designer() {
 
         <div className="grid content-start gap-4">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex-row items-center justify-between gap-2">
               <CardTitle className="text-base">Preview</CardTitle>
+              <div className="flex gap-1" role="group" aria-label="Preview size">
+                {(['desktop', 'phone'] as const).map((s) => (
+                  <Button key={s} type="button" size="sm" variant={size === s ? 'default' : 'ghost'} aria-pressed={size === s} onClick={() => setSize(s)}>
+                    {s === 'desktop' ? 'Desktop' : 'Phone'}
+                  </Button>
+                ))}
+              </div>
             </CardHeader>
             <CardContent>
-              {preview ? <iframe title="Button preview" className="h-96 w-full rounded border" sandbox="allow-scripts" srcDoc={preview} data-testid="widget-preview" /> : <p className="text-sm text-muted-foreground">The preview needs the public link address on the server.</p>}
+              {preview ? (
+                size === 'phone' ? <ScaledFrame key="phone" srcDoc={preview} width={375} height={667} /> : <ScaledFrame key="desktop" srcDoc={preview} width={1280} height={800} />
+              ) : (
+                <p className="text-sm text-muted-foreground">The preview needs the public link address on the server.</p>
+              )}
+              <p className="mt-2 text-xs text-muted-foreground">Click the button in the preview to see the greeting.</p>
             </CardContent>
           </Card>
           {w ? (

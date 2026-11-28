@@ -20,6 +20,8 @@ import { SettingsService } from '../settings/settings.service.js';
 // and the send job carries it encrypted, removed when the job ends.
 
 export const MASKED_CODE = '••••';
+/** The one code settings row. */
+export const OTP_SETTINGS_ID = '00000000-0000-7000-8000-000000000009';
 
 export const SendCodeSchema = z
   .object({
@@ -59,9 +61,17 @@ export class OtpService {
     @Inject(APP_CONFIG) private readonly config: AppConfig,
   ) {}
 
-  /** The settings row, made with the defaults on first use. */
+  /**
+   * The settings row, made with the defaults on first use. It has one fixed id, so two first reads at
+   * once cannot make two rows (findFirst() would then read either one).
+   */
   private async row() {
-    return (await this.prisma.otpSettings.findFirst()) ?? this.prisma.otpSettings.create({ data: {} });
+    try {
+      return await this.prisma.otpSettings.upsert({ where: { id: OTP_SETTINGS_ID }, create: { id: OTP_SETTINGS_ID }, update: {} });
+    } catch {
+      // Both first reads tried to make it: the other one did.
+      return this.prisma.otpSettings.findUniqueOrThrow({ where: { id: OTP_SETTINGS_ID } });
+    }
   }
 
   async settings() {

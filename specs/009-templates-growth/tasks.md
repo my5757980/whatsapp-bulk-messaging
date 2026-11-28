@@ -347,8 +347,8 @@ in time"; a document campaign with per-row addresses blocks on a bad address and
 
 ### Tests for User Story 4 (write first, must fail)
 
-- [ ] T048 [P] [US4] Unit tests apps/api/test/unit/sending/send-expiry.spec.ts: `created_at + ttl` past gives EXPIRED_BEFORE_SENDING for every kind (a pause or retry does not restart it); an offer end past gives OFFER_ENDED; no TTL means no drop; `expires_at` is set only for Meta-applied TTL
-- [ ] T049 [P] [US4] Integration test apps/api/test/integration/templates-ttl.int-spec.ts (`FakeTemplatesGraph`, fake clock):
+- [X] T048 [P] [US4] Unit tests apps/api/test/unit/sending/send-expiry.spec.ts: `created_at + ttl` past gives EXPIRED_BEFORE_SENDING for every kind (a pause or retry does not restart it); an offer end past gives OFFER_ENDED; no TTL means no drop; `expires_at` is set only for Meta-applied TTL
+- [X] T049 [P] [US4] Integration test apps/api/test/integration/templates-ttl.int-spec.ts (`FakeTemplatesGraph`, fake clock):
   - **ranges:** ranges by category are enforced (422); the TTL is sent to Meta for AUTHENTICATION and UTILITY and never for MARKETING
   - **category change:** a sync that finds Meta changed utility to marketing clears the TTL, or keeps it as PLATFORM when it fits
   - **before sending:** a paused campaign resumed after the TTL drops the queued messages as EXPIRED_BEFORE_SENDING
@@ -356,7 +356,7 @@ in time"; a document campaign with per-row addresses blocks on a bad address and
     - with delivery held, the sweep marks sent messages NOT_DELIVERED_IN_TIME after `ttl + 10 minutes`
     - a late delivered webhook replaces the mark
   - **retries and completion:** retry rounds (005) never pick `EXPIRED`; a campaign completes with its expired messages counted
-- [ ] T050 [P] [US4] Integration test apps/api/test/integration/campaign-media-urls.int-spec.ts (nock hosts):
+- [X] T050 [P] [US4] Integration test apps/api/test/integration/campaign-media-urls.int-spec.ts (nock hosts):
   - `HEADER.media` from one address, a column or an attribute; a missing value skips the recipient with MEDIA_URL_MISSING
   - **the check:**
     - an http address, a private address, the wrong type, too large and a timeout each give their reason
@@ -364,25 +364,25 @@ in time"; a document campaign with per-row addresses blocks on a bad address and
     - launch is refused with MEDIA_PROBLEMS and at most 50 problems
   - **sending:** messages go out with `link`; a send-time failure shows the help reason
   - the public API refuses an http address with 422
-- [ ] T051 [P] [US4] Contract cases: the address part of `POST /campaigns/{id}/media-check`, the TTL fields on templates (apps/api/test/contract/us3.contract-spec.ts), and the `expired` report fields
-- [ ] T052 [P] [US4] Playwright e2e apps/web/e2e/templates-us4-ttl-media.spec.ts:
+- [X] T051 [P] [US4] Contract cases: the address part of `POST /campaigns/{id}/media-check`, the TTL fields on templates (apps/api/test/contract/us3.contract-spec.ts), and the `expired` report fields
+- [X] T052 [P] [US4] Playwright e2e apps/web/e2e/templates-us4-ttl-media.spec.ts:
   - **TTL:** a utility template with a 30-second TTL, delivery held on mock-meta, and the sweep's grace and interval shortened by env for e2e: the message shows "not delivered in time"
   - **media addresses:** a document campaign with `invoice_url` per row; **Check media** lists the bad row; after the fix it launches
 
 ### Implementation for User Story 4
 
-- [ ] T053 [US4] Templates: send `message_send_ttl_seconds` for AUTHENTICATION and UTILITY on create and edit, set `ttl_applied_by`, and handle category changes in templates-sync.service.ts (research R8)
-- [ ] T054 [US4] Sending and expiry:
+- [X] T053 [US4] Templates: send `message_send_ttl_seconds` for AUTHENTICATION and UTILITY on create and edit, set `ttl_applied_by`, and handle category changes in templates-sync.service.ts (research R8)
+- [X] T054 [US4] Sending and expiry:
   - apps/api/src/modules/sending/send-expiry.ts in send.processor.ts for every message
   - set `messages.expires_at` when a Meta-applied TTL message is sent
   - a new apps/api/src/modules/sending/expired-sweep.processor.ts (an `expired-sweep` job every 5 minutes on the maintenance queue), with `EXPIRED_SWEEP_GRACE_SECONDS` (default 600) and `EXPIRED_SWEEP_EVERY_SECONDS` (default 300) in apps/api/src/common/config/config.ts and .env.example
   - apps/api/src/modules/webhooks/handlers/status-update.ts lets delivered, read and failed replace NOT_DELIVERED_IN_TIME
   - `EXPIRED` is final in apps/api/src/modules/campaigns/campaign-progress.processor.ts and left out of retry rounds
-- [ ] T055 [US4] Media addresses:
+- [X] T055 [US4] Media addresses:
   - `HEADER.media` in variable-resolver.ts and audience-snapshot.service.ts (to `$headerMediaUrl`, with MEDIA_URL_MISSING)
   - the address checks in media-check.service.ts through apps/api/src/common/http/safe-http.ts (HEAD, else a ranged GET; 5 at a time; at most 1,000 distinct, sampled above that)
   - launch.service.ts refuses MEDIA_PROBLEMS
-- [ ] T056 [P] [US4] Web:
+- [X] T056 [P] [US4] Web:
   - ttl-field.tsx shows who applies the TTL
   - apps/web/src/components/campaigns/wizard/media-source.tsx (one address, a column or an attribute) in mapping-step.tsx
   - **Check media** with its problem list in review-step.tsx
@@ -402,8 +402,8 @@ three messages; each report's totals match the campaign results and download as 
 
 ### Tests for User Story 5 (write first, must fail)
 
-- [ ] T057 [P] [US5] Unit tests packages/shared/src/reports/ranges.test.ts: a range ending before it starts, longer than 366 days, or older than 12 months is refused; day bounds in the company time zone
-- [ ] T058 [P] [US5] Integration test apps/api/test/integration/campaign-replies-duplicates.int-spec.ts:
+- [X] T057 [P] [US5] Unit tests packages/shared/src/reports/ranges.test.ts: a range ending before it starts, longer than 366 days, or older than 12 months is refused; day bounds in the company time zone
+- [X] T058 [P] [US5] Integration test apps/api/test/integration/campaign-replies-duplicates.int-spec.ts:
   - **replies:**
     - `replied` equals the size of the 005 Replied retarget group (SC-006); a reply after 3 days does not count
     - `replyRate` is replied divided by delivered
@@ -415,7 +415,7 @@ three messages; each report's totals match the campaign results and download as 
     - off: one message per number, as today
     - retarget groups hold distinct contacts
   - **export:** the campaign export has `replied`, `replied_at` and `clicks`
-- [ ] T059 [P] [US5] Integration test apps/api/test/integration/reports-growth.int-spec.ts (the 001 reports.int-spec.ts stays as it is):
+- [X] T059 [P] [US5] Integration test apps/api/test/integration/reports-growth.int-spec.ts (the 001 reports.int-spec.ts stays as it is):
   - **overview:** totals match the campaign results, by day in the company time zone, by category and by number, with failures by reason, expired counts and the cost
   - **team report:**
     - `launched_by_id`, including campaigns backfilled from audit entries
@@ -429,31 +429,31 @@ three messages; each report's totals match the campaign results and download as 
     - each CSV streams the same numbers as its JSON
     - downloads are audited as `data.exported` with the report type
   - **permissions:** agents get 403
-- [ ] T060 [P] [US5] Contract cases:
+- [X] T060 [P] [US5] Contract cases:
   - `/reports/*` in apps/api/test/contract/templates-growth.contract-spec.ts
   - the CampaignReportAdditions in apps/api/test/contract/us5.contract-spec.ts
-- [ ] T061 [P] [US5] Playwright e2e apps/web/e2e/reports-us5.spec.ts:
+- [X] T061 [P] [US5] Playwright e2e apps/web/e2e/reports-us5.spec.ts:
   - replied and the reply rate on a campaign with two CLI replies
   - "send to every row" with a repeated number sends three messages
   - the three reports for this month, each downloaded
 
 ### Implementation for User Story 5
 
-- [ ] T062 [US5] Replied counts:
+- [X] T062 [US5] Replied counts:
   - move the REPLIED fragment into apps/api/src/modules/campaigns/replied.sql.ts, used by retarget.service.ts and the campaign report in apps/api/src/modules/reports/reports.service.ts (`replied`, `replyRate`, cached for 60 seconds)
   - the `replied` filter in campaign-messages.controller.ts
   - the new columns in apps/api/src/modules/reports/export.controller.ts
-- [ ] T063 [US5] Duplicate rows and who launched:
+- [X] T063 [US5] Duplicate rows and who launched:
   - `allowDuplicateRows` (UPLOAD only) in campaigns.service.ts
   - audience-upload.processor.ts and csv.ts keep every valid row when it is on
   - audience-snapshot.service.ts sets `copy_index`
   - estimate.service.ts counts messages
   - the report's `multiMessageRecipients`
   - launch.service.ts sets `launched_by_id`
-- [ ] T064 [US5] Reports in apps/api/src/modules/reports/:
+- [X] T064 [US5] Reports in apps/api/src/modules/reports/:
   - overview-report.service.ts, team-report.service.ts and consent-report.service.ts
   - reports-v2.controller.ts with the JSON summaries and streamed CSVs: ranges from the shared rules, audit, and phone masking
-- [ ] T065 [P] [US5] Web:
+- [X] T065 [P] [US5] Web:
   - replied, the reply rate and the Replied filter on apps/web/src/app/(dashboard)/campaigns/[id]/report/page.tsx
   - the "send to every row" option in apps/web/src/components/campaigns/wizard/audience-step.tsx
   - apps/web/src/app/(dashboard)/reports/page.tsx with Overview, Team and Opt-ins tabs, a date range and downloads
@@ -472,25 +472,25 @@ the sample's text and examples.
 
 ### Tests for User Story 6 (write first, must fail)
 
-- [ ] T066 [P] [US6] Unit tests packages/shared/src/templates/samples.test.ts:
+- [X] T066 [P] [US6] Unit tests packages/shared/src/templates/samples.test.ts:
   - every sample passes `validateTemplate` (media samples are exempt only from the missing-file rule)
   - at least 60 samples and 10 industries
   - every purpose and type of the spec; at least 10 in Arabic
   - ids and names are unique
   - no sample contains another company's brand words (a deny list)
-- [ ] T067 [P] [US6] Integration test apps/api/test/integration/template-samples.int-spec.ts:
+- [X] T067 [P] [US6] Integration test apps/api/test/integration/template-samples.int-spec.ts:
   - filters and search
   - a copy becomes a DRAFT with the sample's content; NAME_TAKEN for a used name
   - agents can list samples but get 403 on copy
   - copies are audited as `template_sample.copied`
-- [ ] T068 [P] [US6] Contract cases for `/template-samples*` in apps/api/test/contract/templates-growth.contract-spec.ts
-- [ ] T069 [P] [US6] Playwright e2e apps/web/e2e/templates-us6-samples.spec.ts: filter to food and order update, use a sample, and the draft editor opens filled
+- [X] T068 [P] [US6] Contract cases for `/template-samples*` in apps/api/test/contract/templates-growth.contract-spec.ts
+- [X] T069 [P] [US6] Playwright e2e apps/web/e2e/templates-us6-samples.spec.ts: filter to food and order update, use a sample, and the draft editor opens filled
 
 ### Implementation for User Story 6
 
-- [ ] T070 [US6] Write packages/shared/src/templates/samples.ts: `TEMPLATE_SAMPLES`, our own texts per research R13, exported from index.ts
-- [ ] T071 [US6] Add apps/api/src/modules/templates/template-samples.controller.ts (list, get, copy) with its service
-- [ ] T072 [P] [US6] Add apps/web/src/app/(dashboard)/templates/samples/page.tsx: filters, the preview (template-preview.tsx) and a **Use this sample** dialog (account and name), linked from the templates page
+- [X] T070 [US6] Write packages/shared/src/templates/samples.ts: `TEMPLATE_SAMPLES`, our own texts per research R13, exported from index.ts
+- [X] T071 [US6] Add apps/api/src/modules/templates/template-samples.controller.ts (list, get, copy) with its service
+- [X] T072 [P] [US6] Add apps/web/src/app/(dashboard)/templates/samples/page.tsx: filters, the preview (template-preview.tsx) and a **Use this sample** dialog (account and name), linked from the templates page
 
 **Checkpoint**: US6 runs alone.
 
@@ -506,18 +506,18 @@ its meaning; the marketing review step shows the per-person limit note.
 
 ### Tests for User Story 7 (write first, must fail)
 
-- [ ] T073 [P] [US7] Unit tests packages/shared/src/help/template-guidelines.test.ts: every editor section (category, variables, media, buttons, carousel, offer, authentication) has guidelines and a `checkedAt`, and the rejection reasons are listed
-- [ ] T074 [P] [US7] Integration test apps/api/test/integration/help-reasons.int-spec.ts:
+- [X] T073 [P] [US7] Unit tests packages/shared/src/help/template-guidelines.test.ts: every editor section (category, variables, media, buttons, carousel, offer, authentication) has guidelines and a `checkedAt`, and the rejection reasons are listed
+- [X] T074 [P] [US7] Integration test apps/api/test/integration/help-reasons.int-spec.ts:
   - failure reasons in campaign results and message details carry `meaning` and `action`
   - an unknown code shows Meta's text with general advice and is counted in `wbm_unknown_error_codes_total`
   - the held-back count has its explanation
-- [ ] T075 [P] [US7] Playwright e2e apps/web/e2e/templates-us7-help.spec.ts: the guidelines panel per section, the meanings next to failure reasons, and the per-person limit note on a marketing campaign's review step and in its results
+- [X] T075 [P] [US7] Playwright e2e apps/web/e2e/templates-us7-help.spec.ts: the guidelines panel per section, the meanings next to failure reasons, and the per-person limit note on a marketing campaign's review step and in its results
 
 ### Implementation for User Story 7
 
-- [ ] T076 [US7] Write packages/shared/src/help/template-guidelines.ts in our own words, and complete the actions in error-meanings.ts
-- [ ] T077 [US7] Api: `meaning` and `action` on failure reasons in reports.service.ts and campaign-messages.controller.ts; the unknown-code counter in apps/api/src/common/metrics/metrics.service.ts
-- [ ] T078 [P] [US7] Web:
+- [X] T076 [US7] Write packages/shared/src/help/template-guidelines.ts in our own words, and complete the actions in error-meanings.ts
+- [X] T077 [US7] Api: `meaning` and `action` on failure reasons in reports.service.ts and campaign-messages.controller.ts; the unknown-code counter in apps/api/src/common/metrics/metrics.service.ts
+- [X] T078 [P] [US7] Web:
   - apps/web/src/components/templates/guidelines-panel.tsx in the editor
   - apps/web/src/components/help/error-meaning.tsx in the results and message details
   - apps/web/src/components/help/frequency-cap-note.tsx in review-step.tsx and the report page

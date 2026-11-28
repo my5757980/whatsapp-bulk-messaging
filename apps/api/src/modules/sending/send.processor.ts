@@ -82,6 +82,7 @@ export class SendProcessor {
   private async otpEvent(messageId: string): Promise<void> {
     const m = await this.prisma.message.findUnique({ where: { id: messageId }, select: { origin: true, status: true, failureCode: true, failureReason: true, failedAt: true } });
     if (m?.origin !== 'OTP') return;
+    if (m.status === 'FAILED') this.metrics.otpSendsTotal.inc({ result: 'failed' });
     await this.platformEvents.otpStatus(this.prisma, messageId).catch((error: unknown) => this.logger.warn({ messageId, err: (error as Error).message }, 'Could not record the code status event'));
   }
 
@@ -141,6 +142,7 @@ export class SendProcessor {
     if (expiry.expire) {
       await this.transition(m.id, 'QUEUED', { status: 'EXPIRED', expiredReason: expiry.reason }, 'EXPIRED', `${m.id}:expired`, { reason: expiry.reason });
       this.metrics.messagesTotal.inc({ status: 'EXPIRED', number: m.number.phoneNumberId });
+      this.metrics.messagesExpiredTotal.inc({ reason: expiry.reason });
       return { result: 'cancelled' };
     }
 
@@ -189,13 +191,17 @@ export class SendProcessor {
     return this.sent(m, waMessageId);
   }
 
-  private async sent(m: { id: string; origin: string; number: { phoneNumberId: string }; template: { ttlSeconds: number | null; ttlAppliedBy: string | null } }, waMessageId: string): Promise<SendOutcome> {
+  private async sent(m: { id: string; origin: string; createdAt?: Date; number: { phoneNumberId: string }; template: { ttlSeconds: number | null; ttlAppliedBy: string | null } }, waMessageId: string): Promise<SendOutcome> {
     const now = new Date();
     // Feature 009 (research R8): the expired sweep reads expiresAt for TTLs that Meta applies.
     const expiresAt = deliveryDeadline(m.template, now);
     await this.prisma.message.updateMany({ where: { id: m.id, status: 'SENDING' }, data: { status: 'SENT', waMessageId, sentAt: now, ...(expiresAt ? { expiresAt } : {}) } });
     await this.event(m.id, 'SENT_ACCEPTED', `${m.id}:accepted`, { waMessageId }, now);
     this.metrics.messagesTotal.inc({ status: 'SENT', number: m.number.phoneNumberId });
+    if (m.origin === 'OTP') {
+      this.metrics.otpSendsTotal.inc({ result: 'sent' });
+      if (m.createdAt) this.metrics.otpSendSeconds.observe(Math.max(0, (now.getTime() - m.createdAt.getTime()) / 1000));
+    }
     if (m.origin === 'INBOX') this.metrics.inboxMessagesTotal.inc({ direction: 'out', kind: 'template' });
     await this.statuses.applyBuffered(waMessageId);
     // Show the template in the contact's live chat on this number (002 R2); never fails the send.

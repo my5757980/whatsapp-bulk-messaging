@@ -20,6 +20,7 @@ const CONTRACTS = [
   path.join(SPECS, '006-integrations-platform/contracts/integrations-api.openapi.yaml'),
   path.join(SPECS, '007-ads-manager/contracts/ads-api.openapi.yaml'),
   path.join(SPECS, '008-commerce-payments/contracts/commerce-api.openapi.yaml'),
+  path.join(SPECS, '009-templates-growth/contracts/templates-growth-api.openapi.yaml'),
 ];
 /**
  * The live event stream never ends, so a plain request would hang (inbox-realtime.int-spec.ts covers
@@ -37,6 +38,10 @@ const SKIP = new Set([
   // Feature 008: the pay link and Stripe's notifications are public; pay-link and payments-lifecycle cover them.
   'get /l/p/{code}',
   'post /payments/stripe/webhook',
+  // Feature 009: the website button script, config and image are public; chat-widgets covers them.
+  'get /l/w/widget.js',
+  'get /l/w/{key}/config.json',
+  'get /l/w/{key}/image',
 ]);
 const ROLES = ['ADMIN', 'MANAGER', 'AGENT'] as const;
 /** Documented operations that are not implemented yet (none since US7). */
@@ -105,6 +110,14 @@ describe('Role permissions on every endpoint', () => {
     expect(operations.some((op) => op.route === '/chat-orders/{id}/send-link' && op.permission === 'inbox.reply')).toBe(true);
     expect(operations.some((op) => op.route === '/forms/{id}/publish' && op.permission === 'forms.manage')).toBe(true);
     expect(operations.some((op) => op.route === '/l/p/{code}' || op.route === '/payments/stripe/webhook')).toBe(false);
+    // And templates growth: samples, code settings, media checks, reports, website buttons and the generator (009 T094).
+    expect(operations.some((op) => op.route === '/template-samples/{sampleId}/copy' && op.permission === 'templates.manage')).toBe(true);
+    expect(operations.some((op) => op.route === '/otp/settings' && op.method === 'put' && op.permission === 'settings.manage')).toBe(true);
+    expect(operations.some((op) => op.route === '/reports/team' && op.permission === 'reports.view')).toBe(true);
+    expect(operations.some((op) => op.route === '/reports/consent.csv' && op.permission === 'data.export')).toBe(true);
+    expect(operations.some((op) => op.route === '/chat-widgets/{id}/pause' && op.permission === 'campaigns.manage')).toBe(true);
+    expect(operations.some((op) => op.route === '/tools/whatsapp-link' && op.permission === 'templates.view')).toBe(true);
+    expect(operations.some((op) => op.route.startsWith('/l/w/'))).toBe(false);
   });
 
   it.each(ROLES)('%s gets 403 exactly where the role table says so', async (role) => {

@@ -47,7 +47,9 @@ export class ChatLinkRedirectService {
     if (!preview) {
       try {
         // The page counts only when the open comes from this link's own button (a wrong `w` is ignored).
-        const page = link.widget && from.widget === link.widget.key ? pagePathForCount(from.page) : null;
+        const fromButton = Boolean(link.widget && from.widget === link.widget.key);
+        const page = fromButton ? pagePathForCount(from.page) : null;
+        if (fromButton) this.metrics.widgetOpensTotal.inc();
         await this.prisma.chatLinkOpen.create({ data: { chatLinkId: link.id, device: deviceKind(request.userAgent), page } });
       } catch (error) {
         // A failed count never keeps the visitor from WhatsApp.
