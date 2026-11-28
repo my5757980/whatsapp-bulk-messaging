@@ -21,6 +21,7 @@ import {
 } from '../campaigns/variable-resolver.js';
 import { AutoRepliesService } from '../inbox/automation/auto-replies.service.js';
 import { KEYWORD_REPLY_PARAM } from '../sending/template-payload.builder.js';
+import { MetricsService } from '../../common/metrics/metrics.service.js';
 
 // Feature 010 (US4, research R8, FR-017, FR-018): the confirmation sent after an opt-out or opt-in keyword,
 // a text or an approved utility template, at most once a day per contact and kind.
@@ -86,6 +87,7 @@ export class KeywordRepliesService {
     private readonly audit: AuditService,
     private readonly autoReplies: AutoRepliesService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly metrics: MetricsService,
   ) {}
 
   private async replies(): Promise<{ optOut: KeywordReply; optIn: KeywordReply }> {
@@ -174,15 +176,16 @@ export class KeywordRepliesService {
    * Sends the confirmation in the chat the keyword came in, from that chat's number: never to blocked contacts,
    * never while the number's sending is off, and once per contact and kind in 24 hours.
    */
-  async send(input: {
-    conversationId: string;
-    contactId: string;
-    numberId: string;
-    kind: KeywordKind;
-  }): Promise<'SENT' | 'SKIPPED'> {
+  async send(input: { conversationId: string; contactId: string; numberId: string; kind: KeywordKind }): Promise<'SENT' | 'SKIPPED'> {
+    const result = await this.trySend(input);
+    if (result !== 'NONE') this.metrics.keywordRepliesTotal.inc({ kind: input.kind.toLowerCase(), result: result.toLowerCase() });
+    return result === 'SENT' ? 'SENT' : 'SKIPPED';
+  }
+
+  private async trySend(input: { conversationId: string; contactId: string; numberId: string; kind: KeywordKind }): Promise<'SENT' | 'SKIPPED' | 'FAILED' | 'NONE'> {
     const replies = await this.replies();
     const reply = input.kind === 'OPT_OUT' ? replies.optOut : replies.optIn;
-    if (reply.kind === 'NONE') return 'SKIPPED';
+    if (reply.kind === 'NONE') return 'NONE';
     const [contact, number] = await Promise.all([
       this.prisma.contact.findUnique({
         where: { id: input.contactId },
@@ -236,7 +239,7 @@ export class KeywordRepliesService {
         { err: (error as Error).message, kind: input.kind, conversationId: input.conversationId },
         'Keyword reply not sent',
       );
-      return 'SKIPPED';
+      return 'FAILED';
     }
   }
 }

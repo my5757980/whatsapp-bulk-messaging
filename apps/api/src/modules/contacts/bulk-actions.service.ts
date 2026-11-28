@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional } from '@nestjs/common';
 import { z } from 'zod';
 import { AppError } from '../../common/errors/app-error.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
@@ -8,6 +8,7 @@ import { Prisma, type BulkAction, type BulkActionKind } from '../../generated/pr
 import type { AuditActor } from '../audit/audit.service.js';
 import { ContactFilterSchema, contactFilterSql } from './contact-filter.sql.js';
 import { SegmentQueryBuilder } from './segment-query.builder.js';
+import { MetricsService } from '../../common/metrics/metrics.service.js';
 
 // Feature 010 (research R3, FR-008, FR-009): bulk work on many contacts runs in the background on the
 // `bulk` queue, one action at a time and in order. The selection is walked in id order, in batches of
@@ -54,6 +55,7 @@ export class BulkActionsService {
     private readonly prisma: PrismaService,
     private readonly queues: QueueRegistry,
     private readonly segments: SegmentQueryBuilder,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   /** Records the action and queues it; segments must exist and not be broken. */
@@ -105,7 +107,8 @@ export class BulkActionsService {
   }
 
   async finish(id: string, outcome: { result?: Record<string, unknown>; error?: string }): Promise<void> {
-    await this.prisma.bulkAction.update({
+    const row = await this.prisma.bulkAction.update({
+      select: { kind: true },
       where: { id },
       data: {
         status: outcome.error ? 'FAILED' : 'DONE',
@@ -114,6 +117,7 @@ export class BulkActionsService {
         ...(outcome.error ? { error: outcome.error.slice(0, 300) } : {}),
       },
     });
+    this.metrics?.bulkActionsTotal.inc({ kind: row.kind, result: outcome.error ? 'failed' : 'done' });
   }
 
   /** How many contacts the selection holds now. */

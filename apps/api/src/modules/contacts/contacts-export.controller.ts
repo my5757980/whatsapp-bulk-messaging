@@ -12,6 +12,7 @@ import { AuditService } from '../audit/audit.service.js';
 import { csvField } from '../campaigns/csv.js';
 import { ContactFilterSchema, contactFilterSql } from './contact-filter.sql.js';
 import { SegmentQueryBuilder } from './segment-query.builder.js';
+import { MetricsService } from '../../common/metrics/metrics.service.js';
 
 // Feature 010 (US2, FR-013, research R6): contacts as a streamed CSV for a segment, the list's filter or
 // everyone. Nothing is stored; phones are masked for roles without phones.full; each download is audited.
@@ -67,6 +68,7 @@ export class ContactsExportController {
     private readonly prisma: PrismaService,
     private readonly segments: SegmentQueryBuilder,
     private readonly audit: AuditService,
+    private readonly metrics: MetricsService,
   ) {}
 
   @Get('export.csv')
@@ -82,6 +84,7 @@ export class ContactsExportController {
     const keys = defs.map((d) => d.key);
     const selection = query.segmentId ? 'segment' : query.q || query.tag.length || query.consent || query.leadSource ? 'filter' : 'everyone';
     await this.audit.record({ userId: user.id, ip: clientIp(req) ?? null }, 'data.exported', { type: 'contacts', id: query.segmentId ?? null }, { selection, rows, format: 'csv' });
+    this.metrics.contactsExportedTotal.inc(rows);
 
     res.status(200);
     res.setHeader('content-type', 'text/csv; charset=utf-8');

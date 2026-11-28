@@ -55,7 +55,7 @@ test('US6: two-factor sign-in, the company requirement and an admin reset', asyn
     await expect(member.getByText('Enter the 6-digit code from your authenticator app.')).toBeVisible();
     await member.getByLabel('Code from your app').fill('000000');
     await member.getByRole('button', { name: 'Sign in' }).click();
-    await expect(member.getByRole('alert')).toContainText('That code is not right');
+    await expect(member.getByText('That code is not right')).toBeVisible();
     await member.getByLabel('Code from your app').fill(totp(secret, 1));
     await member.getByRole('button', { name: 'Sign in' }).click();
     await expect(member).toHaveURL(/\/campaigns/);

@@ -35,6 +35,12 @@ test('US2: retarget the people who clicked', async ({ page }) => {
   expect((await openTrackedLink(page, codes.get(phones[1]!)!)).status()).toBe(302);
   expect((await openTrackedLink(page, codes.get(phones[2]!)!, PREVIEW_UA)).status()).toBe(302);
 
+  // The dialog counts once when it opens, so wait until the clicks and the third delivered status are in.
+  const campaignId = campaignUrl.split('/').pop()!;
+  const groupCount = async (status: string) =>
+    ((await (await page.request.get(`/api/campaigns/${campaignId}/retarget-groups`)).json()) as { groups: Array<{ status: string; count: number }> }).groups.find((g) => g.status === status)?.count;
+  await expect.poll(() => groupCount('CLICKED'), { timeout: 60_000 }).toBe(2);
+  await expect.poll(() => groupCount('NOT_CLICKED'), { timeout: 60_000 }).toBe(1);
   await page.goto(`${campaignUrl}/report`);
   await page.getByRole('button', { name: 'Retarget…' }).click();
   await expect(page.getByTestId('retarget-count-CLICKED')).toHaveText('2', { timeout: 30_000 });

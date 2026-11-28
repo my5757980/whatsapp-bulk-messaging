@@ -21,6 +21,7 @@ const CONTRACTS = [
   path.join(SPECS, '007-ads-manager/contracts/ads-api.openapi.yaml'),
   path.join(SPECS, '008-commerce-payments/contracts/commerce-api.openapi.yaml'),
   path.join(SPECS, '009-templates-growth/contracts/templates-growth-api.openapi.yaml'),
+  path.join(SPECS, '010-contacts-settings-security/contracts/contacts-settings-api.openapi.yaml'),
 ];
 /**
  * The live event stream never ends, so a plain request would hang (inbox-realtime.int-spec.ts covers
@@ -118,6 +119,14 @@ describe('Role permissions on every endpoint', () => {
     expect(operations.some((op) => op.route === '/chat-widgets/{id}/pause' && op.permission === 'campaigns.manage')).toBe(true);
     expect(operations.some((op) => op.route === '/tools/whatsapp-link' && op.permission === 'templates.view')).toBe(true);
     expect(operations.some((op) => op.route.startsWith('/l/w/'))).toBe(false);
+    // And contacts, settings and security: segments, bulk tags, automations, 2FA and the business profile (010 T086).
+    expect(operations.some((op) => op.route === '/segments' && op.method === 'post' && op.permission === 'campaigns.manage')).toBe(true);
+    expect(operations.some((op) => op.route === '/contacts/export.csv' && op.permission === 'data.export')).toBe(true);
+    expect(operations.some((op) => op.route === '/date-automations/{id}/switch' && op.permission === 'campaigns.launch')).toBe(true);
+    expect(operations.some((op) => op.route === '/settings/security' && op.method === 'put' && op.permission === 'users.manage')).toBe(true);
+    expect(operations.some((op) => op.route === '/numbers/{id}/business-profile' && op.method === 'put' && op.permission === 'numbers.manage')).toBe(true);
+    // Self-service 2FA and the sign-in steps have no x-permission, so they are not role checked.
+    expect(operations.some((op) => op.route.startsWith('/me/2fa') || op.route.startsWith('/auth/login'))).toBe(false);
   });
 
   it.each(ROLES)('%s gets 403 exactly where the role table says so', async (role) => {

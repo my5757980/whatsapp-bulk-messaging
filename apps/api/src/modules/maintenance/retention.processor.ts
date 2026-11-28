@@ -35,11 +35,16 @@ const SHORT_LIVED_DAYS = 30;
 /** Payment requests and chat orders are business records (008 FR-044). */
 const PAYMENT_MONTHS = 60;
 const REMOVED_PRODUCT_DAYS = 90;
+/** Feature 010: bulk action records are kept 90 days. */
+const BULK_ACTION_DAYS = 90;
 const UPLOADS_PREFIX = 'uploads/';
 const BATCH = 5_000;
 
 type PurgeTable =
   | 'messages'
+  // Feature 010.
+  | 'bulk_actions'
+  | 'date_automation_occurrences'
   | 'campaign_upload_rows'
   | 'webhook_events'
   | 'chat_messages'
@@ -131,6 +136,10 @@ export interface RetentionResult extends LiveChatRetentionResult, AiRetentionRes
   flowSessions: number;
   /** One-time code messages older than 30 days (009). */
   otpMessages: number;
+  /** Feature 010 (research R13). */
+  bulkActions: number;
+  dateOccurrences: number;
+  dateAutomationMessages: number;
 }
 
 export function monthsBefore(now: Date, months: number): Date {
@@ -185,6 +194,9 @@ export class RetentionService {
       paymentRequests: 0,
       chatOrders: 0,
       otpMessages: 0,
+      bulkActions: 0,
+      dateOccurrences: 0,
+      dateAutomationMessages: 0,
     };
     const failures: string[] = [];
     const step = async (name: string, fn: () => Promise<void>) => {
@@ -228,9 +240,25 @@ export class RetentionService {
       const cutoff = new Date(now.getTime() - OTP_DAYS * 86_400_000);
       result.otpMessages = await this.deleteInBatches('messages', Prisma.sql`origin = 'OTP' AND created_at < ${cutoff}`);
     });
+    await step('contacts and automations', async () => {
+      Object.assign(result, await this.purgeContactsSettings(now));
+    });
     this.logger.log({ ...result }, 'Retention run finished');
     if (failures.length) throw new Error(`Retention partly failed: ${failures.join('; ')}`);
     return result;
+  }
+
+  /**
+   * Feature 010 (research R13): bulk action records after 90 days (they hold counts and selections, never contact
+   * lists); date automation occurrences after 12 months, then their messages, like campaign messages.
+   */
+  async purgeContactsSettings(now: Date): Promise<{ bulkActions: number; dateOccurrences: number; dateAutomationMessages: number }> {
+    const bulkCutoff = new Date(now.getTime() - BULK_ACTION_DAYS * 86_400_000);
+    const cutoff = monthsBefore(now, CAMPAIGN_MONTHS);
+    const bulkActions = await this.deleteInBatches('bulk_actions', Prisma.sql`created_at < ${bulkCutoff}`);
+    const dateOccurrences = await this.deleteInBatches('date_automation_occurrences', Prisma.sql`due_date < ${cutoff}::date`);
+    const dateAutomationMessages = await this.deleteInBatches('messages', Prisma.sql`origin = 'DATE_AUTOMATION' AND created_at < ${cutoff}`);
+    return { bulkActions, dateOccurrences, dateAutomationMessages };
   }
 
   /** Completed or cancelled campaigns that ended over 12 months ago, plus old API messages. */

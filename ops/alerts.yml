@@ -275,3 +275,29 @@ groups:
           description: >-
             Codes wait in the number's send queue. Check that the worker runs and keeps up, the
             number's sending speed, and Meta's status page.
+
+      # Feature 010 (research R13): date automations and the second sign-in step.
+      - alert: WbmDateAutomationBehind
+        expr: |
+          max(wbm_date_automation_behind) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Date automation messages are still pending 30 minutes after their send time
+          description: >-
+            Birthday or other date messages are late. Check that the worker runs the maintenance job
+            date-automation-tick every minute, the number's send queue, and paused automations in
+            Automations.
+
+      - alert: WbmSecondStepFailures
+        expr: |
+          sum(increase(wbm_login_second_step_total{result="failed"}[15m])) > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: More than 30 wrong sign-in codes in 15 minutes
+          description: >-
+            Someone may be guessing codes, or a clock is wrong. Check the audit log for auth.2fa_failed and
+            auth.2fa_locked, and the server clock (codes depend on the time).

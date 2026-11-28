@@ -360,6 +360,54 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  // Feature 010 (research R13): contacts, settings and security.
+  readonly segmentQuerySeconds = new Histogram({
+    name: 'wbm_segment_query_seconds',
+    help: 'Seconds a segment count query takes (cache misses only)',
+    buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10],
+    registers: [this.registry],
+  });
+
+  readonly bulkActionsTotal = new Counter({
+    name: 'wbm_bulk_actions_total',
+    help: 'Finished bulk actions by kind (TAG_ADD, TAG_REMOVE, DRIP_ENROL) and result (done, failed)',
+    labelNames: ['kind', 'result'] as const,
+    registers: [this.registry],
+  });
+
+  readonly contactsExportedTotal = new Counter({
+    name: 'wbm_contacts_exported_total',
+    help: 'Contacts written to CSV exports',
+    registers: [this.registry],
+  });
+
+  readonly keywordRepliesTotal = new Counter({
+    name: 'wbm_keyword_replies_total',
+    help: 'Keyword replies by kind (opt_out, opt_in) and result (sent, skipped, failed)',
+    labelNames: ['kind', 'result'] as const,
+    registers: [this.registry],
+  });
+
+  readonly dateAutomationMessagesTotal = new Counter({
+    name: 'wbm_date_automation_messages_total',
+    help: 'Date automation occurrences by result: queued, skipped, too_late',
+    labelNames: ['result'] as const,
+    registers: [this.registry],
+  });
+
+  readonly dateAutomationBehind = new Gauge({
+    name: 'wbm_date_automation_behind',
+    help: 'Date automation occurrences still pending 30 minutes after their send time (set by the minute tick)',
+    registers: [this.registry],
+  });
+
+  readonly loginSecondStepTotal = new Counter({
+    name: 'wbm_login_second_step_total',
+    help: 'Second sign-in steps by result: code, recovery, setup (signed in), failed, locked',
+    labelNames: ['result'] as const,
+    registers: [this.registry],
+  });
+
   constructor() {
     collectDefaultMetrics({ register: this.registry });
   }

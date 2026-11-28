@@ -41,8 +41,8 @@ test('US4: a consent keyword gets its confirmation reply in the chat', async ({ 
       `npm run mock:inbound -- --from ${customer} --name "${name}" --text "stop" --phone-number-id ${number.phoneNumberId}`,
       { cwd: REPO_ROOT, stdio: 'ignore' },
     );
-    // Both STOP messages show (each chat item also holds its time), and still one reply.
-    await expect(timeline.getByTestId('chat-item').filter({ hasText: /\bstop\b/i })).toHaveCount(2, {
+    // Both STOP messages show (a chat item's text runs into its time, so no word boundary), and still one reply.
+    await expect(timeline.locator('[data-testid="chat-item"][data-kind="INBOUND"]').filter({ hasText: /stop/i })).toHaveCount(2, {
       timeout: 15_000,
     });
     await expect(timeline.getByTestId('chat-item').filter({ hasText: REPLY })).toHaveCount(1);

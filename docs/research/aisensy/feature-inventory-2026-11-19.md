@@ -9,7 +9,7 @@
 - Where a page leaves a detail out, we choose a sensible default and mark it "default". Nothing undocumented is claimed as "identical".
 
 **Status legend:**
-- ✅ built (features 001 to 009)
+- ✅ built (features 001 to 010)
 - 🟡 partly built
 - ❌ missing
 - ➖ not applicable to a single company running its own WhatsApp account
@@ -22,10 +22,10 @@
 |---|---|---|---|
 | 1.1 | Connect a WhatsApp Business number (they use Meta "Log in with Facebook" Embedded Signup; needs Meta Tech Provider status) | ✅ A guided connection wizard: paste a system-user token once, pick the account and number, and each check (permissions, expiry, registration and PIN, display name, quality, limit, app subscription, webhook address) shows a fix; it registers the number and subscribes the app on request, and ends with a test message (006). The manual form stays. | 006 Integrations. Embedded Signup only if the company becomes a Tech Provider ➖ |
 | 1.2 | Quality rating and messaging-limit tier (250 → 2K → 10K → 100K → unlimited) shown, with upgrade guidance | ✅ Quality, tier and quality webhooks; upgrade guidance text 🟡 | Contacts & settings (guidance) |
-| 1.3 | Edit the WhatsApp Business profile: logo (640×640, ≤5 MB), description (≤256), address (≤256), email, vertical/category, website. Owner only. | ❌ | Contacts & settings |
-| 1.4 | Display-name verification status, and a free Blue Tick (official business account) application guide | ❌ | Contacts & settings (status display and a step-by-step guide; Meta decides) |
+| 1.3 | Edit the WhatsApp Business profile: logo (640×640, ≤5 MB), description (≤256), address (≤256), email, vertical/category, website. Owner only. | ✅ Profile editing through Meta, with Meta's limits checked first and the picture sent by Resumable Upload | 010 |
+| 1.4 | Display-name verification status, and a free Blue Tick (official business account) application guide | ✅ Display name status with steps when declined, and the blue tick checklist (Meta decides) | 010 |
 | 1.5 | Coexistence: the same number used in the WhatsApp Business app and the API, with 6 months of 1:1 chat history synced (beta, partner-enabled) | ➖ Partner-only onboarding today | Revisit if available to direct Cloud API users |
-| 1.6 | Migrating from another provider, and downgrading back to the app (guides) | ❌ docs only | Contacts & settings (docs) |
+| 1.6 | Migrating from another provider, and downgrading back to the app (guides) | ✅ Two guides on the numbers page, with a typed confirmation to remove a number | 010 |
 | 1.7 | Virtual numbers, sold by AiSensy | ➖ A vendor service | – |
 
 ## 2. Team, security and settings
@@ -34,9 +34,9 @@
 |---|---|---|---|
 | 2.1 | Roles: owner/admin, manager, agent; invite and remove agents | ✅ admin, manager and agent; invitations; deactivation | – |
 | 2.2 | Number masking for agents (last 4 digits) | ✅ | – |
-| 2.3 | Two-factor authentication for team logins | ❌ | Contacts & settings |
-| 2.4 | Agent rules: an agent sees and resolves only chats whose contact matches tag or attribute values (for example tag "Demo", or Industry = Ecommerce) | ❌ | 002 |
-| 2.5 | Notification preferences: sound on/off; browser push on up to 5 devices (add, remove, pause) | 🟡 We have an in-app notification bell only | 002 |
+| 2.3 | Two-factor authentication for team logins | ✅ Authenticator-app codes, recovery codes, a company requirement, lockout and admin resets | 010 |
+| 2.4 | Agent rules: an agent sees and resolves only chats whose contact matches tag or attribute values (for example tag "Demo", or Industry = Ecommerce) | ✅ Agent rules by tags and attribute values | 002 |
+| 2.5 | Notification preferences: sound on/off; browser push on up to 5 devices (add, remove, pause) | ✅ Sound, browser push on up to 5 devices, pause per device | 002 |
 | 2.6 | Audit trail | ✅ We go further: a full audit log | – |
 
 ## 3. Contacts and audience
@@ -44,16 +44,16 @@
 | # | Capability | Our status | Planned in |
 |---|---|---|---|
 | 3.1 | Unlimited contacts; CSV import with column mapping; add a single contact | ✅ | – |
-| 3.2 | Export contacts | 🟡 We export campaigns; a full contact export is missing | Contacts & settings |
-| 3.3 | Tags (manual) plus automated tags for first message, API and broadcast; bulk add/remove tags on selected contacts | 🟡 Manual tags work; automated tag types and bulk tag management are missing | Contacts & settings |
+| 3.2 | Export contacts | ✅ Streamed CSV of the filtered list or a segment, phones masked by role | 010 |
+| 3.3 | Tags (manual) plus automated tags for first message, API and broadcast; bulk add/remove tags on selected contacts | ✅ Bulk add or remove for chosen or all matching contacts; automatic tags by lead source, reply, click and consent | 010 |
 | 3.4 | Custom attributes (typed), editable from the profile | ✅ | – |
-| 3.5 | **Global attributes**: project-wide values usable in templates and messages | ❌ | Contacts & settings |
+| 3.5 | **Global attributes**: project-wide values usable in templates and messages | ✅ Global attributes in template variables, replies, flows and AI agent instructions | 010 |
 | 3.6 | Fallback values for attributes used in templates | ✅ in variable mapping | – |
 | 3.7 | **First Message tags**: a tag with category "First Message" and a list of phrases. Exact-match phrases auto-tag a contact on their first message. Pre-filled messages from links, QR codes and widgets drive it. | ✅ First-message rules set the tag on a contact's first message and can start a flow (003); links and QR codes not yet | 003 Flow builder (QR in Integrations) |
-| 3.8 | Lead source: Organic, API, or a custom label on import | 🟡 Consent source exists; lead source is missing | Contacts & settings |
-| 3.9 | **Segments / lists**: saved audiences built from tags, attributes, campaigns and behaviour (read, replied, clicked) | 🟡 We have per-campaign filters; saved segments and behaviour filters are missing | Contacts & settings |
-| 3.10 | Opt-in/opt-out keyword automation: up to 5 keywords each, configurable response message (template or regular) | 🟡 Keywords work; configurable response messages and the keyword limit need checking | Contacts & settings |
-| 3.11 | **Block a contact** ("block all messages"): stops their incoming messages; you can still message them | ❌ | 002 |
+| 3.8 | Lead source: Organic, API, or a custom label on import | ✅ Lead source kinds with an optional label, set when a contact is created | 010 |
+| 3.9 | **Segments / lists**: saved audiences built from tags, attributes, campaigns and behaviour (read, replied, clicked) | ✅ Saved segments with behaviour rules, used as campaign and drip audiences | 010 |
+| 3.10 | Opt-in/opt-out keyword automation: up to 5 keywords each, configurable response message (template or regular) | ✅ A text or utility template reply for each list, once a day per contact | 010 |
+| 3.11 | **Block a contact** ("block all messages"): stops their incoming messages; you can still message them | ✅ Block and unblock from the chat profile | 002 |
 | 3.12 | Contact deletion | ✅ with anonymisation | – |
 | 3.13 | Payment history on the contact profile | ✅ The contact's Payments tab with requests and chat orders, and payments in the journey (008) | 008 Commerce and payments |
 
@@ -87,7 +87,7 @@
 | 5.8 | **Click tracking**: URL CTA buttons only; "Clicked" tab with per-user click counts; one-tap retarget of clickers | ✅ A tracked link per recipient on URL buttons and text variables; a Clicked view with first and last clicks and counts, an export, and one-click retargeting of clickers; previews and robots are not counted (005) | 005 Campaign growth |
 | 5.9 | **API campaigns**: a named "Live" campaign bound to one template, triggered by API with params, media, tags and attributes; auto-creates contacts | ✅ Named API campaigns with a template, variable mapping, header media, tags, attributes and a daily limit, called by API name; contacts are created on the first call; results per day and an export (006) | 006 Integrations |
 | 5.10 | **QR code campaigns**: name, pre-filled message, optional linked flow; "Set Live and generate QR"; download the QR or a printable standee; track Scanned → Replied leads, then export, broadcast or tag them | ✅ Chat links: a short link, QR images (PNG, SVG) and a printable poster of our own design; openings, chats started and new contacts per day; the link's flow and tag; the contacts can be exported or tagged for a campaign (006) | 006 Integrations |
-| 5.11 | **Birthday automation**: a date-of-birth attribute; a toggle with send time; "skip opted-out"; a chosen template; analytics. Default: any date attribute. | ❌ | Contacts & settings |
+| 5.11 | **Birthday automation**: a date-of-birth attribute; a toggle with send time; "skip opted-out"; a chosen template; analytics. Default: any date attribute. | ✅ Date automations: every year or once, days before or after, send time, skips and results per day | 010 |
 | 5.12 | **Drip sequences**: time-based follow-ups after an action | ✅ Drips of up to 10 timed template steps with quiet hours; contacts join by hand or on a tag, an opt-in, an import, the API or a link click, and leave on a reply, a stop tag, an opt-out and more; results per step (005) | 005 Campaign growth |
 | 5.13 | Campaign reports download (campaign, user, overview, opt-in/opt-out) | ✅ The campaign export, plus overview, team member and opt-in/opt-out reports with CSV downloads (009) | 009 Templates and growth |
 | 5.14 | Meta frequency capping awareness (marketing messages limited per user) | ✅ Meta's per-person marketing limit explained in the wizard, and held-back messages counted in the results (009) | 009 Templates and growth |
@@ -96,27 +96,27 @@
 
 | # | Capability (documented flow) | Our status | Planned in |
 |---|---|---|---|
-| 6.1 | Shared inbox: many agents on one number, real time | ❌ (spec drafted) | 002 |
-| 6.2 | **Chat states**: Active (bot handling or new), Requesting (needs a human), Intervened (an agent took over; only that agent sees it), Resolved/Closed (back to the bot) | ❌ | 002 (spec to be aligned) |
-| 6.3 | **Intervene** and **Resolve** actions; resolving hands the chat back to the bot | ❌ | 002 |
-| 6.4 | **History**: a chat moves to History 24 h after the user's last message. Agents can't reply there, but can **Send Template** to restart; the chat returns to Active when the user writes. | ❌ | 002 |
-| 6.5 | **Auto-resolve** after 24 h of inactivity (toggle), so chats aren't stuck with absent agents | ❌ | 002 |
-| 6.6 | Manual transfer between agents; manager monitoring | ❌ | 002 |
-| 6.7 | Agent rules (2.4) limit which chats an agent sees | ❌ | 002 |
-| 6.8 | Smart filters by tags, campaigns and attributes | ❌ | 002 |
-| 6.9 | **Canned messages**: name; type text or media (up to 4,096 chars; *bold*/_italic_); variables ($FirstName, $Name, $MobileNumber, $LastName, custom attributes, and {{1}} filled at send); media from a URL or the media library; personal favourites; insert with "/" or the bookmark icon; max 200 | ❌ | 002 |
-| 6.10 | **Welcome and off-hours messages**: welcome inside working hours, off-hours outside; template or regular text/image/file; time zone; hours per weekday | ❌ | 002 |
-| 6.11 | **Chat profile panel**: status, last active, template and session message counts, unresolved queries count, source (Organic/API/custom), first-message tag (editable), campaigns with read ticks, attributes (editable), tags (add/create), **customer journey** (timestamped log of interventions, tag changes, campaigns) | ❌ | 002 |
+| 6.1 | Shared inbox: many agents on one number, real time | ✅ Shared inbox with live updates | 002 |
+| 6.2 | **Chat states**: Active (bot handling or new), Requesting (needs a human), Intervened (an agent took over; only that agent sees it), Resolved/Closed (back to the bot) | ✅ Active, waiting for agent, taken and resolved states | 002 |
+| 6.3 | **Intervene** and **Resolve** actions; resolving hands the chat back to the bot | ✅ Take over and resolve; resolving hands the chat back to flows and the AI agent | 002 |
+| 6.4 | **History**: a chat moves to History 24 h after the user's last message. Agents can't reply there, but can **Send Template** to restart; the chat returns to Active when the user writes. | ✅ Past chats after 24 hours, restarted with a template | 002 |
+| 6.5 | **Auto-resolve** after 24 h of inactivity (toggle), so chats aren't stuck with absent agents | ✅ Auto-resolve after 24 hours (toggle) | 002 |
+| 6.6 | Manual transfer between agents; manager monitoring | ✅ Transfer between members; the team view for managers | 002 |
+| 6.7 | Agent rules (2.4) limit which chats an agent sees | ✅ Agent rules limit the chats an agent sees | 002 |
+| 6.8 | Smart filters by tags, campaigns and attributes | ✅ Filters by tags, campaigns and attributes | 002 |
+| 6.9 | **Canned messages**: name; type text or media (up to 4,096 chars; *bold*/_italic_); variables ($FirstName, $Name, $MobileNumber, $LastName, custom attributes, and {{1}} filled at send); media from a URL or the media library; personal favourites; insert with "/" or the bookmark icon; max 200 | ✅ Saved replies with variables, parameters and media | 002 |
+| 6.10 | **Welcome and off-hours messages**: welcome inside working hours, off-hours outside; template or regular text/image/file; time zone; hours per weekday | ✅ Welcome and off-hours messages with working hours and a time zone | 002 |
+| 6.11 | **Chat profile panel**: status, last active, template and session message counts, unresolved queries count, source (Organic/API/custom), first-message tag (editable), campaigns with read ticks, attributes (editable), tags (add/create), **customer journey** (timestamped log of interventions, tag changes, campaigns) | ✅ The chat profile panel with counts, source, journey and blocking | 002 |
 | 6.12 | Send payment requests, catalog items and forms from live chat | ✅ Payment requests, one product, product lists, the catalog and forms from a chat; carts become chat orders (008) | 008 Commerce and payments |
-| 6.13 | Notification preferences (2.5) and push notifications | ❌ | 002 |
-| 6.14 | Media library (reusable uploaded media) | 🟡 Media assets exist; a library screen is missing | 002 |
+| 6.13 | Notification preferences (2.5) and push notifications | ✅ Notification preferences and browser push | 002 |
+| 6.14 | Media library (reusable uploaded media) | ✅ The media library | 002 |
 
 ## 7. Chatbot flow builder
 
 | # | Capability | Our status | Planned in |
 |---|---|---|---|
-| 7.1 | Build by drag-and-drop canvas, from a template (60+ by industry), or with an AI generator from a prompt | 🟡 Canvas and 6 starter flows of our own (003); the team assistant drafts a flow from a prompt (004); fewer starters than 60 | 003 Flow builder (AI generator in 004 AI agent) |
-| 7.2 | **Triggers**: keywords, regex, template-message buttons, QR codes, Click-to-WhatsApp ads | 🟡 Keywords, patterns (regex), template quick-reply buttons and first-message rules (003); QR codes through chat links (006); ads not yet | 003 Flow builder, 006 Integrations (ads in Ads) |
+| 7.1 | Build by drag-and-drop canvas, from a template (60+ by industry), or with an AI generator from a prompt | ✅ Canvas and 6 starter flows of our own (003); a flow drafted from a prompt by the team assistant (004) | 003 |
+| 7.2 | **Triggers**: keywords, regex, template-message buttons, QR codes, Click-to-WhatsApp ads | ✅ Keywords, patterns, template buttons and first-message rules (003), QR codes through chat links (006), click-to-WhatsApp ads (007) | 003 |
 | 7.3 | **Message nodes**: text/media, reply buttons, list menus | ✅ (003) | 003 Flow builder |
 | 7.4 | **Commerce nodes**: product cards, catalog, cart, payments, native forms | ✅ Send products and Send catalog (waiting for the cart), Send form, and Request payment with the cart total (008) | 008 Commerce and payments |
 | 7.5 | **Logic**: save answers to attributes; conditions; API request (live data such as order status); time delay; timeout fallback; fallback reply for unknown input | ✅ Questions with validation and retries, attributes, tags, conditions, safe API calls with secrets, delays, timeouts and invalid-answer branches (003) | 003 Flow builder |
@@ -190,7 +190,7 @@
 
 ## Roadmap to full functional parity
 
-Feature numbers follow the order specs are started. 002 to 009 are built; each remaining row gets the
+Feature numbers follow the order specs are started. 002 to 010 are built; each remaining row gets the
 next free number when its spec starts. Agreed order: the AI agent, campaign growth (click tracking
 and drips), integrations, click-to-WhatsApp ads, payments and templates growth are built; the other
 rows are scheduled around them.
@@ -205,7 +205,7 @@ rows are scheduled around them.
 | **007 Ads manager** ✅ built | Items 10.1–10.4 and the texts of 9.7: connection with checks, chat, lead form and website ads with Meta's review, chats from ads with the free window, flows and tags, results and a spending cap, audiences and lookalikes, lead forms. Still open: AI images and videos (9.7) and website visitor audiences (10.2) | 003, 006 |
 | **008 Commerce and payments** ✅ built | Items 3.13, 4.8, 6.12, 7.4, 8.1–8.4 (8.3 as Stripe payment links) and 11.8: payment requests from chat, flows, campaigns, the API and store orders with statuses, reminders, reports and retargeting; the Meta catalog with product messages and carts into chat orders; WhatsApp Forms; commerce flow steps. Still open: webviews (8.5, optional) | 003, 006 |
 | **009 Templates and growth** ✅ built | Items 4.1, 4.3–4.7, 4.9 and 4.11; 5.3, 5.6 (replied), 5.13 and 5.14; 12.1 and 12.2: one-time codes with authentication templates and a code API, carousel and limited-time offer templates, time-to-live, media from web addresses, replied counts and every row, overview, team and opt-in reports, samples, help, the website chat button and the link generator | 001, 006 |
-| **Contacts, settings and security** | Items 1.3, 1.4, 1.6 and 2.3; 3.2, 3.3, 3.5, 3.8, 3.9 and 3.10 (3.7 first-message tags came with 003); 5.11 (birthday and date automations) | 001 |
+| **010 Contacts, settings and security** ✅ built | Items 1.3, 1.4, 1.6 and 2.3; 3.2, 3.3, 3.5, 3.8, 3.9 and 3.10 (3.7 first-message tags came with 003); 5.11: segments with behaviour rules, bulk and automatic tags, lead sources, the contacts export, global attributes, keyword replies, birthday and date automations, two-factor sign-in, the business profile with name status and the blue tick checklist, and number guides. | 001 |
 | **Mobile (installable app with push)** | Item 12.4 | 002 |
 
 **What depends on Meta, not on us:**

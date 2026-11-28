@@ -276,6 +276,25 @@ describe('Contact deletion', () => {
     expect(await ctx.prisma.message.count({ where: { campaignId: campaign.id, contactId: { not: null } } })).toBe(0);
   });
 
+  it('deletes their date automation occurrences, clears their automation messages and leaves them out of exports (010 T084)', async () => {
+    const phone = uaePhone();
+    const contact = await seedContact(ctx, phone, { name: 'Birthday Person', attributes: { birthday: '1990-01-01' } });
+    const number = await seedNumber(ctx);
+    const template = await seedTemplate(ctx, number.wabaId);
+    const automation = await ctx.prisma.dateAutomation.create({
+      data: { name: `Erasure dates ${randomUUID().slice(0, 6)}`, attributeKey: 'birthday', timing: 'YEARLY', sendTime: '09:00', numberId: number.id, templateId: template.id, variableMapping: {} },
+    });
+    const message = await ctx.prisma.message.create({ data: { origin: 'DATE_AUTOMATION', contactId: contact.id, phoneE164: phone, recipientCountry: 'AE', numberId: number.id, templateId: template.id, status: 'DELIVERED', resolvedParams: { 'BODY.1': 'Birthday Person' } } });
+    const occurrence = await ctx.prisma.dateAutomationOccurrence.create({ data: { automationId: automation.id, contactId: contact.id, dueDate: new Date('2027-01-01T00:00:00.000Z'), status: 'SENT', messageId: message.id } });
+    expect((await admin.agent.delete(`/api/contacts/${contact.id}`).set('x-csrf-token', admin.csrf)).status).toBe(204);
+    expect(await ctx.prisma.dateAutomationOccurrence.findUnique({ where: { id: occurrence.id } })).toBeNull();
+    expect(await ctx.prisma.message.findUniqueOrThrow({ where: { id: message.id } })).toMatchObject({ contactId: null, phoneE164: null, status: 'DELIVERED' });
+    const exported = await admin.agent.get('/api/contacts/export.csv').query({ q: 'Birthday Person' });
+    expect(exported.status).toBe(200);
+    expect(exported.text).not.toContain(phone.slice(1));
+    expect(exported.text).not.toContain('Birthday Person');
+  });
+
   it('is admin-only and returns 404 for unknown contacts', async () => {
     const contact = await seedContact(ctx, uaePhone());
     const manager = await signIn(ctx, 'MANAGER');

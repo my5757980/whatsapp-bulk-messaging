@@ -69,6 +69,11 @@ describe('alert rules', () => {
     expect(rule('WbmOtpSlow')).toMatch(/histogram_quantile\(0\.95[\s\S]*wbm_otp_send_seconds_bucket\[10m\][\s\S]*> 5[\s\S]*for: 10m/);
   });
 
+  it('warn when date automations fall behind or sign-in codes keep failing (010 T083)', () => {
+    expect(rule('WbmDateAutomationBehind')).toMatch(/max\(wbm_date_automation_behind\) > 0[\s\S]*for: 10m/);
+    expect(rule('WbmSecondStepFailures')).toMatch(/wbm_login_second_step_total\{result="failed"\}\[15m\]\)\) > 30/);
+  });
+
   it('give every alert a severity and a summary', () => {
     const names = [...ALERTS.matchAll(/- alert: (\w+)/g)].map((m) => m[1]!);
     expect(names.length).toBeGreaterThanOrEqual(5);

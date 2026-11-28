@@ -13,6 +13,7 @@ import { GlobalAttributesService } from '../settings/global-attributes.service.j
 import { SettingsService } from '../settings/settings.service.js';
 import type { PauseReason } from './date-automations.service.js';
 import { companyClock, dayDate, dayOf, dueCondition } from './due-query.js';
+import { MetricsService } from '../../common/metrics/metrics.service.js';
 
 export const DATE_AUTOMATION_TICK_JOB = 'date-automation-tick';
 const EVERY_MS = 60_000;
@@ -68,6 +69,7 @@ export class DateAutomationTickProcessor implements OnModuleInit, OnApplicationB
     private readonly settings: SettingsService,
     private readonly globals: GlobalAttributesService,
     private readonly notifications: NotificationsService,
+    private readonly metrics: MetricsService,
   ) {}
 
   onModuleInit(): void {
@@ -85,6 +87,7 @@ export class DateAutomationTickProcessor implements OnModuleInit, OnApplicationB
     const today = dayDate(clock.date);
     const late = await this.prisma.dateAutomationOccurrence.updateMany({ where: { status: 'PENDING', messageId: null, dueDate: { lt: today } }, data: { status: 'SKIPPED', reason: 'too_late' } });
     const automations = await this.prisma.dateAutomation.findMany({ where: { status: 'ON', sendTime: { lte: clock.time } }, include: { template: true, number: true }, orderBy: { id: 'asc' } });
+    if (late.count) this.metrics.dateAutomationMessagesTotal.inc({ result: 'too_late' }, late.count);
     const totals = { queued: 0, skipped: late.count, paused: 0 };
     for (const a of automations) {
       try {
@@ -100,11 +103,27 @@ export class DateAutomationTickProcessor implements OnModuleInit, OnApplicationB
         const done = await this.sendPending(a, clock.date);
         totals.queued += done.queued;
         totals.skipped += done.skipped;
+        if (done.queued) this.metrics.dateAutomationMessagesTotal.inc({ result: 'queued' }, done.queued);
+        if (done.skipped) this.metrics.dateAutomationMessagesTotal.inc({ result: 'skipped' }, done.skipped);
       } catch (error) {
         this.logger.error({ automationId: a.id, err: (error as Error).message }, 'Date automation run failed');
       }
     }
+    await this.measureBehind(clock).catch((error: unknown) => this.logger.warn({ err: (error as Error).message }, 'Could not measure pending date automation messages'));
     return totals;
+  }
+
+  /** Occurrences still pending 30 minutes after their automation's send time today (WbmDateAutomationBehind). */
+  private async measureBehind(clock: { date: string; time: string }): Promise<void> {
+    const [h, m] = clock.time.split(':').map(Number) as [number, number];
+    const minutes = h * 60 + m - 30;
+    if (minutes < 0) {
+      this.metrics.dateAutomationBehind.set(0);
+      return;
+    }
+    const cutoff = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+    const behind = await this.prisma.dateAutomationOccurrence.count({ where: { status: 'PENDING', dueDate: dayDate(clock.date), automation: { status: 'ON', sendTime: { lte: cutoff } } } });
+    this.metrics.dateAutomationBehind.set(behind);
   }
 
   /** Pauses an automation that cannot run, telling the admins once; returns whether it changed. */

@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { SegmentRulesSchema, segmentReferences, type BrokenSegmentRule, type SegmentRule, type SegmentRules } from '@wbm/shared';
 import type { Redis } from 'ioredis';
@@ -9,6 +9,7 @@ import { Prisma } from '../../generated/prisma/client.js';
 import type { AttributeType } from '../../generated/prisma/client.js';
 import { CLICKED, DELIVERED, REPLIED } from '../campaigns/replied.sql.js';
 import { compileRule } from './audience-query.builder.js';
+import { MetricsService } from '../../common/metrics/metrics.service.js';
 
 // Feature 010 (research R1, FR-001 – FR-003, FR-006): saved segments compiled to one parameterised WHERE
 // over `contacts c`. Members are never stored; every use runs the SQL. Rules that name a missing tag,
@@ -119,6 +120,7 @@ export class SegmentQueryBuilder {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    @Optional() private readonly metrics?: MetricsService,
   ) {}
 
   /** Parses stored or submitted rules; a 422 names the problems. */
@@ -169,11 +171,13 @@ export class SegmentQueryBuilder {
     const key = `wbm:segcount:${createHash('sha256').update(JSON.stringify(rules)).digest('hex')}`;
     const cached = await this.redis.get(key).catch(() => null);
     if (cached) return JSON.parse(cached) as SegmentCounts;
+    const stopTimer = this.metrics?.segmentQuerySeconds.startTimer();
     const [row] = await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SET LOCAL statement_timeout = '10s'`;
       return tx.$queryRaw<Array<{ count: bigint; marketable: bigint }>>`
         SELECT count(*) AS count, count(*) FILTER (WHERE ${MARKETABLE}) AS marketable FROM contacts c WHERE ${where}`;
     });
+    stopTimer?.();
     const counts = { count: Number(row?.count ?? 0), marketable: Number(row?.marketable ?? 0) };
     await this.redis.set(key, JSON.stringify(counts), 'EX', 10).catch(() => undefined);
     return counts;

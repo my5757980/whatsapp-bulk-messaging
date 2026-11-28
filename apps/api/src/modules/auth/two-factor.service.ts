@@ -12,6 +12,7 @@ import { REDIS_CLIENT } from '../../common/queue/queue.module.js';
 import { AuditService, type AuditActor } from '../audit/audit.service.js';
 import { AuthService, newRandomToken } from './auth.service.js';
 import { hashRecoveryCode, newRecoveryCodes } from './recovery-codes.js';
+import { MetricsService } from '../../common/metrics/metrics.service.js';
 
 // Feature 010 (US6, research R10, contracts/login-2fa.md): authenticator-app codes with recovery codes, the
 // pending sign-in between the password and the code, the lockout, self-service and admin resets.
@@ -44,6 +45,7 @@ export class TwoFactorService {
     private readonly auth: AuthService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    private readonly metrics: MetricsService,
   ) {
     this.hashKey = Buffer.from(config.TOKEN_ENCRYPTION_KEY, 'base64');
   }
@@ -111,14 +113,21 @@ export class TwoFactorService {
     const count = await this.redis.incr(failKey(userId));
     if (count === 1) await this.redis.expire(failKey(userId), LOCK_SECONDS);
     await this.audit.record(actor, 'auth.2fa_failed', { type: 'user', id: userId }, { failures: count });
+    this.metrics.loginSecondStepTotal.inc({ result: 'failed' });
     if (count >= MAX_FAILURES) {
       await this.redis.set(lockKey(userId), '1', 'EX', LOCK_SECONDS);
       await this.redis.del(failKey(userId));
       if (pendingToken) await this.endPending(pendingToken);
       await this.audit.record(actor, 'auth.2fa_locked', { type: 'user', id: userId }, { minutes: LOCK_SECONDS / 60 });
+      this.metrics.loginSecondStepTotal.inc({ result: 'locked' });
       throw new AppError(HttpStatus.TOO_MANY_REQUESTS, 'SECOND_STEP_LOCKED', 'Too many wrong codes. Try again in 15 minutes.');
     }
     throw AppError.validation('That code is not right', [{ field: 'code', issue: 'is not valid' }], 'INVALID_CODE');
+  }
+
+  /** A second step that signed the member in. */
+  signedIn(step: 'CODE' | 'RECOVERY' | 'SETUP'): void {
+    this.metrics.loginSecondStepTotal.inc({ result: step.toLowerCase() });
   }
 
   async clearFailures(userId: string): Promise<void> {

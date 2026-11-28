@@ -83,6 +83,13 @@ jobs:
       - name: List the failed contract tests
         if: failure() && steps.contract.outcome == 'failure'
         run: node tools/ci/vitest-failures.mjs vitest-contract.json contract
+      # Feature 010 (SC-001): a 10-rule segment counted over 200,000 contacts; the timing is a notice annotation.
+      - name: Segment count over 200,000 contacts (perf)
+        if: success()
+        working-directory: apps/api
+        env:
+          PERF_SEGMENTS: '1'
+        run: npx vitest run --project integration test/integration/segments-perf.int-spec.ts --reporter=default --reporter=github-actions
 
   e2e-smoke:
     runs-on: ubuntu-latest

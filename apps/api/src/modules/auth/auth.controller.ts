@@ -127,6 +127,7 @@ export class AuthController {
     const { user, sessionToken } = await this.auth.createSession(member, metaOf(req));
     setAuthCookies(res, sessionToken, this.config.COOKIE_SECURE);
     await this.audit.record({ userId, ip: clientIp(req) ?? null }, 'auth.login', { type: 'user', id: userId }, { secondStep });
+    this.twoFactor.signedIn(secondStep);
     return user;
   }
 
