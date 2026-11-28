@@ -32,7 +32,7 @@ delivery order. Pushes are batched: US1–US2 (the MVP), US3–US6, then US7–U
 
 **Purpose**: contract lint, mock-meta routes, a code helper for tests and the perf seed.
 
-- [ ] T001 [P] Register the 010 contract:
+- [X] T001 [P] Register the 010 contract:
   - add specs/010-contacts-settings-security/contracts/contacts-settings-api.openapi.yaml to the `lint:contracts` script in package.json
   - add `'contacts-settings-api.openapi.yaml'` (feature folder `010-contacts-settings-security`) to `ContractFile` and `FEATURE_OF` in apps/api/test/contract/openapi-validator.ts
 - [ ] T002 [P] Add tools/mock-meta/src/business-profile.ts, mounted from tools/mock-meta/src/server.ts (contracts/meta-business-profile.md):
@@ -55,7 +55,7 @@ actions, web types and earlier contracts.
 
 **⚠️ CRITICAL**: no user story work can begin until this phase is complete.
 
-- [ ] T005 Write the migration apps/api/prisma/migrations/20261217000000_contacts_settings_security/migration.sql per data-model.md, then update apps/api/prisma/schema.prisma and run `prisma generate`. The migration holds:
+- [X] T005 Write the migration apps/api/prisma/migrations/20261217000000_contacts_settings_security/migration.sql per data-model.md, then update apps/api/prisma/schema.prisma and run `prisma generate`. The migration holds:
   - **new enums:** `LeadSourceKind`, `BulkActionKind`, `BulkActionStatus`, `AutoTagEvent`, `DateAutomationTiming`, `DateAutomationStatus` and `OccurrenceStatus`
   - **new enum values:** `AudienceType.SEGMENT`, `MessageOrigin.DATE_AUTOMATION` and `NotificationType.DATE_AUTOMATION_PAUSED`
   - **new columns:** `contacts.lead_source_kind`, `campaigns.segment_id`, and `settings.opt_out_reply`, `opt_in_reply`, `require_2fa`
@@ -64,34 +64,34 @@ actions, web types and earlier contracts.
   - **indexes:** `contacts (lead_source_kind)`, `messages (contact_id, created_at)` and `date_automation_occurrences (automation_id, due_date, status)`
   - **a hand-written SQL tail:** the legacy `lead_source` text → kind mapping of research R5
   - add the new `NotificationType` value to packages/shared/src/enums.ts as well
-- [ ] T006 [P] Write packages/shared/src/contacts/segment-rules.ts and its test segment-rules.test.ts (research R1):
+- [X] T006 [P] Write packages/shared/src/contacts/segment-rules.ts and its test segment-rules.test.ts (research R1):
   - `SegmentRulesSchema` with every rule kind, 1–5 groups and 1–30 rules in total
   - day windows: 7, 30 or 90 for behaviour; 1–365 for `added` and `last_inbound`
   - tests: valid examples per kind, every limit, the "did not" forms
-- [ ] T007 [P] Write packages/shared/src/contacts/lead-source.ts and lead-source.test.ts:
+- [X] T007 [P] Write packages/shared/src/contacts/lead-source.ts and lead-source.test.ts:
   - `LEAD_SOURCE_LABELS` for the web app
   - `legacyLeadSource(text)` mapping the existing values (R5), tested with 'API', 'Campaign upload', 'STORE', 'Lead form', 'Organic', 'Import', other text (CUSTOM) and empty (UNKNOWN)
-- [ ] T008 [P] Write packages/shared/src/contacts/date-automation.ts and date-automation.test.ts: `dueOn(date, timing, offsetDays, today)`, tested for:
+- [X] T008 [P] Write packages/shared/src/contacts/date-automation.ts and date-automation.test.ts: `dueOn(date, timing, offsetDays, today)`, tested for:
   - yearly on the day and month
   - offsets before and after, across month and year ends
   - 29 February on 28 February in other years
   - once on the exact date, past dates never due
-- [ ] T009 [P] Write packages/shared/src/settings/business-profile.ts and its test: `BUSINESS_PROFILE_LIMITS`, `BUSINESS_VERTICALS`, `PROFILE_PICTURE_RULES` and `checkBusinessProfile(input)` returning field issues (contracts/meta-business-profile.md §2–§3)
-- [ ] T010 [P] Write packages/shared/src/settings/oba-checklist.ts and number-guides.ts in our own words (research R12), and a test: every step has a title, body, at least one link to a Meta page and a `checkedAt` date
-- [ ] T011 Export the new shared files from packages/shared/src/index.ts, then run `npm run build -w @wbm/shared`
-- [ ] T012 Add the 010 audit actions of research R13 to apps/api/src/modules/audit/audit-actions.ts, and list them in the `PENDING` set of apps/api/test/unit/audit-coverage.spec.ts (each story removes its own)
-- [ ] T013 Add apps/api/src/modules/contacts/lead-source.ts:
+- [X] T009 [P] Write packages/shared/src/settings/business-profile.ts and its test: `BUSINESS_PROFILE_LIMITS`, `BUSINESS_VERTICALS`, `PROFILE_PICTURE_RULES` and `checkBusinessProfile(input)` returning field issues (contracts/meta-business-profile.md §2–§3)
+- [X] T010 [P] Write packages/shared/src/settings/oba-checklist.ts and number-guides.ts in our own words (research R12), and a test: every step has a title, body, at least one link to a Meta page and a `checkedAt` date
+- [X] T011 Export the new shared files from packages/shared/src/index.ts, then run `npm run build -w @wbm/shared`
+- [X] T012 Add the 010 audit actions of research R13 to apps/api/src/modules/audit/audit-actions.ts, and list them in the `PENDING` set of apps/api/test/unit/audit-coverage.spec.ts (each story removes its own)
+- [X] T013 Add apps/api/src/modules/contacts/lead-source.ts:
   - `leadSourceFor(kind, label?)`, which returns the create-branch fields
   - `upgradeFirstMessageSource(tx, contactId, kind, label)`, which changes an `ORGANIC` source only while the contact was created by the current message
-- [ ] T014 Add the `bulk` queue:
+- [X] T014 Add the `bulk` queue:
   - `QUEUES.BULK` in apps/api/src/common/queue/queue.constants.ts
   - its registration in apps/api/src/common/queue/queue.module.ts
   - an empty `BulkProcessor` in apps/api/src/modules/contacts/bulk.processor.ts (concurrency 1), registered in apps/api/src/worker-features.module.ts
-- [ ] T015 Add the new modules and providers:
+- [X] T015 Add the new modules and providers:
   - automations, global attributes, keyword replies, business profile and the checklist, wired into apps/api/src/domain.module.ts and the api and worker modules
   - exports where other modules use them
-- [ ] T016 [P] Add the web types and query keys to apps/web/src/lib/types.ts and apps/web/src/lib/query.ts: Segment, SegmentRules, BulkAction, LeadSourceKind, AutoTagRule, GlobalAttribute, KeywordReplies, DateAutomation, AutomationDay, MyTwoFactor, SecuritySettings, BusinessProfile and ObaChecklist
-- [ ] T017 [P] Update the earlier contracts (contacts-settings-api.openapi.yaml header):
+- [X] T016 [P] Add the web types and query keys to apps/web/src/lib/types.ts and apps/web/src/lib/query.ts: Segment, SegmentRules, BulkAction, LeadSourceKind, AutoTagRule, GlobalAttribute, KeywordReplies, DateAutomation, AutomationDay, MyTwoFactor, SecuritySettings, BusinessProfile and ObaChecklist
+- [X] T017 [P] Update the earlier contracts (contacts-settings-api.openapi.yaml header):
   - **001 dashboard-api.openapi.yaml:**
     - `audienceType` gains `SEGMENT`, with `segmentId`
     - the contact list takes `segmentId` and `leadSource`, and `Contact` returns `leadSource` and `leadSourceLabel`
@@ -113,11 +113,11 @@ launch a campaign to it; enrol it in a drip (quickstart US1).
 
 ### Tests for User Story 1 ⚠️ (write first, must fail)
 
-- [ ] T018 [P] [US1] Write the unit tests apps/api/test/unit/contacts/segment-query.builder.spec.ts:
+- [X] T018 [P] [US1] Write the unit tests apps/api/test/unit/contacts/segment-query.builder.spec.ts:
   - the SQL and parameters per rule kind (snapshots), and "all of" / "any of" groups
   - values are never put into the SQL text
   - broken references come back as `{ group, rule, issue }`
-- [ ] T019 [P] [US1] Write the integration test apps/api/test/integration/segments.int-spec.ts:
+- [X] T019 [P] [US1] Write the integration test apps/api/test/integration/segments.int-spec.ts:
   - create, rename, copy, delete; `NAME_TAKEN`
   - `/segments/preview` counts against seeded contacts for every rule kind: tags has and has not, attributes by type, consent, lead source, added, last inbound, blocked, and behaviour (sent, delivered, read, replied, clicked, failed; did and did not; one campaign and 7/30/90 days)
   - the marketable count, and a sample of 20 masked for roles without `phones.full`
@@ -125,19 +125,19 @@ launch a campaign to it; enrol it in a drip (quickstart US1).
   - `/segments/{id}/count`
   - agents: list and count yes, change no (403)
   - audit entries
-- [ ] T020 [P] [US1] Write the integration test apps/api/test/integration/campaign-segment-audience.int-spec.ts:
+- [X] T020 [P] [US1] Write the integration test apps/api/test/integration/campaign-segment-audience.int-spec.ts:
   - `audienceType: SEGMENT`: the estimate equals the marketable count
   - the launch snapshot holds the members at launch, including a contact added after the campaign was made
   - opted-out and blocked contacts are left out
   - a broken segment refuses the launch (`SEGMENT_BROKEN`)
   - deleting a segment used by a draft gives 409 `SEGMENT_IN_USE`, with the campaign listed
-- [ ] T021 [P] [US1] Write the integration test apps/api/test/integration/drip-segment-enrol.int-spec.ts:
+- [X] T021 [P] [US1] Write the integration test apps/api/test/integration/drip-segment-enrol.int-spec.ts:
   - `POST /drips/{id}/enrolments { segmentId }` answers 202 with a `DRIP_ENROL` bulk action
   - after the bulk processor runs: the 005 counts (enrolled, opted out, already in, not found)
   - a second enrolment skips those already in
   - the action's progress through `GET /contacts/bulk-actions/{id}`
-- [ ] T022 [P] [US1] Write the contract cases in apps/api/test/contract/contacts-settings.contract-spec.ts (new file): every `/segments*` route, the 001 campaign with `SEGMENT`, and the 005 enrolment's 202
-- [ ] T023 [P] [US1] Write the Playwright e2e apps/web/e2e/contacts-us1-segments.spec.ts:
+- [X] T022 [P] [US1] Write the contract cases in apps/api/test/contract/contacts-settings.contract-spec.ts (new file): every `/segments*` route, the 001 campaign with `SEGMENT`, and the 005 enrolment's 202
+- [X] T023 [P] [US1] Write the Playwright e2e apps/web/e2e/contacts-us1-segments.spec.ts:
   - build the quickstart segment and watch the counts change
   - save it and launch a campaign to it
   - enrol it in a drip and see the progress
@@ -145,27 +145,27 @@ launch a campaign to it; enrol it in a drip (quickstart US1).
 
 ### Implementation for User Story 1
 
-- [ ] T024 [US1] Write apps/api/src/modules/contacts/segment-query.builder.ts (research R1):
+- [X] T024 [US1] Write apps/api/src/modules/contacts/segment-query.builder.ts (research R1):
   - compile `SegmentRules` to a parameterised `WHERE` over `contacts c`
   - reuse the 001 tag and attribute rule SQL from audience-query.builder.ts
   - behaviour rules as `EXISTS` subqueries over `messages`, with the 009 replied fragment and 005 `link_clicks`
   - return the broken references
-- [ ] T025 [US1] Write apps/api/src/modules/contacts/segments.service.ts and segments.controller.ts:
+- [X] T025 [US1] Write apps/api/src/modules/contacts/segments.service.ts and segments.controller.ts:
   - CRUD, copy, preview (counts and a sample masked by role), count
   - a 10-second Redis count cache per rules hash, and a 10-second statement timeout
   - the unfinished campaigns using a segment (`usedBy`)
   - audit `segment.*`
   - remove the `segment.*` actions from `PENDING`
-- [ ] T026 [US1] Add `SEGMENT` audiences to campaigns:
+- [X] T026 [US1] Add `SEGMENT` audiences to campaigns:
   - in apps/api/src/modules/campaigns/audience-snapshot.service.ts (`assertReady`, the snapshot) and the estimate service, through the segment builder plus the 001 consent, block and duplicate rules
   - `segmentId` in campaigns.service.ts, checked with the audience type
   - the delete guard in segments.service.ts
-- [ ] T027 [US1] Write the bulk action base, used by US1 and US2:
+- [X] T027 [US1] Write the bulk action base, used by US1 and US2:
   - apps/api/src/modules/contacts/bulk-actions.service.ts: create, progress and result updates, the selection walk in keyset batches of 5,000 over ids, a filter or a segment
   - `GET /contacts/bulk-actions` and `GET /contacts/bulk-actions/{id}` in bulk-actions.controller.ts
   - the `DRIP_ENROL` handler in bulk.processor.ts, calling the 005 enrolment service in batches
-- [ ] T028 [US1] Extend the 005 enrolment route (apps/api/src/modules/drips/drip-enrolments.controller.ts and its service): `{ segmentId }` creates a `DRIP_ENROL` bulk action and answers 202
-- [ ] T029 [P] [US1] Write the web pages:
+- [X] T028 [US1] Extend the 005 enrolment route (apps/api/src/modules/drips/drip-enrolments.controller.ts and its service): `{ segmentId }` creates a `DRIP_ENROL` bulk action and answers 202
+- [X] T029 [P] [US1] Write the web pages:
   - apps/web/src/app/(dashboard)/contacts/segments/page.tsx (list with lazy counts) and contacts/segments/[id]/page.tsx (rule groups editor with live counts, the sample, broken rules, the unfinished campaigns using it)
   - the segment filter on apps/web/src/app/(dashboard)/contacts/page.tsx
   - the "Segment" audience in the campaign wizard (apps/web/src/components/campaigns/wizard/audience-step.tsx)
@@ -185,19 +185,19 @@ lead source; download exports (quickstart US2).
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T030 [P] [US2] Write the integration test apps/api/test/integration/bulk-tags.int-spec.ts:
+- [X] T030 [P] [US2] Write the integration test apps/api/test/integration/bulk-tags.int-spec.ts:
   - add and remove by chosen ids, by a filter and by a segment
   - 12,000 seeded contacts, so more than two batches run
   - changed counts, and two actions run in order
   - audit `contacts.bulk_tagged` with the counts
   - agents get 403
-- [ ] T031 [P] [US2] Write the integration test apps/api/test/integration/auto-tags.int-spec.ts:
+- [X] T031 [P] [US2] Write the integration test apps/api/test/integration/auto-tags.int-spec.ts:
   - rule CRUD (`settings.manage`; managers read only)
   - each event adds the tag: a contact created from each lead source, a campaign reply within 72 hours, a link click, opt-in, opt-out
   - contacts from before the rule are not changed
   - a manual removal stays until the event happens again
   - a duplicate rule gives 409; audit entries
-- [ ] T032 [P] [US2] Write the integration test apps/api/test/integration/lead-source.int-spec.ts. Each entry point sets its kind:
+- [X] T032 [P] [US2] Write the integration test apps/api/test/integration/lead-source.int-spec.ts. Each entry point sets its kind:
   - an inbound first message (ORGANIC)
   - the public API and the 006 contacts API (API, with a custom label)
   - an import with a label (IMPORT)
@@ -210,14 +210,14 @@ lead source; download exports (quickstart US2).
     - a later message with a chat link reference does not change it
     - the contact list filters by kind and returns the source
     - the migration's legacy mapping, by running its SQL on seeded rows
-- [ ] T033 [P] [US2] Write the integration test apps/api/test/integration/contacts-export.int-spec.ts:
+- [X] T033 [P] [US2] Write the integration test apps/api/test/integration/contacts-export.int-spec.ts:
   - every column, with one column per attribute definition
   - the row count equals the list's count for a filter and for a segment
   - a broken segment gives 422; agents get 403
   - audit `data.exported` with target `contacts` and the row count
   - a unit test of the row writer covers masked phones when `phonesFull` is false
-- [ ] T034 [P] [US2] Write the contract cases for `/contacts/bulk-actions*`, `/contacts/export.csv` and `/auto-tag-rules*` in apps/api/test/contract/contacts-settings.contract-spec.ts
-- [ ] T035 [P] [US2] Write the Playwright e2e apps/web/e2e/contacts-us2-tags-export.spec.ts:
+- [X] T034 [P] [US2] Write the contract cases for `/contacts/bulk-actions*`, `/contacts/export.csv` and `/auto-tag-rules*` in apps/api/test/contract/contacts-settings.contract-spec.ts
+- [X] T035 [P] [US2] Write the Playwright e2e apps/web/e2e/contacts-us2-tags-export.spec.ts:
   - select rows and add a tag; "all matching" and remove a tag, watching the progress
   - an automatic tag rule for the website button source
   - the lead source column and filter
@@ -225,13 +225,13 @@ lead source; download exports (quickstart US2).
 
 ### Implementation for User Story 2
 
-- [ ] T036 [US2] Add the `TAG_ADD` and `TAG_REMOVE` handlers to apps/api/src/modules/contacts/bulk.processor.ts (set-based `INSERT … ON CONFLICT DO NOTHING` and `DELETE` per batch), and `POST /contacts/bulk-actions` to bulk-actions.controller.ts (`contacts.manage`; audit; remove the action from `PENDING`)
-- [ ] T037 [US2] Write apps/api/src/modules/contacts/auto-tags.service.ts and auto-tags.controller.ts (rules CRUD; a 30-second rule cache; idempotent `apply`), and call `apply` from:
+- [X] T036 [US2] Add the `TAG_ADD` and `TAG_REMOVE` handlers to apps/api/src/modules/contacts/bulk.processor.ts (set-based `INSERT … ON CONFLICT DO NOTHING` and `DELETE` per batch), and `POST /contacts/bulk-actions` to bulk-actions.controller.ts (`contacts.manage`; audit; remove the action from `PENDING`)
+- [X] T037 [US2] Write apps/api/src/modules/contacts/auto-tags.service.ts and auto-tags.controller.ts (rules CRUD; a 30-second rule cache; idempotent `apply`), and call `apply` from:
   - the lead source helper (T013) on creation
   - apps/api/src/modules/contacts/consent.service.ts on opt-in and opt-out
   - the 005 click recorder (apps/api/src/modules/growth/links/link-redirect.service.ts)
   - apps/api/src/modules/inbox/inbound/inbound-chat.handler.ts on a campaign reply (a delivered or read campaign message within 72 hours)
-- [ ] T038 [US2] Use `leadSourceFor()` in every creation path, and upgrade first-message sources:
+- [X] T038 [US2] Use `leadSourceFor()` in every creation path, and upgrade first-message sources:
   - **creation paths:**
     - apps/api/src/modules/webhooks/handlers/inbound.handler.ts and inbox/inbound/inbound-chat.handler.ts
     - public-api/public-api.service.ts and contacts/contacts.service.ts (API, imports with labels, stores)
@@ -240,14 +240,14 @@ lead source; download exports (quickstart US2).
   - **first-message upgrades** (`upgradeFirstMessageSource`):
     - the 006 chat link matcher (CHAT_LINK, or WEBSITE_BUTTON for `source: WIDGET` links)
     - the 007 ad referral matcher (AD)
-- [ ] T039 [US2] Extend the contact list and profile:
+- [X] T039 [US2] Extend the contact list and profile:
   - the `leadSource` filter and the `leadSource` and `leadSourceLabel` fields in apps/api/src/modules/contacts/contacts.service.ts and contacts.controller.ts
   - the 002 chat contact panel (`chat-contact.service.ts`) returns the kind and label
-- [ ] T040 [US2] Write apps/api/src/modules/contacts/contacts-export.controller.ts (research R6):
+- [X] T040 [US2] Write apps/api/src/modules/contacts/contacts-export.controller.ts (research R6):
   - streamed keyset batches of 2,000, with back-pressure
   - columns from the attribute definitions; masking by `phones.full`
   - audit `data.exported` with target `contacts`
-- [ ] T041 [P] [US2] Write the web parts:
+- [X] T041 [P] [US2] Write the web parts:
   - on apps/web/src/app/(dashboard)/contacts/page.tsx: row selection, "all matching", add/remove tags dialogs with progress, the lead source column and filter, the export button
   - the lead source on the contact profile and the chat contact panel
   - apps/web/src/app/(dashboard)/settings/automatic-tags/page.tsx
@@ -266,11 +266,11 @@ instructions.
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T042 [P] [US3] Write the unit tests for `{global:key}`:
+- [X] T042 [P] [US3] Write the unit tests for `{global:key}`:
   - in apps/api/test/unit/flows/render.spec.ts and apps/api/test/unit/inbox/canned-render.spec.ts
   - the `global` variable source in apps/api/test/unit/campaigns/variable-resolver.spec.ts
   - unknown keys and empty values
-- [ ] T043 [P] [US3] Write the integration test apps/api/test/integration/global-attributes.int-spec.ts:
+- [X] T043 [P] [US3] Write the integration test apps/api/test/integration/global-attributes.int-spec.ts:
   - CRUD (`settings.manage`); every role can list; `KEY_TAKEN`; the key pattern
   - a campaign variable mapped to a global attribute gets the value at launch
   - an empty value refuses the launch (`GLOBAL_ATTRIBUTE_EMPTY`)
@@ -279,22 +279,22 @@ instructions.
   - a change is seen within the cache time
   - deletion is refused while in use, with the users listed by `/usage`
   - audit entries
-- [ ] T044 [P] [US3] Write the contract cases for `/global-attributes*`
-- [ ] T045 [P] [US3] Write the Playwright e2e apps/web/e2e/settings-us3-global-attributes.spec.ts: create, map in a campaign, insert in a chat reply, change the value, and the deletion refusal
+- [X] T044 [P] [US3] Write the contract cases for `/global-attributes*`
+- [X] T045 [P] [US3] Write the Playwright e2e apps/web/e2e/settings-us3-global-attributes.spec.ts: create, map in a campaign, insert in a chat reply, change the value, and the deletion refusal
 
 ### Implementation for User Story 3
 
-- [ ] T046 [US3] Write apps/api/src/modules/settings/global-attributes.service.ts and global-attributes.controller.ts (research R7):
+- [X] T046 [US3] Write apps/api/src/modules/settings/global-attributes.service.ts and global-attributes.controller.ts (research R7):
   - CRUD, a 30-second cache cleared on change, the usage scan
   - audit `global_attribute.*`; remove them from `PENDING`
-- [ ] T047 [US3] Add the `global` source to the variable resolver:
+- [X] T047 [US3] Add the `global` source to the variable resolver:
   - in apps/api/src/modules/campaigns/variable-resolver.ts (`VariableSourceSchema` gains `global`)
   - resolve it at launch, and refuse empty values in `assertReady` (`GLOBAL_ATTRIBUTE_EMPTY`)
-- [ ] T048 [US3] Fill `{global:key}`:
+- [X] T048 [US3] Fill `{global:key}`:
   - in apps/api/src/modules/flows/engine/render.ts and apps/api/src/modules/inbox/canned/canned-render.ts
   - in the 004 prompt builder (apps/api/src/modules/ai/agent/prompt-builder.ts) before the request to Claude
   - a value that is still empty is left out and logged, never sent as a blank
-- [ ] T049 [P] [US3] Write the web parts:
+- [X] T049 [P] [US3] Write the web parts:
   - apps/web/src/app/(dashboard)/settings/global-attributes/page.tsx
   - the "Global attribute" source in the campaign wizard mapping step
   - an "Insert global attribute" menu in the live chat composer and the saved reply editor
@@ -311,7 +311,7 @@ the replies (quickstart US4).
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T050 [P] [US4] Write the integration test apps/api/test/integration/keyword-replies.int-spec.ts:
+- [X] T050 [P] [US4] Write the integration test apps/api/test/integration/keyword-replies.int-spec.ts:
   - `GET` and `PUT /settings/keyword-replies`: text length, `TEMPLATE_NOT_UTILITY` for a marketing template
   - STOP opts out and sends the text reply, which shows as a chat item
   - START sends the template reply
@@ -319,19 +319,19 @@ the replies (quickstart US4).
   - nothing goes to a blocked contact, or from a number whose sending is off
   - the 001 settings refuse a keyword in both lists
   - audit `keyword_replies.changed`
-- [ ] T051 [P] [US4] Write the contract cases for `/settings/keyword-replies`
+- [X] T051 [P] [US4] Write the contract cases for `/settings/keyword-replies`
 - [ ] T052 [P] [US4] Write the Playwright e2e apps/web/e2e/settings-us4-keywords.spec.ts: set the replies, send STOP with the inbound CLI, and see the reply in the chat
 
 ### Implementation for User Story 4
 
-- [ ] T053 [US4] Write apps/api/src/modules/settings/keyword-replies.ts and its controller (research R8):
+- [X] T053 [US4] Write apps/api/src/modules/settings/keyword-replies.ts and its controller (research R8):
   - settings read and write, with template checks on save
   - `sendKeywordReply(contact, kind, numberId)`, with the once-a-day Redis guard
   - text through the 002 session send path; template through the template path
   - call it from the 001 consent handler in apps/api/src/modules/webhooks/handlers/inbound.handler.ts after the consent change
   - refuse a keyword in both lists in apps/api/src/modules/settings/settings.service.ts
   - remove `keyword_replies.changed` from `PENDING`
-- [ ] T054 [P] [US4] Write apps/web/src/app/(dashboard)/settings/keywords/page.tsx: the keyword lists (moved from the general settings page) and both replies, with an approved utility template picker and variable mapping
+- [X] T054 [P] [US4] Write apps/web/src/app/(dashboard)/settings/keywords/page.tsx: the keyword lists (moved from the general settings page) and both replies, with an approved utility template picker and variable mapping
 
 ---
 
@@ -344,8 +344,8 @@ the sends, skips, results and pausing (quickstart US5).
 
 ### Tests for User Story 5 ⚠️
 
-- [ ] T055 [P] [US5] Write the unit tests apps/api/test/unit/automations/due-query.spec.ts: the due SQL for yearly, once, offsets and 29 February (snapshots), and the company-day bounds in other time zones
-- [ ] T056 [P] [US5] Write the integration test apps/api/test/integration/date-automations.int-spec.ts:
+- [X] T055 [P] [US5] Write the unit tests apps/api/test/unit/automations/due-query.spec.ts: the due SQL for yearly, once, offsets and 29 February (snapshots), and the company-day bounds in other time zones
+- [X] T056 [P] [US5] Write the integration test apps/api/test/integration/date-automations.int-spec.ts:
   - **setup:** CRUD with `ATTRIBUTE_NOT_DATE` and `VARIABLES_UNMAPPED`; the 7-day preview; switching on (`campaigns.launch`; `TEMPLATE_NOT_APPROVED`)
   - **the tick, with a fake clock:**
     - contacts due today get one message (origin `DATE_AUTOMATION`), and a second tick sends nothing more
@@ -356,26 +356,26 @@ the sends, skips, results and pausing (quickstart US5).
   - **pausing:** a rejected template or a disconnected number pauses the automation with one admin notification; resuming never sends past days
   - **results and recipients:** per day, with the 009 replied definition
   - audit entries
-- [ ] T057 [P] [US5] Write the contract cases for `/date-automations*`
-- [ ] T058 [P] [US5] Write the Playwright e2e apps/web/e2e/automations-us5-dates.spec.ts:
+- [X] T057 [P] [US5] Write the contract cases for `/date-automations*`
+- [X] T058 [P] [US5] Write the Playwright e2e apps/web/e2e/automations-us5-dates.spec.ts:
   - create a birthday automation for the next minute; seed contacts through the API
   - see the sends in mock-meta's `/mock/sent`
   - the results and recipients pages
 
 ### Implementation for User Story 5
 
-- [ ] T059 [US5] Write apps/api/src/modules/automations/due-query.ts: the due conditions on `attributes ->> key`, using the shared `dueOn` rules and the company time zone
-- [ ] T060 [US5] Write apps/api/src/modules/automations/date-automations.service.ts and date-automations.controller.ts:
+- [X] T059 [US5] Write apps/api/src/modules/automations/due-query.ts: the due conditions on `attributes ->> key`, using the shared `dueOn` rules and the company time zone
+- [X] T060 [US5] Write apps/api/src/modules/automations/date-automations.service.ts and date-automations.controller.ts:
   - CRUD with validation, the preview, switching with checks, results and recipients (phones masked by role)
   - audit `date_automation.*`; remove them from `PENDING`
-- [ ] T061 [US5] Write apps/api/src/modules/automations/date-automation-tick.processor.ts (maintenance job `date-automation-tick` every minute, research R9):
+- [X] T061 [US5] Write apps/api/src/modules/automations/date-automation-tick.processor.ts (maintenance job `date-automation-tick` every minute, research R9):
   - insert occurrences, ignoring conflicts
   - batches of 500 messages on the number queue with campaign priority
   - skips with reasons
   - the end-of-day `too_late`
   - pausing, with the `DATE_AUTOMATION_PAUSED` notification
-- [ ] T062 [US5] Let apps/api/src/modules/sending/send.processor.ts and the template payload builder send `DATE_AUTOMATION` messages with the automation's mapping, and update occurrences on the send outcome (SENT or FAILED with `send_failed`)
-- [ ] T063 [P] [US5] Write the web pages:
+- [X] T062 [US5] Let apps/api/src/modules/sending/send.processor.ts and the template payload builder send `DATE_AUTOMATION` messages with the automation's mapping, and update occurrences on the send outcome (SENT or FAILED with `send_failed`)
+- [X] T063 [P] [US5] Write the web pages:
   - apps/web/src/app/(dashboard)/automations/page.tsx (list with the last 7 days)
   - automations/[id]/page.tsx (editor with the due preview, results by day, recipients of a day)
   - a nav item 'Automations' (`campaigns.view`)
@@ -392,12 +392,12 @@ reset a member (quickstart US6).
 
 ### Tests for User Story 6 ⚠️
 
-- [ ] T064 [P] [US6] Write the unit tests apps/api/test/unit/auth/totp.spec.ts:
+- [X] T064 [P] [US6] Write the unit tests apps/api/test/unit/auth/totp.spec.ts:
   - the RFC 6238 SHA-1 vectors (59, 1111111109, 1111111111, 1234567890, 2000000000, 20000000000)
   - one step either side accepted, two refused; replay refused through `lastStep`
   - base32 round trip and the `otpauth://` address
   - recovery code normalising (case, spaces, dashes) and hashing
-- [ ] T065 [P] [US6] Write the integration test apps/api/test/integration/two-factor.int-spec.ts:
+- [X] T065 [P] [US6] Write the integration test apps/api/test/integration/two-factor.int-spec.ts:
   - **self-service:** setup, confirm (10 recovery codes once), turn off with a code, new codes
   - **sign-in:**
     - with 2FA, `POST /auth/login` answers `{ next: CODE }` and sets only `sid_2fa`, while `GET /auth/me` stays 401
@@ -407,7 +407,7 @@ reset a member (quickstart US6).
   - **admin reset:** ends the member's sessions; resetting oneself gives 409
   - **unaffected:** API keys keep working
   - **records:** audit entries for every event, and no code, secret or recovery code in logs or audit details
-- [ ] T066 [P] [US6] Write the contract cases for `/settings/security`, `/users/{id}/2fa/reset`, `/me/2fa*` and `/auth/login/*`
+- [X] T066 [P] [US6] Write the contract cases for `/settings/security`, `/users/{id}/2fa/reset`, `/me/2fa*` and `/auth/login/*`
 - [ ] T067 [P] [US6] Write the Playwright e2e apps/web/e2e/security-us6-2fa.spec.ts:
   - turn on 2FA, computing codes with apps/web/e2e/totp.ts from the shown secret
   - sign out and in with a code
@@ -416,14 +416,14 @@ reset a member (quickstart US6).
 
 ### Implementation for User Story 6
 
-- [ ] T068 [US6] Write apps/api/src/common/auth/totp.ts (RFC 6238 with `node:crypto`, base32, `otpauth://` address) and apps/api/src/modules/auth/recovery-codes.ts (10 codes from the link-code alphabet, HMAC-SHA256 with the server key)
-- [ ] T069 [US6] Extend the sign-in (contracts/login-2fa.md):
+- [X] T068 [US6] Write apps/api/src/common/auth/totp.ts (RFC 6238 with `node:crypto`, base32, `otpauth://` address) and apps/api/src/modules/auth/recovery-codes.ts (10 codes from the link-code alphabet, HMAC-SHA256 with the server key)
+- [X] T069 [US6] Extend the sign-in (contracts/login-2fa.md):
   - apps/api/src/modules/auth/auth.service.ts and auth.controller.ts: the pending sign-in cookie `sid_2fa` and its Redis record, `POST /auth/login/code`, `POST /auth/login/setup` and `/setup/confirm`
   - the lockout counters in login-throttle.service.ts
   - cookie helpers in auth.cookies.ts
-- [ ] T070 [US6] Write apps/api/src/modules/me/two-factor.controller.ts (`/me/2fa*`), the security settings controller (`GET` and `PUT /settings/security`) and `POST /users/{id}/2fa/reset` in the users module (ending sessions); audit `auth.2fa_*` and `security.2fa_required_changed`, and remove them from `PENDING`
-- [ ] T071 [US6] Write apps/api/scripts/reset-2fa.ts and the `auth:reset-2fa` script (operator reset, audited with the actor `operator`)
-- [ ] T072 [P] [US6] Write the web pages:
+- [X] T070 [US6] Write apps/api/src/modules/me/two-factor.controller.ts (`/me/2fa*`), the security settings controller (`GET` and `PUT /settings/security`) and `POST /users/{id}/2fa/reset` in the users module (ending sessions); audit `auth.2fa_*` and `security.2fa_required_changed`, and remove them from `PENDING`
+- [X] T071 [US6] Write apps/api/scripts/reset-2fa.ts and the `auth:reset-2fa` script (operator reset, audited with the actor `operator`)
+- [X] T072 [P] [US6] Write the web pages:
   - the code step and the setup step on apps/web/src/app/(auth)/login/page.tsx
   - apps/web/src/app/(dashboard)/account/two-factor/page.tsx (QR code, confirm, recovery codes to save, turn off, new codes)
   - apps/web/src/app/(dashboard)/settings/security/page.tsx (require 2FA, members' status, reset)

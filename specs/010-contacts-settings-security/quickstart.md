@@ -52,8 +52,8 @@ npm run dev                   # api, worker (including the new `bulk` queue) and
    - Change the value; new messages use it.
    - Try deleting it: the places that use it are listed.
 4. **US4 Keyword replies:**
-   - Settings → **Keywords**: the opt-out reply is a text; the opt-in reply is an approved utility
-     template.
+   - Settings → **Consent keywords** → *Keyword replies*: the opt-out reply is a text; the opt-in reply
+     is an approved utility template.
    - Send "STOP" with the inbound CLI: the contact is opted out and the reply shows in the chat.
      Send "STOP" again: no second reply within 24 hours.
 5. **US5 Date automations:**
@@ -64,19 +64,22 @@ npm run dev                   # api, worker (including the new `bulk` queue) and
    - The results show the skipped contact with its reason.
    - Reject the template in mock-meta: the automation pauses and admins are notified.
 6. **US6 2FA:**
-   - Account → **Two-factor authentication**: scan the QR code with an authenticator app (or use
-     `npm run tool:totp -- --secret <secret>` to print codes), confirm, and save the recovery codes.
+   - **Two-factor** (top bar) → *Turn on two-factor sign-in*: scan the QR code with an authenticator
+     app (or use `npm run tool:totp -w @wbm/api -- --secret <key>` to print codes), confirm, and save
+     the recovery codes.
    - Sign out and in: a code is asked for. Five wrong codes lock the step for 15 minutes.
-   - Settings → **Security** → **Require for everyone**: a member without 2FA must set it up at
-     sign-in.
+   - Settings → **Security** → *Require two-factor sign-in for every member*: a member without 2FA
+     must set it up at sign-in, and members already signed in see a reminder.
    - Reset a member's 2FA: their sessions end.
 7. **US7 Business profile:**
-   - Numbers → a number → **Profile**: change the about text, address, websites and category, and
+   - Settings → WhatsApp numbers → a number's **Profile**: change the about text, address, websites and category, and
      upload a square picture. The page shows Meta's values. A 3000×2000 picture is refused.
-   - Set the name status to `DECLINED` in mock-meta: the badge and the steps show.
+   - Set the name status to `DECLINED` in mock-meta (`POST /mock/name-status`) before opening the
+     page (it keeps Meta's answer 5 minutes): the badge and the steps show.
    - Tick blue tick checklist steps and record an application date.
-8. **US8 Guides:** Numbers → **Move a number here** and **Move back to the WhatsApp Business app**:
-   every step and warning shows, with links.
+8. **US8 Guides:** Settings → WhatsApp numbers → **Move a number here** and **Move a number back to
+   the app**: every step and warning shows, with links; removing a number asks for the number to be
+   typed.
 
 ## 4. Tests
 
@@ -86,7 +89,7 @@ npm run test -w @wbm/api -- unit                    # unit: segment SQL builder,
 npm run test:integration -w @wbm/api -- segments bulk auto-tags lead-source export global keyword automations two-factor business-profile
 npm run test:contract -w @wbm/api -- contacts-settings
 npm run test:e2e -w @wbm/web -- contacts-us settings-us automations-us security-us numbers-us
-npm run perf:segments -w @wbm/api                   # 200,000 contacts: counts under 3 s (SC-001)
+npm run perf:segments -w @wbm/api                   # 200,000 contacts: counts under 3 s (SC-001); CI runs it in build-test
 ```
 
 Docker is not running on the development machine, so integration, contract, e2e and perf runs happen
