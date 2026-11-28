@@ -91,6 +91,14 @@ CI per batch (all four jobs: build-test, e2e-smoke, docker-images, secret-scan):
 10. **The website button response schema:** it extended the input schema through `allOf`, and the
     input allows no other properties, so every response field beyond the input was refused. The
     response fields are listed in full, with the look as its own schema.
+11. **The designer preview and the dashboard CSP:** the dashboard allows scripts from its own origin
+    and inline only, and preview frames inherit that policy, so the script could not come from the
+    link host. The dashboard serves it at `/w/widget.js` (a rewrite to the api), and the preview runs
+    its text inline in a sandboxed frame.
+12. **Loading the script on another site:** the api's helmet setup sends
+    `Cross-Origin-Resource-Policy: same-origin`, which stopped the mock shop page (another origin)
+    from loading the script, so no button showed (found by the US8 e2e). The script, config and
+    brand image routes send `cross-origin`, checked by the integration test.
 
 ## 4. Before release (owner: the company's admin)
 

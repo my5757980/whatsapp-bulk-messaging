@@ -33,6 +33,13 @@ function widgetScript(): Promise<{ body: string; etag: string }> {
   return script;
 }
 
+/**
+ * Company sites load these answers from the link host. The api's helmet setup says
+ * Cross-Origin-Resource-Policy: same-origin for everything else, which would stop the script and the
+ * brand image there; the config is read with CORS and no credentials.
+ */
+const OTHER_SITES = { 'Access-Control-Allow-Origin': '*', 'Cross-Origin-Resource-Policy': 'cross-origin' } as const;
+
 @Controller('l/w')
 export class WidgetPublicController {
   constructor(
@@ -44,7 +51,7 @@ export class WidgetPublicController {
   @Get('widget.js')
   async script(@Req() req: Request, @Res() res: Response): Promise<void> {
     const { body, etag } = await widgetScript();
-    res.set({ 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ETag: etag, 'Access-Control-Allow-Origin': '*' });
+    res.set({ 'Content-Type': 'application/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=86400', ETag: etag, ...OTHER_SITES });
     if (req.get('if-none-match') === etag) res.status(304).end();
     else res.status(200).send(body);
   }
@@ -52,7 +59,7 @@ export class WidgetPublicController {
   @Public()
   @Get(':key/config.json')
   async config(@Param('key') key: string, @Req() req: Request, @Res() res: Response): Promise<void> {
-    res.set({ 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'no-store' });
+    res.set({ ...OTHER_SITES, 'Cache-Control': 'no-store' });
     if (!(await this.limiter.allow(req.ip))) {
       res.status(429).set('Retry-After', '60').json({ error: 'Too many requests' });
       return;
@@ -73,9 +80,9 @@ export class WidgetPublicController {
   async image(@Param('key') key: string, @Res() res: Response): Promise<void> {
     const image = KEY.test(key) ? await this.widgets.image(key) : null;
     if (!image) {
-      res.status(404).set('Access-Control-Allow-Origin', '*').json({ error: 'No image' });
+      res.status(404).set(OTHER_SITES).json({ error: 'No image' });
       return;
     }
-    res.status(200).set({ 'Content-Type': image.mimeType, 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' }).send(image.bytes);
+    res.status(200).set({ 'Content-Type': image.mimeType, 'Cache-Control': 'public, max-age=3600', ...OTHER_SITES }).send(image.bytes);
   }
 }

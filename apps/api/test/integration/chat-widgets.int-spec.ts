@@ -94,6 +94,7 @@ describe('Website chat buttons (009 US8)', () => {
     const res = await config(w.key);
     expect(res.status).toBe(200);
     expect(res.headers['access-control-allow-origin']).toBe('*');
+    expect(res.headers['cross-origin-resource-policy']).toBe('cross-origin');
     expect(res.headers['set-cookie']).toBeUndefined();
     expect(res.headers['cache-control']).toBe('public, max-age=60');
     expect(res.body).toMatchObject({
@@ -113,10 +114,13 @@ describe('Website chat buttons (009 US8)', () => {
     const logo = await request(ctx.server()).get(`/l/w/${w.key}/image`);
     expect(logo.status).toBe(200);
     expect(logo.headers['content-type']).toMatch(/image\/png/);
+    // Company sites load the image and the script from the link host (helmet's default is same-origin).
+    expect(logo.headers['cross-origin-resource-policy']).toBe('cross-origin');
     const script = await request(ctx.server()).get('/l/w/widget.js');
     expect(script.status).toBe(200);
     expect(script.headers['content-type']).toMatch(/javascript/);
     expect(script.headers['cache-control']).toBe('public, max-age=86400');
+    expect(script.headers['cross-origin-resource-policy']).toBe('cross-origin');
     expect(script.text).toContain('__wbmChatButton');
 
     expect((await api(manager, 'post', `/chat-widgets/${w.id}/pause`)).body.status).toBe('PAUSED');

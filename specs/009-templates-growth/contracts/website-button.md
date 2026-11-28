@@ -16,7 +16,9 @@
 ## 2. `GET /l/w/widget.js`
 
 - **The file:** one static, versioned file for every button: `Cache-Control: public, max-age=86400`
-  and an ETag.
+  and an ETag. It and the brand image (`/l/w/{key}/image`) are sent with
+  `Cross-Origin-Resource-Policy: cross-origin`, because the api's default (`same-origin`) would stop
+  company sites from loading them.
 - **Budget:** under 30 KB uncompressed (SC-010), checked by a unit test on the built file.
 - **Code:** plain ES2019 JavaScript with no dependencies, in an IIFE. It adds one global guard,
   `window.__wbmChatButton`, and nothing else.
@@ -57,7 +59,7 @@
 
 - **Response:** the `WidgetPublicConfig` schema in templates-growth-api.openapi.yaml.
 - **Headers:**
-  - `Access-Control-Allow-Origin: *`, no credentials
+  - `Access-Control-Allow-Origin: *`, no credentials, and `Cross-Origin-Resource-Policy: cross-origin`
   - `Cache-Control: public, max-age=60`, and an `ETag` from `version`
 - **Rate limit:** the 005 link limiter per IP. Unknown keys get 404.
 - **Hidden:** `{hidden: true}` when the button is paused or deleted, or its number is not
