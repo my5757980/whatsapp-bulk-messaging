@@ -1,4 +1,7 @@
+import argon2 from 'argon2';
+import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { totpCode } from '../../src/common/auth/totp.js';
 import { BulkTagsProcessor } from '../../src/modules/contacts/bulk-tags.processor.js';
 import { digits, seedContact, seedNumber, seedTemplate, uaePhone } from '../support/fixtures.js';
 import { createTestContext, signIn, type SignedInAgent, type TestContext } from '../support/test-context.js';
@@ -147,6 +150,45 @@ describe('Contacts, settings and security API (010) contract', () => {
       await check('delete', '/date-automations/{id}', await send(manager, 'delete', `/date-automations/${waiting.body.id}`), 204);
       await check('get', '/date-automations/{id}', await manager.agent.get(`/api/date-automations/${waiting.body.id}`), 404);
       await send(manager, 'delete', `/date-automations/${created.body.id}`);
+    });
+  });
+
+  describe('US6 two-factor sign-in', () => {
+    it('/me/2fa*, /auth/login/*, /settings/security and /users/{id}/2fa/reset', async () => {
+      const password = 'Contract-2FA-Password-1';
+      const email = `contract-2fa-${digits(8)}@test.local`;
+      const user = await ctx.prisma.user.create({ data: { email, name: 'Contract 2FA', role: 'AGENT', status: 'ACTIVE', passwordHash: await argon2.hash(password, { type: argon2.argon2id }) } });
+      const member = request.agent(ctx.server());
+      const signedIn = await member.post('/api/auth/login').send({ email, password });
+      await expectMatchesContract('dashboard-api.openapi.yaml', 'post', '/auth/login', 200, signedIn.body);
+      const csrfOf = (res: request.Response) => decodeURIComponent(((res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('csrf=')) ?? 'csrf=').split(';')[0]!.slice(5));
+      const csrf = csrfOf(signedIn);
+      const me = (path: string, body?: object) => member.post(`/api${path}`).set('X-CSRF-Token', csrf).send(body ?? {});
+
+      await check('get', '/me/2fa', await member.get('/api/me/2fa'), 200);
+      const setup = await me('/me/2fa/setup');
+      await check('post', '/me/2fa/setup', setup, 200);
+      await check('post', '/me/2fa/confirm', await me('/me/2fa/confirm', { code: '000000' }), 422);
+      await check('post', '/me/2fa/confirm', await me('/me/2fa/confirm', { code: totpCode(setup.body.secret, Date.now()) }), 200);
+      await check('post', '/me/2fa/setup', await me('/me/2fa/setup'), 409);
+      await check('post', '/me/2fa/recovery-codes', await me('/me/2fa/recovery-codes', { code: totpCode(setup.body.secret, Date.now() + 30_000) }), 200);
+
+      const pending = request.agent(ctx.server());
+      const first = await pending.post('/api/auth/login').send({ email, password });
+      await expectMatchesContract('dashboard-api.openapi.yaml', 'post', '/auth/login', 200, first.body);
+      expect(first.body).toEqual({ next: 'CODE' });
+      await check('post', '/auth/login/code', await pending.post('/api/auth/login/code').send({ code: '000000' }), 422);
+      await check('post', '/auth/login/setup', await pending.post('/api/auth/login/setup'), 401);
+      await ctx.prisma.userTwoFactor.update({ where: { userId: user.id }, data: { lastStep: null } });
+      await check('post', '/auth/login/code', await pending.post('/api/auth/login/code').send({ code: totpCode(setup.body.secret, Date.now()) }), 200);
+      await check('post', '/auth/login/code', await pending.post('/api/auth/login/code').send({ code: '123456' }), 401);
+      await check('post', '/auth/login/setup/confirm', await request(ctx.server()).post('/api/auth/login/setup/confirm').send({ code: '123456' }), 401);
+
+      await check('get', '/settings/security', await admin.agent.get('/api/settings/security'), 200);
+      await check('put', '/settings/security', await send(admin, 'put', '/settings/security', { require2fa: false }), 200);
+      await check('post', '/users/{id}/2fa/reset', await send(admin, 'post', `/users/${admin.userId}/2fa/reset`), 409);
+      await check('post', '/users/{id}/2fa/reset', await send(admin, 'post', '/users/0190a000-0000-7000-8000-00000000abcd/2fa/reset'), 404);
+      await check('post', '/users/{id}/2fa/reset', await send(admin, 'post', `/users/${user.id}/2fa/reset`), 204);
     });
   });
 });

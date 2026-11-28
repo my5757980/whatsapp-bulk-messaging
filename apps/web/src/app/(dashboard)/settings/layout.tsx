@@ -16,6 +16,7 @@ const TABS: Array<{ href: string; label: string; permission: Permission }> = [
   { href: '/settings/keywords', label: 'Consent keywords', permission: 'settings.view' },
   { href: '/settings/rate-card', label: 'Rate card', permission: 'campaigns.view' },
   { href: '/settings/team', label: 'Team', permission: 'users.manage' },
+  { href: '/settings/security', label: 'Security', permission: 'users.manage' },
   { href: '/settings/live-chat', label: 'Live chat', permission: 'livechat.settings' },
   { href: '/settings/saved-replies', label: 'Saved replies', permission: 'inbox.view' },
   { href: '/settings/media-library', label: 'Media library', permission: 'inbox.view' },

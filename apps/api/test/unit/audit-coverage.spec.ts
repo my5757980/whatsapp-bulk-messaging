@@ -9,14 +9,6 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../sr
 /** Actions listed before the code that records them exists (empty: every action is recorded). */
 const PENDING = new Set<string>([
   // Feature 010: recorded by their stories (tasks.md T085 empties this list)
-  'auth.2fa_enabled',
-  'auth.2fa_disabled',
-  'auth.2fa_reset',
-  'auth.2fa_recovery_used',
-  'auth.2fa_recovery_regenerated',
-  'auth.2fa_failed',
-  'auth.2fa_locked',
-  'security.2fa_required_changed',
   'business_profile.changed',
   'oba_checklist.changed',
 ]);

@@ -43,10 +43,13 @@ paths:
                 password: { type: string, minLength: 12 }
       responses:
         '200':
-          description: Signed in; sets sid and csrf cookies
+          description: 'Signed in (sets sid and csrf), or, with feature 010 two-factor sign-in, the next step { next } with only the sid_2fa cookie (010 contracts/login-2fa.md)'
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/User' }
+              schema:
+                anyOf:
+                  - { $ref: '#/components/schemas/User' }
+                  - { $ref: '#/components/schemas/LoginNext' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
   /auth/logout:
@@ -1173,6 +1176,13 @@ components:
         role: { $ref: '#/components/schemas/Role' }
         status: { type: string, enum: [INVITED, ACTIVE, DEACTIVATED] }
         lastLoginAt: { type: [string, 'null'], format: date-time }
+    LoginNext:
+      description: Feature 010 - a second sign-in step is needed; no session exists yet
+      type: object
+      additionalProperties: false
+      required: [next]
+      properties:
+        next: { type: string, enum: [CODE, SETUP] }
     Settings:
       type: object
       properties:
