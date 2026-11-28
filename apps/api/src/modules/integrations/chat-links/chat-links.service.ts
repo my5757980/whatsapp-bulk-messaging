@@ -88,7 +88,8 @@ export class ChatLinksService {
   ) {}
 
   async list() {
-    const rows = await this.prisma.chatLink.findMany({ where: { deletedAt: null }, include: INCLUDE, orderBy: { createdAt: 'desc' } });
+    // Feature 009: website button links (source WIDGET) are managed with their button.
+    const rows = await this.prisma.chatLink.findMany({ where: { deletedAt: null, source: 'MANUAL' }, include: INCLUDE, orderBy: { createdAt: 'desc' } });
     return rows.map((r) => this.toDto(r));
   }
 
@@ -255,7 +256,7 @@ export class ChatLinksService {
   }
 
   private async load(id: string): Promise<Row> {
-    const row = await this.prisma.chatLink.findFirst({ where: { id, deletedAt: null }, include: INCLUDE });
+    const row = await this.prisma.chatLink.findFirst({ where: { id, deletedAt: null, source: 'MANUAL' }, include: INCLUDE });
     if (!row) throw AppError.notFound('Chat link not found');
     return row;
   }

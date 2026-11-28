@@ -233,6 +233,8 @@ enum NotificationType {
   PAYMENT_PAID_LATE
   PAYMENTS_CONNECTION_ERROR
   CATALOG_SYNC_FAILED
+  /// Feature 009: a website chat button is hidden because its number is not connected.
+  CHAT_WIDGET_NUMBER_DISCONNECTED
 }
 
 // ---------- Live chat enums (feature 002) ----------

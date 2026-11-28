@@ -128,6 +128,8 @@ export const NotificationType = {
   PAYMENT_PAID_LATE: 'PAYMENT_PAID_LATE',
   PAYMENTS_CONNECTION_ERROR: 'PAYMENTS_CONNECTION_ERROR',
   CATALOG_SYNC_FAILED: 'CATALOG_SYNC_FAILED',
+  // Feature 009 templates and growth
+  CHAT_WIDGET_NUMBER_DISCONNECTED: 'CHAT_WIDGET_NUMBER_DISCONNECTED',
 } as const;
 export type NotificationType = (typeof NotificationType)[keyof typeof NotificationType];
 

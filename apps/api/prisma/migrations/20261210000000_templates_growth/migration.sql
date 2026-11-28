@@ -161,3 +161,6 @@ UPDATE "campaigns" c
 DROP INDEX "campaign_upload_rows_campaign_id_phone_e164_key";
 CREATE UNIQUE INDEX "campaign_upload_rows_campaign_id_row_number_key" ON "campaign_upload_rows"("campaign_id", "row_number");
 CREATE INDEX "campaign_upload_rows_campaign_id_phone_e164_idx" ON "campaign_upload_rows"("campaign_id", "phone_e164");
+
+-- Feature 009 (FR-044): admins hear when a website button is hidden by a disconnected number.
+ALTER TYPE "NotificationType" ADD VALUE 'CHAT_WIDGET_NUMBER_DISCONNECTED';

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { deviceKind, isLinkCode, isPreviewRequest, messageWithRef, waMeUrl } from '@wbm/shared';
+import { deviceKind, isLinkCode, isPreviewRequest, messageWithRef, pagePathForCount, waMeUrl } from '@wbm/shared';
 import { MetricsService } from '../../../common/metrics/metrics.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
 import { LinkRateLimiter } from '../../growth/links/link-rate-limiter.js';
@@ -22,7 +22,8 @@ export class ChatLinkRedirectService {
     private readonly metrics: MetricsService,
   ) {}
 
-  async open(code: string, request: LinkRequest): Promise<LinkResponse> {
+  /** `widget` and `page` come from a website button's Start chat (feature 009, `?w=&p=`). */
+  async open(code: string, request: LinkRequest, from: { widget?: string | undefined; page?: string | undefined } = {}): Promise<LinkResponse> {
     if (!(await this.limiter.allow(request.ip))) {
       this.metrics.chatLinkOpensTotal.inc({ kind: 'limited' });
       return { status: 429, headers: { ...PAGE_HEADERS, 'Retry-After': '60' }, body: TOO_MANY };
@@ -30,7 +31,7 @@ export class ChatLinkRedirectService {
     const link = isLinkCode(code)
       ? await this.prisma.chatLink.findUnique({
           where: { code },
-          select: { id: true, message: true, ref: true, status: true, deletedAt: true, number: { select: { displayPhoneNumber: true } } },
+          select: { id: true, message: true, ref: true, status: true, deletedAt: true, number: { select: { displayPhoneNumber: true } }, widget: { select: { key: true } } },
         })
       : null;
     if (!link) {
@@ -45,7 +46,9 @@ export class ChatLinkRedirectService {
     this.metrics.chatLinkOpensTotal.inc({ kind: preview ? 'preview' : 'open' });
     if (!preview) {
       try {
-        await this.prisma.chatLinkOpen.create({ data: { chatLinkId: link.id, device: deviceKind(request.userAgent) } });
+        // The page counts only when the open comes from this link's own button (a wrong `w` is ignored).
+        const page = link.widget && from.widget === link.widget.key ? pagePathForCount(from.page) : null;
+        await this.prisma.chatLinkOpen.create({ data: { chatLinkId: link.id, device: deviceKind(request.userAgent), page } });
       } catch (error) {
         // A failed count never keeps the visitor from WhatsApp.
         this.logger.warn({ err: error, chatLinkId: link.id }, 'Could not record a chat link opening');
